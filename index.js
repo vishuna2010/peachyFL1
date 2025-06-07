@@ -4,6 +4,8 @@ const authModule = require('./auth'); // Renamed to avoid conflict with authRout
 const db = require('./db'); // Import the db module to ensure tables are created
 const productRoutes = require('./routes/products'); // Import product routes
 const adminUserRoutes = require('./routes/adminUsers'); // Import admin user routes
+const adminOrderRoutes = require('./routes/adminOrders'); // Import admin order routes
+const orderRoutes = require('./routes/orders'); // Import order routes
 const path = require('path'); // Import path module
 
 const app = express();
@@ -80,8 +82,15 @@ app.use('/api/auth', authRouter); // Mount auth router under /api/auth
 // --- Product Routes ---
 app.use('/api/products', productRoutes); // Mount product routes under /api/products
 
-// --- Admin User Management Routes ---
-app.use('/api/admin/users', adminUserRoutes); // Mount admin user routes
+// --- Admin Routes ---
+// Mount user management specific admin routes
+app.use('/api/admin/users', adminUserRoutes);
+// Mount order management specific admin routes
+app.use('/api/admin', adminOrderRoutes); // This will make routes like /api/admin/orders available
+
+
+// --- Public Order Routes (e.g., for user to create their own order) ---
+app.use('/api/orders', orderRoutes);
 
 
 // Ensure DB connection is attempted and tables are created when server starts

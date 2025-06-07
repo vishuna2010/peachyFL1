@@ -29,6 +29,9 @@
             <strong>Tags:</strong>
             <span v-for="tag in product.tags" :key="tag" class="tag">{{ tag }}</span>
           </div>
+          <button @click="handleAddToCart(product)" class="add-to-cart-button">
+            {{ productAdded[product.id] ? 'Added!' : 'Add to Cart' }}
+          </button>
         </li>
       </ul>
     </div>
@@ -39,15 +42,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'; // Import computed
+import { ref, onMounted, computed } from 'vue';
+import { useCart } from '~/composables/useCart'; // Import useCart
 
 const { $axios } = useNuxtApp();
 const products = ref([]);
 const pending = ref(true);
 const error = ref(null);
-const runtimeConfig = useRuntimeConfig(); // Access runtime config
+const runtimeConfig = useRuntimeConfig();
+const { addToCart } = useCart(); // Get addToCart function
 
 const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl);
+const productAdded = ref({}); // For visual feedback
 
 async function fetchProducts() {
   pending.value = true;
@@ -62,6 +68,14 @@ async function fetchProducts() {
     pending.value = false;
   }
 }
+
+const handleAddToCart = (product) => {
+  addToCart(product);
+  productAdded.value[product.id] = true;
+  setTimeout(() => {
+    productAdded.value[product.id] = false;
+  }, 1000); // Reset feedback after 1 second
+};
 
 onMounted(fetchProducts);
 </script>
@@ -126,6 +140,20 @@ onMounted(fetchProducts);
   color: #555;
   flex-grow: 1; /* Allow description to take available space */
   margin-bottom: 0.5rem;
+}
+.add-to-cart-button {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  margin-top: auto; /* Push button to the bottom of the flex container */
+  align-self: flex-start; /* Align to the start of the cross axis */
+}
+.add-to-cart-button:hover {
+  background-color: #218838;
 }
 .tags {
   margin-top: 0.5rem;

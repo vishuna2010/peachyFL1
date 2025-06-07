@@ -91,6 +91,39 @@ const createTables = async () => {
     `);
     console.log('Table "product_tags" created successfully or already exists.');
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT, -- Or SET NULL / CASCADE depending on desired behavior
+        status VARCHAR(50) DEFAULT 'pending',
+        total_amount DECIMAL(10, 2) NOT NULL,
+        shipping_address_line1 VARCHAR(255) NOT NULL,
+        shipping_address_line2 VARCHAR(255) NULL,
+        shipping_city VARCHAR(100) NOT NULL,
+        shipping_postal_code VARCHAR(20) NOT NULL,
+        shipping_country VARCHAR(50) NOT NULL,
+        billing_address_line1 VARCHAR(255) NULL,
+        billing_address_line2 VARCHAR(255) NULL,
+        billing_city VARCHAR(100) NULL,
+        billing_postal_code VARCHAR(20) NULL,
+        billing_country VARCHAR(50) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Consider trigger for auto-update
+      );
+    `);
+    console.log('Table "orders" created successfully or already exists.');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS order_items (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT, -- Prevent product deletion if in an order
+        quantity INTEGER NOT NULL CHECK (quantity > 0),
+        price_at_purchase DECIMAL(10, 2) NOT NULL
+      );
+    `);
+    console.log('Table "order_items" created successfully or already exists.');
+
   } catch (err) {
     console.error('Error creating/altering tables:', err.stack);
   } finally {

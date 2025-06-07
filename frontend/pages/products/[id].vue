@@ -29,26 +29,36 @@
         <span v-for="tag in product.tags" :key="tag" class="tag">{{ tag }}</span>
       </div>
 
-      <!-- Conceptual: Add to cart button, related products, etc. -->
-      <!-- <button @click="addToCart">Add to Cart</button> -->
+      <div class="add-to-cart-section">
+        <input type="number" v-model.number="quantity" min="1" class="quantity-input" />
+        <button @click="handleAddToCart" class="add-to-cart-button">
+          {{ itemAdded ? 'Added!' : 'Add to Cart' }}
+        </button>
+      </div>
+      <div v-if="addToCartError" class="error-message">{{ addToCartError }}</div>
 
       <NuxtLink to="/" class="back-link">Back to all products</NuxtLink>
     </div>
   </div>
-</template>
+</template
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'; // Import computed
+import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { useCart } from '~/composables/useCart'; // Import useCart
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
 const product = ref(null);
 const pending = ref(true);
 const error = ref(null);
-const runtimeConfig = useRuntimeConfig(); // Access runtime config
+const runtimeConfig = useRuntimeConfig();
+const { addToCart } = useCart(); // Get addToCart function
 
 const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl);
+const quantity = ref(1); // For quantity input
+const itemAdded = ref(false); // For visual feedback
+const addToCartError = ref(''); // For error messages
 
 async function fetchProduct() {
   const productId = route.params.id;
@@ -65,12 +75,24 @@ async function fetchProduct() {
   }
 }
 
-onMounted(fetchProduct);
+const handleAddToCart = () => {
+  addToCartError.value = '';
+  if (!product.value) {
+    addToCartError.value = "Product data not loaded yet.";
+    return;
+  }
+  if (quantity.value <= 0) {
+    addToCartError.value = "Please enter a valid quantity.";
+    return;
+  }
+  addToCart(product.value, quantity.value);
+  itemAdded.value = true;
+  setTimeout(() => {
+    itemAdded.value = false;
+  }, 1500); // Reset feedback
+};
 
-// const addToCart = () => {
-//   console.log('Conceptual: Add to cart', product.value.id);
-//   // Add actual cart logic here
-// }
+onMounted(fetchProduct);
 </script>
 
 <style scoped>
@@ -86,6 +108,7 @@ onMounted(fetchProduct);
   background-color: #ffdddd;
   border: 1px solid #ff0000;
   color: #D8000C;
+  margin-top: 0.5rem; /* Added margin for addToCartError */
 }
 .error-message a {
   color: #D8000C;
@@ -105,6 +128,7 @@ onMounted(fetchProduct);
 }
 .product-detail-image-placeholder {
   height: 300px; /* Fixed height for placeholder */
+  /* Ensure these styles are consistent if you copy-pasted the image placeholder part */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -151,28 +175,43 @@ onMounted(fetchProduct);
   margin-right: 0.5rem;
   margin-bottom: 0.5rem;
 }
-.back-link {
-  display: inline-block;
-  margin-top: 1rem;
-  color: #007bff;
-  text-decoration: none;
+
+.add-to-cart-section {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  justify-content: center; /* Center this section */
 }
-.back-link:hover {
-  text-decoration: underline;
+.quantity-input {
+  width: 70px;
+  padding: 0.5rem;
+  text-align: center;
+  border: 1px solid #ccc;
+  border-radius: 4px;
 }
-/* Conceptual button styling
-button {
+.add-to-cart-button {
   background-color: #28a745;
   color: white;
-  padding: 0.75rem 1.5rem;
+  padding: 0.7rem 1.2rem;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   font-size: 1em;
-  margin-top: 1rem;
 }
-button:hover {
+.add-to-cart-button:hover {
   background-color: #218838;
 }
-*/
+
+.back-link {
+  display: block; /* Make it block to center it */
+  margin-top: 1.5rem;
+  color: #007bff;
+  text-decoration: none;
+  text-align: center; /* Center link text */
+}
+.back-link:hover {
+  text-decoration: underline;
+}
 </style>
