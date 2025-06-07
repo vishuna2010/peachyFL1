@@ -10,6 +10,14 @@
           <li><NuxtLink to="/admin/discounts">Discount Codes</NuxtLink></li>
           <li><NuxtLink to="/admin/suppliers">Supplier Management</NuxtLink></li>
           <li><NuxtLink to="/admin/purchase-orders">Purchase Orders</NuxtLink></li>
+          <li class="nav-item-group">
+            <span>Reports</span>
+            <ul>
+              <li><NuxtLink to="/admin/reports/low-stock">Low Stock</NuxtLink></li>
+              <li><NuxtLink to="/admin/reports/sales">Sales</NuxtLink></li>
+              <li><NuxtLink to="/admin/reports/best-sellers">Best Sellers</NuxtLink></li>
+            </ul>
+          </li>
           <!-- Add other admin navigation links here -->
           <li v-if="isAuthenticated">
             <button @click="handleLogout" class="logout-button">Logout ({{ user?.email }})</button>
