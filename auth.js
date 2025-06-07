@@ -51,12 +51,14 @@ async function loginUser(email, password) {
       return { success: false, message: 'User not found.' };
     }
 
-    const user = result.rows[0];
+    const user = result.rows[0]; // Contains id, email, role, password, is_two_fa_enabled, two_fa_secret
     const match = await bcrypt.compare(password, user.password);
 
     if (match) {
-      const token = jwt.sign({ userId: user.id, email: user.email }, jwtSecret, { expiresIn: '1h' });
-      return { success: true, token: token };
+      // Password matches. Return user object for further processing (2FA check or JWT generation)
+      // Exclude password from returned user object
+      const { password: _, ...userWithoutPassword } = user;
+      return { success: true, user: userWithoutPassword };
     } else {
       return { success: false, message: 'Incorrect password.' };
     }
@@ -64,6 +66,16 @@ async function loginUser(email, password) {
     console.error('Error logging in user:', error);
     return { success: false, message: 'Error logging in user.' };
   }
+}
+
+// Function to generate JWT
+function generateJwt(user) {
+  // User object should contain id, email, role
+  return jwt.sign(
+    { userId: user.id, email: user.email, role: user.role }, // Add role to JWT payload
+    jwtSecret,
+    { expiresIn: '1h' }
+  );
 }
 
 // Conceptual Password Recovery
@@ -103,11 +115,12 @@ async function resetPassword(token, newPassword) {
 
 module.exports = {
   registerUser,
-  loginUser,
+  loginUser, // Now returns user object on success
+  generateJwt, // New exported function
   requestPasswordReset,
   resetPassword,
   jwtSecret,
-  isAuthenticated, // Export the new middleware
+  isAuthenticated,
 
   // isAdmin middleware - now checks role from DB
   isAdmin: async (req, res, next) => {

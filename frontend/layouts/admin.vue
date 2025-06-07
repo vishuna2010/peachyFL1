@@ -8,6 +8,7 @@
           <li><NuxtLink to="/admin/users">User Management</NuxtLink></li>
           <li><NuxtLink to="/admin/orders">Order Management</NuxtLink></li>
           <li><NuxtLink to="/admin/discounts">Discount Codes</NuxtLink></li>
+          <li><NuxtLink to="/admin/suppliers">Supplier Management</NuxtLink></li>
           <!-- Add other admin navigation links here -->
           <li v-if="isAuthenticated">
             <button @click="handleLogout" class="logout-button">Logout ({{ user?.email }})</button>

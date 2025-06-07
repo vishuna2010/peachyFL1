@@ -30,10 +30,13 @@ const createTables = async () => {
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         role VARCHAR(50) NOT NULL DEFAULT 'customer',
+        two_fa_secret VARCHAR(255) NULL,
+        is_two_fa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        -- Note: Consider adding updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP here too for consistency
       );
     `);
-    console.log('Table "users" created successfully or already exists (and altered for role).');
+    console.log('Table "users" created successfully or already exists (and altered for role, 2FA).');
 
     // Ensure existing users have the default role if the column was just added.
     // This is more of a migration step. For simplicity, we'll assume new setups

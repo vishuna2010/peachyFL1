@@ -6,26 +6,38 @@ export const useAuth = () => {
 
   // Reactive state for token and user
   // Using useState for simple global state within Nuxt's context
-  const authToken = useState('authToken', () => null); // Persist in localStorage for better UX
-  constauthUser = useState('authUser', () => null);   // Could also be persisted
+  const authToken = useState('authToken', () => null);
+  const authUser = useState('authUser', () => null);
+  const isAuthInitialized = useState('isAuthInitialized', () => false); // Flag to track initial load
 
   // Attempt to load token from localStorage on initialization (client-side)
-  if (process.client) {
+  const _initializeAuth = () => {
+    if (process.client && !isAuthInitialized.value) {
     const storedToken = localStorage.getItem('authToken');
     const storedUser = localStorage.getItem('authUser');
     if (storedToken) {
       authToken.value = storedToken;
-      $axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+      if (storedToken) { // Set Axios header only if token actually exists
+          $axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+      }
     }
     if (storedUser) {
       try {
         authUser.value = JSON.parse(storedUser);
       } catch (e) {
         console.error("Error parsing stored user", e);
-        localStorage.removeItem('authUser'); // Clear corrupted data
+        localStorage.removeItem('authUser');
       }
     }
+    isAuthInitialized.value = true;
+    console.log('Auth initialized. Token:', !!authToken.value, 'User:', !!authUser.value);
+    }
+  };
+
+  if (process.client && !isAuthInitialized.value) {
+      _initializeAuth();
   }
+
 
   const setToken = (newToken) => {
     authToken.value = newToken;
@@ -51,24 +63,26 @@ export const useAuth = () => {
     }
   };
 
-  const login = async (email, password) => {
-    try {
-      const response = await $axios.post('/auth/login', { email, password });
-      if (response.data.token) {
-        setToken(response.data.token);
-        // Optionally fetch user details here if not returned by /login
-        // For now, let's assume login doesn't return full user details
-        // or we can decode the token if it contains user info (not best practice for sensitive info)
-        // For simplicity, we'll try to get user info from a hypothetical /auth/me endpoint
-        await fetchUser();
-        return { success: true };
-      }
-      return { success: false, message: 'Login failed: No token received.' };
-    } catch (error) {
-      console.error('Login error:', error.response?.data?.message || error.message);
-      return { success: false, message: error.response?.data?.message || 'Login failed.' };
+  // This login function is now primarily for direct, non-2FA login if ever needed,
+  // or can be deprecated if login page handles API calls directly.
+  // For this refactor, we'll keep it but note its diminished role for the login page.
+  // The login page will call API directly then call loginSuccess.
+  // async function login(email, password) { ... } // Original login logic might be removed or adapted
+
+  const loginSuccess = (apiResponseData) => {
+    // Expects apiResponseData to be { token, user }
+    if (apiResponseData.token && apiResponseData.user) {
+      setToken(apiResponseData.token);
+      setUser(apiResponseData.user); // Assuming user object from API is safe to store
+                                     // (e.g., excludes password, sensitive fields)
+      console.log('Login successful, user set:', authUser.value);
+      // router.push(router.currentRoute.value.query.redirect || '/profile'); // Moved to page
+      return true;
     }
+    console.error('loginSuccess called with invalid data:', apiResponseData);
+    return false;
   };
+
 
   const register = async (email, password) => {
     try {
@@ -120,17 +134,23 @@ export const useAuth = () => {
     }
   };
 
-  // Call fetchUser on init if token exists but user doesn't (e.g. after page reload)
-  if (process.client && authToken.value && !authUser.value) {
+  // Call fetchUser on init if token exists but user doesn't (e.g. after page reload and _initializeAuth)
+  if (process.client && authToken.value && !authUser.value && isAuthInitialized.value) {
+     // Check isAuthInitialized to ensure this doesn't run before localStorage load attempt
     fetchUser();
   }
 
   return {
-    authToken,
-    authUser,
-    login,
+    authToken: computed(() => authToken.value), // Expose as computed for read-only pattern
+    authUser: computed(() => authUser.value),
+    isAuthInitialized: computed(() => isAuthInitialized.value), // Expose initialization status
+    // login, // Original login function might be deprecated for page-level handling
+    loginSuccess, // New function to finalize login
     register,
     logout,
-    fetchUser // Expose if needed elsewhere
+    fetchUser,
+    // Expose setters if direct manipulation from outside is ever needed, though typically not.
+    // _setToken: setToken,
+    // _setUser: setUser,
   };
 };
