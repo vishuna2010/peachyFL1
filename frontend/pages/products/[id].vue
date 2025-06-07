@@ -29,10 +29,25 @@
         <span v-for="tag in product.tags" :key="tag" class="tag">{{ tag }}</span>
       </div>
 
+      <div class="stock-info" :class="stockStatusClass">
+        {{ stockStatusMessage }}
+      </div>
+
       <div class="add-to-cart-section">
-        <input type="number" v-model.number="quantity" min="1" class="quantity-input" />
-        <button @click="handleAddToCart" class="add-to-cart-button">
-          {{ itemAdded ? 'Added!' : 'Add to Cart' }}
+        <input
+          type="number"
+          v-model.number="quantity"
+          min="1"
+          :max="product.stock_quantity > 0 ? product.stock_quantity : 1"
+          :disabled="product.stock_quantity <= 0"
+          class="quantity-input"
+        />
+        <button
+          @click="handleAddToCart"
+          class="add-to-cart-button"
+          :disabled="product.stock_quantity <= 0 || quantity > product.stock_quantity"
+        >
+          {{ itemAdded ? 'Added!' : (product.stock_quantity <= 0 ? 'Out of Stock' : 'Add to Cart') }}
         </button>
       </div>
       <div v-if="addToCartError" class="error-message">{{ addToCartError }}</div>
@@ -56,9 +71,25 @@ const runtimeConfig = useRuntimeConfig();
 const { addToCart } = useCart(); // Get addToCart function
 
 const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl);
-const quantity = ref(1); // For quantity input
-const itemAdded = ref(false); // For visual feedback
-const addToCartError = ref(''); // For error messages
+const quantity = ref(1);
+const itemAdded = ref(false);
+const addToCartError = ref('');
+
+// Stock related computed properties
+const stockStatusMessage = computed(() => {
+  if (!product.value) return '';
+  if (product.value.stock_quantity <= 0) return 'Out of Stock';
+  if (product.value.stock_quantity > 0 && product.value.stock_quantity <= 5) return `Only ${product.value.stock_quantity} left!`;
+  return 'In Stock';
+});
+
+const stockStatusClass = computed(() => {
+  if (!product.value) return '';
+  if (product.value.stock_quantity <= 0) return 'stock-out-of-stock';
+  if (product.value.stock_quantity > 0 && product.value.stock_quantity <= 5) return 'stock-low';
+  return 'stock-in-stock';
+});
+
 
 async function fetchProduct() {
   const productId = route.params.id;
@@ -81,12 +112,23 @@ const handleAddToCart = () => {
     addToCartError.value = "Product data not loaded yet.";
     return;
   }
+  if (product.value.stock_quantity <= 0) {
+    addToCartError.value = "This product is out of stock.";
+    return;
+  }
   if (quantity.value <= 0) {
     addToCartError.value = "Please enter a valid quantity.";
     return;
   }
+  if (quantity.value > product.value.stock_quantity) {
+    addToCartError.value = `Cannot add ${quantity.value} items. Only ${product.value.stock_quantity} left in stock.`;
+    return;
+  }
+
   addToCart(product.value, quantity.value);
   itemAdded.value = true;
+  // Potentially re-fetch product to update stock_quantity display if not relying on cart logic to do so
+  // Or, optimistically update local product.value.stock_quantity (though this can get out of sync)
   setTimeout(() => {
     itemAdded.value = false;
   }, 1500); // Reset feedback
@@ -128,7 +170,6 @@ onMounted(fetchProduct);
 }
 .product-detail-image-placeholder {
   height: 300px; /* Fixed height for placeholder */
-  /* Ensure these styles are consistent if you copy-pasted the image placeholder part */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -165,6 +206,17 @@ onMounted(fetchProduct);
 .tags {
   margin-bottom: 1.5rem;
 }
+.stock-info {
+  text-align: center;
+  margin: 1rem 0;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-weight: bold;
+}
+.stock-in-stock { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;}
+.stock-low { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba;}
+.stock-out-of-stock { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+
 .tag {
   display: inline-block;
   background-color: #007bff;
@@ -191,6 +243,10 @@ onMounted(fetchProduct);
   border: 1px solid #ccc;
   border-radius: 4px;
 }
+.quantity-input:disabled {
+  background-color: #e9ecef;
+  opacity: 0.7;
+}
 .add-to-cart-button {
   background-color: #28a745;
   color: white;
@@ -200,8 +256,12 @@ onMounted(fetchProduct);
   cursor: pointer;
   font-size: 1em;
 }
-.add-to-cart-button:hover {
+.add-to-cart-button:hover:not(:disabled) {
   background-color: #218838;
+}
+.add-to-cart-button:disabled {
+  background-color: #6c757d; /* Grey out when disabled */
+  cursor: not-allowed;
 }
 
 .back-link {

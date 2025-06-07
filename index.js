@@ -5,6 +5,7 @@ const db = require('./db'); // Import the db module to ensure tables are created
 const productRoutes = require('./routes/products'); // Import product routes
 const adminUserRoutes = require('./routes/adminUsers'); // Import admin user routes
 const adminOrderRoutes = require('./routes/adminOrders'); // Import admin order routes
+const adminProductRoutes = require('./routes/adminProducts'); // Import admin product routes
 const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
 const path = require('path'); // Import path module

@@ -100,7 +100,7 @@ router.get('/', async (req, res) => {
   let paramIndex = 1;
 
   let baseQuery = `
-    SELECT p.id, p.name, p.description, p.price, p.category_id, p.image_url, p.created_at,
+    SELECT p.id, p.name, p.description, p.price, p.category_id, p.image_url, p.stock_quantity, p.created_at,
            c.name as category_name,
            COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
     FROM products p

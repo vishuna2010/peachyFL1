@@ -76,11 +76,24 @@ const createTables = async () => {
         price DECIMAL(10, 2) NOT NULL,
         category_id INT,
         image_url VARCHAR(255) NULL,
+        stock_quantity INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
       );
     `);
-    console.log('Table "products" created successfully or already exists (and altered for image_url).');
+    console.log('Table "products" created successfully or already exists (and altered for image_url and stock_quantity).');
+
+    // Optional: Add a CHECK constraint to ensure stock_quantity never goes negative,
+    // though application logic should primarily handle this.
+    // try {
+    //   await client.query("ALTER TABLE products ADD CONSTRAINT check_stock_non_negative CHECK (stock_quantity >= 0);");
+    //   console.log('CHECK constraint for non-negative stock added to products table.');
+    // } catch (constraintError) {
+    //   if (!constraintError.message.includes('already exists')) { // Benign if constraint already there
+    //     console.warn('Warning during products table alteration for stock_quantity check constraint:', constraintError.message);
+    //   }
+    // }
+
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_tags (
