@@ -31,6 +31,7 @@
           <th>SKU</th>
           <th>Price</th>
           <th>Stock</th>
+          <th>Reorder At</th>
           <th>Category</th>
           <th>Supplier</th>
           <th>Actions</th>
@@ -52,6 +53,7 @@
           <td>{{ product.sku || 'N/A' }}</td>
           <td>${{ parseFloat(product.price).toFixed(2) }}</td>
           <td>{{ product.stock_quantity }}</td>
+          <td>{{ product.reorder_threshold !== null ? product.reorder_threshold : 'N/A' }}</td>
           <td>{{ product.category_name || 'N/A' }}</td>
           <td>{{ product.supplier_name || 'N/A' }}</td>
           <td class="actions-cell">

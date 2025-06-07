@@ -10,6 +10,7 @@ const adminProductRoutes = require('./routes/adminProducts'); // Import admin pr
 const adminDiscountRoutes = require('./routes/adminDiscounts'); // Import admin discount routes
 const adminSupplierRoutes = require('./routes/adminSuppliers'); // Import admin supplier routes
 const adminPurchaseOrderRoutes = require('./routes/adminPurchaseOrders'); // Import admin PO routes
+const adminReportRoutes = require('./routes/adminReports'); // Import admin report routes
 const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
 const cartRoutes = require('./routes/cart'); // Import cart routes

@@ -82,11 +82,12 @@ const createTables = async () => {
         stock_quantity INTEGER NOT NULL DEFAULT 0,
         supplier_id INTEGER NULL REFERENCES suppliers(id) ON DELETE SET NULL,
         sku VARCHAR(100) NULL UNIQUE,
+        reorder_threshold INTEGER NULL DEFAULT NULL, -- New column
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Will be updated by application logic
       );
     `);
-    console.log('Table "products" created successfully or already exists (altered for supplier_id, sku, updated_at, image_url, stock_quantity).');
+    console.log('Table "products" created successfully or already exists (altered for supplier_id, sku, updated_at, image_url, stock_quantity, reorder_threshold).');
 
     // Optional: Add a CHECK constraint to ensure stock_quantity never goes negative,
     // though application logic should primarily handle this.

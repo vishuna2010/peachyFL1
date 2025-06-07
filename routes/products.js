@@ -29,7 +29,7 @@ async function getOrCreateTagIds(tagNames, client) {
 router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleMulterError, async (req, res) => {
   const {
     name, description, price, category_id, tags: tagNames,
-    stock_quantity = 0, supplier_id, sku
+    stock_quantity = 0, supplier_id, sku, reorder_threshold
   } = req.body;
 
   // Validations
@@ -45,6 +45,12 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   }
   if (supplier_id !== undefined && supplier_id !== null && isNaN(parseInt(supplier_id))) {
     return res.status(400).json({ message: 'Valid supplier_id (integer or null) is required if provided.' });
+  }
+  if (reorder_threshold !== undefined && reorder_threshold !== null) {
+    const rt = parseInt(reorder_threshold);
+    if (isNaN(rt) || rt < 0) {
+      return res.status(400).json({ message: 'Reorder threshold must be a non-negative integer if provided.' });
+    }
   }
   // SKU can be null/empty, but if provided, it might have format rules (not enforced here beyond DB unique constraint)
 
@@ -75,8 +81,8 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   try {
     await client.query('BEGIN');
     const productQuery = `
-      INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+      INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, reorder_threshold, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
       RETURNING *
     `;
     const productResult = await client.query(productQuery, [
@@ -84,7 +90,8 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
       category_id ? parseInt(category_id) : null,
       imageUrl, stock,
       supplier_id ? parseInt(supplier_id) : null,
-      sku || null
+      sku || null,
+      reorder_threshold !== undefined && reorder_threshold !== null ? parseInt(reorder_threshold) : null
     ]);
     const newProduct = productResult.rows[0];
 
@@ -138,7 +145,7 @@ router.get('/', async (req, res) => {
   let paramIndex = 1;
 
   let baseQuery = `
-    SELECT p.id, p.name, p.description, p.price, p.category_id, p.image_url, p.stock_quantity, p.sku, p.supplier_id, p.created_at, p.updated_at,
+    SELECT p.id, p.name, p.description, p.price, p.category_id, p.image_url, p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold, p.created_at, p.updated_at,
            c.name as category_name,
            s.name as supplier_name,
            COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
@@ -296,7 +303,7 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
   const { id } = req.params;
   const {
     name, description, price, category_id, tags: tagNames,
-    stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku
+    stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold
   } = req.body;
 
   if (isNaN(parseInt(id))) {
@@ -370,9 +377,18 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
         setClauses.push(`supplier_id = $${currentParamIndex++}`);
         queryUpdateValues.push(supplier_id === null ? null : parseInt(supplier_id));
     }
-    if (sku !== undefined) { // Can be null to remove SKU
+    if (sku !== undefined) {
         setClauses.push(`sku = $${currentParamIndex++}`);
         queryUpdateValues.push(sku === null || sku === '' ? null : sku);
+    }
+    if (reorder_threshold !== undefined) { // Can be null to remove/unset threshold
+        const rt = reorder_threshold === null ? null : parseInt(reorder_threshold);
+        if (reorder_threshold !== null && (isNaN(rt) || rt < 0)) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'Reorder threshold must be a non-negative integer or null.' });
+        }
+        setClauses.push(`reorder_threshold = $${currentParamIndex++}`);
+        queryUpdateValues.push(rt);
     }
 
     // Only update image_url if a new file was uploaded OR if it was explicitly set to null

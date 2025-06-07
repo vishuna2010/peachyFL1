@@ -104,6 +104,154 @@ router.post('/', async (req, res) => {
   }
 });
 
+// POST /api/admin/purchase-orders/:poId/items/:poItemId/receive - Receive stock for a PO item
+router.post('/:poId/items/:poItemId/receive', async (req, res) => {
+  const { poId, poItemId } = req.params;
+  const { quantity_received_now } = req.body;
+
+  // 1. Validate Inputs
+  if (isNaN(parseInt(poId)) || isNaN(parseInt(poItemId))) {
+    return res.status(400).json({ message: 'Invalid PO ID or PO Item ID format.' });
+  }
+  if (quantity_received_now === undefined || isNaN(parseInt(quantity_received_now)) || parseInt(quantity_received_now) <= 0) {
+    return res.status(400).json({ message: 'quantity_received_now must be a positive integer.' });
+  }
+  const qtyReceivedNow = parseInt(quantity_received_now);
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 2. Fetch Purchase Order Item (and lock)
+    const poItemResult = await client.query(
+      'SELECT * FROM purchase_order_items WHERE id = $1 AND purchase_order_id = $2 FOR UPDATE',
+      [poItemId, poId]
+    );
+    if (poItemResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: `Purchase order item with ID ${poItemId} not found on PO #${poId}.` });
+    }
+    const poItem = poItemResult.rows[0];
+
+    // 3. Fetch Product (and lock)
+    const productResult = await client.query(
+      'SELECT id, stock_quantity FROM products WHERE id = $1 FOR UPDATE',
+      [poItem.product_id]
+    );
+    if (productResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      // This should ideally not happen if DB integrity is maintained via foreign keys
+      return res.status(404).json({ message: `Product with ID ${poItem.product_id} not found.` });
+    }
+    // const product = productResult.rows[0]; // Not directly used beyond locking for now
+
+    // 4. Fetch Purchase Order (to check status and lock)
+    const poResult = await client.query(
+      'SELECT status FROM purchase_orders WHERE id = $1 FOR UPDATE',
+      [poId]
+    );
+    // PO existence is implicitly checked by poItemResult, but explicit check is fine
+    if (poResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: `Purchase Order with ID ${poId} not found.`});
+    }
+    const currentPOStatus = poResult.rows[0].status;
+    if (!['ordered', 'partially_received'].includes(currentPOStatus)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: `Cannot receive stock for a PO with status "${currentPOStatus}". Must be 'ordered' or 'partially_received'.` });
+    }
+
+    // 5. Validate quantity_received_now
+    const totalReceivable = poItem.quantity_ordered - poItem.quantity_received;
+    if (qtyReceivedNow > totalReceivable) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: `Quantity received now (${qtyReceivedNow}) exceeds remaining receivable quantity (${totalReceivable}).` });
+    }
+
+    // 6. Update purchase_order_items
+    const updatedPoItemResult = await client.query(
+      'UPDATE purchase_order_items SET quantity_received = quantity_received + $1 WHERE id = $2 RETURNING *',
+      [qtyReceivedNow, poItemId]
+    );
+
+    // 7. Update products stock
+    await client.query(
+      'UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [qtyReceivedNow, poItem.product_id]
+    );
+
+    // 8. Update purchase_orders.status and updated_at
+    const allItemsForPOResult = await client.query(
+      'SELECT quantity_ordered, quantity_received FROM purchase_order_items WHERE purchase_order_id = $1',
+      [poId]
+    );
+
+    let totalOrderedOnPO = 0;
+    let totalReceivedOnPO = 0;
+    allItemsForPOResult.rows.forEach(item => {
+      totalOrderedOnPO += item.quantity_ordered;
+      totalReceivedOnPO += item.quantity_received;
+    });
+
+    let newPOStatus = currentPOStatus; // Default to current
+    if (totalReceivedOnPO >= totalOrderedOnPO) {
+      newPOStatus = 'received';
+    } else if (totalReceivedOnPO > 0) {
+      newPOStatus = 'partially_received';
+    }
+    // If newPOStatus changed or if it's 'partially_received' (could be multiple partial receipts)
+    if (newPOStatus !== currentPOStatus || newPOStatus === 'partially_received') {
+        await client.query(
+            'UPDATE purchase_orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [newPOStatus, poId]
+        );
+    } else { // Still update updated_at even if status name doesn't change (e.g. another partial receipt)
+        await client.query(
+            'UPDATE purchase_orders SET updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [poId]
+        );
+    }
+
+
+    // 9. Commit Transaction
+    await client.query('COMMIT');
+
+    // 10. Response: Fetch the updated PO to return full details
+    const finalPoQuery = `
+      SELECT po.*, s.name as supplier_name, u.email as created_by_user_email
+      FROM purchase_orders po
+      JOIN suppliers s ON po.supplier_id = s.id
+      LEFT JOIN users u ON po.created_by_user_id = u.id
+      WHERE po.id = $1;
+    `;
+    const finalPoResult = await db.query(finalPoQuery, [poId]); // Use db.query for fresh client after commit
+    const updatedPurchaseOrder = finalPoResult.rows[0];
+
+    const finalItemsQuery = `
+      SELECT poi.*, p.name as product_name, p.sku as product_sku
+      FROM purchase_order_items poi
+      JOIN products p ON poi.product_id = p.id
+      WHERE poi.purchase_order_id = $1
+      ORDER BY poi.id ASC;
+    `;
+    const finalItemsResult = await db.query(finalItemsQuery, [poId]);
+    updatedPurchaseOrder.items = finalItemsResult.rows;
+
+    res.status(200).json({
+        message: `Successfully received ${qtyReceivedNow} unit(s) for item ${poItemId} on PO #${poId}.`,
+        purchaseOrder: updatedPurchaseOrder,
+        updatedItem: updatedPoItemResult.rows[0]
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(`Error receiving stock for PO Item ID ${poItemId} on PO ID ${poId}:`, error);
+    res.status(500).json({ message: 'Failed to receive stock.' });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/admin/purchase-orders - List all Purchase Orders
 router.get('/', async (req, res) => {
   const page = parseInt(req.query.page) || 1;

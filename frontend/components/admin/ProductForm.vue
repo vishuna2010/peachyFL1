@@ -42,9 +42,15 @@
       </div>
     </div>
 
-    <div class="form-group">
-      <label for="sku">SKU (Stock Keeping Unit):</label>
-      <input type="text" id="sku" v-model="formData.sku" />
+    <div class="form-row">
+        <div class="form-group">
+            <label for="sku">SKU (Stock Keeping Unit):</label>
+            <input type="text" id="sku" v-model="formData.sku" />
+        </div>
+        <div class="form-group">
+            <label for="reorder_threshold">Reorder Threshold (Optional):</label>
+            <input type="number" id="reorder_threshold" v-model.number="formData.reorder_threshold" min="0" placeholder="Leave empty for no threshold" />
+        </div>
     </div>
 
     <div class="form-group">
@@ -88,17 +94,18 @@ const props = defineProps({
       price: 0,
       stock_quantity: 0,
       category_id: null,
-      supplier_id: null, // Added
-      sku: '',           // Added
-      tags: [],          // Expect tags as an array of names
+      supplier_id: null,
+      sku: '',
+      reorder_threshold: null, // Added default
+      tags: [],
       image_url: null,
     })
   },
-  categories: { // Expect categories to be passed as a prop
+  categories: {
     type: Array,
     default: () => []
   },
-  suppliers: { // Expect suppliers to be passed as a prop
+  suppliers: {
     type: Array,
     default: () => []
   },
@@ -120,19 +127,45 @@ const emit = defineEmits(['submit']);
 const runtimeConfig = useRuntimeConfig();
 const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl);
 
-const formData = reactive({ ...props.initialData });
-const tagsInput = ref(props.initialData.tags ? props.initialData.tags.join(', ') : '');
+// Initialize formData with a structure that includes all fields
+const initialFormData = {
+  name: '',
+  description: '',
+  price: 0,
+  stock_quantity: 0,
+  category_id: null,
+  supplier_id: null,
+  sku: '',
+  reorder_threshold: null,
+  tags: [],
+  image_url: null,
+  ...props.initialData // Spread initialData to overwrite defaults
+};
+const formData = reactive(initialFormData);
+const tagsInput = ref(initialFormData.tags ? initialFormData.tags.join(', ') : '');
+
+
 const selectedFile = ref(null);
 const newImagePreview = ref(null);
-// Reactive flag to indicate if current image should be removed (by setting image_url to null)
 const imageRemovalFlag = ref(false);
 
 
 watch(() => props.initialData, (newData) => {
   if (newData) {
-    Object.assign(formData, newData);
+    // Update each field individually to maintain reactivity if initialData is not fully structured
+    formData.name = newData.name || '';
+    formData.description = newData.description || '';
+    formData.price = newData.price || 0;
+    formData.stock_quantity = newData.stock_quantity || 0;
+    formData.category_id = newData.category_id === undefined ? null : newData.category_id; // Ensure null if not present
+    formData.supplier_id = newData.supplier_id === undefined ? null : newData.supplier_id;
+    formData.sku = newData.sku || '';
+    formData.reorder_threshold = newData.reorder_threshold === undefined ? null : newData.reorder_threshold;
+    formData.image_url = newData.image_url || null;
+    formData.tags = newData.tags || []; // Ensure tags is an array
+
     tagsInput.value = newData.tags ? newData.tags.join(', ') : '';
-    selectedFile.value = null; // Reset file input on data change
+    selectedFile.value = null;
     newImagePreview.value = null;
     imageRemovalFlag.value = false;
   }
@@ -142,8 +175,7 @@ function handleFileChange(event) {
   const file = event.target.files[0];
   if (file) {
     selectedFile.value = file;
-    imageRemovalFlag.value = false; // If new file is selected, don't remove current image based on button
-    // Generate preview
+    imageRemovalFlag.value = false;
     const reader = new FileReader();
     reader.onload = (e) => {
       newImagePreview.value = e.target.result;
@@ -157,10 +189,9 @@ function handleFileChange(event) {
 
 function removeCurrentImage() {
     imageRemovalFlag.value = true;
-    formData.image_url = null; // Clear current image_url from formData immediately for UI feedback
-    selectedFile.value = null; // Ensure no new file is selected
-    newImagePreview.value = null; // Clear preview
-    // The parent component will need to handle newImageUrlFromRequest: null when submitting
+    formData.image_url = null;
+    selectedFile.value = null;
+    newImagePreview.value = null;
 }
 
 
@@ -170,35 +201,68 @@ const handleSubmit = () => {
     return;
   }
 
-  // Create a FormData object to handle file upload along with other data
   const submissionData = new FormData();
 
-  // Append all formData fields. Convert nulls appropriately.
-  for (const key in formData) {
-    if (key === 'tags') continue; // Tags handled separately
-    if (formData[key] !== null && formData[key] !== undefined) {
-      submissionData.append(key, formData[key]);
+  // Process and append formData fields
+  const processedFormData = { ...formData };
+
+  // Ensure numeric fields that can be empty/null are handled correctly
+  processedFormData.category_id = processedFormData.category_id === '' ? null : processedFormData.category_id;
+  processedFormData.supplier_id = processedFormData.supplier_id === '' ? null : processedFormData.supplier_id;
+  processedFormData.reorder_threshold = (processedFormData.reorder_threshold === '' || processedFormData.reorder_threshold === undefined)
+                                        ? null
+                                        : parseInt(processedFormData.reorder_threshold);
+  if (isNaN(processedFormData.reorder_threshold)) processedFormData.reorder_threshold = null;
+
+
+  for (const key in processedFormData) {
+    if (key === 'tags') continue; // Tags handled separately below
+
+    if (processedFormData[key] !== null && processedFormData[key] !== undefined) {
+      submissionData.append(key, processedFormData[key]);
+    } else if (key === 'image_url' && imageRemovalFlag.value) {
+        // If imageRemovalFlag is true, it means formData.image_url was already set to null.
+        // We want to tell the backend to set image_url to null.
+        // Sending an empty string for 'image_url' can be interpreted by backend as nullification.
+        submissionData.append('image_url', ''); // Or explicit 'null' string if backend handles that
     }
+    // If a field in processedFormData is null (e.g. category_id after processing) and it's not image_url removal case,
+    // it simply won't be appended if the condition is `!== null && !== undefined`.
+    // This is generally fine for optional fields.
+    // If backend expects null for empty optional fields, ensure they are appended as empty string or explicit null.
+    // Example: For supplier_id, if it's null, it won't be appended. Backend should treat missing field as no change or null for new.
   }
 
   // Handle tags
   if (tagsInput.value.trim()) {
     const tagsArray = tagsInput.value.split(',').map(tag => tag.trim()).filter(tag => tag);
     if (tagsArray.length > 0) {
-        tagsArray.forEach(tag => submissionData.append('tags[]', tag)); // Send as array
+        tagsArray.forEach(tag => submissionData.append('tags[]', tag));
+    } else {
+        submissionData.append('tags[]', ''); // Send empty array signal if all tags removed
     }
   } else {
-     submissionData.append('tags[]', ''); // Send empty array if no tags to clear them
+     submissionData.append('tags[]', ''); // Send empty array signal if field was cleared
   }
 
-  // Handle file
   if (selectedFile.value) {
     submissionData.append('productImage', selectedFile.value);
-  } else if (imageRemovalFlag.value && props.isEditMode) {
-    // This tells the backend to set image_url to null
-    submissionData.append('image_url', null);
   }
-  // If no new file and not removing, existing image_url in formData (if any) will be used by backend if it supports not sending the field
+  // Note: if `imageRemovalFlag.value` is true, `formData.image_url` was already set to null.
+  // The loop for `processedFormData` will skip appending `image_url` if it's null,
+  // unless we explicitly handle it like `submissionData.append('image_url', '')` as above.
+  // The PUT logic in backend `routes/products.js` for `image_url` checks:
+  // `else if (newImageUrlFromRequest === null && currentImageUrl)`
+  // `newImageUrlFromRequest` comes from `req.body.image_url`.
+  // FormData does not directly send `null`. If `image_url` is `null` in `formData`, it might not be sent.
+  // To signal removal, `image_url` should be sent as an empty string or a specific keyword if needed.
+  // The current `removeCurrentImage` sets `formData.image_url = null`.
+  // The loop for `submissionData.append` might skip it.
+  // Let's ensure explicit removal signal:
+  if (imageRemovalFlag.value && !selectedFile.value && props.isEditMode) {
+      submissionData.set('image_url', ''); // Use .set to ensure it's there, or make it 'null_flag'
+  }
+
 
   emit('submit', submissionData);
 };
