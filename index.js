@@ -6,6 +6,7 @@ const productRoutes = require('./routes/products'); // Import product routes
 const adminUserRoutes = require('./routes/adminUsers'); // Import admin user routes
 const adminOrderRoutes = require('./routes/adminOrders'); // Import admin order routes
 const orderRoutes = require('./routes/orders'); // Import order routes
+const categoryRoutes = require('./routes/categories'); // Import category routes
 const path = require('path'); // Import path module
 
 const app = express();
@@ -88,6 +89,8 @@ app.use('/api/admin/users', adminUserRoutes);
 // Mount order management specific admin routes
 app.use('/api/admin', adminOrderRoutes); // This will make routes like /api/admin/orders available
 
+// --- Public Category Routes ---
+app.use('/api/categories', categoryRoutes);
 
 // --- Public Order Routes (e.g., for user to create their own order) ---
 app.use('/api/orders', orderRoutes);

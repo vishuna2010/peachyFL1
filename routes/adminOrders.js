@@ -6,6 +6,8 @@ const { isAuthenticated, isAdmin } = require('../auth');
 // Apply auth middleware to all routes in this router
 router.use(isAuthenticated, isAdmin);
 
+const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+
 // GET /admin/orders - List all orders
 router.get('/orders', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -93,5 +95,65 @@ router.get('/orders/:id', async (req, res) => {
     res.status(500).json({ message: 'Failed to retrieve order details.' });
   }
 });
+
+// PUT /admin/orders/:id/status - Update an order's status
+router.put('/orders/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status: newStatus } = req.body;
+
+  if (isNaN(parseInt(id))) {
+    return res.status(400).json({ message: 'Invalid order ID format.' });
+  }
+
+  if (!newStatus) {
+    return res.status(400).json({ message: 'Status is required in the request body.' });
+  }
+
+  if (!ALLOWED_ORDER_STATUSES.includes(newStatus.toLowerCase())) {
+    return res.status(400).json({
+      message: `Invalid status. Allowed statuses are: ${ALLOWED_ORDER_STATUSES.join(', ')}`
+    });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Check if order exists
+    const orderExistsResult = await client.query('SELECT id FROM orders WHERE id = $1 FOR UPDATE', [id]);
+    if (orderExistsResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: `Order with ID ${id} not found.` });
+    }
+
+    // Update the order status and updated_at timestamp
+    const updateQuery = `
+      UPDATE orders
+      SET status = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+      RETURNING *;
+    `;
+    // RETURNING id, user_id, status, total_amount, created_at, updated_at;
+    // Fetch more details if needed for the response, similar to GET /orders/:id
+    const updatedOrderResult = await client.query(updateQuery, [newStatus.toLowerCase(), id]);
+
+    await client.query('COMMIT');
+
+    // For a more complete response, you could re-fetch the order with joins like in GET /orders/:id
+    // For now, returning the directly updated row is sufficient.
+    res.status(200).json({
+      message: `Order #${id} status updated to '${newStatus}'.`,
+      order: updatedOrderResult.rows[0]
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(`Error updating status for order ID ${id}:`, error);
+    res.status(500).json({ message: 'Failed to update order status.' });
+  } finally {
+    client.release();
+  }
+});
+
 
 module.exports = router;

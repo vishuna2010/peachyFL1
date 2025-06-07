@@ -30,7 +30,6 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   const { name, description, price, category_id, tags: tagNames } = req.body;
 
   if (!name || price === undefined) {
-    // If a file was uploaded before this validation fails, it's orphaned.
     if (req.file) fs.unlink(req.file.path, (err) => { if (err) console.error("Error deleting orphaned upload due to validation fail:", err);});
     return res.status(400).json({ message: 'Name and price are required.' });
   }
@@ -41,8 +40,6 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
 
   let imageUrl = null;
   if (req.file) {
-    // req.file.path from multer is like "uploads/product_images/filename.jpg"
-    // We want the URL to be "/uploads/product_images/filename.jpg"
     imageUrl = '/' + req.file.path.replace(/\\/g, "/");
   }
 
@@ -72,7 +69,6 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
     res.status(201).json(newProduct);
   } catch (error) {
     await client.query('ROLLBACK');
-    // If transaction fails and an image was uploaded, delete the orphaned image.
     if (req.file) {
       fs.unlink(req.file.path, (unlinkErr) => {
         if (unlinkErr) console.error('Error deleting image after transaction rollback:', unlinkErr);
@@ -88,32 +84,126 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   }
 });
 
-// GET /products - Get all products (remains unchanged)
+// GET /products - Get all products with filtering, sorting, and pagination
 router.get('/', async (req, res) => {
+  const {
+    search_term,
+    category_id,
+    min_price,
+    max_price,
+    sort_by,
+    page = 1,
+    limit = 10
+  } = req.query;
+
+  const queryValues = [];
+  let paramIndex = 1;
+
+  let baseQuery = `
+    SELECT p.id, p.name, p.description, p.price, p.category_id, p.image_url, p.created_at,
+           c.name as category_name,
+           COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
+    FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN product_tags pt ON p.id = pt.product_id
+    LEFT JOIN tags t ON pt.tag_id = t.id
+  `;
+
+  let countBaseQuery = `
+    SELECT COUNT(DISTINCT p.id) as total_count
+    FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN product_tags pt ON p.id = pt.product_id
+    LEFT JOIN tags t ON pt.tag_id = t.id
+  `;
+
+  let whereClauses = [];
+
+  if (search_term) {
+    whereClauses.push(`(p.name ILIKE $${paramIndex} OR p.description ILIKE $${paramIndex})`);
+    queryValues.push(`%${search_term}%`);
+    paramIndex++;
+  }
+  if (category_id) {
+    if (isNaN(parseInt(category_id))) return res.status(400).json({message: "Invalid category_id format."});
+    whereClauses.push(`p.category_id = $${paramIndex}`);
+    queryValues.push(parseInt(category_id));
+    paramIndex++;
+  }
+  if (min_price) {
+    if (isNaN(parseFloat(min_price))) return res.status(400).json({message: "Invalid min_price format."});
+    whereClauses.push(`p.price >= $${paramIndex}`);
+    queryValues.push(parseFloat(min_price));
+    paramIndex++;
+  }
+  if (max_price) {
+    if (isNaN(parseFloat(max_price))) return res.status(400).json({message: "Invalid max_price format."});
+    whereClauses.push(`p.price <= $${paramIndex}`);
+    queryValues.push(parseFloat(max_price));
+    paramIndex++;
+  }
+
+  if (whereClauses.length > 0) {
+    const whereString = " WHERE " + whereClauses.join(" AND ");
+    baseQuery += whereString;
+    countBaseQuery += whereString;
+  }
+
+  baseQuery += " GROUP BY p.id, c.name ";
+
+  let orderByClause = " ORDER BY p.created_at DESC "; // Default sort
+  const allowedSorts = {
+    'price_asc': 'p.price ASC NULLS LAST', // Handle NULLS if price can be null
+    'price_desc': 'p.price DESC NULLS LAST',
+    'name_asc': 'p.name ASC',
+    'name_desc': 'p.name DESC',
+    'created_at_desc': 'p.created_at DESC',
+    'created_at_asc': 'p.created_at ASC',
+  };
+  if (sort_by && allowedSorts[sort_by]) {
+    orderByClause = ` ORDER BY ${allowedSorts[sort_by]} `;
+  } else if (sort_by && !allowedSorts[sort_by]) {
+    return res.status(400).json({message: "Invalid sort_by parameter."});
+  }
+  baseQuery += orderByClause;
+
+  const numPage = parseInt(page);
+  const numLimit = parseInt(limit);
+  if (isNaN(numPage) || numPage < 1) return res.status(400).json({message: "Invalid page number."});
+  if (isNaN(numLimit) || numLimit < 1 || numLimit > 100) return res.status(400).json({message: "Invalid limit value (must be 1-100)."});
+  const offset = (numPage - 1) * numLimit;
+
+  baseQuery += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1} `;
+  const finalQueryValues = [...queryValues, numLimit, offset];
+
   try {
-    const query = `
-      SELECT p.*, c.name as category_name, COALESCE(json_agg(t.name) FILTER (WHERE t.name IS NOT NULL), '[]') as tags
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.id
-      LEFT JOIN product_tags pt ON p.id = pt.product_id
-      LEFT JOIN tags t ON pt.tag_id = t.id
-      GROUP BY p.id, c.name
-      ORDER BY p.created_at DESC;
-    `;
-    const result = await db.query(query);
-    res.status(200).json(result.rows);
+    const productsResult = await db.query(baseQuery, finalQueryValues);
+    const countResult = await db.query(countBaseQuery, queryValues); // queryValues for count doesn't include limit/offset
+
+    const totalProducts = parseInt(countResult.rows[0].total_count);
+    const totalPages = Math.ceil(totalProducts / numLimit);
+
+    res.status(200).json({
+      products: productsResult.rows,
+      pagination: {
+        total_products: totalProducts,
+        current_page: numPage,
+        limit: numLimit,
+        total_pages: totalPages,
+      }
+    });
   } catch (error) {
-    console.error('Error getting products:', error);
+    console.error('Error getting products with filters:', error);
     res.status(500).json({ message: 'Error getting products.' });
   }
 });
 
-// GET /products/:id - Get a single product by ID (remains unchanged)
+// GET /products/:id - Get a single product by ID
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const query = `
-      SELECT p.*, c.name as category_name, COALESCE(json_agg(t.name) FILTER (WHERE t.name IS NOT NULL), '[]') as tags
+      SELECT p.*, c.name as category_name, COALESCE(json_agg(t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN product_tags pt ON p.id = pt.product_id
@@ -141,7 +231,6 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
     if (req.file) fs.unlink(req.file.path, (err) => { if (err) console.error("Error deleting orphaned upload:", err);});
     return res.status(400).json({ message: 'Invalid product ID.' });
   }
-  // Add other validations as needed, similar to POST
 
   const client = await db.pool.connect();
   try {
@@ -160,29 +249,62 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
       newImageUrl = '/' + req.file.path.replace(/\\/g, "/");
     }
 
-    const updateQuery = `
-      UPDATE products
-      SET name = $1, description = $2, price = $3, category_id = $4, image_url = $5
-      WHERE id = $6
-      RETURNING *
-    `;
-    const productResult = await client.query(updateQuery, [
-      name,
-      description,
-      price !== undefined ? parseFloat(price) : undefined, // Use undefined for COALESCE in query if not provided
-      category_id !== undefined ? parseInt(category_id) : undefined,
-      newImageUrl,
-      id
-    ]);
-    // Note: COALESCE should be used in SQL if partial updates are desired for text/price/category
-    // The above JS passes undefined if not present, SQL query needs to handle this with COALESCE(new_value, old_column_value)
-    // For simplicity, this example assumes all fields (or their current values via a SELECT first) are provided for an update.
-    // A more robust update would fetch product, merge changes, then save.
-    // Or, modify the SQL to use COALESCE for each field: SET name = COALESCE($1, name), description = COALESCE($2, description), ...
+    // Build SET clause dynamically for partial updates
+    const setClauses = [];
+    const queryUpdateValues = [];
+    let currentParamIndex = 1;
 
-    const updatedProduct = productResult.rows[0];
+    if (name !== undefined) {
+        setClauses.push(`name = $${currentParamIndex++}`);
+        queryUpdateValues.push(name);
+    }
+    if (description !== undefined) {
+        setClauses.push(`description = $${currentParamIndex++}`);
+        queryUpdateValues.push(description);
+    }
+    if (price !== undefined) {
+        setClauses.push(`price = $${currentParamIndex++}`);
+        queryUpdateValues.push(parseFloat(price));
+    }
+    if (category_id !== undefined) {
+        setClauses.push(`category_id = $${currentParamIndex++}`);
+        queryUpdateValues.push(category_id === null ? null : parseInt(category_id));
+    }
+    if (req.file || (newImageUrl === null && oldImageUrl !== null) ) { // if new image uploaded or image explicitly set to null
+        setClauses.push(`image_url = $${currentParamIndex++}`);
+        queryUpdateValues.push(newImageUrl);
+    }
 
-    if (tagNames !== undefined) { // Allow clearing tags with empty array or null
+    if (setClauses.length === 0 && tagNames === undefined) { // No actual fields to update and no tags to update
+        await client.query('ROLLBACK'); // Or COMMIT if no change is fine
+        // Return current product data or a 304 Not Modified
+        const productData = await client.query( `
+            SELECT p.*, c.name as category_name, COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            LEFT JOIN product_tags pt ON p.id = pt.product_id
+            LEFT JOIN tags t ON pt.tag_id = t.id
+            WHERE p.id = $1
+            GROUP BY p.id, c.name;
+        `, [id]);
+        return res.status(200).json(productData.rows[0]);
+    }
+
+
+    if (setClauses.length > 0) {
+        const updateQuery = `
+          UPDATE products
+          SET ${setClauses.join(", ")}
+          WHERE id = $${currentParamIndex}
+          RETURNING *
+        `;
+        queryUpdateValues.push(id);
+        const productResult = await client.query(updateQuery, queryUpdateValues);
+        // updatedProduct = productResult.rows[0]; // Will be fetched later for consistent tag data
+    }
+
+
+    if (tagNames !== undefined) {
         await client.query('DELETE FROM product_tags WHERE product_id = $1', [id]);
         if (tagNames && Array.isArray(tagNames) && tagNames.length > 0) {
             const tagIds = await getOrCreateTagIds(tagNames, client);
@@ -191,15 +313,25 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
             }
         }
     }
-    // Refresh tags for response
-    const tagsResult = await client.query('SELECT t.name FROM tags t JOIN product_tags pt ON t.id = pt.tag_id WHERE pt.product_id = $1', [id]);
-    updatedProduct.tags = tagsResult.rows.map(t => t.name);
+
+    // Fetch the product again to get updated tags and consistent data structure
+    const finalProductQuery = `
+        SELECT p.*, c.name as category_name, COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN product_tags pt ON p.id = pt.product_id
+        LEFT JOIN tags t ON pt.tag_id = t.id
+        WHERE p.id = $1
+        GROUP BY p.id, c.name;
+    `;
+    const finalProductResult = await client.query(finalProductQuery, [id]);
+    const updatedProduct = finalProductResult.rows[0];
 
 
     await client.query('COMMIT');
 
     if (req.file && oldImageUrl && oldImageUrl !== newImageUrl) {
-      const oldImageServerPath = path.join(__dirname, '..', oldImageUrl); // .. to go up from routes to project root
+      const oldImageServerPath = path.join(__dirname, '..', oldImageUrl);
       fs.unlink(oldImageServerPath, (err) => {
         if (err) console.error(`Error deleting old image ${oldImageServerPath}:`, err);
         else console.log(`Successfully deleted old image: ${oldImageServerPath}`);
@@ -208,7 +340,7 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
     res.status(200).json(updatedProduct);
   } catch (error) {
     await client.query('ROLLBACK');
-    if (req.file) { // If transaction fails, delete newly uploaded file
+    if (req.file) {
         fs.unlink(req.file.path, (unlinkErr) => {
             if (unlinkErr) console.error('Error deleting image after PUT transaction rollback:', unlinkErr);
         });
@@ -224,7 +356,6 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
 });
 
 // DELETE /products/:id - Delete a product
-// Protected: requires authentication and admin role
 router.delete('/:id', isAuthenticated, isAdmin, async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) {
@@ -234,7 +365,6 @@ router.delete('/:id', isAuthenticated, isAdmin, async (req, res) => {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-    // Fetch image_url before deleting product
     const productDataResult = await client.query('SELECT image_url FROM products WHERE id = $1', [id]);
     if (productDataResult.rowCount === 0) {
         await client.query('ROLLBACK');
@@ -243,7 +373,6 @@ router.delete('/:id', isAuthenticated, isAdmin, async (req, res) => {
     const imageUrlToDelete = productDataResult.rows[0].image_url;
 
     const result = await client.query('DELETE FROM products WHERE id = $1 RETURNING *', [id]);
-    // product_tags are deleted by CASCADE constraint defined in db.js
 
     await client.query('COMMIT');
 
