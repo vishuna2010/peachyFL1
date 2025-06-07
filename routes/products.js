@@ -27,19 +27,26 @@ async function getOrCreateTagIds(tagNames, client) {
 
 // POST /products - Create a new product with S3 Upload
 router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleMulterError, async (req, res) => {
-  const { name, description, price, category_id, tags: tagNames, stock_quantity = 0 } = req.body;
+  const {
+    name, description, price, category_id, tags: tagNames,
+    stock_quantity = 0, supplier_id, sku
+  } = req.body;
 
+  // Validations
   if (!name || price === undefined) {
     return res.status(400).json({ message: 'Name and price are required.' });
   }
-  if (category_id && isNaN(parseInt(category_id))) {
-    return res.status(400).json({ message: 'Valid category_id (integer) is required if provided.' });
+  if (category_id !== undefined && category_id !== null && isNaN(parseInt(category_id))) {
+    return res.status(400).json({ message: 'Valid category_id (integer or null) is required if provided.' });
   }
   const stock = parseInt(stock_quantity);
   if (isNaN(stock) || stock < 0) {
     return res.status(400).json({ message: 'Stock quantity must be a non-negative integer.' });
   }
-
+  if (supplier_id !== undefined && supplier_id !== null && isNaN(parseInt(supplier_id))) {
+    return res.status(400).json({ message: 'Valid supplier_id (integer or null) is required if provided.' });
+  }
+  // SKU can be null/empty, but if provided, it might have format rules (not enforced here beyond DB unique constraint)
 
   let imageUrl = null;
   let s3FileKey = null;
@@ -68,11 +75,17 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   try {
     await client.query('BEGIN');
     const productQuery = `
-      INSERT INTO products (name, description, price, category_id, image_url, stock_quantity)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
       RETURNING *
     `;
-    const productResult = await client.query(productQuery, [name, description, parseFloat(price), category_id ? parseInt(category_id) : null, imageUrl, stock]);
+    const productResult = await client.query(productQuery, [
+      name, description, parseFloat(price),
+      category_id ? parseInt(category_id) : null,
+      imageUrl, stock,
+      supplier_id ? parseInt(supplier_id) : null,
+      sku || null
+    ]);
     const newProduct = productResult.rows[0];
 
     if (tagNames && Array.isArray(tagNames) && tagNames.length > 0) {
@@ -125,11 +138,13 @@ router.get('/', async (req, res) => {
   let paramIndex = 1;
 
   let baseQuery = `
-    SELECT p.id, p.name, p.description, p.price, p.category_id, p.image_url, p.stock_quantity, p.created_at,
+    SELECT p.id, p.name, p.description, p.price, p.category_id, p.image_url, p.stock_quantity, p.sku, p.supplier_id, p.created_at, p.updated_at,
            c.name as category_name,
+           s.name as supplier_name,
            COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN suppliers s ON p.supplier_id = s.id
     LEFT JOIN product_tags pt ON p.id = pt.product_id
     LEFT JOIN tags t ON pt.tag_id = t.id
   `;
@@ -138,9 +153,13 @@ router.get('/', async (req, res) => {
     SELECT COUNT(DISTINCT p.id) as total_count
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN suppliers s ON p.supplier_id = s.id
     LEFT JOIN product_tags pt ON p.id = pt.product_id
     LEFT JOIN tags t ON pt.tag_id = t.id
   `;
+  // Note: Joins for count query should ideally only include those necessary for WHERE clauses.
+  // If WHERE clauses only filter on 'p' table, then joins in count query can be simplified or removed.
+  // For now, keeping them aligned for simplicity, assuming filters might expand.
 
   let whereClauses = [];
 
@@ -174,7 +193,7 @@ router.get('/', async (req, res) => {
     countBaseQuery += whereString;
   }
 
-  baseQuery += " GROUP BY p.id, c.name ";
+  baseQuery += " GROUP BY p.id, c.name, s.name "; // Added s.name to GROUP BY
 
   let orderByClause = " ORDER BY p.created_at DESC ";
   const allowedSorts = {
@@ -228,14 +247,19 @@ router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
     const query = `
-      SELECT p.*, c.name as category_name, COALESCE(json_agg(t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
+      SELECT p.*,
+             c.name as category_name,
+             s.name as supplier_name,
+             COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN suppliers s ON p.supplier_id = s.id
       LEFT JOIN product_tags pt ON p.id = pt.product_id
       LEFT JOIN tags t ON pt.tag_id = t.id
       WHERE p.id = $1
-      GROUP BY p.id, c.name;
+      GROUP BY p.id, c.name, s.name;
     `;
+    // p.* will include supplier_id, sku, updated_at
     const result = await db.query(query, [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Product not found.' });
@@ -270,21 +294,24 @@ functiongetS3KeyFromUrl(url) {
 // PUT /products/:id - Update a product with S3 Upload
 router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handleMulterError, async (req, res) => {
   const { id } = req.params;
-  const { name, description, price, category_id, tags: tagNames, stock_quantity, image_url: newImageUrlFromRequest } = req.body;
+  const {
+    name, description, price, category_id, tags: tagNames,
+    stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku
+  } = req.body;
 
   if (isNaN(parseInt(id))) {
     return res.status(400).json({ message: 'Invalid product ID.' });
   }
 
   const client = await db.pool.connect();
-  let s3FileKeyToStore = null; // This will be the S3 Key if a new file is uploaded
-  let finalImageUrlToStoreInDb = null; // This will be the S3 URL or null
+  let s3FileKeyToStore = null;
+  let finalImageUrlToStoreInDb = undefined; // Use undefined to signify no change unless explicitly set
   let oldS3KeyToDelete = null;
 
   try {
     await client.query('BEGIN');
 
-    const currentProductResult = await client.query('SELECT image_url FROM products WHERE id = $1', [id]);
+    const currentProductResult = await client.query('SELECT image_url, supplier_id, sku FROM products WHERE id = $1 FOR UPDATE', [id]); // Lock row
     if (currentProductResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Product not found.' });
@@ -339,6 +366,15 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
       setClauses.push(`stock_quantity = $${currentParamIndex++}`);
       queryUpdateValues.push(stock);
     }
+    if (supplier_id !== undefined) { // Can be null to remove supplier
+        setClauses.push(`supplier_id = $${currentParamIndex++}`);
+        queryUpdateValues.push(supplier_id === null ? null : parseInt(supplier_id));
+    }
+    if (sku !== undefined) { // Can be null to remove SKU
+        setClauses.push(`sku = $${currentParamIndex++}`);
+        queryUpdateValues.push(sku === null || sku === '' ? null : sku);
+    }
+
     // Only update image_url if a new file was uploaded OR if it was explicitly set to null
     if (req.file || newImageUrlFromRequest === null) {
         setClauses.push(`image_url = $${currentParamIndex++}`);
@@ -346,9 +382,19 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
     }
 
     if (setClauses.length > 0) {
+      setClauses.push(`updated_at = CURRENT_TIMESTAMP`); // Always update timestamp if other fields change
       const updateQuery = `UPDATE products SET ${setClauses.join(", ")} WHERE id = $${currentParamIndex} RETURNING *`;
       queryUpdateValues.push(id);
       await client.query(updateQuery, queryUpdateValues);
+    } else if (tagNames === undefined) { // No field updates and no tag updates
+        // If only tags are being updated, setClauses might be empty, but tagNames is defined.
+        // If neither fields nor tags are updated, we might not need to do anything or commit.
+        // However, client might expect updated_at to change even if only tags are modified.
+        // For simplicity, if only tags change, we'll still update updated_at.
+        // If setClauses is empty AND tagNames is undefined, it means truly no update.
+         await client.query('COMMIT'); // Commit if no actual field changes but maybe tags will change or just to finish.
+         const noChangeProduct = await client.query(finalProductQuery, [id]); // Use pre-defined finalProductQuery
+         return res.status(200).json(noChangeProduct.rows[0]);
     }
 
     if (tagNames !== undefined) {

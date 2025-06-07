@@ -80,11 +80,13 @@ const createTables = async () => {
         category_id INT,
         image_url VARCHAR(255) NULL,
         stock_quantity INTEGER NOT NULL DEFAULT 0,
+        supplier_id INTEGER NULL REFERENCES suppliers(id) ON DELETE SET NULL,
+        sku VARCHAR(100) NULL UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Will be updated by application logic
       );
     `);
-    console.log('Table "products" created successfully or already exists (and altered for image_url and stock_quantity).');
+    console.log('Table "products" created successfully or already exists (altered for supplier_id, sku, updated_at, image_url, stock_quantity).');
 
     // Optional: Add a CHECK constraint to ensure stock_quantity never goes negative,
     // though application logic should primarily handle this.
@@ -189,6 +191,37 @@ const createTables = async () => {
     await client.query('CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_suppliers_email ON suppliers(email);');
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        id SERIAL PRIMARY KEY,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE RESTRICT,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending', -- e.g., pending, ordered, partially_received, received, cancelled
+        order_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        expected_delivery_date DATE NULL,
+        notes TEXT NULL,
+        created_by_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "purchase_orders" created successfully or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_po_supplier_id ON purchase_orders(supplier_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_po_order_date ON purchase_orders(order_date);');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS purchase_order_items (
+        id SERIAL PRIMARY KEY,
+        purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+        quantity_ordered INTEGER NOT NULL CHECK (quantity_ordered > 0),
+        unit_cost_price DECIMAL(10, 2) NOT NULL,
+        quantity_received INTEGER NOT NULL DEFAULT 0 CHECK (quantity_received >= 0 AND quantity_received <= quantity_ordered)
+      );
+    `);
+    console.log('Table "purchase_order_items" created successfully or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_poi_purchase_order_id ON purchase_order_items(purchase_order_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_poi_product_id ON purchase_order_items(product_id);');
 
   } catch (err) {
     console.error('Error creating/altering tables:', err.stack);

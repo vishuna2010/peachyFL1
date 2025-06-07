@@ -51,33 +51,38 @@ router.put('/:id/stock', async (req, res) => {
     // `;
     const updateQuery = `
       UPDATE products
-      SET stock_quantity = $1
+      SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP
       WHERE id = $2
-      RETURNING id, name, price, stock_quantity, category_id, image_url, description, created_at;
-      -- Add other fields as needed for the response, or use RETURNING *
+      RETURNING id;
+      -- Only need to know it succeeded, will re-fetch full details.
     `;
     const updatedProductResult = await client.query(updateQuery, [stockQuantity, id]);
 
-    // The product is guaranteed to be found here due to the check above,
-    // but update operations can return 0 rows if the WHERE clause didn't match (though unlikely here).
-    if (updatedProductResult.rows.length === 0) {
-        // This case should ideally not be hit if the existence check passed.
-        return res.status(404).json({ message: `Product with ID ${id} found but update failed.`});
+    if (updatedProductResult.rowCount === 0) {
+        // This case should ideally not be hit if the existence check passed and ID is valid.
+        return res.status(404).json({ message: `Product with ID ${id} found but update failed to apply.`});
     }
 
-
-    // To include tags and category_name in the response, similar to GET /api/products/:id
+    // Re-fetch the product with all details including supplier, category, and tags
     const finalProductQuery = `
-        SELECT p.*, c.name as category_name, COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
+        SELECT p.*,
+               c.name as category_name,
+               s.name as supplier_name,
+               COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN suppliers s ON p.supplier_id = s.id
         LEFT JOIN product_tags pt ON p.id = pt.product_id
         LEFT JOIN tags t ON pt.tag_id = t.id
         WHERE p.id = $1
-        GROUP BY p.id, c.name;
+        GROUP BY p.id, c.name, s.name;
     `;
     const finalProductResponse = await client.query(finalProductQuery, [id]);
 
+    if (finalProductResponse.rows.length === 0) {
+        // Should not happen if update was successful
+        return res.status(404).json({ message: `Product with ID ${id} could not be re-fetched after update.`});
+    }
 
     res.status(200).json({
       message: `Stock quantity for product #${id} updated to ${stockQuantity}.`,
@@ -91,5 +96,49 @@ router.put('/:id/stock', async (req, res) => {
     client.release();
   }
 });
+
+// GET /api/admin/products/:id/label - Generate a PDF label for a product
+router.get('/:id/label', async (req, res) => {
+  const { id } = req.params;
+  if (isNaN(parseInt(id))) {
+    return res.status(400).json({ message: 'Invalid product ID format.' });
+  }
+
+  try {
+    // Fetch minimal product details needed for the label
+    // Ensure SKU is fetched if it's preferred for barcode over ID.
+    const productResult = await db.query(
+      'SELECT id, name, sku, price FROM products WHERE id = $1',
+      [id]
+    );
+
+    if (productResult.rows.length === 0) {
+      return res.status(404).json({ message: `Product with ID ${id} not found.` });
+    }
+    const product = productResult.rows[0];
+
+    // Generate the PDF
+    const { generateProductLabelPdf } = require('../services/pdfService'); // Import here or at top
+    const pdfBuffer = await generateProductLabelPdf(product);
+
+    // Set response headers for PDF
+    res.setHeader('Content-Type', 'application/pdf');
+    const fileNameSku = product.sku || product.id;
+    res.setHeader('Content-Disposition', `inline; filename="product_label_${fileNameSku}.pdf"`);
+    // Use 'attachment' instead of 'inline' to force download
+
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error(`Error generating label for product ID ${id}:`, error);
+    if (!res.headersSent) { // Avoid setting headers if already sent (e.g. by an earlier error)
+        res.status(500).json({ message: 'Failed to generate product label PDF.' });
+    } else {
+        // If headers already sent, express will handle closing connection on error
+        console.error("Headers already sent, could not send JSON error response for PDF generation.");
+    }
+  }
+});
+
 
 module.exports = router;
