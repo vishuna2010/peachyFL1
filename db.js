@@ -165,6 +165,27 @@ const createTables = async () => {
     // Index on is_active and dates for querying valid discounts
     await client.query('CREATE INDEX IF NOT EXISTS idx_discounts_validity ON discounts(is_active, valid_from, valid_until);');
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS suppliers (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        contact_person VARCHAR(255) NULL,
+        email VARCHAR(255) NULL UNIQUE,
+        phone VARCHAR(50) NULL,
+        address_line1 VARCHAR(255) NULL,
+        address_line2 VARCHAR(255) NULL,
+        city VARCHAR(100) NULL,
+        postal_code VARCHAR(20) NULL,
+        country VARCHAR(50) NULL,
+        notes TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Consider trigger for auto-update
+      );
+    `);
+    console.log('Table "suppliers" created successfully or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_suppliers_email ON suppliers(email);');
+
 
   } catch (err) {
     console.error('Error creating/altering tables:', err.stack);

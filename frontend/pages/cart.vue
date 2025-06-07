@@ -1,7 +1,7 @@
 <template>
   <div class="cart-page">
     <h2>Your Shopping Cart</h2>
-    <div v-if="!isCartInitialized" class="loading-cart">Initializing cart...</div>
+    <div v-if="!isCartInitialized.value" class="loading-cart">Initializing cart...</div>
     <div v-else-if="cartItems.length === 0" class="empty-cart">
       <p>Your cart is empty.</p>
       <NuxtLink to="/">Continue Shopping</NuxtLink>
@@ -11,7 +11,7 @@
         <li v-for="item in cartItems" :key="item.productId" class="cart-item">
           <img
             v-if="item.image_url"
-            :src="item.image_url" <!-- Removed backendUrl prefix -->
+            :src="item.image_url"
             :alt="item.name"
             class="cart-item-image"
           />
@@ -39,10 +39,36 @@
       <div class="cart-summary">
         <h3>Cart Summary</h3>
         <p>Total Items: {{ cartTotalItems }}</p>
-        <p>Total Price: <strong>${{ cartTotalPrice.toFixed(2) }}</strong></p>
+        <p>Subtotal: ${{ cartSubtotal.toFixed(2) }}</p>
+
+        <div class="discount-section">
+          <div class="discount-form">
+            <input type="text" v-model="discountCodeInput" placeholder="Enter discount code" class="discount-input" :disabled="applyingDiscount"/>
+            <button @click="handleApplyDiscount" :disabled="applyingDiscount || !discountCodeInput" class="apply-discount-button">
+              {{ applyingDiscount ? 'Applying...' : 'Apply Discount' }}
+            </button>
+          </div>
+          <p v-if="discountValidationError" class="error-message discount-error">{{ discountValidationError }}</p>
+          <div v-if="appliedDiscount" class="applied-discount-info">
+            <p>
+              Discount Applied: <strong>{{ appliedDiscount.code }}</strong>
+              (-${{ parseFloat(appliedDiscount.calculated_discount_amount_for_cart).toFixed(2) }})
+              <button @click="handleRemoveDiscount" class="remove-discount-button" :disabled="applyingDiscount">Remove</button>
+            </p>
+            <p v-if="appliedDiscount.description" class="discount-description">{{ appliedDiscount.description }}</p>
+          </div>
+        </div>
+
+        <p class="final-total">Final Total: <strong>${{ cartFinalTotalPrice.toFixed(2) }}</strong></p>
         <div class="cart-actions">
           <button @click="confirmClearCart" class="clear-cart-button">Clear Cart</button>
-          <NuxtLink to="/checkout" class="checkout-button">Proceed to Checkout</NuxtLink>
+          <NuxtLink
+            :to="cartItems.length > 0 ? '/checkout' : '#'"
+            :class="['checkout-button', { 'disabled-link': cartItems.length === 0 }]"
+            @click="checkCartEmptyBeforeCheckout"
+          >
+            Proceed to Checkout
+          </NuxtLink>
         </div>
       </div>
     </div>
@@ -50,9 +76,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue'; // Removed unused useRuntimeConfig, added ref
 import { useCart } from '~/composables/useCart';
-import { useRuntimeConfig } from '#app'; // For Nuxt 3 global runtime config
+// import { useRuntimeConfig } from '#app'; // Not needed if image URLs are absolute
 
 const {
   cartItems,
@@ -61,14 +87,22 @@ const {
   removeFromCart,
   clearCart,
   cartTotalItems,
-  cartTotalPrice
+  cartSubtotal,      // Using cartSubtotal from composable
+  cartFinalTotalPrice, // Using cartFinalTotalPrice from composable
+  applyDiscountCode,
+  clearAppliedDiscount,
+  appliedDiscount,
+  discountValidationError
 } = useCart();
 
-const runtimeConfig = useRuntimeConfig();
-const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl);
+// const runtimeConfig = useRuntimeConfig(); // Not needed if image URLs are absolute
+// const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl); // Not needed
+
+const discountCodeInput = ref('');
+const applyingDiscount = ref(false);
 
 const updateItemQuantity = (productId, quantity) => {
-  if (isNaN(quantity)) return; // Prevent NaN issues if input is cleared
+  if (isNaN(quantity)) return;
   updateQuantity(productId, quantity);
 };
 
@@ -81,6 +115,29 @@ const removeItem = (productId) => {
 const confirmClearCart = () => {
   if (confirm('Are you sure you want to clear your entire cart?')) {
     clearCart();
+  }
+};
+
+const handleApplyDiscount = async () => {
+  if (!discountCodeInput.value.trim()) return;
+  applyingDiscount.value = true;
+  await applyDiscountCode(discountCodeInput.value.trim());
+  applyingDiscount.value = false;
+  // Do not clear input if there was a validation error, so user can correct it.
+  // if (!discountValidationError.value) {
+  //   discountCodeInput.value = '';
+  // }
+};
+
+const handleRemoveDiscount = () => {
+  clearAppliedDiscount();
+  discountCodeInput.value = ''; // Optionally clear input when discount is removed
+};
+
+const checkCartEmptyBeforeCheckout = (event) => {
+  if (cartItems.value.length === 0) {
+    event.preventDefault();
+    alert("Your cart is empty. Please add items before proceeding to checkout.");
   }
 };
 
@@ -137,7 +194,7 @@ h2 {
   height: 100px;
   object-fit: cover;
   border-radius: 4px;
-  background-color: #e0e0e0; /* Placeholder background */
+  background-color: #e0e0e0;
 }
 .cart-item-image-placeholder {
   display: flex;
@@ -199,10 +256,78 @@ h2 {
   margin: 0.5rem 0;
   font-size: 1.1em;
 }
-.cart-summary strong {
+.cart-summary .final-total strong {
   font-size: 1.2em;
-  color: #007bff;
+  color: #28a745;
 }
+.discount-section {
+  margin: 1rem 0;
+  padding: 1rem 0;
+  border-top: 1px dashed #ccc;
+  border-bottom: 1px dashed #ccc;
+}
+.discount-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.discount-input {
+  flex-grow: 1;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.apply-discount-button {
+  padding: 0.5rem 1rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.apply-discount-button:disabled {
+  background-color: #aaa;
+}
+.apply-discount-button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+.error-message.discount-error {
+  color: #721c24;
+  background-color: #f8d7da;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9em;
+  margin-top: 0.5rem;
+}
+.applied-discount-info {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+  font-size: 0.9em;
+}
+.applied-discount-info strong {
+  font-weight: bold;
+}
+.discount-description {
+    font-size: 0.9em;
+    margin-top: 0.3em;
+}
+.remove-discount-button {
+  background: none;
+  border: none;
+  color: #155724;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.9em;
+  margin-left: 0.5rem;
+}
+.remove-discount-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .cart-actions {
   margin-top: 1.5rem;
   display: flex;
@@ -229,7 +354,12 @@ h2 {
   color: white;
   border: none;
 }
-.checkout-button:hover {
+.checkout-button:hover:not(.disabled-link) {
   background-color: #218838;
+}
+.checkout-button.disabled-link {
+  background-color: #aaa;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 </style>

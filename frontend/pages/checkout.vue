@@ -6,7 +6,7 @@
 
     <div v-else-if="!isAuthenticated" class="auth-redirect-message">
       <p>You need to be logged in to proceed to checkout.</p>
-      <NuxtLink to="/login?redirect=/checkout">Login</NuxtLink>
+      <NuxtLink :to="`/login?redirect=${encodeURIComponent('/checkout')}`">Login</NuxtLink>
     </div>
 
     <div v-else-if="cartItems.length === 0" class="empty-cart-message">
@@ -23,7 +23,13 @@
             <span>${{ (item.price * item.quantity).toFixed(2) }}</span>
           </li>
         </ul>
-        <p class="summary-total"><strong>Total: ${{ cartTotalPrice.toFixed(2) }}</strong></p>
+        <p class="summary-subtotal">Subtotal: ${{ cartSubtotal.toFixed(2) }}</p>
+        <div v-if="appliedDiscount" class="summary-discount">
+          <p>Discount ({{ appliedDiscount.code }}):
+            <strong>-${{ parseFloat(appliedDiscount.calculated_discount_amount_for_cart).toFixed(2) }}</strong>
+          </p>
+        </div>
+        <p class="summary-total"><strong>Final Total: ${{ cartFinalTotalPrice.toFixed(2) }}</strong></p>
       </div>
 
       <form @submit.prevent="handlePlaceOrder" class="checkout-form">
@@ -58,7 +64,7 @@
           <h3>Billing Address</h3>
           <div class="form-group">
             <label for="ba-line1">Address Line 1:</label>
-            <input type="text" id="ba-line1" v-model="billingAddress.line1" required />
+            <input type="text" id="ba-line1" v-model="billingAddress.line1" :required="!sameAsShipping" />
           </div>
           <div class="form-group">
             <label for="ba-line2">Address Line 2 (Optional):</label>
@@ -66,15 +72,15 @@
           </div>
           <div class="form-group">
             <label for="ba-city">City:</label>
-            <input type="text" id="ba-city" v-model="billingAddress.city" required />
+            <input type="text" id="ba-city" v-model="billingAddress.city" :required="!sameAsShipping" />
           </div>
           <div class="form-group">
             <label for="ba-postalCode">Postal Code:</label>
-            <input type="text" id="ba-postalCode" v-model="billingAddress.postalCode" required />
+            <input type="text" id="ba-postalCode" v-model="billingAddress.postalCode" :required="!sameAsShipping" />
           </div>
           <div class="form-group">
             <label for="ba-country">Country:</label>
-            <input type="text" id="ba-country" v-model="billingAddress.country" required />
+            <input type="text" id="ba-country" v-model="billingAddress.country" :required="!sameAsShipping" />
           </div>
         </template>
 
@@ -89,19 +95,25 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watchEffect } from 'vue';
+import { ref, reactive, onMounted, watchEffect, computed, nextTick } from 'vue'; // Added nextTick, computed
 import { useCart } from '~/composables/useCart';
 import { useAuth } from '~/composables/useAuth';
 import { useRouter, useNuxtApp } from '#app';
 
-const { cartItems, cartTotalPrice, clearCart, isCartInitialized: isCartStoreInitialized } = useCart();
-const { authToken, authUser, isAuthInitialized } = useAuth(); // Assuming useAuth exposes isAuthInitialized
+const {
+  cartItems,
+  cartSubtotal, // Corrected: use cartSubtotal
+  cartFinalTotalPrice, // Corrected: use cartFinalTotalPrice
+  appliedDiscount,    // Corrected: import appliedDiscount
+  clearCart,
+  isCartInitialized: isCartStoreInitialized
+} = useCart();
+const { authToken, authUser, isAuthInitialized } = useAuth();
 const { $axios } = useNuxtApp();
 const router = useRouter();
 
-const isAuthenticated = ref(false); // Local ref to track auth status post-initialization
+const isAuthenticated = ref(false);
 const isLoadingAuthOrCart = ref(true);
-
 
 const shippingAddress = reactive({
   line1: '', line2: '', city: '', postalCode: '', country: ''
@@ -113,47 +125,39 @@ const sameAsShipping = ref(true);
 const isSubmitting = ref(false);
 const submissionError = ref('');
 
-// Check auth and cart status after client-side initialization
 onMounted(async () => {
-  // Wait for both auth and cart to confirm initialization if they have such flags
-  // For this example, we assume useAuth().authToken will be populated after its own init logic (e.g. from localStorage)
-  // And useCart().isCartInitialized is used.
+  await nextTick();
 
-  // A simple way to wait for composables if they load async from localStorage:
-  // This can be improved with explicit isInitialized flags in composables
-  await nextTick(); // Wait for potential updates from composables
+  const updateLoadingState = () => {
+      const authReady = typeof isAuthInitialized === 'undefined' ? true : isAuthInitialized.value;
+      const cartReady = isCartStoreInitialized.value;
 
-  if (typeof isAuthInitialized !== 'undefined') { // If useAuth has an initialized flag
+      if (authReady && cartReady) {
+          isLoadingAuthOrCart.value = false;
+          isAuthenticated.value = !!authToken.value; // Update isAuthenticated based on actual authToken
+          if (!isAuthenticated.value) {
+              router.replace(`/login?redirect=${encodeURIComponent('/checkout')}`);
+          } else if (cartItems.value.length === 0) {
+              router.replace('/cart');
+          }
+      }
+  };
+
+  if (typeof isAuthInitialized !== 'undefined') {
     watchEffect(() => {
-        if (isAuthInitialized.value) {
-            isAuthenticated.value = !!authToken.value;
-        }
+      if (isAuthInitialized.value && isCartStoreInitialized.value) {
+        updateLoadingState();
+      }
     });
-    isAuthenticated.value = !!authToken.value; // Initial check
-  } else { // Fallback if useAuth doesn't have isAuthInitialized
-      isAuthenticated.value = !!authToken.value;
   }
-
-
-  watchEffect(() => {
-    if (isCartStoreInitialized.value && (typeof isAuthInitialized === 'undefined' || isAuthInitialized.value) ) {
-        isLoadingAuthOrCart.value = false;
-        if (!isAuthenticated.value) {
-            router.replace('/login?redirect=/checkout');
-        } else if (cartItems.value.length === 0) {
-            router.replace('/cart');
-        }
-    }
+   watchEffect(() => { // This handles cart initialization changes
+      if (isCartStoreInitialized.value && (typeof isAuthInitialized === 'undefined' || isAuthInitialized.value)) {
+        updateLoadingState();
+      }
   });
-   if (isCartStoreInitialized.value && (typeof isAuthInitialized === 'undefined' || isAuthInitialized.value) ) {
-        isLoadingAuthOrCart.value = false;
-        if (!isAuthenticated.value) {
-            router.replace('/login?redirect=/checkout');
-        } else if (cartItems.value.length === 0) {
-            router.replace('/cart');
-        }
-    }
 
+  // Initial check in case watchers didn't cover all scenarios or for immediate state
+  updateLoadingState();
 });
 
 
@@ -168,19 +172,16 @@ const handlePlaceOrder = async () => {
     })),
     shippingAddress: { ...shippingAddress },
     billingAddress: sameAsShipping.value ? { ...shippingAddress } : { ...billingAddress },
+    discount_code: appliedDiscount.value?.code || undefined, // Add discount_code
   };
 
   try {
-    // Axios plugin should already include the auth token if set up in useAuth
     const response = await $axios.post('/orders', orderPayload);
 
     if (response.status === 201 && response.data.order) {
-      clearCart();
-      // Redirect to a thank you page, potentially with order ID
-      // For simplicity, a generic thank you page.
+      clearCart(); // This will also clear the applied discount via the updated composable
       router.push(`/orders/thank-you?orderId=${response.data.order.id}`);
     } else {
-      // Should not happen if backend returns 201 only on success
       submissionError.value = 'Failed to place order. Unexpected response.';
     }
   } catch (error) {
@@ -232,7 +233,7 @@ h2 { text-align: center; margin-bottom: 1.5rem; }
 
 @media (min-width: 768px) {
   .checkout-content {
-    grid-template-columns: 1fr 1fr; /* Summary and Form side-by-side on larger screens */
+    grid-template-columns: 1fr 1fr;
   }
 }
 
@@ -253,10 +254,25 @@ h2 { text-align: center; margin-bottom: 1.5rem; }
   font-size: 0.9em;
 }
 .summary-item span:first-child { color: #555; }
+.summary-subtotal {
+  text-align: right;
+  font-size: 1em;
+  color: #444;
+}
+.summary-discount {
+  text-align: right;
+  font-size: 1em;
+  color: #28a745;
+}
+.summary-discount strong {
+  font-weight: bold;
+}
 .summary-total {
-  margin-top: 1rem;
+  margin-top: 0.5rem;
   font-size: 1.2em;
   text-align: right;
+  border-top: 1px solid #eee;
+  padding-top: 0.5rem;
 }
 .summary-total strong { color: #007bff; }
 
@@ -270,8 +286,7 @@ h2 { text-align: center; margin-bottom: 1.5rem; }
   font-size: 0.9em;
   color: #444;
 }
-.checkout-form input[type="text"],
-.checkout-form input[type="email"] /* If email was needed */ {
+.checkout-form input[type="text"] {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid #ccc;

@@ -7,8 +7,10 @@ const adminUserRoutes = require('./routes/adminUsers'); // Import admin user rou
 const adminOrderRoutes = require('./routes/adminOrders'); // Import admin order routes
 const adminProductRoutes = require('./routes/adminProducts'); // Import admin product routes
 const adminDiscountRoutes = require('./routes/adminDiscounts'); // Import admin discount routes
+const adminSupplierRoutes = require('./routes/adminSuppliers'); // Import admin supplier routes
 const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
+const cartRoutes = require('./routes/cart'); // Import cart routes
 const path = require('path'); // Import path module
 
 const app = express();
@@ -94,6 +96,9 @@ app.use('/api/admin', adminOrderRoutes); // This will make routes like /api/admi
 
 // --- Public Category Routes ---
 app.use('/api/categories', categoryRoutes);
+
+// --- Public Cart Routes (e.g. for discount validation) ---
+app.use('/api/cart', cartRoutes);
 
 // --- Public Order Routes (e.g., for user to create their own order) ---
 app.use('/api/orders', orderRoutes);
