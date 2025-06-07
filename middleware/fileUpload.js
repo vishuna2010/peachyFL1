@@ -7,23 +7,15 @@ const uploadDir = 'uploads/product_images/';
 
 // Ensure the upload directory exists
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-  console.log(`Created directory: ${uploadDir}`);
-} else {
-  console.log(`Directory already exists: ${uploadDir}`);
-}
+  // fs.mkdirSync(uploadDir, { recursive: true }); // No longer needed for memoryStorage
+  // console.log(`Created directory: ${uploadDir}`);
+// } else {
+  // console.log(`Directory already exists: ${uploadDir}`);
+// }
 
-// Multer disk storage configuration
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir); // Files will be saved in 'uploads/product_images/'
-  },
-  filename: function (req, file, cb) {
-    // Create a unique filename: fieldname-timestamp.extension
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// Multer memory storage configuration
+// This keeps the file in memory as a Buffer, accessible via req.file.buffer
+const storage = multer.memoryStorage();
 
 // File filter to accept only images
 const imageFileFilter = (req, file, cb) => {

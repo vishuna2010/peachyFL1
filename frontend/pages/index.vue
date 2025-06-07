@@ -39,7 +39,7 @@
           <NuxtLink :to="`/products/${product.id}`">
             <img
               v-if="product.image_url"
-              :src="`${backendUrl}${product.image_url}`"
+              :src="product.image_url"  ETY ETY <!-- Removed backendUrl prefix -->
               :alt="`Image of ${product.name}`"
               class="product-image"
             />

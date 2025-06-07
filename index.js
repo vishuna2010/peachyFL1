@@ -6,6 +6,7 @@ const productRoutes = require('./routes/products'); // Import product routes
 const adminUserRoutes = require('./routes/adminUsers'); // Import admin user routes
 const adminOrderRoutes = require('./routes/adminOrders'); // Import admin order routes
 const adminProductRoutes = require('./routes/adminProducts'); // Import admin product routes
+const adminDiscountRoutes = require('./routes/adminDiscounts'); // Import admin discount routes
 const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
 const path = require('path'); // Import path module
@@ -16,8 +17,9 @@ const port = 3000;
 app.use(cors()); // Enable CORS for all routes
 app.use(express.json()); // Middleware to parse JSON bodies
 
-// Serve static files from the 'uploads' directory
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Serve static files from the 'uploads' directory - REMOVING THIS as S3 is now primary for product images
+// If other uploads still use this, it might need to stay or be refined. Assuming only product images used it.
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
 // API Health Check or Info

@@ -11,7 +11,7 @@
         <li v-for="item in cartItems" :key="item.productId" class="cart-item">
           <img
             v-if="item.image_url"
-            :src="`${backendUrl}${item.image_url}`"
+            :src="item.image_url" <!-- Removed backendUrl prefix -->
             :alt="item.name"
             class="cart-item-image"
           />

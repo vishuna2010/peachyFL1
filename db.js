@@ -120,11 +120,15 @@ const createTables = async () => {
         billing_city VARCHAR(100) NULL,
         billing_postal_code VARCHAR(20) NULL,
         billing_country VARCHAR(50) NULL,
+        discount_id INTEGER NULL REFERENCES discounts(id) ON DELETE SET NULL,
+        discount_code_applied VARCHAR(255) NULL,
+        discount_amount_applied DECIMAL(10, 2) NULL,
+        original_total_amount DECIMAL(10, 2) NULL, -- Total before discount
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Consider trigger for auto-update
       );
     `);
-    console.log('Table "orders" created successfully or already exists.');
+    console.log('Table "orders" created successfully or already exists (and altered for discounts).');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS order_items (
@@ -136,6 +140,31 @@ const createTables = async () => {
       );
     `);
     console.log('Table "order_items" created successfully or already exists.');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS discounts (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(255) UNIQUE NOT NULL,
+        type VARCHAR(50) NOT NULL, -- 'percentage', 'fixed_amount'
+        value DECIMAL(10, 2) NOT NULL,
+        description TEXT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        valid_from TIMESTAMP NULL,
+        valid_until TIMESTAMP NULL,
+        usage_limit INTEGER NULL,
+        times_used INTEGER NOT NULL DEFAULT 0,
+        min_order_amount DECIMAL(10, 2) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Consider trigger for auto-update
+      );
+    `);
+    console.log('Table "discounts" created successfully or already exists.');
+
+    // Index on code for faster lookups
+    await client.query('CREATE INDEX IF NOT EXISTS idx_discounts_code ON discounts(code);');
+    // Index on is_active and dates for querying valid discounts
+    await client.query('CREATE INDEX IF NOT EXISTS idx_discounts_validity ON discounts(is_active, valid_from, valid_until);');
+
 
   } catch (err) {
     console.error('Error creating/altering tables:', err.stack);

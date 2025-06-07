@@ -12,7 +12,7 @@
     <div v-if="product && !pending && !error" class="product-detail">
       <img
         v-if="product.image_url"
-        :src="`${backendUrl}${product.image_url}`"
+        :src="product.image_url" <!-- Removed backendUrl prefix -->
         :alt="`Image of ${product.name}`"
         class="product-detail-image"
       />

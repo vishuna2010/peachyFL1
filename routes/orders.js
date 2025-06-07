@@ -6,7 +6,7 @@ const { sendEmail, getOrderConfirmationHtml, getOrderConfirmationText } = requir
 
 // POST /api/orders - Create a new order
 router.post('/', isAuthenticated, async (req, res) => {
-  const { cart, shippingAddress, billingAddress } = req.body;
+  const { cart, shippingAddress, billingAddress, discount_code } = req.body; // Added discount_code
   const userId = req.user.userId;
 
   // --- 1. Validate input ---
@@ -72,20 +72,91 @@ router.post('/', isAuthenticated, async (req, res) => {
       });
     }
 
-    totalAmount = parseFloat(totalAmount.toFixed(2));
+    totalAmount = parseFloat(totalAmount.toFixed(2)); // This is now subtotal_for_items
 
-    // --- 4. Insert a new record into the orders table ---
+    // --- Discount Logic ---
+    let finalTotalAmount = totalAmount;
+    let originalTotalAmount = totalAmount; // Store the total before discount
+    let appliedDiscountId = null;
+    let appliedDiscountCode = null;
+    let appliedDiscountAmount = null;
+
+    if (discount_code) {
+      const discountResult = await client.query(
+        'SELECT * FROM discounts WHERE code = $1 FOR UPDATE', // Lock discount row
+        [discount_code.toUpperCase()]
+      );
+
+      if (discountResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Invalid discount code.' });
+      }
+
+      const discount = discountResult.rows[0];
+
+      // Validate discount
+      if (!discount.is_active) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Discount code is not active.' });
+      }
+      if (discount.valid_from && new Date(discount.valid_from) > new Date()) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Discount code is not yet valid.' });
+      }
+      if (discount.valid_until && new Date(discount.valid_until) < new Date()) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Discount code has expired.' });
+      }
+      if (discount.usage_limit !== null && discount.times_used >= discount.usage_limit) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Discount code usage limit reached.' });
+      }
+      if (discount.min_order_amount !== null && totalAmount < parseFloat(discount.min_order_amount)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: `Minimum order amount of $${parseFloat(discount.min_order_amount).toFixed(2)} not met for this discount.` });
+      }
+
+      // Calculate and apply discount
+      if (discount.type === 'percentage') {
+        appliedDiscountAmount = totalAmount * (parseFloat(discount.value) / 100.0);
+      } else if (discount.type === 'fixed_amount') {
+        appliedDiscountAmount = parseFloat(discount.value);
+      }
+      appliedDiscountAmount = parseFloat(appliedDiscountAmount.toFixed(2));
+
+      // Ensure discount doesn't make total negative
+      finalTotalAmount = totalAmount - appliedDiscountAmount;
+      if (finalTotalAmount < 0) {
+        finalTotalAmount = 0; // Or minimum allowed, e.g. $0.01 if order must have cost
+        appliedDiscountAmount = totalAmount; // Adjust applied amount if it exceeds total
+      }
+
+      appliedDiscountId = discount.id;
+      appliedDiscountCode = discount.code;
+
+      // Increment times_used for the discount
+      await client.query(
+        'UPDATE discounts SET times_used = times_used + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [discount.id]
+      );
+    }
+    // --- End Discount Logic ---
+
+
+    // --- 4. Insert a new record into the orders table (with discount info) ---
     const orderInsertQuery = `
       INSERT INTO orders (
-        user_id, status, total_amount,
+        user_id, status, total_amount, original_total_amount,
+        discount_id, discount_code_applied, discount_amount_applied,
         shipping_address_line1, shipping_address_line2, shipping_city, shipping_postal_code, shipping_country,
         billing_address_line1, billing_address_line2, billing_city, billing_postal_code, billing_country,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
-      RETURNING id, status, total_amount, created_at;
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
+      RETURNING id, status, total_amount, original_total_amount, discount_code_applied, discount_amount_applied, created_at;
     `;
     const orderValues = [
-      userId, 'pending', totalAmount,
+      userId, 'pending', finalTotalAmount, originalTotalAmount,
+      appliedDiscountId, appliedDiscountCode, appliedDiscountAmount,
       shippingAddress.line1, shippingAddress.line2 || null, shippingAddress.city, shippingAddress.postalCode, shippingAddress.country,
       finalBillingAddress.line1, finalBillingAddress.line2 || null, finalBillingAddress.city, finalBillingAddress.postalCode, finalBillingAddress.country
     ];
@@ -112,11 +183,11 @@ router.post('/', isAuthenticated, async (req, res) => {
 
     // --- 8. Return a success response & Send Email ---
     const createdOrderDetails = {
-        ...newOrder,
+        ...newOrder, // Contains fields from RETURNING clause
         user_id: userId,
         shippingAddress: shippingAddress,
         billingAddress: finalBillingAddress,
-        items: orderItemsData // product_name is already included here
+        items: orderItemsData
     };
 
     res.status(201).json({ message: 'Order created successfully.', order: createdOrderDetails });
@@ -125,8 +196,8 @@ router.post('/', isAuthenticated, async (req, res) => {
     let customerEmail = req.user.email;
     if (!customerEmail) {
         try {
-            // Use the same client for this quick read, as it's part of the post-commit phase
-            const userResult = await db.query('SELECT email FROM users WHERE id = $1', [userId]); // Changed to db.query as client might be released
+            // Using db.query for safety, as client from pool for main transaction might be released or in error state
+            const userResult = await db.query('SELECT email FROM users WHERE id = $1', [userId]);
             if (userResult.rows.length > 0) {
                 customerEmail = userResult.rows[0].email;
             }
