@@ -1,8 +1,19 @@
 import { ref, computed, watch } from 'vue';
 
-// Cart item structure: { productId: string, quantity: number, name: string, price: number, image_url: string | null }
+// Cart item structure:
+// {
+//   cartItemId: 'prod123-variant456', // or 'prod123-base'
+//   productId: '123', // Base Product ID
+//   productVariantId: '456', // or null
+//   name: 'Awesome T-Shirt', // Base Product Name
+//   quantity: 1,
+//   price: 29.99, // Final price of this item (variant or base)
+//   image_url: 'path/to/variant_or_base_image.jpg',
+//   sku: 'SKU-RED-L', // Variant or base SKU
+//   selectedVariantDescription: 'Color: Red, Size: Large' // or empty string/null
+// }
 const cartItems = ref([]);
-const isCartInitialized = ref(false); // To prevent multiple initializations
+const isCartInitialized = ref(false);
 
 const CART_STORAGE_KEY = 'myNuxtEcommerceCart';
 
@@ -64,54 +75,65 @@ export const useCart = () => {
     }
   };
 
-  const addToCart = (product, quantity = 1) => {
-    if (!product || !product.id) {
-      console.error('Invalid product passed to addToCart');
+  // productDetails should contain:
+  // id (base productId), productVariantId (optional), name (base name),
+  // price (final price), image_url (final image), sku (final sku),
+  // stock_quantity (available stock of item being added - for reference, not stored directly in cart item),
+  // selectedOptionsDescriptionArray (e.g., ["Color: Red", "Size: M"])
+  const addToCart = (productDetails, quantity = 1) => {
+    if (!productDetails || !productDetails.id) {
+      console.error('Invalid productDetails passed to addToCart');
       return;
     }
     if (!isCartInitialized.value && process.client) {
-        initCart(); // Ensure cart is loaded before operations
+        initCart();
     }
 
-    const existingItem = cartItems.value.find(item => item.productId === product.id);
+    const cartItemId = productDetails.id + '-' + (productDetails.productVariantId || 'base');
+    const existingItem = cartItems.value.find(item => item.cartItemId === cartItemId);
+
     if (existingItem) {
       existingItem.quantity += quantity;
     } else {
+      const selectedVariantDesc = productDetails.selectedOptionsDescriptionArray
+                                  ? productDetails.selectedOptionsDescriptionArray.join(', ')
+                                  : '';
       cartItems.value.push({
-        productId: product.id,
-        name: product.name,
-        price: parseFloat(product.price), // Ensure price is a number
-        image_url: product.image_url || null,
+        cartItemId: cartItemId,
+        productId: productDetails.id,
+        productVariantId: productDetails.productVariantId || null,
+        name: productDetails.name, // Base product name
+        price: parseFloat(productDetails.price), // Final price for this item
+        image_url: productDetails.image_url || null,
+        sku: productDetails.sku || null,
+        selectedVariantDescription: selectedVariantDesc,
         quantity: quantity,
       });
     }
-    // saveCartToLocalStorage(); // Watcher handles this
-    console.log('Added to cart:', product.name, 'Quantity:', quantity);
+    console.log('Added to cart:', productDetails.name, 'Variant:', productDetails.productVariantId, 'Quantity:', quantity);
   };
 
-  const removeFromCart = (productId) => {
+  const removeFromCart = (cartItemIdToRemove) => {
      if (!isCartInitialized.value && process.client) {
         initCart();
     }
-    cartItems.value = cartItems.value.filter(item => item.productId !== productId);
-    // saveCartToLocalStorage(); // Watcher handles this
-    console.log('Removed from cart, productId:', productId);
+    cartItems.value = cartItems.value.filter(item => item.cartItemId !== cartItemIdToRemove);
+    console.log('Removed from cart, cartItemId:', cartItemIdToRemove);
   };
 
-  const updateQuantity = (productId, quantity) => {
+  const updateQuantity = (cartItemIdToUpdate, newQuantity) => {
     if (!isCartInitialized.value && process.client) {
         initCart();
     }
-    const item = cartItems.value.find(item => item.productId === productId);
+    const item = cartItems.value.find(item => item.cartItemId === cartItemIdToUpdate);
     if (item) {
-      if (quantity <= 0) {
-        removeFromCart(productId);
+      if (newQuantity <= 0) {
+        removeFromCart(cartItemIdToUpdate); // Use the specific item's cartId
       } else {
-        item.quantity = quantity;
+        item.quantity = newQuantity;
       }
     }
-    // saveCartToLocalStorage(); // Watcher handles this
-    console.log('Updated quantity for productId:', productId, 'New Quantity:', quantity);
+    console.log('Updated quantity for cartItemId:', cartItemIdToUpdate, 'New Quantity:', newQuantity);
   };
 
   const clearCart = () => {

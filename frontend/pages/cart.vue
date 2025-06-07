@@ -19,21 +19,23 @@
 
           <div class="item-details">
             <h3>{{ item.name }}</h3>
+            <p v-if="item.selectedVariantDescription" class="item-variant-desc">{{ item.selectedVariantDescription }}</p>
+            <p v-if="item.sku" class="item-sku">SKU: {{ item.sku }}</p>
             <p>Price: ${{ item.price.toFixed(2) }}</p>
             <div class="item-quantity">
-              <label :for="`quantity-${item.productId}`">Quantity:</label>
+              <label :for="`quantity-${item.cartItemId}`">Quantity:</label>
               <input
                 type="number"
-                :id="`quantity-${item.productId}`"
+                :id="`quantity-${item.cartItemId}`"
                 :value="item.quantity"
-                @input="updateItemQuantity(item.productId, parseInt($event.target.value))"
+                @input="updateItemQuantity(item.cartItemId, parseInt($event.target.value))"
                 min="1"
                 class="quantity-input"
               />
             </div>
             <p>Item Total: ${{ (item.price * item.quantity).toFixed(2) }}</p>
           </div>
-          <button @click="removeItem(item.productId)" class="remove-item-button">&times;</button>
+          <button @click="removeItem(item.cartItemId)" class="remove-item-button">&times;</button>
         </li>
       </ul>
       <div class="cart-summary">
@@ -87,28 +89,27 @@ const {
   removeFromCart,
   clearCart,
   cartTotalItems,
-  cartSubtotal,      // Using cartSubtotal from composable
-  cartFinalTotalPrice, // Using cartFinalTotalPrice from composable
+  cartSubtotal,
+  cartFinalTotalPrice,
   applyDiscountCode,
   clearAppliedDiscount,
   appliedDiscount,
   discountValidationError
 } = useCart();
 
-// const runtimeConfig = useRuntimeConfig(); // Not needed if image URLs are absolute
-// const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl); // Not needed
-
 const discountCodeInput = ref('');
 const applyingDiscount = ref(false);
 
-const updateItemQuantity = (productId, quantity) => {
+// Note: backendUrl is not needed if image_urls from cart are absolute (e.g. S3)
+
+const updateItemQuantity = (cartItemId, quantity) => {
   if (isNaN(quantity)) return;
-  updateQuantity(productId, quantity);
+  updateQuantity(cartItemId, quantity);
 };
 
-const removeItem = (productId) => {
+const removeItem = (cartItemId) => {
   if (confirm('Are you sure you want to remove this item from your cart?')) {
-    removeFromCart(productId);
+    removeFromCart(cartItemId);
   }
 };
 
