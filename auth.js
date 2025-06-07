@@ -1,18 +1,40 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const db = require('./db'); // Assuming db.js is in the same directory
+const db = require('./db');
 
-const saltRounds = 10; // For bcrypt hashing
-const jwtSecret = 'your-super-secret-key'; // IMPORTANT: Use an environment variable in production!
+const saltRounds = 10;
+const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-key'; // Use environment variable
+
+// Middleware to check if user is authenticated
+const isAuthenticated = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7, authHeader.length); // Extract token from "Bearer TOKEN"
+    jwt.verify(token, jwtSecret, (err, decoded) => {
+      if (err) {
+        // Token is not valid or expired
+        return res.status(401).json({ message: 'Unauthorized: Invalid token.' });
+      }
+      // Token is valid, attach decoded payload to request
+      req.user = decoded; // Contains userId, email (based on loginUser JWT signing)
+      next();
+    });
+  } else {
+    // No token provided
+    return res.status(401).json({ message: 'Unauthorized: No token provided.' });
+  }
+};
 
 async function registerUser(email, password) {
   try {
     const hashedPassword = await bcrypt.hash(password, saltRounds);
+    // Role defaults to 'customer' due to table DDL, but explicit is fine too.
     const result = await db.query(
-      'INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, email, created_at',
-      [email, hashedPassword]
+      'INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id, email, role, created_at',
+      [email, hashedPassword, 'customer'] // Explicitly set role
     );
-    return { success: true, user: result.rows[0] };
+    const { password: _, ...userWithoutPassword } = result.rows[0];
+    return { success: true, user: userWithoutPassword };
   } catch (error) {
     console.error('Error registering user:', error);
     if (error.code === '23505') { // Unique violation (email already exists)
@@ -84,13 +106,31 @@ module.exports = {
   loginUser,
   requestPasswordReset,
   resetPassword,
-  jwtSecret, // Exporting for potential middleware usage if needed later
+  jwtSecret,
+  isAuthenticated, // Export the new middleware
 
-  // Placeholder isAdmin middleware
-  isAdmin: (req, res, next) => {
-    // In a real application, you would verify admin privileges here.
-    // For example, decode JWT, check user role from DB, etc.
-    console.log('isAdmin middleware called (placeholder - allowing request)');
-    next();
+  // isAdmin middleware - now checks role from DB
+  isAdmin: async (req, res, next) => {
+    // This middleware must run AFTER isAuthenticated, so req.user should be populated.
+    if (!req.user || !req.user.userId) {
+      // This case should ideally be caught by isAuthenticated
+      return res.status(401).json({ message: 'Unauthorized: User not authenticated.' });
+    }
+
+    try {
+      const result = await db.query('SELECT role FROM users WHERE id = $1', [req.user.userId]);
+      if (result.rows.length === 0) {
+        return res.status(403).json({ message: 'Forbidden: User not found.' });
+      }
+      const userRole = result.rows[0].role;
+      if (userRole === 'admin') {
+        next(); // User is admin, proceed
+      } else {
+        return res.status(403).json({ message: 'Forbidden: Requires admin role.' });
+      }
+    } catch (error) {
+      console.error('isAdmin check error:', error);
+      return res.status(500).json({ message: 'Error checking admin status.' });
+    }
   }
 };

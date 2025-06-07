@@ -13,9 +13,16 @@
       <ul>
         <li v-for="product in products" :key="product.id" class="product-item">
           <NuxtLink :to="`/products/${product.id}`">
+            <img
+              v-if="product.image_url"
+              :src="`${backendUrl}${product.image_url}`"
+              :alt="`Image of ${product.name}`"
+              class="product-image"
+            />
+            <div v-else class="product-image-placeholder">No Image</div>
             <h3>{{ product.name }}</h3>
           </NuxtLink>
-          <p>{{ product.description }}</p>
+          <p class="product-description">{{ product.description }}</p>
           <p><strong>Price:</strong> ${{ product.price }}</p>
           <p v-if="product.category_name"><strong>Category:</strong> {{ product.category_name }}</p>
           <div v-if="product.tags && product.tags.length > 0" class="tags">
@@ -32,12 +39,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue'; // Import computed
 
-const { $axios } = useNuxtApp(); // Access the configured axios instance
+const { $axios } = useNuxtApp();
 const products = ref([]);
 const pending = ref(true);
 const error = ref(null);
+const runtimeConfig = useRuntimeConfig(); // Access runtime config
+
+const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl);
 
 async function fetchProducts() {
   pending.value = true;
@@ -83,9 +93,26 @@ onMounted(fetchProducts);
   margin-bottom: 1rem;
   border-radius: 5px;
   background-color: #f9f9f9;
+  display: flex;
+  flex-direction: column;
+}
+.product-image, .product-image-placeholder {
+  width: 100%;
+  height: 200px; /* Fixed height for uniformity */
+  object-fit: cover; /* Crop image to fit, or 'contain' to show full image */
+  margin-bottom: 0.75rem;
+  border-radius: 4px;
+  background-color: #e0e0e0; /* Placeholder background */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #777;
+  font-size: 0.9em;
 }
 .product-item h3 {
   margin-top: 0;
+  margin-bottom: 0.5rem; /* Added margin */
+  font-size: 1.2em; /* Slightly larger font */
 }
 .product-item a {
   text-decoration: none;
@@ -93,6 +120,12 @@ onMounted(fetchProducts);
 }
 .product-item a:hover h3 {
   text-decoration: underline;
+}
+.product-description {
+  font-size: 0.9em;
+  color: #555;
+  flex-grow: 1; /* Allow description to take available space */
+  margin-bottom: 0.5rem;
 }
 .tags {
   margin-top: 0.5rem;

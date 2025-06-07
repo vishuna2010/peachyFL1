@@ -29,10 +29,28 @@ const createTables = async () => {
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL DEFAULT 'customer',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "users" created successfully or already exists.');
+    console.log('Table "users" created successfully or already exists (and altered for role).');
+
+    // Ensure existing users have the default role if the column was just added.
+    // This is more of a migration step. For simplicity, we'll assume new setups
+    // or that this runs once. A proper migration tool would handle this better.
+    try {
+      await client.query("ALTER TABLE users ALTER COLUMN role SET DEFAULT 'customer';");
+      // The following might be needed if there are old rows with NULL role, though the DEFAULT should handle new ones.
+      // await client.query("UPDATE users SET role = 'customer' WHERE role IS NULL;");
+      console.log('Default role set for users table.');
+    } catch (alterError) {
+      // Ignore if the column or default already exists in a way that's compatible.
+      // Specific error codes could be checked here (e.g., duplicate column, default already set)
+      // For now, we log a warning if it's not a "column already exists" or similar error.
+      if (!alterError.message.includes('already exists') && !alterError.message.includes('multiple default expressions')) {
+          console.warn('Warning during users table alteration for role default (may be benign if already set):', alterError.message);
+      }
+    }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS categories (
@@ -57,11 +75,12 @@ const createTables = async () => {
         description TEXT,
         price DECIMAL(10, 2) NOT NULL,
         category_id INT,
+        image_url VARCHAR(255) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
       );
     `);
-    console.log('Table "products" created successfully or already exists (and altered).');
+    console.log('Table "products" created successfully or already exists (and altered for image_url).');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_tags (

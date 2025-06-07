@@ -10,6 +10,14 @@
     </div>
 
     <div v-if="product && !pending && !error" class="product-detail">
+      <img
+        v-if="product.image_url"
+        :src="`${backendUrl}${product.image_url}`"
+        :alt="`Image of ${product.name}`"
+        class="product-detail-image"
+      />
+      <div v-else class="product-detail-image-placeholder">No Image Available</div>
+
       <h1>{{ product.name }}</h1>
       <p class="description">{{ product.description }}</p>
       <p class="price"><strong>Price:</strong> ${{ product.price }}</p>
@@ -30,7 +38,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue'; // Import computed
 import { useRoute } from 'vue-router';
 
 const { $axios } = useNuxtApp();
@@ -38,6 +46,9 @@ const route = useRoute();
 const product = ref(null);
 const pending = ref(true);
 const error = ref(null);
+const runtimeConfig = useRuntimeConfig(); // Access runtime config
+
+const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl);
 
 async function fetchProduct() {
   const productId = route.params.id;
@@ -80,6 +91,27 @@ onMounted(fetchProduct);
   color: #D8000C;
   text-decoration: underline;
 }
+
+.product-detail-image, .product-detail-image-placeholder {
+  width: 100%;
+  max-width: 400px; /* Max width for detail image */
+  height: auto; /* Auto height to maintain aspect ratio */
+  max-height: 400px; /* Max height */
+  object-fit: contain; /* Show full image, scaled down if needed */
+  margin: 0 auto 1.5rem auto; /* Center image and add margin below */
+  display: block; /* For centering with margin auto */
+  border-radius: 5px;
+  background-color: #e0e0e0; /* Placeholder background */
+}
+.product-detail-image-placeholder {
+  height: 300px; /* Fixed height for placeholder */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #777;
+  font-size: 1em;
+}
+
 .product-detail {
   border: 1px solid #ddd;
   padding: 1.5rem;
@@ -88,6 +120,7 @@ onMounted(fetchProduct);
 }
 .product-detail h1 {
   margin-top: 0;
+  text-align: center; /* Center product title */
   color: #333;
 }
 .description {

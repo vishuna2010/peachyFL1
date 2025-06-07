@@ -1,14 +1,20 @@
 const express = require('express');
 const cors = require('cors'); // Import CORS
-const auth = require('./auth'); // Import the auth module
+const authModule = require('./auth'); // Renamed to avoid conflict with authRouter
 const db = require('./db'); // Import the db module to ensure tables are created
 const productRoutes = require('./routes/products'); // Import product routes
+const adminUserRoutes = require('./routes/adminUsers'); // Import admin user routes
+const path = require('path'); // Import path module
 
 const app = express();
 const port = 3000;
 
 app.use(cors()); // Enable CORS for all routes
 app.use(express.json()); // Middleware to parse JSON bodies
+
+// Serve static files from the 'uploads' directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // API Health Check or Info
 app.get('/api', (req, res) => {
@@ -24,11 +30,11 @@ authRouter.post('/register', async (req, res) => {
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
   }
-  const result = await auth.registerUser(email, password);
+  const result = await authModule.registerUser(email, password);
   if (result.success) {
     // Exclude password from the response if user object is sent
     // Ensure result.user is defined before destructuring
-    const userResponse = result.user ? (({ password, ...rest }) => rest)(result.user) : {};
+    const userResponse = result.user ? (({ password, ...rest }) => rest)(result.user) : {}; // result.user already excludes password due to auth.js change
     res.status(201).json({ message: 'User registered successfully.', user: userResponse });
   } else {
     res.status(400).json({ message: result.message });
@@ -41,7 +47,7 @@ authRouter.post('/login', async (req, res) => {
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
   }
-  const result = await auth.loginUser(email, password);
+  const result = await authModule.loginUser(email, password);
   if (result.success) {
     res.status(200).json({ message: 'Login successful.', token: result.token });
   } else {
@@ -55,7 +61,7 @@ authRouter.post('/request-password-reset', async (req, res) => {
   if (!email) {
     return res.status(400).json({ message: 'Email is required.' });
   }
-  const result = await auth.requestPasswordReset(email);
+  const result = await authModule.requestPasswordReset(email);
   res.status(200).json({ message: result.message });
 });
 
@@ -65,7 +71,7 @@ authRouter.post('/reset-password', async (req, res) => {
   if (!token || !newPassword) {
     return res.status(400).json({ message: 'Token and new password are required.' });
   }
-  const result = await auth.resetPassword(token, newPassword);
+  const result = await authModule.resetPassword(token, newPassword);
   res.status(200).json({ message: result.message });
 });
 
@@ -73,6 +79,9 @@ app.use('/api/auth', authRouter); // Mount auth router under /api/auth
 
 // --- Product Routes ---
 app.use('/api/products', productRoutes); // Mount product routes under /api/products
+
+// --- Admin User Management Routes ---
+app.use('/api/admin/users', adminUserRoutes); // Mount admin user routes
 
 
 // Ensure DB connection is attempted and tables are created when server starts
