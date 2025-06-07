@@ -38,18 +38,10 @@ const createTables = async () => {
     `);
     console.log('Table "users" created successfully or already exists (and altered for role, 2FA).');
 
-    // Ensure existing users have the default role if the column was just added.
-    // This is more of a migration step. For simplicity, we'll assume new setups
-    // or that this runs once. A proper migration tool would handle this better.
     try {
       await client.query("ALTER TABLE users ALTER COLUMN role SET DEFAULT 'customer';");
-      // The following might be needed if there are old rows with NULL role, though the DEFAULT should handle new ones.
-      // await client.query("UPDATE users SET role = 'customer' WHERE role IS NULL;");
       console.log('Default role set for users table.');
     } catch (alterError) {
-      // Ignore if the column or default already exists in a way that's compatible.
-      // Specific error codes could be checked here (e.g., duplicate column, default already set)
-      // For now, we log a warning if it's not a "column already exists" or similar error.
       if (!alterError.message.includes('already exists') && !alterError.message.includes('multiple default expressions')) {
           console.warn('Warning during users table alteration for role default (may be benign if already set):', alterError.message);
       }
@@ -72,33 +64,43 @@ const createTables = async () => {
     console.log('Table "tags" created successfully or already exists.');
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS suppliers (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        contact_person VARCHAR(255) NULL,
+        email VARCHAR(255) NULL UNIQUE,
+        phone VARCHAR(50) NULL,
+        address_line1 VARCHAR(255) NULL,
+        address_line2 VARCHAR(255) NULL,
+        city VARCHAR(100) NULL,
+        postal_code VARCHAR(20) NULL,
+        country VARCHAR(50) NULL,
+        notes TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "suppliers" created successfully or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_suppliers_email ON suppliers(email);');
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         description TEXT,
         price DECIMAL(10, 2) NOT NULL,
-        category_id INT,
+        category_id INT REFERENCES categories(id) ON DELETE SET NULL,
         image_url VARCHAR(255) NULL,
         stock_quantity INTEGER NOT NULL DEFAULT 0,
         supplier_id INTEGER NULL REFERENCES suppliers(id) ON DELETE SET NULL,
         sku VARCHAR(100) NULL UNIQUE,
-        reorder_threshold INTEGER NULL DEFAULT NULL, -- New column
+        reorder_threshold INTEGER NULL DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Will be updated by application logic
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('Table "products" created successfully or already exists (altered for supplier_id, sku, updated_at, image_url, stock_quantity, reorder_threshold).');
-
-    // Optional: Add a CHECK constraint to ensure stock_quantity never goes negative,
-    // though application logic should primarily handle this.
-    // try {
-    //   await client.query("ALTER TABLE products ADD CONSTRAINT check_stock_non_negative CHECK (stock_quantity >= 0);");
-    //   console.log('CHECK constraint for non-negative stock added to products table.');
-    // } catch (constraintError) {
-    //   if (!constraintError.message.includes('already exists')) { // Benign if constraint already there
-    //     console.warn('Warning during products table alteration for stock_quantity check constraint:', constraintError.message);
-    //   }
-    // }
 
 
     await client.query(`
@@ -111,9 +113,30 @@ const createTables = async () => {
     console.log('Table "product_tags" created successfully or already exists.');
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS discounts (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(255) UNIQUE NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        value DECIMAL(10, 2) NOT NULL,
+        description TEXT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        valid_from TIMESTAMP NULL,
+        valid_until TIMESTAMP NULL,
+        usage_limit INTEGER NULL,
+        times_used INTEGER NOT NULL DEFAULT 0,
+        min_order_amount DECIMAL(10, 2) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "discounts" created successfully or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_discounts_code ON discounts(code);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_discounts_validity ON discounts(is_active, valid_from, valid_until);');
+
+    await client.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT, -- Or SET NULL / CASCADE depending on desired behavior
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
         status VARCHAR(50) DEFAULT 'pending',
         total_amount DECIMAL(10, 2) NOT NULL,
         shipping_address_line1 VARCHAR(255) NOT NULL,
@@ -129,9 +152,9 @@ const createTables = async () => {
         discount_id INTEGER NULL REFERENCES discounts(id) ON DELETE SET NULL,
         discount_code_applied VARCHAR(255) NULL,
         discount_amount_applied DECIMAL(10, 2) NULL,
-        original_total_amount DECIMAL(10, 2) NULL, -- Total before discount
+        original_total_amount DECIMAL(10, 2) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Consider trigger for auto-update
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('Table "orders" created successfully or already exists (and altered for discounts).');
@@ -140,63 +163,22 @@ const createTables = async () => {
       CREATE TABLE IF NOT EXISTS order_items (
         id SERIAL PRIMARY KEY,
         order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT, -- Prevent product deletion if in an order
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+        product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL, -- Added
         quantity INTEGER NOT NULL CHECK (quantity > 0),
         price_at_purchase DECIMAL(10, 2) NOT NULL
+        -- sku_at_purchase VARCHAR(100) NULL -- Conceptual, not adding yet
       );
     `);
-    console.log('Table "order_items" created successfully or already exists.');
+    console.log('Table "order_items" created successfully or already exists (altered for product_variant_id).');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_variant_id ON order_items(product_variant_id);');
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS discounts (
-        id SERIAL PRIMARY KEY,
-        code VARCHAR(255) UNIQUE NOT NULL,
-        type VARCHAR(50) NOT NULL, -- 'percentage', 'fixed_amount'
-        value DECIMAL(10, 2) NOT NULL,
-        description TEXT NULL,
-        is_active BOOLEAN NOT NULL DEFAULT TRUE,
-        valid_from TIMESTAMP NULL,
-        valid_until TIMESTAMP NULL,
-        usage_limit INTEGER NULL,
-        times_used INTEGER NOT NULL DEFAULT 0,
-        min_order_amount DECIMAL(10, 2) NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Consider trigger for auto-update
-      );
-    `);
-    console.log('Table "discounts" created successfully or already exists.');
-
-    // Index on code for faster lookups
-    await client.query('CREATE INDEX IF NOT EXISTS idx_discounts_code ON discounts(code);');
-    // Index on is_active and dates for querying valid discounts
-    await client.query('CREATE INDEX IF NOT EXISTS idx_discounts_validity ON discounts(is_active, valid_from, valid_until);');
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS suppliers (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL UNIQUE,
-        contact_person VARCHAR(255) NULL,
-        email VARCHAR(255) NULL UNIQUE,
-        phone VARCHAR(50) NULL,
-        address_line1 VARCHAR(255) NULL,
-        address_line2 VARCHAR(255) NULL,
-        city VARCHAR(100) NULL,
-        postal_code VARCHAR(20) NULL,
-        country VARCHAR(50) NULL,
-        notes TEXT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Consider trigger for auto-update
-      );
-    `);
-    console.log('Table "suppliers" created successfully or already exists.');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_suppliers_email ON suppliers(email);');
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS purchase_orders (
         id SERIAL PRIMARY KEY,
         supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE RESTRICT,
-        status VARCHAR(50) NOT NULL DEFAULT 'pending', -- e.g., pending, ordered, partially_received, received, cancelled
+        status VARCHAR(50) NOT NULL DEFAULT 'pending',
         order_date DATE NOT NULL DEFAULT CURRENT_DATE,
         expected_delivery_date DATE NULL,
         notes TEXT NULL,
@@ -224,6 +206,61 @@ const createTables = async () => {
     await client.query('CREATE INDEX IF NOT EXISTS idx_poi_purchase_order_id ON purchase_order_items(purchase_order_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_poi_product_id ON purchase_order_items(product_id);');
 
+    // --- New Product Variants Schema ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_options (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL, -- e.g., "Color", "Size"
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uk_product_option_name UNIQUE (product_id, name)
+      );
+    `);
+    console.log('Table "product_options" created successfully or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_option_product_id ON product_options(product_id);'); // Renamed index
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_option_values (
+        id SERIAL PRIMARY KEY,
+        product_option_id INTEGER NOT NULL REFERENCES product_options(id) ON DELETE CASCADE,
+        value VARCHAR(255) NOT NULL, -- e.g., "Red", "Large"
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uk_option_value UNIQUE (product_option_id, value)
+      );
+    `);
+    console.log('Table "product_option_values" created successfully or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_option_value_product_option_id ON product_option_values(product_option_id);'); // Renamed index
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_variants (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        sku VARCHAR(100) UNIQUE NULL,
+        price_modifier DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+        stock_quantity INTEGER NOT NULL DEFAULT 0,
+        image_url VARCHAR(255) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "product_variants" created successfully or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_variant_product_id ON product_variants(product_id);'); // Renamed index
+    await client.query('CREATE INDEX IF NOT EXISTS idx_variant_sku ON product_variants(sku);'); // Renamed index
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_variant_option_values (
+        id SERIAL PRIMARY KEY,
+        product_variant_id INTEGER NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+        product_option_value_id INTEGER NOT NULL REFERENCES product_option_values(id) ON DELETE CASCADE,
+        CONSTRAINT uk_variant_option_value_combo UNIQUE (product_variant_id, product_option_value_id)
+      );
+    `);
+    console.log('Table "product_variant_option_values" created successfully or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_variant_id ON product_variant_option_values(product_variant_id);'); // Renamed index
+    await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_option_value_id ON product_variant_option_values(product_option_value_id);'); // Renamed index
+
   } catch (err) {
     console.error('Error creating/altering tables:', err.stack);
   } finally {
@@ -231,11 +268,9 @@ const createTables = async () => {
   }
 };
 
-// Immediately execute table creation when this module is loaded.
-// In a more complex setup, you might export this and call it from your main application file.
 createTables().catch(err => console.error('Failed to create tables on startup:', err));
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
-  pool, // Exporting the pool can be useful for more complex scenarios
+  pool,
 };

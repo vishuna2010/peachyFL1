@@ -133,17 +133,28 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
     }
     const poItem = poItemResult.rows[0];
 
-    // 3. Fetch Product (and lock)
-    const productResult = await client.query(
-      'SELECT id, stock_quantity FROM products WHERE id = $1 FOR UPDATE',
-      [poItem.product_id]
-    );
-    if (productResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      // This should ideally not happen if DB integrity is maintained via foreign keys
-      return res.status(404).json({ message: `Product with ID ${poItem.product_id} not found.` });
+    // 3. Fetch Product or Variant (and lock)
+    // The poItem now has product_id and potentially product_variant_id
+    if (poItem.product_variant_id) {
+        const variantResult = await client.query(
+            'SELECT id, stock_quantity FROM product_variants WHERE id = $1 AND product_id = $2 FOR UPDATE',
+            [poItem.product_variant_id, poItem.product_id]
+        );
+        if (variantResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: `Product Variant with ID ${poItem.product_variant_id} for Product ID ${poItem.product_id} not found.` });
+        }
+    } else {
+        const productResult = await client.query(
+            'SELECT id, stock_quantity FROM products WHERE id = $1 FOR UPDATE',
+            [poItem.product_id]
+        );
+        if (productResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: `Base Product with ID ${poItem.product_id} not found.` });
+        }
     }
-    // const product = productResult.rows[0]; // Not directly used beyond locking for now
+
 
     // 4. Fetch Purchase Order (to check status and lock)
     const poResult = await client.query(
@@ -174,11 +185,18 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
       [qtyReceivedNow, poItemId]
     );
 
-    // 7. Update products stock
-    await client.query(
-      'UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [qtyReceivedNow, poItem.product_id]
-    );
+    // 7. Update products or product_variants stock
+    if (poItem.product_variant_id) {
+        await client.query(
+            'UPDATE product_variants SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [qtyReceivedNow, poItem.product_variant_id]
+        );
+    } else {
+        await client.query(
+            'UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [qtyReceivedNow, poItem.product_id]
+        );
+    }
 
     // 8. Update purchase_orders.status and updated_at
     const allItemsForPOResult = await client.query(
