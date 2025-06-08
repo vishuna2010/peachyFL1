@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors'); // Import CORS
+const helmet = require('helmet'); // Import Helmet
 // const authModule = require('./auth'); // No longer needed here, logic is in routes/auth.js
 const authRoutes = require('./routes/auth'); // Import the new auth router
 const db = require('./db'); // Import the db module to ensure tables are created
@@ -26,6 +27,7 @@ const port = 3000;
 
 app.use(cors()); // Enable CORS for all routes
 app.use(express.json()); // Middleware to parse JSON bodies
+app.use(helmet()); // Use Helmet for security headers
 
 // Serve static files from the 'uploads' directory - REMOVING THIS as S3 is now primary for product images
 // If other uploads still use this, it might need to stay or be refined. Assuming only product images used it.

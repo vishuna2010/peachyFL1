@@ -3,9 +3,37 @@ const router = express.Router();
 const authService = require('../auth'); // Renamed original auth.js to authService for clarity
 const db = require('../db'); // For 2FA direct DB check
 const { authenticator } = require('otplib');
+const rateLimit = require('express-rate-limit');
+
+// Rate limiter for login attempts
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 login requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: { message: 'Too many login attempts from this IP, please try again after 15 minutes.' }
+});
+
+// Rate limiter for registration attempts
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // Limit each IP to 20 registration requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many accounts created from this IP, please try again after an hour.' }
+});
+
+// Rate limiter for password reset requests
+const passwordResetLimiter = rateLimit({
+  windowMs: 30 * 60 * 1000, // 30 minutes
+  max: 5, // Limit each IP to 5 password reset requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many password reset attempts from this IP, please try again after 30 minutes.' }
+});
 
 // Register
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
@@ -20,7 +48,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
@@ -57,7 +85,7 @@ router.post('/login', async (req, res) => {
 });
 
 // Request Password Reset
-router.post('/request-password-reset', async (req, res) => {
+router.post('/request-password-reset', passwordResetLimiter, async (req, res) => {
   const { email } = req.body;
   if (!email) {
     return res.status(400).json({ message: 'Email is required.' });
@@ -67,7 +95,7 @@ router.post('/request-password-reset', async (req, res) => {
 });
 
 // Reset Password
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', passwordResetLimiter, async (req, res) => {
   const { token, newPassword } = req.body;
   if (!token || !newPassword) {
     return res.status(400).json({ message: 'Token and new password are required.' });
@@ -106,6 +134,7 @@ router.post('/2fa/setup', authService.isAuthenticated, async (req, res) => {
 });
 
 // POST /api/auth/2fa/verify - Verify TOTP token and enable 2FA
+// This route appears duplicated below. Applying limiter to both instances as per current file structure.
 router.post('/2fa/verify', authService.isAuthenticated, async (req, res) => {
   const { token, secret } = req.body;
   const userId = req.user.userId;
@@ -153,7 +182,7 @@ router.post('/2fa/verify', authService.isAuthenticated, async (req, res) => {
   }
 });
 
-// POST /api/auth/2fa/verify - Verify TOTP token and enable 2FA
+// POST /api/auth/2fa/verify - Verify TOTP token and enable 2FA (Duplicate route)
 router.post('/2fa/verify', authService.isAuthenticated, async (req, res) => {
   const { token, secret } = req.body;
   const userId = req.user.userId;
@@ -196,7 +225,7 @@ router.post('/2fa/verify', authService.isAuthenticated, async (req, res) => {
 });
 
 // POST /api/auth/2fa/login-verify - Verify TOTP for login
-router.post('/2fa/login-verify', async (req, res) => {
+router.post('/2fa/login-verify', loginLimiter, async (req, res) => {
   const { userId, token } = req.body;
 
   if (!userId) {
