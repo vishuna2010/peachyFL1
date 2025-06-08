@@ -1,28 +1,56 @@
 <template>
   <div class="flex flex-col min-h-screen bg-neutral-light text-text-primary">
     <header class="bg-white shadow-md">
-      <nav class="container mx-auto px-4 py-3 flex justify-between items-center">
-        <NuxtLink to="/" class="text-2xl font-bold text-brand-primary">MySite</NuxtLink>
-        <ul class="flex items-center space-x-4">
-          <li><NuxtLink to="/" class="hover:text-brand-primary">Home</NuxtLink></li>
+      <nav class="container mx-auto px-4 sm:px-6 lg:px-8 py-0 flex items-center justify-between h-16">
+        <!-- Logo (Left Side) -->
+        <NuxtLink to="/" class="text-2xl font-bold text-brand-primary hover:text-opacity-80 transition-colors duration-150 flex-shrink-0">MySite</NuxtLink>
+
+        <!-- Centered Navigation Links -->
+        <div class="hidden md:flex items-center space-x-6 flex-grow justify-center">
+          <NuxtLink to="/" class="text-text-primary hover:text-brand-primary transition-colors duration-150">Home</NuxtLink>
+          <NuxtLink to="/products" class="text-text-primary hover:text-brand-primary transition-colors duration-150">Shop All</NuxtLink>
+          <!-- Add other static links here if desired, e.g., About, Contact -->
+        </div>
+
+        <!-- Right-side Utility Navigation -->
+        <ul class="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+          <!-- Admin Link -->
+          <li v-if="isAdminUser"><NuxtLink to="/admin/users" class="text-sm font-medium text-text-secondary hover:text-brand-primary hidden sm:block px-3 py-2 rounded-md hover:bg-neutral-light transition-colors duration-150">Admin</NuxtLink></li>
+
+          <!-- User / Auth Links -->
           <template v-if="!isAuthenticated">
-            <li><NuxtLink to="/login" class="hover:text-brand-primary">Login</NuxtLink></li>
-            <li><NuxtLink to="/register" class="hover:text-brand-primary">Register</NuxtLink></li>
-          </template>
-          <template v-else>
-            <li><NuxtLink to="/profile" class="hover:text-brand-primary">Profile</NuxtLink></li>
-            <li v-if="isAdminUser"><NuxtLink to="/admin/users" class="hover:text-brand-primary">Manage Users</NuxtLink></li>
             <li>
-              <button @click="handleLogout" class="hover:text-brand-primary">Logout</button>
+              <NuxtLink to="/login" title="Login / Register" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150">
+                <UserIcon class="w-6 h-6" />
+              </NuxtLink>
             </li>
           </template>
-          <li>
-            <NuxtLink to="/cart" class="flex items-center hover:text-brand-primary">
-              <svg class="w-6 h-6 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-              Cart <span v-if="cartTotalItems > 0" class="ml-1 text-xs font-semibold text-white bg-brand-accent rounded-full px-1.5 py-0.5">({{ cartTotalItems }})</span>
+          <template v-else>
+            <li>
+              <NuxtLink to="/profile" title="My Profile" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150">
+                <UserIcon class="w-6 h-6" />
+              </NuxtLink>
+            </li>
+            <li>
+              <button @click="handleLogout" title="Logout" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150">
+                <LogoutIcon class="w-6 h-6" />
+              </button>
+            </li>
+          </template>
+
+          <!-- Cart Link -->
+          <li class="relative"> <!-- Added relative for badge positioning -->
+            <NuxtLink to="/cart" title="Shopping Cart" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150 block">
+              <CartIcon class="w-6 h-6" />
+              <span v-if="cartTotalItems > 0"
+                    class="absolute -top-1 -right-1 bg-brand-accent text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center leading-none">
+                {{ cartTotalItems }}
+              </span>
             </NuxtLink>
           </li>
-          <li v-if="user" class="text-sm text-text-secondary hidden md:block">
+
+          <!-- User Greeting -->
+          <li v-if="user" class="text-sm text-text-secondary hidden lg:block ml-2"> <!-- Added ml-2 for slight spacing from icons -->
             Hello, {{ user.email }} ({{ user.role }})
           </li>
         </ul>
@@ -40,7 +68,10 @@
 <script setup>
 import { computed } from 'vue';
 import { useAuth } from '~/composables/useAuth';
-import { useCart } from '~/composables/useCart'; // Import useCart
+import { useCart } from '~/composables/useCart';
+import UserIcon from '~/components/icons/UserIcon.vue';
+import LogoutIcon from '~/components/icons/LogoutIcon.vue';
+import CartIcon from '~/components/icons/CartIcon.vue';
 
 // Auth composable
 const { authToken, authUser, logout } = useAuth();
