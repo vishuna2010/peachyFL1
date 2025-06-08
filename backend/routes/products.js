@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { BadRequestError, NotFoundError } = require('../utils/AppError');
 const { isAuthenticated, isAdmin } = require('../auth');
 const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload');
 const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../services/s3Service');
@@ -188,12 +189,14 @@ async function getVariantSelectedOptions(variantId, client) {
 }
 
 // GET /products/:id - Get a single product by ID with variants
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res, next) => {
   const { id } = req.params;
-  if (isNaN(parseInt(id))) { return res.status(400).json({ message: 'Invalid product ID format.' }); }
 
   const client = await db.pool.connect();
   try {
+    if (isNaN(parseInt(id))) {
+      throw new BadRequestError('Invalid product ID format.');
+    }
     const productQuery = `
       SELECT p.*,
              c.name as category_name,
@@ -208,7 +211,9 @@ router.get('/:id', async (req, res) => {
       GROUP BY p.id, c.name, s.name;
     `;
     const productResult = await client.query(productQuery, [id]);
-    if (productResult.rows.length === 0) { return res.status(404).json({ message: `Product with ID ${id} not found.` }); }
+    if (productResult.rows.length === 0) {
+      throw new NotFoundError(`Product with ID ${id} not found.`);
+    }
     const product = productResult.rows[0];
 
     const optionsQuery = `
@@ -235,7 +240,8 @@ router.get('/:id', async (req, res) => {
     }
 
     res.status(200).json(product);
-  } catch (error) { console.error(`Error getting product by ID ${id} with variants:`, error); res.status(500).json({ message: 'Error getting product details.' });
+  } catch (error) {
+    next(error);
   } finally { if (client) client.release(); }
 });
 

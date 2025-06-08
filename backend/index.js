@@ -21,6 +21,7 @@ const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
 const cartRoutes = require('./routes/cart'); // Import cart routes
 const path = require('path'); // Import path module
+const globalErrorHandler = require('./middleware/errorHandler'); // Import global error handler
 
 const app = express();
 const port = 3000;
@@ -68,6 +69,8 @@ if (db.pool) {
   console.log('Database module loaded, connection and table creation initiated.');
 }
 
+// Global Error Handling Middleware - MUST BE LAST
+app.use(globalErrorHandler);
 
 app.listen(port, () => {
   console.log(`Server listening at http://localhost:${port}`);
