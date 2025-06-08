@@ -14,28 +14,50 @@
         Start Shopping
       </NuxtLink>
     </div>
-    <div v-else class="space-y-4">
-      <div v-for="order in orders" :key="order.id" class="bg-white shadow-md rounded-lg p-4 sm:p-6 border border-neutral-medium hover:shadow-lg transition-shadow duration-200">
-        <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-3 pb-3 border-b border-neutral-light">
-          <div>
-            <h3 class="text-lg font-semibold text-brand-primary hover:underline">
-              <NuxtLink :to="`/profile/orders/${order.id}`">Order #{{ order.id }}</NuxtLink>
-            </h3>
-            <p class="text-xs text-text-secondary mt-1">Placed on: {{ new Date(order.order_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) }}</p>
+    <div v-else>
+      <div class="space-y-4">
+        <div v-for="order in orders" :key="order.id" class="bg-white shadow-md rounded-lg p-4 sm:p-6 border border-neutral-medium hover:shadow-lg transition-shadow duration-200">
+          <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-3 pb-3 border-b border-neutral-light">
+            <div>
+              <h3 class="text-lg font-semibold text-brand-primary hover:underline">
+                <NuxtLink :to="`/profile/orders/${order.id}`">Order #{{ order.id }}</NuxtLink>
+              </h3>
+              <p class="text-xs text-text-secondary mt-1">Placed on: {{ new Date(order.order_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) }}</p>
+            </div>
+            <span :class="statusClass(order.status)" class="text-xs font-medium px-2.5 py-1 rounded-full mt-2 sm:mt-0 self-start sm:self-center">
+              {{ order.status }}
+            </span>
           </div>
-          <span :class="statusClass(order.status)" class="text-xs font-medium px-2.5 py-1 rounded-full mt-2 sm:mt-0 self-start sm:self-center">
-            {{ order.status }}
-          </span>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm mb-3">
+            <p><span class="font-medium text-text-secondary">Total Amount:</span> <span class="font-semibold text-text-primary">${{ order.total_amount.toFixed(2) }}</span></p>
+            <p><span class="font-medium text-text-secondary">Items:</span> <span class="font-semibold text-text-primary">{{ order.item_count }}</span></p>
+          </div>
+          <div class="text-right mt-3">
+            <NuxtLink :to="`/profile/orders/${order.id}`" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-brand-primary hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary transition-colors">
+              View Details
+            </NuxtLink>
+          </div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm mb-3">
-          <p><span class="font-medium text-text-secondary">Total Amount:</span> <span class="font-semibold text-text-primary">${{ order.total_amount.toFixed(2) }}</span></p>
-          <p><span class="font-medium text-text-secondary">Items:</span> <span class="font-semibold text-text-primary">{{ order.item_count }}</span></p>
-        </div>
-        <div class="text-right mt-3">
-          <NuxtLink :to="`/profile/orders/${order.id}`" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-brand-primary hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary transition-colors">
-            View Details
-          </NuxtLink>
-        </div>
+      </div>
+      <!-- Pagination Controls -->
+      <div class="mt-8 flex justify-center items-center space-x-3" v-if="paginationData && paginationData.totalPages > 1">
+        <button
+          @click="fetchUserOrders(paginationData.page - 1)"
+          :disabled="!paginationData.hasPrevPage"
+          class="px-4 py-2 border border-neutral-dark rounded-md text-sm font-medium hover:bg-neutral-light disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Previous
+        </button>
+        <span class="text-sm text-text-secondary">
+          Page {{ paginationData.page }} of {{ paginationData.totalPages }}
+        </span>
+        <button
+          @click="fetchUserOrders(paginationData.page + 1)"
+          :disabled="!paginationData.hasNextPage"
+          class="px-4 py-2 border border-neutral-dark rounded-md text-sm font-medium hover:bg-neutral-light disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Next
+        </button>
       </div>
     </div>
   </div>
@@ -44,7 +66,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import { useAuth } from '~/composables/useAuth';
-import { navigateTo, useNuxtApp } from '#app';
+import { navigateTo, useNuxtApp, useRoute, useRouter } from '#app';
 
 definePageMeta({
   layout: 'default',
@@ -72,12 +94,26 @@ useHead({
   title: 'My Orders',
 });
 
+const { $axios } = useNuxtApp();
+const route = useRoute();
+const router = useRouter();
+
 const isLoading = ref(true);
 const orders = ref([]);
 const fetchError = ref(null);
+const currentPage = ref(parseInt(route.query.page) || 1);
+const limit = ref(10);
+const paginationData = ref({
+  total: 0,
+  page: currentPage.value,
+  limit: limit.value,
+  totalPages: 1,
+  hasNextPage: false,
+  hasPrevPage: false
+});
 
 const statusClass = (status) => {
-  if (!status) return 'text-neutral-dark bg-neutral-light';
+  if (!status) return 'text-neutral-dark bg-neutral-light'; // Adjusted default from gray to neutral
   const lowerStatus = status.toLowerCase();
   if (lowerStatus === 'delivered' || lowerStatus === 'completed') {
     return 'text-green-700 bg-green-100 px-2 py-0.5 rounded-full text-xs';
@@ -88,21 +124,51 @@ const statusClass = (status) => {
   } else if (lowerStatus === 'pending') {
     return 'text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full text-xs';
   }
-  return 'text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full text-xs'; // Default
+  return 'text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full text-xs';
 };
 
-onMounted(() => {
+async function fetchUserOrders(pageToFetch = currentPage.value) {
   isLoading.value = true;
   fetchError.value = null;
-
-  setTimeout(() => {
-    orders.value = [
-      { id: 'ORD00123', order_date: '2023-10-26T10:30:00Z', total_amount: 79.98, status: 'Shipped', item_count: 2 },
-      { id: 'ORD00124', order_date: '2023-10-20T14:15:00Z', total_amount: 149.50, status: 'Delivered', item_count: 1 },
-      { id: 'ORD00125', order_date: '2023-09-15T09:00:00Z', total_amount: 35.00, status: 'Cancelled', item_count: 3 },
-      { id: 'ORD00126', order_date: '2023-11-01T11:00:00Z', total_amount: 250.75, status: 'Processing', item_count: 5 },
-    ];
+  try {
+    const response = await $axios.get('/api/orders/my-history', {
+      params: {
+        page: pageToFetch,
+        limit: limit.value
+      }
+    });
+    orders.value = response.data.data;
+    paginationData.value = response.data.pagination;
+    currentPage.value = response.data.pagination.page;
+    // Update router query if pageToFetch was different from route.query.page
+    // This handles direct calls to fetchUserOrders (e.g. from buttons)
+    if (router && route.query.page !== currentPage.value.toString()) {
+        router.push({ query: { ...route.query, page: currentPage.value } });
+    }
+  } catch (err) {
+    console.error('Failed to fetch user orders:', err);
+    fetchError.value = err.response?.data?.message || err.message || 'Could not load orders.';
+    orders.value = [];
+  } finally {
     isLoading.value = false;
-  }, 1000);
+  }
+}
+
+onMounted(() => {
+  fetchUserOrders(currentPage.value);
 });
+
+watch(() => route.query.page, (newPage) => {
+  const pageToFetch = parseInt(newPage) || 1;
+  // Fetch only if page actually changed from the ref, or if it's the first load with no orders
+  // This condition aims to prevent re-fetch if already on the correct page from onMounted
+  if (pageToFetch !== currentPage.value) {
+      fetchUserOrders(pageToFetch);
+  } else if (!orders.value.length && !isLoading.value && !fetchError.value && pageToFetch === currentPage.value) {
+      // This case handles scenarios like navigating back to a page that previously had an error
+      // or was empty, and we want to retry loading if the URL matches the current state.
+      fetchUserOrders(pageToFetch);
+  }
+}, { immediate: false }); // immediate: false because onMounted handles initial load.
+
 </script>
