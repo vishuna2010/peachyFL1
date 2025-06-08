@@ -5,14 +5,6 @@ const fs = require('fs');
 // Define the destination folder for product images
 const uploadDir = 'uploads/product_images/';
 
-// Ensure the upload directory exists
-if (!fs.existsSync(uploadDir)) {
-  // fs.mkdirSync(uploadDir, { recursive: true }); // No longer needed for memoryStorage
-  // console.log(`Created directory: ${uploadDir}`);
-// } else {
-  // console.log(`Directory already exists: ${uploadDir}`);
-// }
-
 // Multer memory storage configuration
 // This keeps the file in memory as a Buffer, accessible via req.file.buffer
 const storage = multer.memoryStorage();
