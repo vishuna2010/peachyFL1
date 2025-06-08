@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+const defaultTheme = require('tailwindcss/defaultTheme');
+
 export default {
   content: [
     './app.vue',
@@ -19,6 +21,9 @@ export default {
         'text-primary': '#2d3748',
         'text-secondary': '#4a5568',
       },
+    },
+    fontFamily: {
+      sans: ['Poppins', ...defaultTheme.fontFamily.sans],
     },
   },
   plugins: [],
