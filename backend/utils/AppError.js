@@ -33,6 +33,12 @@ class NotFoundError extends AppError {
   }
 }
 
+class ConflictError extends AppError {
+  constructor(message = 'Conflict') {
+    super(message, 409);
+  }
+}
+
 // You can add more specific error classes here if needed, e.g.:
 // class ConflictError extends AppError {
 //   constructor(message = 'Conflict') {
@@ -46,5 +52,5 @@ module.exports = {
   UnauthorizedError,
   ForbiddenError,
   NotFoundError,
-  // ConflictError
+  ConflictError
 };

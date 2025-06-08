@@ -17,6 +17,7 @@ const adminProductSpecificOptionsRoutes = require('./routes/adminProductSpecific
 const adminOptionManagementRoutes = require('./routes/adminOptionManagement'); // Import general option/value management routes
 const adminProductVariantsRoutes = require('./routes/adminProductVariants.js'); // For product-scoped variant actions
 const adminVariantDetailRoutes = require('./routes/adminVariantDetails.js');   // For variant-specific GET/PUT/DELETE by variant ID
+const adminCategoryRoutes = require('./routes/adminCategories'); // Import admin category routes
 const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
 const cartRoutes = require('./routes/cart'); // Import cart routes
@@ -49,6 +50,7 @@ app.use('/api/products', productRoutes); // Mount product routes under /api/prod
 // --- Admin Routes ---
 // Mount user management specific admin routes
 app.use('/api/admin/users', adminUserRoutes);
+app.use('/api/admin/categories', adminCategoryRoutes); // Mount admin category routes
 // Mount order management specific admin routes
 app.use('/api/admin', adminOrderRoutes); // This will make routes like /api/admin/orders available
 
