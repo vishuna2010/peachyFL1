@@ -275,6 +275,24 @@ const createTables = async () => {
     await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_variant_id ON product_variant_option_values(product_variant_id);'); // Renamed index
     await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_option_value_id ON product_variant_option_values(product_option_value_id);'); // Renamed index
 
+    // Additional recommended indexes
+    console.log('Applying additional recommended indexes...');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_supplier_id ON products(supplier_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_stock_reorder ON products(stock_quantity, reorder_threshold);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_product_tags_tag_id ON product_tags(tag_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);');
+    console.log('Additional recommended indexes applied successfully or already exist.');
+
   } catch (err) {
     console.error('Error creating/altering tables:', err.stack);
   } finally {
