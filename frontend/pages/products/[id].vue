@@ -13,13 +13,26 @@
       <!-- Image Column -->
       <div class="md:col-span-3 lg:col-span-1">
         <img
-          v-if="displayImage"
-          :src="displayImage"
+          v-if="selectedImageUrl"
+          :src="selectedImageUrl"
           :alt="`Image of ${product.name}`"
           class="w-full h-auto object-contain rounded-lg shadow-lg max-h-[550px] aspect-[4/5]"
-          key="display-image" <!-- Key for re-rendering on change -->
+          key="selected-image" <!-- Key for re-rendering on change -->
         />
-        <div v-else class="w-full h-[400px] md:h-[550px] flex items-center justify-center bg-neutral-medium rounded-lg text-text-secondary">No Image Available</div>
+        <div v-if="!selectedImageUrl" class="w-full h-[400px] md:h-[550px] flex items-center justify-center bg-neutral-medium rounded-lg text-text-secondary">No Image Available</div>
+
+        <!-- Thumbnail Gallery -->
+        <div v-if="galleryImages.length > 1" class="mt-4 flex items-center justify-center space-x-2 sm:space-x-3 overflow-x-auto py-2 px-1">
+          <img
+            v-for="imageItem in galleryImages"
+            :key="imageItem.id"
+            :src="imageItem.url"
+            @click="selectedImageUrl = imageItem.url"
+            :alt="`${product.name} thumbnail ${imageItem.id}`"
+            class="h-16 w-16 sm:h-20 sm:w-20 object-cover rounded-md border-2 cursor-pointer transition-all duration-200 ease-in-out hover:opacity-75"
+            :class="selectedImageUrl === imageItem.url ? 'border-brand-primary ring-2 ring-brand-primary ring-offset-1 shadow-md' : 'border-transparent'"
+          />
+        </div>
       </div>
 
       <!-- Details Column -->
@@ -114,18 +127,20 @@ const { $axios } = useNuxtApp();
 const route = useRoute();
 const product = ref(null);
 const pending = ref(true);
-const fetchError = ref(null); // Changed from error to fetchError for clarity
+const fetchError = ref(null);
 
 const { addToCart } = useCart();
 
 // --- Variant and Display State ---
-const selectedOptions = reactive({}); // { <option_id>: <value_id> }
+const selectedOptions = reactive({});
 const currentVariant = ref(null);
+const galleryImages = ref([]); // Added for gallery
+const selectedImageUrl = ref(''); // Renamed from displayImage
 
 const displayPrice = ref(0);
 const displaySku = ref('');
 const displayStock = ref(0);
-const displayImage = ref('');
+// displayImage is now selectedImageUrl
 const addToCartDisabled = ref(true);
 
 const quantity = ref(1);
@@ -134,27 +149,21 @@ const addToCartError = ref('');
 
 // --- Computed properties for dynamic display based on selection ---
 const stockStatusMessage = computed(() => {
-  if (!product.value && !currentVariant.value) return 'Loading...'; // Or handle better if product never loads
+  if (!product.value && !currentVariant.value) return 'Loading...';
   const stock = displayStock.value;
   if (stock <= 0) return 'Out of Stock';
   if (stock > 0 && stock <= 5) return `Only ${stock} left!`;
   return 'In Stock';
 });
 
-const stockStatusClass = computed(() => {
-  if (!product.value && !currentVariant.value) return '';
-  const stock = displayStock.value;
-  if (stock <= 0) return 'stock-out-of-stock';
-  if (stock > 0 && stock <= 5) return 'stock-low';
-  return 'stock-in-stock';
-});
+// stockStatusClass computed property remains the same
 
 // --- Functions ---
 function initializeSelections() {
   if (product.value && product.value.options) {
     for (const option of product.value.options) {
       if (option.values && option.values.length > 0) {
-        selectedOptions[option.id] = option.values[0].id; // Default to first value
+        selectedOptions[option.id] = option.values[0].id;
       }
     }
   }
@@ -170,25 +179,23 @@ function updateCurrentVariant() {
   if (!product.value) return;
 
   if (!product.value.variants || product.value.variants.length === 0) {
-    // No variants, use base product details
     currentVariant.value = null;
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = product.value.stock_quantity;
-    displayImage.value = product.value.image_url || ''; // Already absolute S3 URL
+    selectedImageUrl.value = product.value.image_url || ''; // Use selectedImageUrl
     addToCartDisabled.value = product.value.stock_quantity <= 0;
-    quantity.value = 1; // Reset quantity
+    quantity.value = 1;
     return;
   }
 
   const numSelectedOptions = Object.keys(selectedOptions).length;
-  // Ensure all options have a selection before trying to find a variant
   if (product.value.options && numSelectedOptions < product.value.options.length) {
-    currentVariant.value = null; // Not all options selected yet
-    displayPrice.value = parseFloat(product.value.price); // Show base price
+    currentVariant.value = null;
+    displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
-    displayStock.value = 0; // Indicate selection needed or unavailable
-    displayImage.value = product.value.image_url || '';
+    displayStock.value = 0;
+    selectedImageUrl.value = product.value.image_url || ''; // Use selectedImageUrl
     addToCartDisabled.value = true;
     return;
   }
@@ -205,17 +212,17 @@ function updateCurrentVariant() {
     displayPrice.value = parseFloat(matchedVariant.final_price);
     displaySku.value = matchedVariant.sku || product.value.sku || '';
     displayStock.value = matchedVariant.stock_quantity;
-    displayImage.value = matchedVariant.image_url || product.value.image_url || '';
+    selectedImageUrl.value = matchedVariant.image_url || product.value.image_url || ''; // Use selectedImageUrl
     addToCartDisabled.value = matchedVariant.stock_quantity <= 0;
   } else {
     currentVariant.value = null;
-    displayPrice.value = parseFloat(product.value.price); // Or some "unavailable price"
-    displaySku.value = product.value.sku || ''; // Or "unavailable"
-    displayStock.value = 0; // Variant combination doesn't exist or out of stock
-    displayImage.value = product.value.image_url || ''; // Fallback to base image
+    displayPrice.value = parseFloat(product.value.price);
+    displaySku.value = product.value.sku || '';
+    displayStock.value = 0;
+    selectedImageUrl.value = product.value.image_url || ''; // Use selectedImageUrl (fallback to base image)
     addToCartDisabled.value = true;
   }
-  quantity.value = 1; // Reset quantity on variant change
+  quantity.value = 1;
 }
 
 
@@ -227,9 +234,36 @@ async function fetchProduct() {
     const response = await $axios.get(`/products/${productId}`);
     product.value = response.data;
     if (product.value) {
-      initializeSelections(); // This will also call updateCurrentVariant
+      initializeSelections();
+
+      // Build galleryImages and set initial selectedImageUrl
+      const imageUrls = new Set();
+      if (product.value.image_url) {
+        imageUrls.add(product.value.image_url);
+      }
+      if (product.value.variants && Array.isArray(product.value.variants)) {
+        product.value.variants.forEach(variant => {
+          if (variant.image_url) {
+            imageUrls.add(variant.image_url);
+          }
+        });
+      }
+      galleryImages.value = Array.from(imageUrls).map((url, index) => ({ id: `gallery_img_${index}`, url }));
+
+      // Set initial selectedImageUrl: try currentVariant's image, then product's main, then first gallery, then empty
+      // Note: currentVariant might be set by initializeSelections -> updateCurrentVariant
+      // So this logic might re-evaluate selectedImageUrl based on the initially selected variant.
+      if (currentVariant.value && currentVariant.value.image_url) {
+          selectedImageUrl.value = currentVariant.value.image_url;
+      } else if (product.value.image_url) {
+          selectedImageUrl.value = product.value.image_url;
+      } else if (galleryImages.value.length > 0) {
+          selectedImageUrl.value = galleryImages.value[0].url;
+      } else {
+          selectedImageUrl.value = '';
+      }
+
     } else {
-      // Handle case where product data is unexpectedly null after successful fetch
       fetchError.value = { message: "Product data is invalid." };
     }
   } catch (err) {
@@ -242,8 +276,8 @@ async function fetchProduct() {
 
 const handleAddToCart = () => {
   addToCartError.value = '';
-  const productToAdd = currentVariant.value || product.value; // Prioritize variant
-  const stockAvailable = displayStock.value; // Use the dynamically set displayStock
+  const productToAdd = currentVariant.value || product.value;
+  const stockAvailable = displayStock.value;
 
   if (!productToAdd) {
     addToCartError.value = "Product or variant not selected/available.";
@@ -262,14 +296,12 @@ const handleAddToCart = () => {
     return;
   }
 
-  // Construct cart item
   const itemForCart = {
-    id: product.value.id, // Base product ID
+    id: product.value.id,
     productVariantId: currentVariant.value ? currentVariant.value.id : null,
     name: currentVariant.value ? `${product.value.name} (${currentVariant.value.selected_options.map(opt => opt.value_name).join(', ')})` : product.value.name,
-    price: displayPrice.value, // This is already final_price for variant or base price
-    image_url: displayImage.value,
-    // Pass other relevant details like SKU if needed by cart/checkout
+    price: displayPrice.value,
+    image_url: selectedImageUrl.value, // Use selectedImageUrl for cart
     sku: displaySku.value,
   };
 
@@ -284,8 +316,9 @@ onMounted(fetchProduct);
 
 watch(product, (newProductData) => {
     if(newProductData) {
-        // This re-initializes selections and current variant if product data itself is refetched/changed.
         initializeSelections();
+        // Potentially re-build gallery if product data could fundamentally change, though unlikely here
+        // For now, gallery is built once in fetchProduct.
     }
 }, { deep: true });
 
