@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { isAuthenticated } = require('../auth');
 const { sendEmail, getOrderConfirmationHtml, getOrderConfirmationText } = require('../services/emailService');
+const { NotFoundError, BadRequestError } = require('../utils/AppError');
 
 // POST /api/orders - Create a new order
 router.post('/', isAuthenticated, async (req, res) => {
@@ -39,16 +40,15 @@ router.post('/', isAuthenticated, async (req, res) => {
       let priceAtPurchase;
       let productName;
       let currentStock;
-      let productSku = null; // Conceptual, if we were to store SKU in order_items
+      let productSku = null;
 
       if (item.productVariantId) {
-        // --- Handling a Product Variant ---
         const variantResult = await client.query(
           `SELECT pv.stock_quantity, pv.price_modifier, pv.sku as variant_sku,
                   p.price as base_price, p.name as base_product_name, p.sku as base_product_sku
            FROM product_variants pv
            JOIN products p ON pv.product_id = p.id
-           WHERE pv.id = $1 AND pv.product_id = $2 FOR UPDATE OF pv`, // Lock variant row
+           WHERE pv.id = $1 AND pv.product_id = $2 FOR UPDATE OF pv`,
           [item.productVariantId, item.productId]
         );
         if (variantResult.rows.length === 0) {
@@ -58,7 +58,7 @@ router.post('/', isAuthenticated, async (req, res) => {
         const variant = variantResult.rows[0];
         currentStock = variant.stock_quantity;
         priceAtPurchase = parseFloat(variant.base_price) + parseFloat(variant.price_modifier);
-        productName = `${variant.base_product_name} (Variant)`; // Or more descriptive with option values later
+        productName = `${variant.base_product_name} (Variant)`;
         productSku = variant.variant_sku || variant.base_product_sku;
 
         if (currentStock < item.quantity) {
@@ -67,7 +67,6 @@ router.post('/', isAuthenticated, async (req, res) => {
         }
         stockUpdates.push({ type: 'variant', id: item.productVariantId, quantityToDecrement: item.quantity });
       } else {
-        // --- Handling a Base Product (no variant specified) ---
         const productResult = await client.query(
           'SELECT name, price, stock_quantity, sku FROM products WHERE id = $1 FOR UPDATE',
           [item.productId]
@@ -202,18 +201,17 @@ router.get('/my-history', isAuthenticated, async (req, res, next) => {
     let limit = parseInt(req.query.limit) || 10;
 
     if (isNaN(page) || page < 1) {
-      page = 1; // Default to page 1 if invalid
+      page = 1;
     }
     if (isNaN(limit) || limit < 1) {
-      limit = 10; // Default to limit 10 if invalid
+      limit = 10;
     }
     if (limit > 100) {
-        limit = 100; // Max limit
+        limit = 100;
     }
 
     const offset = (page - 1) * limit;
 
-    // Query for user's orders with item_count
     const ordersQuery = `
       SELECT o.id, o.order_date, o.total_amount, o.status,
              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) as item_count
@@ -224,7 +222,6 @@ router.get('/my-history', isAuthenticated, async (req, res, next) => {
     `;
     const ordersResult = await db.query(ordersQuery, [userId, limit, offset]);
 
-    // Query for total count of user's orders
     const totalCountQuery = 'SELECT COUNT(*) FROM orders WHERE user_id = $1';
     const totalCountResult = await db.query(totalCountQuery, [userId]);
     const totalOrders = parseInt(totalCountResult.rows[0].count);
@@ -244,7 +241,95 @@ router.get('/my-history', isAuthenticated, async (req, res, next) => {
     });
 
   } catch (error) {
-    // console.error('Error fetching user order history:', error); // Optional: more specific logging here
+    return next(error);
+  }
+});
+
+// GET /api/orders/my-history/:orderId - Get details for a specific order for the authenticated user
+router.get('/my-history/:orderId', isAuthenticated, async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const orderIdParam = req.params.orderId;
+
+    const orderId = parseInt(orderIdParam);
+    if (isNaN(orderId) || orderId <= 0) {
+      throw new BadRequestError('Invalid order ID format.');
+    }
+
+    // Query for the specific order, ensuring it belongs to the user
+    const orderQuery = 'SELECT * FROM orders WHERE id = $1 AND user_id = $2';
+    const orderResult = await db.query(orderQuery, [orderId, userId]);
+
+    if (orderResult.rows.length === 0) {
+      throw new NotFoundError(`Order with ID ${orderId} not found or does not belong to the current user.`);
+    }
+    const orderData = orderResult.rows[0];
+
+    // Query for associated order items
+    const itemsQuery = `
+      SELECT
+        oi.id as item_id,
+        oi.product_id,
+        oi.quantity,
+        oi.price_at_purchase,
+        p.name as product_name,
+        p.image_url as product_image_url
+      FROM order_items oi
+      JOIN products p ON oi.product_id = p.id
+      WHERE oi.order_id = $1
+      ORDER BY oi.id ASC
+    `;
+    const itemsResult = await db.query(itemsQuery, [orderId]);
+    orderData.items = itemsResult.rows;
+
+    // Construct final order object to match frontend mock structure where possible
+    const responseOrder = {
+       id: orderData.id,
+       order_date: orderData.order_date,
+       status: orderData.status,
+       total_amount: parseFloat(orderData.total_amount),
+       shipping_address: {
+           line1: orderData.shipping_address_line1,
+           line2: orderData.shipping_address_line2,
+           city: orderData.shipping_city,
+           postalCode: orderData.shipping_postal_code,
+           country: orderData.shipping_country
+       },
+       billing_address: {
+           line1: orderData.billing_address_line1 || orderData.shipping_address_line1,
+           line2: orderData.billing_address_line2 || orderData.shipping_address_line2,
+           city: orderData.billing_city || orderData.shipping_city,
+           postalCode: orderData.billing_postal_code || orderData.shipping_postal_code,
+           country: orderData.billing_country || orderData.shipping_country
+       },
+       items: orderData.items.map(item => ({
+           item_id: item.item_id,
+           product_id: item.product_id,
+           name: item.product_name,
+           quantity: item.quantity,
+           price_at_purchase: parseFloat(item.price_at_purchase),
+           image_url: item.product_image_url
+       })),
+       subtotal: orderData.original_total_amount ? parseFloat(orderData.original_total_amount) : parseFloat(orderData.total_amount) + (orderData.discount_amount_applied ? parseFloat(orderData.discount_amount_applied) : 0),
+       discount_applied: orderData.discount_id ? {
+           code: orderData.discount_code_applied,
+           amount_deducted: parseFloat(orderData.discount_amount_applied)
+       } : null,
+       // These fields are not in the 'orders' table schema provided earlier, so they are commented out.
+       // If they were added, they could be included here.
+       // shipping_cost: 0.00,
+       // payment_method: 'N/A'
+    };
+
+    if (orderData.original_total_amount === null && responseOrder.discount_applied) {
+       responseOrder.subtotal = parseFloat(orderData.total_amount) + parseFloat(orderData.discount_amount_applied);
+    } else if (orderData.original_total_amount === null && !responseOrder.discount_applied) {
+       responseOrder.subtotal = parseFloat(orderData.total_amount);
+    }
+
+    res.status(200).json(responseOrder);
+
+  } catch (error) {
     return next(error); // Pass to global error handler
   }
 });
