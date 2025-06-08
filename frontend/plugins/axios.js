@@ -1,8 +1,13 @@
 import axios from 'axios';
+import { defineNuxtPlugin, useRuntimeConfig } from '#app'; // Explicit import for clarity
 
 export default defineNuxtPlugin((nuxtApp) => {
+  const config = useRuntimeConfig();
+  const backendBaseUrl = config.public.backendBaseUrl || 'http://localhost:3000'; // Fallback if not set
+  const baseURL = `${backendBaseUrl}/api`;
+
   const instance = axios.create({
-    baseURL: 'http://localhost:3000/api', // Your backend API
+    baseURL: baseURL,
     // You can add other default settings here, like headers
   });
 
