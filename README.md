@@ -61,29 +61,24 @@ Each directory has its own `package.json` and dependencies.
     *   Create a new PostgreSQL database (e.g., `my_ecommerce_db`).
     *   The backend application, upon starting, will attempt to create necessary tables if they don't already exist (due to `CREATE TABLE IF NOT EXISTS ...` statements in `backend/db.js`). For manual control or initial setup in specific environments, you can extract the SQL statements from `backend/db.js` and execute them using a PostgreSQL client.
 4.  **Environment Variables:**
-    *   In the `backend/` directory, create a `.env` file. You can copy `backend/.env.example` if such a template is provided, or create it manually.
+    *   In the `backend/` directory, copy the `backend/.env.example` template to a new file named `backend/.env`.
     *   Update the following environment variables in `backend/.env`, replacing placeholder values:
         ```dotenv
+        # Database Connection (PostgreSQL)
+        DATABASE_URL=postgresql://your_db_user:your_db_password@your_db_host:5432/your_db_name
+
         # Server Configuration
         PORT=3000 # Or your preferred port for the backend
-        NODE_ENV=development
-
-        # Database Connection
-        DB_USER=your_db_user
-        DB_HOST=localhost
-        DB_DATABASE=my_ecommerce_db
-        DB_PASSWORD=your_db_password
-        DB_PORT=5432
-        DB_SSL_REQUIRED=false # Set to 'true' if your DB (e.g., AWS RDS) requires SSL
+        NODE_ENV=development # Or 'production'
 
         # JWT Authentication
         JWT_SECRET=your_super_secret_jwt_key_at_least_32_chars_long
 
-        # AWS S3 for Image Uploads (Leave blank if not testing S3; image uploads requiring S3 will fail or be skipped)
-        AWS_ACCESS_KEY_ID=your_aws_access_key_id
-        AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
-        AWS_S3_BUCKET_NAME=your_s3_bucket_name
-        AWS_REGION=your_aws_s3_bucket_region
+        # AWS S3 for Image Uploads (Optional: Leave blank if not testing S3)
+        # AWS_ACCESS_KEY_ID=your_aws_access_key_id
+        # AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+        # AWS_S3_BUCKET_NAME=your_s3_bucket_name
+        # AWS_REGION=your_aws_s3_bucket_region
 
         # Email Service (Ethereal.email test account used by default if real SMTP is not set)
         # For production, configure a real SMTP provider or email service:
@@ -92,10 +87,10 @@ Each directory has its own `package.json` and dependencies.
         # SMTP_USER=your_smtp_user
         # SMTP_PASS=your_smtp_password
         # SMTP_SECURE=true # Typically 'true' for port 465, 'false' for 587 (STARTTLS)
-        # SENDER_EMAIL_ADDRESS="My Awesome E-Commerce <noreply@example.com>" # Email 'From' address
+        # SENDER_EMAIL_ADDRESS="My Awesome E-Commerce <noreply@example.com>"
 
         # Application Name (used in 2FA OTPAuth URL & Email Subjects)
-        APP_NAME="My Awesome E-Commerce"
+        # APP_NAME="My Awesome E-Commerce"
         ```
 5.  **Run the Backend Server:**
     `npm start`

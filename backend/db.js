@@ -12,7 +12,21 @@ const { Pool } = require('pg');
 
 // For this example, we'll use a placeholder connection string.
 // In a real application, you would use environment variables or a config file.
-const connectionString = 'postgresql://user:password@host:port/database';
+const placeholderConnectionString = 'postgresql://user:password@host:port/database';
+let connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.warn(`
+    *****************************************************************************
+    WARNING: DATABASE_URL environment variable is not set.
+    Falling back to a placeholder connection string: ${placeholderConnectionString}
+    Please create a backend/.env file and set DATABASE_URL for the application
+    to connect to your actual database.
+    *****************************************************************************
+  `);
+  connectionString = placeholderConnectionString;
+}
+
 const pool = new Pool({
   connectionString: connectionString,
 });
