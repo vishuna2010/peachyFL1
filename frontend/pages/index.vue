@@ -1,54 +1,58 @@
 <template>
-  <div class="p-4 md:p-8">
-    <h1 class="text-3xl font-bold text-text-primary mb-8 text-center">Featured Products</h1>
+  <div class="pb-8"> <!-- Added padding-bottom to the main container -->
+    <HeroBanner v-bind="heroData" />
 
-    <!-- Existing filters UI - will be disconnected from product display for now -->
-    <div class="filters-container mb-8">
-      <input type="text" v-model="searchTerm" placeholder="Search products..." @keyup.enter="applyFiltersAndNavigate" class="filter-input search-input" />
-      <select v-model="selectedCategoryId" class="filter-select category-select">
-        <option :value="null">All Categories</option>
-        <option v-for="category in categories" :key="category.id" :value="category.id">
-          {{ category.name }}
-        </option>
-      </select>
-      <input type="number" v-model.number="minPrice" placeholder="Min Price" class="filter-input price-input" />
-      <input type="number" v-model.number="maxPrice" placeholder="Max Price" class="filter-input price-input" />
-      <select v-model="sortBy" class="filter-select sort-select">
-        <option value="created_at_desc">Newest</option>
-        <option value="created_at_asc">Oldest</option>
-        <option value="price_asc">Price: Low to High</option>
-        <option value="price_desc">Price: High to Low</option>
-        <option value="name_asc">Name: A-Z</option>
-        <option value="name_desc">Name: Z-A</option>
-      </select>
-      <button @click="applyFiltersAndNavigate" class="apply-filters-button">Apply Filters</button>
-      <button @click="resetFiltersAndNavigate" class="reset-filters-button">Reset Filters</button>
-    </div>
+    <div class="p-4 md:p-8"> <!-- Added padding for content below hero -->
+      <h1 class="text-3xl font-bold text-text-primary mb-8 text-center">Featured Products</h1>
 
-    <!-- New Product Grid -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-      <ProductCard v-for="product in products" :key="product.id" :product="product" />
-    </div>
+      <!-- Existing filters UI - will be disconnected from product display for now -->
+      <div class="filters-container mb-8">
+        <input type="text" v-model="searchTerm" placeholder="Search products..." @keyup.enter="applyFiltersAndNavigate" class="filter-input search-input" />
+        <select v-model="selectedCategoryId" class="filter-select category-select">
+          <option :value="null">All Categories</option>
+          <option v-for="category in categories" :key="category.id" :value="category.id">
+            {{ category.name }}
+          </option>
+        </select>
+        <input type="number" v-model.number="minPrice" placeholder="Min Price" class="filter-input price-input" />
+        <input type="number" v-model.number="maxPrice" placeholder="Max Price" class="filter-input price-input" />
+        <select v-model="sortBy" class="filter-select sort-select">
+          <option value="created_at_desc">Newest</option>
+          <option value="created_at_asc">Oldest</option>
+          <option value="price_asc">Price: Low to High</option>
+          <option value="price_desc">Price: High to Low</option>
+          <option value="name_asc">Name: A-Z</option>
+          <option value="name_desc">Name: Z-A</option>
+        </select>
+        <button @click="applyFiltersAndNavigate" class="apply-filters-button">Apply Filters</button>
+        <button @click="resetFiltersAndNavigate" class="reset-filters-button">Reset Filters</button>
+      </div>
 
-    <!-- Original loading/error/empty states and pagination - commented out for mock data -->
-    <!--
-    <div v-if="isLoading" class="loading">Loading products...</div>
-    <div v-if="fetchError" class="error-message">
-      <p>Error fetching products: {{ fetchError.message || fetchError }}</p>
+      <!-- New Product Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        <ProductCard v-for="product in products" :key="product.id" :product="product" />
+      </div>
+
+      <!-- Original loading/error/empty states and pagination - commented out for mock data -->
+      <!--
+      <div v-if="isLoading" class="loading">Loading products...</div>
+      <div v-if="fetchError" class="error-message">
+        <p>Error fetching products: {{ fetchError.message || fetchError }}</p>
+      </div>
+      <div v-if="!isLoading && !fetchError && products.length === 0 && !isMockDataActive">
+        <p>No products found matching your criteria.</p>
+      </div>
+      <div class="pagination-controls" v-if="paginationData.total_pages > 1 && !isMockDataActive">
+        <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1 || isLoading">
+          Previous
+        </button>
+        <span>Page {{ currentPage }} of {{ paginationData.total_pages }}</span>
+        <button @click="changePage(currentPage + 1)" :disabled="currentPage === paginationData.total_pages || isLoading">
+          Next
+        </button>
+      </div>
+      -->
     </div>
-    <div v-if="!isLoading && !fetchError && products.length === 0 && !isMockDataActive">
-      <p>No products found matching your criteria.</p>
-    </div>
-    <div class="pagination-controls" v-if="paginationData.total_pages > 1 && !isMockDataActive">
-      <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1 || isLoading">
-        Previous
-      </button>
-      <span>Page {{ currentPage }} of {{ paginationData.total_pages }}</span>
-      <button @click="changePage(currentPage + 1)" :disabled="currentPage === paginationData.total_pages || isLoading">
-        Next
-      </button>
-    </div>
-    -->
   </div>
 </template>
 
@@ -56,13 +60,23 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useCart } from '~/composables/useCart';
 import { useNuxtApp, useRoute, useRouter, useRuntimeConfig } from '#app';
-import ProductCard from '~/components/ProductCard.vue'; // Import ProductCard
+import ProductCard from '~/components/ProductCard.vue';
+import HeroBanner from '~/components/HeroBanner.vue'; // Import HeroBanner
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
 const router = useRouter();
 const runtimeConfig = useRuntimeConfig();
 const { addToCart } = useCart();
+
+// --- Hero Banner Data ---
+const heroData = ref({
+  title: 'Summer Collection is Here!',
+  subtitle: 'Discover the latest trends and refresh your wardrobe.',
+  buttonText: 'Shop Now',
+  buttonLink: '/products', // Can be changed to a specific category page later
+  imageUrl: 'https://via.placeholder.com/1200x500.png?text=Dynamic+Hero+Image'
+});
 
 // --- Mock Product Data ---
 const isMockDataActive = ref(true); // Flag to control mock data usage
