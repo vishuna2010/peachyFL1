@@ -9,82 +9,97 @@
       <NuxtLink to="/">Go back to Home</NuxtLink>
     </div>
 
-    <div v-if="product && !pending && !fetchError" class="product-detail-layout">
+    <div v-if="product && !pending && !fetchError" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:grid md:grid-cols-5 lg:grid-cols-2 gap-8 lg:gap-12">
       <!-- Image Column -->
-      <div class="image-column">
+      <div class="md:col-span-3 lg:col-span-1">
         <img
           v-if="displayImage"
           :src="displayImage"
           :alt="`Image of ${product.name}`"
-          class="product-detail-image"
+          class="w-full h-auto object-contain rounded-lg shadow-lg max-h-[550px] aspect-[4/5]"
           key="display-image" <!-- Key for re-rendering on change -->
         />
-        <div v-else class="product-detail-image-placeholder">No Image Available</div>
+        <div v-else class="w-full h-[400px] md:h-[550px] flex items-center justify-center bg-neutral-medium rounded-lg text-text-secondary">No Image Available</div>
       </div>
 
       <!-- Details Column -->
-      <div class="details-column">
-        <h1>{{ product.name }}</h1>
-        <p v-if="currentVariant && currentVariant.sku" class="sku">SKU: {{ currentVariant.sku }}</p>
-        <p v-else-if="!currentVariant && product.sku" class="sku">SKU: {{ product.sku }}</p>
+      <div class="md:col-span-2 lg:col-span-1 py-4 md:py-0">
+        <h1 class="text-3xl font-bold text-text-primary mb-2">{{ product.name }}</h1>
+        <p v-if="currentVariant && currentVariant.sku" class="text-sm text-text-secondary mb-4">SKU: {{ currentVariant.sku }}</p>
+        <p v-else-if="!currentVariant && product.sku" class="text-sm text-text-secondary mb-4">SKU: {{ product.sku }}</p>
 
-        <p class="description">{{ product.description }}</p>
+        <p class="text-text-secondary leading-relaxed mb-6">{{ product.description }}</p>
 
-        <p class="price"><strong>Price:</strong> ${{ displayPrice.toFixed(2) }}</p>
+        <p class="text-3xl font-bold text-brand-primary mb-6">${{ displayPrice.toFixed(2) }}</p>
 
-        <p v-if="product.category_name" class="category">
-          <strong>Category:</strong> {{ product.category_name }}
+        <p v-if="product.category_name" class="text-sm text-text-secondary mb-2">
+          Category: <span class="font-medium text-text-primary">{{ product.category_name }}</span>
         </p>
-        <div v-if="product.tags && product.tags.length > 0" class="tags">
-          <strong>Tags:</strong>
-          <span v-for="tag in product.tags" :key="tag" class="tag">{{ tag }}</span>
+        <div v-if="product.tags && product.tags.length > 0" class="mb-6">
+          <span v-for="tag in product.tags" :key="tag" class="inline-block bg-neutral-medium text-text-secondary text-xs font-semibold mr-2 px-2.5 py-0.5 rounded-full">
+            {{ tag }}
+          </span>
         </div>
 
         <!-- Product Options Selection -->
-        <div v-if="product.options && product.options.length > 0" class="options-section">
-          <div v-for="option in product.options" :key="option.id" class="option-group">
-            <strong class="option-name">{{ option.name }}:</strong>
-            <div class="option-values">
+        <div v-if="product.options && product.options.length > 0" class="space-y-4 mb-6">
+          <div v-for="option in product.options" :key="option.id">
+            <label :for="`option-${option.id}`" class="block text-sm font-medium text-text-primary mb-1">{{ option.name }}:</label>
+            <div class="flex flex-wrap gap-2">
               <button
                 v-for="value in option.values"
                 :key="value.id"
                 @click="selectOption(option.id, value.id)"
-                :class="['option-value-button', { selected: selectedOptions[option.id] === value.id }]"
+                :class="[
+                  'px-4 py-2 border rounded-md text-sm transition-colors duration-150',
+                  selectedOptions[option.id] === value.id
+                    ? 'bg-brand-primary text-white border-brand-primary ring-2 ring-brand-accent'
+                    : 'bg-white hover:bg-neutral-light border-neutral-medium text-text-primary'
+                ]"
               >
                 {{ value.value }}
               </button>
             </div>
           </div>
         </div>
-        <div v-if="product.options && product.options.length > 0 && !currentVariant && Object.keys(selectedOptions).length > 0" class="variant-not-found-message">
+        <div v-if="product.options && product.options.length > 0 && !currentVariant && Object.keys(selectedOptions).length > 0"
+             class="my-4 p-3 rounded-md bg-red-100 text-red-700 border border-red-200 text-sm">
           Selected combination is unavailable.
         </div>
 
-
-        <div class="stock-info" :class="stockStatusClass">
+        <div
+          class="my-4 p-3 rounded-md text-sm font-medium"
+          :class="{
+            'bg-green-100 text-green-700 border border-green-200': displayStock > 5,
+            'bg-yellow-100 text-yellow-700 border border-yellow-200': displayStock > 0 && displayStock <= 5,
+            'bg-red-100 text-red-700 border border-red-200': displayStock <= 0
+          }"
+        >
           {{ stockStatusMessage }}
         </div>
 
-        <div class="add-to-cart-section">
+        <div class="flex items-center gap-4 my-6">
           <input
             type="number"
             v-model.number="quantity"
             min="1"
             :max="displayStock > 0 ? displayStock : 1"
             :disabled="addToCartDisabled"
-            class="quantity-input"
+            class="w-20 p-2 border border-neutral-medium rounded-md text-center focus:ring-1 focus:ring-brand-primary focus:border-brand-primary"
           />
           <button
             @click="handleAddToCart"
-            class="add-to-cart-button"
+            class="flex-grow bg-brand-primary text-white font-semibold py-3 px-6 rounded-lg hover:bg-opacity-80 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="addToCartDisabled"
           >
-            {{ itemAdded ? 'Added!' : (displayStock <= 0 ? 'Out of Stock' : 'Add to Cart') }}
+            {{ itemAdded ? 'Added to Cart!' : (displayStock <= 0 ? 'Out of Stock' : 'Add to Cart') }}
           </button>
         </div>
-        <div v-if="addToCartError" class="error-message">{{ addToCartError }}</div>
+        <div v-if="addToCartError" class="my-2 text-sm text-red-600">{{ addToCartError }}</div>
 
-        <NuxtLink to="/" class="back-link">Back to all products</NuxtLink>
+        <NuxtLink to="/" class="inline-block mt-6 text-brand-primary hover:underline">
+          &larr; Back to all products
+        </NuxtLink>
       </div>
     </div>
   </div>
@@ -288,110 +303,51 @@ useHead({
 .error-message { background-color: #ffdddd; border: 1px solid #ff0000; color: #D8000C; }
 .error-message a { color: #D8000C; text-decoration: underline; }
 
-.product-detail-layout {
-  display: grid;
-  grid-template-columns: 1fr; /* Single column for mobile */
-  gap: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 1rem;
+.loading, .error-message { /* Keep existing error/loading styles */
+  padding: 1rem; margin-bottom: 1rem; border-radius: 4px; text-align: center;
 }
-@media (min-width: 768px) {
-  .product-detail-layout {
-    grid-template-columns: 1fr 1fr; /* Two columns for tablet and up */
-  }
-}
+.loading { background-color: #e0e0e0; }
+.error-message { background-color: #ffdddd; border: 1px solid #ff0000; color: #D8000C; }
+.error-message a { color: #D8000C; text-decoration: underline; }
 
-.image-column, .details-column {
-  padding: 1rem;
-}
-.image-column {
-  text-align: center;
-}
+/* Removed: .product-detail-layout, .image-column, .product-detail-image, .product-detail-image-placeholder */
 
-.product-detail-image, .product-detail-image-placeholder {
-  width: 100%;
-  max-width: 450px;
-  height: auto;
-  max-height: 450px;
-  object-fit: contain;
-  margin: 0 auto 1.5rem auto;
-  display: block;
-  border-radius: 8px;
-  background-color: #f0f0f0;
-  border: 1px solid #eee;
+/* Styles for elements within details-column that are more complex or specific */
+.details-column h1 { /* Example if further customization needed beyond Tailwind */
+  /* margin-top: 0; */ /* Tailwind: mt-0 (if needed, but usually handled by spacing utilities) */
+  /* font-size: 1.8em; */ /* Tailwind: text-3xl */
+  /* color: #333; */ /* Tailwind: text-text-primary */
+  /* margin-bottom: 0.5rem; */ /* Tailwind: mb-2 */
 }
-.product-detail-image-placeholder {
-  height: 400px; display: flex; align-items: center; justify-content: center; color: #777; font-size: 1em;
-}
+/* .sku { font-size: 0.85em; color: #777; margin-bottom: 1rem; } */ /* Tailwind: text-sm text-text-secondary mb-4 */
+/* .description { font-size: 1em; color: #555; margin-bottom: 1rem; line-height: 1.6; } */ /* Tailwind: text-text-secondary leading-relaxed mb-6 */
+/* .price { font-size: 1.5em; color: #007bff; font-weight: bold; margin-bottom: 1rem; } */ /* Tailwind: text-3xl font-bold text-brand-primary mb-6 */
+/* .category { color: #666; margin-bottom: 1rem; } */ /* Tailwind: text-sm text-text-secondary mb-2 */
+/* .tags { margin-bottom: 1.5rem; } */ /* Tailwind: mb-6 */
+/* .tag { Tailwind: inline-block bg-neutral-medium text-text-secondary text-xs font-semibold mr-2 px-2.5 py-0.5 rounded-full } */
 
-.details-column h1 {
-  margin-top: 0;
-  font-size: 1.8em; /* Slightly larger */
-  color: #333;
-  margin-bottom: 0.5rem;
-}
-.sku { font-size: 0.85em; color: #777; margin-bottom: 1rem; }
-.description { font-size: 1em; color: #555; margin-bottom: 1rem; line-height: 1.6; }
-.price { font-size: 1.5em; color: #007bff; font-weight: bold; margin-bottom: 1rem; }
-.category { color: #666; margin-bottom: 1rem; }
-.tags { margin-bottom: 1.5rem; }
-.tag {
-  display: inline-block; background-color: #007bff; color: white;
-  padding: 0.2rem 0.5rem; border-radius: 3px; font-size: 0.9em;
-  margin-right: 0.5rem; margin-bottom: 0.5rem;
-}
-
-.options-section { margin-bottom: 1.5rem; }
-.option-group { margin-bottom: 1rem; }
-.option-name { font-weight: bold; margin-right: 0.5rem; display: block; margin-bottom: 0.5rem;}
-.option-values { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.option-value-button {
-  padding: 0.5rem 1rem;
-  border: 1px solid #ccc;
-  background-color: #fff;
-  color: #333;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background-color 0.2s, border-color 0.2s;
-}
-.option-value-button.selected {
-  background-color: #007bff;
-  color: white;
-  border-color: #007bff;
-}
-.option-value-button:hover:not(.selected) { background-color: #f0f0f0; }
-.variant-not-found-message {
-    color: #dc3545;
-    font-size: 0.9em;
-    margin-top: 0.5rem;
-    background-color: #f8d7da;
-    padding: 0.5rem;
-    border-radius: 4px;
-}
+/* .options-section { margin-bottom: 1.5rem; } */ /* Tailwind: space-y-4 mb-6 */
+/* .option-group { margin-bottom: 1rem; } */ /* Tailwind: Handled by space-y on parent */
+/* .option-name { font-weight: bold; margin-right: 0.5rem; display: block; margin-bottom: 0.5rem;} */ /* Tailwind: block text-sm font-medium text-text-primary mb-1 */
+/* .option-values { display: flex; flex-wrap: wrap; gap: 0.5rem; } */ /* Tailwind: flex flex-wrap gap-2 */
+/* .option-value-button { Tailwind classes provided in template } */
+/* .option-value-button.selected { Tailwind classes provided in template } */
+/* .option-value-button:hover:not(.selected) { Tailwind classes provided in template } */
+/* .variant-not-found-message { Tailwind classes provided in template } */
 
 
-.stock-info { text-align: left; margin: 1rem 0; padding: 0.5rem; border-radius: 4px; font-weight: bold; }
-.stock-in-stock { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;}
-.stock-low { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba;}
-.stock-out-of-stock { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+/* .stock-info { text-align: left; margin: 1rem 0; padding: 0.5rem; border-radius: 4px; font-weight: bold; } */ /* Tailwind classes provided in template */
+/* .stock-in-stock { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;} */
+/* .stock-low { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba;} */
+/* .stock-out-of-stock { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;} */
 
-.add-to-cart-section {
-  display: flex; align-items: center; gap: 1rem; margin-top: 1.5rem; margin-bottom: 1rem;
-}
-.quantity-input {
-  width: 70px; padding: 0.7rem; text-align: center; border: 1px solid #ccc; border-radius: 4px;
-}
-.quantity-input:disabled { background-color: #e9ecef; opacity: 0.7; }
-.add-to-cart-button {
-  background-color: #28a745; color: white; padding: 0.7rem 1.2rem;
-  border: none; border-radius: 5px; cursor: pointer; font-size: 1em;
-}
-.add-to-cart-button:hover:not(:disabled) { background-color: #218838; }
-.add-to-cart-button:disabled { background-color: #6c757d; cursor: not-allowed; }
+/* .add-to-cart-section { Tailwind: flex items-center gap-4 my-6 } */
+/* .quantity-input { Tailwind classes provided in template } */
+/* .quantity-input:disabled { Tailwind: handled by disabled:opacity-50 } */
+/* .add-to-cart-button { Tailwind classes provided in template } */
+/* .add-to-cart-button:hover:not(:disabled) { Tailwind: hover:bg-opacity-80 } */
+/* .add-to-cart-button:disabled { Tailwind: disabled:opacity-50 disabled:cursor-not-allowed } */
 
-.back-link {
-  display: inline-block; margin-top: 1.5rem; color: #007bff; text-decoration: none;
-}
-.back-link:hover { text-decoration: underline; }
+/* .back-link { Tailwind: inline-block mt-6 text-brand-primary hover:underline } */
+/* .back-link:hover { text-decoration: underline; } */ /* Tailwind: hover:underline */
 </style>
