@@ -5,18 +5,40 @@
     <div class="p-4 md:p-8"> <!-- Added padding for content below hero -->
       <h1 class="text-3xl font-bold text-text-primary mb-8 text-center">Featured Products</h1>
 
-      <!-- Existing filters UI - will be disconnected from product display for now -->
-      <div class="filters-container mb-8">
-        <input type="text" v-model="searchTerm" placeholder="Search products..." @keyup.enter="applyFiltersAndNavigate" class="filter-input search-input" />
-        <select v-model="selectedCategoryId" class="filter-select category-select">
+      <!-- Updated Filters UI -->
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-3 mb-8 p-4 bg-white rounded-lg shadow border border-neutral-medium">
+        <input
+          type="text"
+          v-model="searchTerm"
+          placeholder="Search products..."
+          @keyup.enter="applyFiltersAndNavigate"
+          class="flex-grow min-w-[200px] sm:min-w-[250px] px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary"
+        />
+        <select
+          v-model="selectedCategoryId"
+          class="min-w-[150px] sm:min-w-[180px] px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary bg-white pr-8"
+        >
           <option :value="null">All Categories</option>
           <option v-for="category in categories" :key="category.id" :value="category.id">
             {{ category.name }}
           </option>
         </select>
-        <input type="number" v-model.number="minPrice" placeholder="Min Price" class="filter-input price-input" />
-        <input type="number" v-model.number="maxPrice" placeholder="Max Price" class="filter-input price-input" />
-        <select v-model="sortBy" class="filter-select sort-select">
+        <input
+          type="number"
+          v-model.number="minPrice"
+          placeholder="Min Price"
+          class="w-24 sm:w-28 px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary"
+        />
+        <input
+          type="number"
+          v-model.number="maxPrice"
+          placeholder="Max Price"
+          class="w-24 sm:w-28 px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary"
+        />
+        <select
+          v-model="sortBy"
+          class="min-w-[150px] sm:min-w-[180px] px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary bg-white pr-8"
+        >
           <option value="created_at_desc">Newest</option>
           <option value="created_at_asc">Oldest</option>
           <option value="price_asc">Price: Low to High</option>
@@ -24,8 +46,18 @@
           <option value="name_asc">Name: A-Z</option>
           <option value="name_desc">Name: Z-A</option>
         </select>
-        <button @click="applyFiltersAndNavigate" class="apply-filters-button">Apply Filters</button>
-        <button @click="resetFiltersAndNavigate" class="reset-filters-button">Reset Filters</button>
+        <button
+          @click="applyFiltersAndNavigate"
+          class="px-4 py-2 bg-brand-primary text-white text-sm font-medium rounded-md shadow-sm hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary transition-colors"
+        >
+          Apply
+        </button>
+        <button
+          @click="resetFiltersAndNavigate"
+          class="px-4 py-2 bg-neutral-medium text-text-primary text-sm font-medium rounded-md shadow-sm hover:bg-neutral-dark hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-dark transition-colors"
+        >
+          Reset
+        </button>
       </div>
 
       <!-- New Product Grid -->
@@ -240,21 +272,22 @@ useHead({
 </script>
 
 <style scoped>
-/* Keep existing styles for filters for now, or remove if Tailwind is fully handling them */
+/* Scoped styles for filters are now replaced by Tailwind utilities.
+   This block can be emptied or removed if no other scoped styles are needed. */
+/*
 .filters-container {
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
-  /* padding: 1rem; */ /* Handled by page padding */
-  margin-bottom: 1.5rem; /* Tailwind: mb-6 or mb-8 */
-  background-color: #f8f9fa; /* Consider Tailwind bg-gray-50 or bg-neutral-light */
-  border-radius: 8px; /* Tailwind: rounded-lg */
-  border: 1px solid #dee2e6; /* Tailwind: border border-neutral-medium */
+  margin-bottom: 1.5rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
 }
 .filter-input, .filter-select {
-  padding: 0.6rem; /* Tailwind: p-2 or p-2.5 */
-  border: 1px solid #ced4da; /* Tailwind: border border-neutral-dark */
-  border-radius: 4px; /* Tailwind: rounded-md */
+  padding: 0.6rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
   font-size: 0.9em;
 }
 .search-input { flex-grow: 1; min-width: 200px; }
@@ -262,17 +295,16 @@ useHead({
 .price-input { width: 100px; }
 
 .apply-filters-button, .reset-filters-button {
-  padding: 0.6rem 1rem; /* Tailwind: py-2 px-4 */
+  padding: 0.6rem 1rem;
   border: none;
-  border-radius: 4px; /* Tailwind: rounded-md */
+  border-radius: 4px;
   color: white;
   cursor: pointer;
   font-size: 0.9em;
 }
-.apply-filters-button { background-color: #007bff; } /* Tailwind: bg-blue-500 hover:bg-blue-600 */
+.apply-filters-button { background-color: #007bff; }
 .apply-filters-button:hover { background-color: #0056b3; }
-.reset-filters-button { background-color: #6c757d; } /* Tailwind: bg-gray-500 hover:bg-gray-600 */
+.reset-filters-button { background-color: #6c757d; }
 .reset-filters-button:hover { background-color: #545b62; }
-
-/* Styles for product-item, loading, error, pagination are removed as they are replaced or commented out */
+*/
 </style>
