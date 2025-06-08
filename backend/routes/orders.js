@@ -82,9 +82,6 @@ router.post('/', isAuthenticated, async (req, res) => {
         productName = product.name;
         productSku = product.sku;
 
-        // Check if this product actually has variants. If so, user should select one.
-        // This check is optional here if UI prevents adding base product to cart if variants exist.
-        // For now, we allow ordering base product if it has stock.
         if (currentStock < item.quantity) {
           await client.query('ROLLBACK');
           return res.status(400).json({ message: `Not enough stock for product "${productName}". Available: ${currentStock}, Requested: ${item.quantity}.` });
@@ -94,18 +91,16 @@ router.post('/', isAuthenticated, async (req, res) => {
 
       subtotalForItems += priceAtPurchase * item.quantity;
       orderItemsToInsert.push({
-        productId: item.productId, // Base product ID
+        productId: item.productId,
         productVariantId: item.productVariantId || null,
-        product_name: productName, // For email
+        product_name: productName,
         quantity: item.quantity,
         priceAtPurchase: priceAtPurchase,
-        // sku_at_purchase: productSku // Conceptual
       });
     }
 
     subtotalForItems = parseFloat(subtotalForItems.toFixed(2));
 
-    // --- Discount Logic (applied to subtotalForItems) ---
     let finalTotalAmount = subtotalForItems;
     let originalTotalAmountBeforeDiscount = subtotalForItems;
     let appliedDiscountId = null;
@@ -113,15 +108,12 @@ router.post('/', isAuthenticated, async (req, res) => {
     let appliedDiscountAmount = null;
 
     if (discount_code) {
-      // ... (existing discount logic remains largely the same, applied to subtotalForItems) ...
-      // Ensure discount calculation is based on subtotalForItems
         const discountResult = await client.query('SELECT * FROM discounts WHERE code = $1 FOR UPDATE', [discount_code.toUpperCase()]);
-        if (discountResult.rows.length === 0) { /* ... rollback, error ... */ await client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid discount code.' }); }
+        if (discountResult.rows.length === 0) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid discount code.' }); }
         const discount = discountResult.rows[0];
         if (!discount.is_active || (discount.valid_from && new Date(discount.valid_from) > new Date()) || (discount.valid_until && new Date(discount.valid_until) < new Date()) || (discount.usage_limit !== null && discount.times_used >= discount.usage_limit) || (discount.min_order_amount !== null && subtotalForItems < parseFloat(discount.min_order_amount))) {
             let message = 'Discount code cannot be applied.';
             if (!discount.is_active) message = 'Discount code is not active.';
-            // Add more specific messages
             await client.query('ROLLBACK'); return res.status(400).json({ message });
         }
         if (discount.type === 'percentage') { appliedDiscountAmount = subtotalForItems * (parseFloat(discount.value) / 100.0); }
@@ -131,7 +123,6 @@ router.post('/', isAuthenticated, async (req, res) => {
         appliedDiscountId = discount.id; appliedDiscountCode = discount.code;
         await client.query('UPDATE discounts SET times_used = times_used + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [discount.id]);
     }
-    // --- End Discount Logic ---
 
     const orderInsertQuery = `
       INSERT INTO orders (
@@ -166,7 +157,7 @@ router.post('/', isAuthenticated, async (req, res) => {
     for (const stockUpdate of stockUpdates) {
       if (stockUpdate.type === 'variant') {
         await client.query('UPDATE product_variants SET stock_quantity = stock_quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2;', [stockUpdate.quantityToDecrement, stockUpdate.id]);
-      } else { // 'base'
+      } else {
         await client.query('UPDATE products SET stock_quantity = stock_quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2;', [stockUpdate.quantityToDecrement, stockUpdate.id]);
       }
     }
@@ -196,9 +187,65 @@ router.post('/', isAuthenticated, async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error creating order:', error);
-    res.status(500).json({ message: error.message || 'Failed to create order due to an internal error.' }); // Send back specific stock error messages if they were thrown
+    res.status(500).json({ message: error.message || 'Failed to create order due to an internal error.' });
   } finally {
     client.release();
+  }
+});
+
+// GET /api/orders/my-history - Get order history for the authenticated user
+router.get('/my-history', isAuthenticated, async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+
+    let page = parseInt(req.query.page) || 1;
+    let limit = parseInt(req.query.limit) || 10;
+
+    if (isNaN(page) || page < 1) {
+      page = 1; // Default to page 1 if invalid
+    }
+    if (isNaN(limit) || limit < 1) {
+      limit = 10; // Default to limit 10 if invalid
+    }
+    if (limit > 100) {
+        limit = 100; // Max limit
+    }
+
+    const offset = (page - 1) * limit;
+
+    // Query for user's orders with item_count
+    const ordersQuery = `
+      SELECT o.id, o.order_date, o.total_amount, o.status,
+             (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) as item_count
+      FROM orders o
+      WHERE o.user_id = $1
+      ORDER BY o.order_date DESC
+      LIMIT $2 OFFSET $3
+    `;
+    const ordersResult = await db.query(ordersQuery, [userId, limit, offset]);
+
+    // Query for total count of user's orders
+    const totalCountQuery = 'SELECT COUNT(*) FROM orders WHERE user_id = $1';
+    const totalCountResult = await db.query(totalCountQuery, [userId]);
+    const totalOrders = parseInt(totalCountResult.rows[0].count);
+
+    const totalPages = Math.ceil(totalOrders / limit);
+
+    res.status(200).json({
+      data: ordersResult.rows,
+      pagination: {
+        total: totalOrders,
+        page: page,
+        limit: limit,
+        totalPages: totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+
+  } catch (error) {
+    // console.error('Error fetching user order history:', error); // Optional: more specific logging here
+    return next(error); // Pass to global error handler
   }
 });
 
