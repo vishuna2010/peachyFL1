@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const db = require('../db'); // Kept for other routes, but not used by GET /products
 const { BadRequestError, NotFoundError } = require('../utils/AppError');
+const productService = require('../services/productService'); // Import product service
 const { isAuthenticated, isAdmin } = require('../auth');
 const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload');
 const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../services/s3Service');
@@ -110,139 +111,70 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
 });
 
 // GET /products - Get all products with filtering, sorting, and pagination
-router.get('/', async (req, res) => {
-  const { search_term, category_id, min_price, max_price, sort_by, page = 1, limit = 10 } = req.query;
-  const queryValues = []; let paramIndex = 1;
-
-  let baseSelect = `
-    SELECT p.id, p.name, p.description, p.price, p.category_id, p.image_url,
-           p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold, p.created_at, p.updated_at,
-           c.name as category_name,
-           s.name as supplier_name,
-           COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags,
-           EXISTS(SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id) AS has_variants
-    FROM products p
-    LEFT JOIN categories c ON p.category_id = c.id
-    LEFT JOIN suppliers s ON p.supplier_id = s.id
-    LEFT JOIN product_tags pt ON p.id = pt.product_id
-    LEFT JOIN tags t ON pt.tag_id = t.id
-  `;
-  let countBaseQuery = `SELECT COUNT(DISTINCT p.id) as total_count FROM products p `;
-
-  let whereClauses = [];
-  if (search_term) { whereClauses.push(`(p.name ILIKE $${paramIndex} OR p.description ILIKE $${paramIndex})`); queryValues.push(`%${search_term}%`); paramIndex++; }
-  if (category_id) { if (isNaN(parseInt(category_id))) return res.status(400).json({message: "Invalid category_id format."}); whereClauses.push(`p.category_id = $${paramIndex}`); queryValues.push(parseInt(category_id)); paramIndex++; }
-  if (min_price) { if (isNaN(parseFloat(min_price))) return res.status(400).json({message: "Invalid min_price format."}); whereClauses.push(`p.price >= $${paramIndex}`); queryValues.push(parseFloat(min_price)); paramIndex++; }
-  if (max_price) { if (isNaN(parseFloat(max_price))) return res.status(400).json({message: "Invalid max_price format."}); whereClauses.push(`p.price <= $${paramIndex}`); queryValues.push(parseFloat(max_price)); paramIndex++; }
-
-  if (whereClauses.length > 0) {
-    const whereString = " WHERE " + whereClauses.join(" AND ");
-    baseSelect += whereString; // Apply to main query
-    // For count query, only add WHERE clauses related to 'p' table directly if not joining for filters
-    // If category_id filter is active, join is needed for count.
-    if (category_id) { countBaseQuery += `LEFT JOIN categories c ON p.category_id = c.id `; }
-    // For this setup, assume all filters might need their respective joins in count for accuracy, or simplify if not.
-    // The provided count query already had some joins, let's keep it simple for now:
-    countBaseQuery += whereString;
-  }
-
-  baseSelect += " GROUP BY p.id, c.name, s.name ";
-
-  let orderByClause = " ORDER BY p.created_at DESC ";
-  const allowedSorts = {'price_asc': 'p.price ASC NULLS LAST', 'price_desc': 'p.price DESC NULLS LAST', 'name_asc': 'p.name ASC', 'name_desc': 'p.name DESC', 'created_at_desc': 'p.created_at DESC', 'created_at_asc': 'p.created_at ASC'};
-  if (sort_by && allowedSorts[sort_by]) { orderByClause = ` ORDER BY ${allowedSorts[sort_by]} `; }
-  else if (sort_by && !allowedSorts[sort_by]) { return res.status(400).json({message: "Invalid sort_by parameter."}); }
-  baseSelect += orderByClause;
-
-  const numPage = parseInt(page); const numLimit = parseInt(limit);
-  if (isNaN(numPage) || numPage < 1) return res.status(400).json({message: "Invalid page number."});
-  if (isNaN(numLimit) || numLimit < 1 || numLimit > 100) return res.status(400).json({message: "Invalid limit value (must be 1-100)."});
-  const offset = (numPage - 1) * numLimit;
-
-  baseSelect += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1} `;
-  const finalQueryValues = [...queryValues, numLimit, offset];
-
+router.get('/', async (req, res, next) => {
   try {
-    const productsResult = await db.query(baseSelect, finalQueryValues);
-    const countResult = await db.query(countBaseQuery, queryValues);
-    const totalProducts = parseInt(countResult.rows[0].total_count);
-    res.status(200).json({
-      products: productsResult.rows,
-      pagination: { total_products: totalProducts, current_page: numPage, limit: numLimit, total_pages: Math.ceil(totalProducts / numLimit) }
-    });
-  } catch (error) { console.error('Error getting products with filters:', error); res.status(500).json({ message: 'Error getting products.' }); }
-});
+    const { search_term, category_id, min_price, max_price, sort_by, page: queryPage = '1', limit: queryLimit = '10' } = req.query;
 
-// Helper: Get variant selected options (can be moved to a shared service if used elsewhere)
-async function getVariantSelectedOptions(variantId, client) {
-    const query = `
-        SELECT pov.id as option_value_id, pov.value as value_name,
-               po.id as option_id, po.name as option_name
-        FROM product_variant_option_values pvov
-        JOIN product_option_values pov ON pvov.product_option_value_id = pov.id
-        JOIN product_options po ON pov.product_option_id = po.id
-        WHERE pvov.product_variant_id = $1
-        ORDER BY po.name, pov.value;
-    `;
-    const result = await client.query(query, [variantId]);
-    return result.rows;
-}
+    // Validation and Parsing
+    let parsedPage = parseInt(queryPage, 10);
+    let parsedLimit = parseInt(queryLimit, 10);
+    let parsedCategoryId = category_id ? parseInt(category_id, 10) : undefined;
+    let parsedMinPrice = min_price ? parseFloat(min_price) : undefined;
+    let parsedMaxPrice = max_price ? parseFloat(max_price) : undefined;
+
+    if (isNaN(parsedPage) || parsedPage < 1) {
+      throw new BadRequestError('Invalid page number. Must be a positive integer.');
+    }
+    if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+      throw new BadRequestError('Invalid limit value. Must be an integer between 1 and 100.');
+    }
+    if (category_id && (isNaN(parsedCategoryId) || parsedCategoryId < 1)) {
+      throw new BadRequestError('Invalid category_id format. Must be a positive integer.');
+    }
+    if (min_price && isNaN(parsedMinPrice)) {
+      throw new BadRequestError('Invalid min_price format. Must be a number.');
+    }
+    if (max_price && isNaN(parsedMaxPrice)) {
+      throw new BadRequestError('Invalid max_price format. Must be a number.');
+    }
+    if (parsedMinPrice !== undefined && parsedMaxPrice !== undefined && parsedMinPrice > parsedMaxPrice) {
+      throw new BadRequestError('min_price cannot be greater than max_price.');
+    }
+
+    // sort_by validation is handled by the service, which throws BadRequestError if invalid
+
+    const result = await productService.getAllProducts({
+      searchTerm: search_term,
+      categoryId: parsedCategoryId,
+      minPrice: parsedMinPrice,
+      maxPrice: parsedMaxPrice,
+      sortBy: sort_by,
+      page: parsedPage,
+      limit: parsedLimit
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    next(error); // Pass errors to the global error handler
+  }
+});
 
 // GET /products/:id - Get a single product by ID with variants
 router.get('/:id', async (req, res, next) => {
-  const { id } = req.params;
-
-  const client = await db.pool.connect();
   try {
-    if (isNaN(parseInt(id))) {
-      throw new BadRequestError('Invalid product ID format.');
-    }
-    const productQuery = `
-      SELECT p.*,
-             c.name as category_name,
-             s.name as supplier_name,
-             COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
-      FROM products p
-      LEFT JOIN categories c ON p.category_id = c.id
-      LEFT JOIN suppliers s ON p.supplier_id = s.id
-      LEFT JOIN product_tags pt ON p.id = pt.product_id
-      LEFT JOIN tags t ON pt.tag_id = t.id
-      WHERE p.id = $1
-      GROUP BY p.id, c.name, s.name;
-    `;
-    const productResult = await client.query(productQuery, [id]);
-    if (productResult.rows.length === 0) {
-      throw new NotFoundError(`Product with ID ${id} not found.`);
-    }
-    const product = productResult.rows[0];
+    const { id } = req.params;
+    const productId = parseInt(id, 10);
 
-    const optionsQuery = `
-      SELECT po.id, po.name,
-             COALESCE(json_agg(json_build_object('id', pov.id, 'value', pov.value) ORDER BY pov.value) FILTER (WHERE pov.id IS NOT NULL), '[]'::json) AS "values"
-      FROM product_options po
-      LEFT JOIN product_option_values pov ON po.id = pov.product_option_id
-      WHERE po.product_id = $1
-      GROUP BY po.id, po.name ORDER BY po.name ASC;
-    `;
-    const optionsResult = await client.query(optionsQuery, [id]);
-    product.options = optionsResult.rows;
-
-    const variantsQuery = `
-      SELECT id, sku, price_modifier, stock_quantity, image_url
-      FROM product_variants WHERE product_id = $1 ORDER BY id ASC;
-    `;
-    const variantsResult = await client.query(variantsQuery, [id]);
-    product.variants = variantsResult.rows;
-
-    for (const variant of product.variants) {
-      variant.selected_options = await getVariantSelectedOptions(variant.id, client);
-      variant.final_price = (parseFloat(product.price) + parseFloat(variant.price_modifier)).toFixed(2);
+    if (isNaN(productId) || productId < 1) {
+      throw new BadRequestError('Invalid product ID format. Must be a positive integer.');
     }
 
+    const product = await productService.getProductById(productId);
+    // NotFoundError will be thrown by the service if product is not found, and caught here.
     res.status(200).json(product);
   } catch (error) {
-    next(error);
-  } finally { if (client) client.release(); }
+    next(error); // Pass errors (including NotFoundError from service) to global error handler
+  }
 });
 
 
