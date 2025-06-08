@@ -84,7 +84,7 @@
          <div class="space-y-2 text-sm">
            <p class="flex justify-between"><span class="text-text-secondary">Subtotal:</span> <span class="font-medium text-text-primary">${{ order.subtotal.toFixed(2) }}</span></p>
            <p v-if="order.discount_applied" class="flex justify-between"><span class="text-text-secondary">Discount ({{ order.discount_applied.code }}):</span> <span class="font-medium text-green-600">-${{ order.discount_applied.amount_deducted.toFixed(2) }}</span></p>
-           <p class="flex justify-between"><span class="text-text-secondary">Shipping:</span> <span class="font-medium text-text-primary">${{ order.shipping_cost.toFixed(2) }}</span></p>
+           <p class="flex justify-between"><span class="text-text-secondary">Shipping:</span> <span class="font-medium text-text-primary">${{ (order.shipping_cost || 0).toFixed(2) }}</span></p>
            <hr class="my-2 border-neutral-medium">
            <p class="flex justify-between text-base font-bold"><span class="text-text-primary">Grand Total:</span> <span class="text-brand-primary">${{ order.total_amount.toFixed(2) }}</span></p>
          </div>
@@ -105,8 +105,8 @@ import { useAuth } from '~/composables/useAuth';
 import { useRoute, useRouter, navigateTo, useHead, useNuxtApp } from '#app';
 
 const route = useRoute();
-// const router = useRouter();
-// const { $axios } = useNuxtApp();
+const router = useRouter(); // Initialized useRouter
+const { $axios } = useNuxtApp();
 
 definePageMeta({
   layout: 'default',
@@ -141,7 +141,7 @@ const isLoading = ref(true);
 const fetchError = ref(null);
 
 const statusClass = (status) => {
-  if (!status) return 'text-gray-700 bg-gray-100'; // Default fallback
+  if (!status) return 'text-gray-700 bg-gray-100';
   const lowerStatus = status.toLowerCase();
   if (lowerStatus === 'delivered' || lowerStatus === 'completed') {
     return 'bg-green-100 text-green-700';
@@ -155,52 +155,35 @@ const statusClass = (status) => {
   return 'bg-gray-100 text-gray-700';
 };
 
-onMounted(() => {
+async function fetchOrderDetail() {
+  const currentOrderId = route.params.id;
   isLoading.value = true;
   fetchError.value = null;
+  order.value = null;
 
-  setTimeout(() => {
-    const mockOrders = {
-      'ORD00123': {
-        id: 'ORD00123',
-        order_date: '2023-10-26T10:30:00Z',
-        status: 'Shipped',
-        total_amount: 79.98,
-        shipping_address: { line1: '123 Main St', line2: 'Apt 4B', city: 'Anytown', postalCode: '12345', country: 'USA' },
-        billing_address: { line1: '123 Main St', line2: 'Apt 4B', city: 'Anytown', postalCode: '12345', country: 'USA' },
-        items: [
-          { item_id: 'item1', product_id: 'prod1', name: 'Stylish Summer Dress', quantity: 1, price_at_purchase: 49.99, image_url: 'https://via.placeholder.com/100x100.png?text=Dress' },
-          { item_id: 'item2', product_id: 'prod2', name: 'Simple Tee', quantity: 1, price_at_purchase: 29.99, image_url: 'https://via.placeholder.com/100x100.png?text=Tee' },
-        ],
-        subtotal: 79.98,
-        discount_applied: null,
-        shipping_cost: 0.00,
-        payment_method: 'Visa ending in **** 1234'
-      },
-      'ORD00124': {
-        id: 'ORD00124',
-        order_date: '2023-10-20T14:15:00Z',
-        status: 'Delivered',
-        total_amount: 149.50,
-        shipping_address: { line1: '456 Oak Rd', city: 'Otherville', postalCode: '67890', country: 'USA' },
-        billing_address: { line1: '456 Oak Rd', city: 'Otherville', postalCode: '67890', country: 'USA' },
-        items: [
-          { item_id: 'item3', product_id: 'prod3', name: 'Classic Leather Handbag', quantity: 1, price_at_purchase: 149.50, image_url: 'https://via.placeholder.com/100x100.png?text=Handbag' },
-        ],
-        subtotal: 149.50,
-        discount_applied: { code: 'FALLSAVE20', amount_deducted: 29.90, original_total_before_discount: 179.40 },
-        shipping_cost: 0.00,
-        payment_method: 'Mastercard ending in **** 5678'
-      }
-    };
-
-    if (mockOrders[orderId]) {
-      order.value = mockOrders[orderId];
+  try {
+    const response = await $axios.get(`/api/orders/my-history/${currentOrderId}`);
+    order.value = response.data;
+  } catch (err) {
+    console.error(`Failed to fetch order details for order ${currentOrderId}:`, err);
+    if (err.response && err.response.status === 404) {
+      fetchError.value = err.response.data.message || `Order #${currentOrderId} not found or you do not have permission to view it.`;
     } else {
-      fetchError.value = 'Order not found.';
-      order.value = null;
+      fetchError.value = err.response?.data?.message || err.message || 'Could not load order details.';
     }
+  } finally {
     isLoading.value = false;
-  }, 1000);
+  }
+}
+
+onMounted(() => {
+  fetchOrderDetail();
+});
+
+// Watch for route param changes if user navigates from one order detail to another (less common for this page)
+watch(() => route.params.id, (newId) => {
+    if (newId && newId !== order.value?.id) { // Check if order already loaded to avoid refetch on same page
+        fetchOrderDetail();
+    }
 });
 </script>
