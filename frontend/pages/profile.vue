@@ -39,8 +39,7 @@
                    class="w-full px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary placeholder:text-neutral-dark" />
           </div>
 
-          <div v-if="changePasswordError" class="my-3 p-3 text-sm text-red-700 bg-red-100 border border-red-200 rounded-md" role="alert">{{ changePasswordError }}</div>
-          <div v-if="changePasswordSuccess" class="my-3 p-3 text-sm text-green-700 bg-green-100 border border-green-200 rounded-md" role="alert">{{ changePasswordSuccess }}</div>
+          <!-- Error/Success messages removed, will use toasts -->
 
           <button
             type="submit"
@@ -53,7 +52,7 @@
       </div>
 
       <!-- Action Links/Buttons -->
-      <div class="pt-6 border-t border-neutral-medium space-y-3 sm:space-y-0 sm:flex sm:space-x-4"> {/* Removed mt-8 as parent div has space-y-8 */}
+      <div class="pt-6 border-t border-neutral-medium space-y-3 sm:space-y-0 sm:flex sm:space-x-4">
         <NuxtLink
           to="/profile/2fa-setup"
           class="block w-full sm:w-auto text-center px-5 py-2.5 border border-neutral-dark text-text-primary bg-white hover:bg-neutral-light rounded-md shadow-sm text-sm font-medium transition-colors duration-150"
@@ -89,33 +88,52 @@
 import { ref, onMounted } from 'vue';
 import { useAuth } from '~/composables/useAuth';
 import { useRouter } from 'vue-router';
+import { useToast } from 'vue-toastification';
 
 const { authUser, authToken, fetchUser } = useAuth();
 const router = useRouter();
+const toast = useToast();
 
 const user = ref(authUser.value);
 const isLoading = ref(false);
 
-// Added for Change Password form
 const currentPassword = ref('');
 const newPassword = ref('');
 const confirmNewPassword = ref('');
 const isChangingPassword = ref(false);
-const changePasswordError = ref('');
-const changePasswordSuccess = ref('');
+// changePasswordError and changePasswordSuccess refs removed
 
 const handleChangePassword = async () => {
-  // Placeholder logic - actual implementation in next step
   isChangingPassword.value = true;
-  changePasswordError.value = '';
-  changePasswordSuccess.value = '';
+  // Clear previous messages if they were local state; toasts clear themselves.
+
+  if (newPassword.value !== confirmNewPassword.value) {
+    toast.error("New passwords do not match.");
+    isChangingPassword.value = false;
+    return;
+  }
+  if (newPassword.value.length < 8) {
+    toast.error("New password must be at least 8 characters.");
+    isChangingPassword.value = false;
+    return;
+  }
+
   console.log('Attempting to change password with:', currentPassword.value, newPassword.value, confirmNewPassword.value);
+
   // Simulate API call
   await new Promise(resolve => setTimeout(resolve, 1500));
-  // Example outcomes:
-  // changePasswordError.value = 'Failed to change password. Incorrect current password.';
-  // changePasswordSuccess.value = 'Password changed successfully.';
-  // currentPassword.value = ''; newPassword.value = ''; confirmNewPassword.value = '';
+
+  // Example outcomes (replace with actual API call logic later):
+  const mockApiSuccess = true; // Simulate API response
+  if (mockApiSuccess) {
+    toast.success('Password changed successfully! (Mocked)');
+    currentPassword.value = '';
+    newPassword.value = '';
+    confirmNewPassword.value = '';
+  } else {
+    toast.error('Failed to change password. Incorrect current password. (Mocked)');
+  }
+
   isChangingPassword.value = false;
 };
 

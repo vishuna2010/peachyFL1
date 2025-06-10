@@ -17,7 +17,7 @@
           :src="selectedImageUrl"
           :alt="`Image of ${product.name}`"
           class="w-full h-auto object-contain rounded-lg shadow-lg max-h-[550px] aspect-[4/5]"
-          key="selected-image" <!-- Key for re-rendering on change -->
+          key="selected-image"
         />
         <div v-if="!selectedImageUrl" class="w-full h-[400px] md:h-[550px] flex items-center justify-center bg-neutral-medium rounded-lg text-text-secondary">No Image Available</div>
 
@@ -105,10 +105,10 @@
             class="flex-grow bg-brand-primary text-white font-semibold py-3 px-6 rounded-lg hover:bg-opacity-80 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="addToCartDisabled"
           >
-            {{ itemAdded ? 'Added to Cart!' : (displayStock <= 0 ? 'Out of Stock' : 'Add to Cart') }}
+            {{ (displayStock <= 0 ? 'Out of Stock' : 'Add to Cart') }}
           </button>
         </div>
-        <div v-if="addToCartError" class="my-2 text-sm text-red-600">{{ addToCartError }}</div>
+        <!-- Removed addToCartError display div -->
 
         <NuxtLink to="/" class="inline-block mt-6 text-brand-primary hover:underline">
           &larr; Back to all products
@@ -122,30 +122,31 @@
 import { ref, onMounted, computed, watch, reactive, nextTick } from 'vue';
 import { useRoute, useNuxtApp } from '#app';
 import { useCart } from '~/composables/useCart';
+import { useToast } from 'vue-toastification';
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
 const product = ref(null);
 const pending = ref(true);
 const fetchError = ref(null);
+const toast = useToast();
 
 const { addToCart } = useCart();
 
 // --- Variant and Display State ---
 const selectedOptions = reactive({});
 const currentVariant = ref(null);
-const galleryImages = ref([]); // Added for gallery
-const selectedImageUrl = ref(''); // Renamed from displayImage
+const galleryImages = ref([]);
+const selectedImageUrl = ref('');
 
 const displayPrice = ref(0);
 const displaySku = ref('');
 const displayStock = ref(0);
-// displayImage is now selectedImageUrl
 const addToCartDisabled = ref(true);
 
 const quantity = ref(1);
-const itemAdded = ref(false);
-const addToCartError = ref('');
+// itemAdded ref removed
+// addToCartError ref removed
 
 // --- Computed properties for dynamic display based on selection ---
 const stockStatusMessage = computed(() => {
@@ -183,7 +184,7 @@ function updateCurrentVariant() {
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = product.value.stock_quantity;
-    selectedImageUrl.value = product.value.image_url || ''; // Use selectedImageUrl
+    selectedImageUrl.value = product.value.image_url || '';
     addToCartDisabled.value = product.value.stock_quantity <= 0;
     quantity.value = 1;
     return;
@@ -195,7 +196,7 @@ function updateCurrentVariant() {
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = 0;
-    selectedImageUrl.value = product.value.image_url || ''; // Use selectedImageUrl
+    selectedImageUrl.value = product.value.image_url || '';
     addToCartDisabled.value = true;
     return;
   }
@@ -212,14 +213,14 @@ function updateCurrentVariant() {
     displayPrice.value = parseFloat(matchedVariant.final_price);
     displaySku.value = matchedVariant.sku || product.value.sku || '';
     displayStock.value = matchedVariant.stock_quantity;
-    selectedImageUrl.value = matchedVariant.image_url || product.value.image_url || ''; // Use selectedImageUrl
+    selectedImageUrl.value = matchedVariant.image_url || product.value.image_url || '';
     addToCartDisabled.value = matchedVariant.stock_quantity <= 0;
   } else {
     currentVariant.value = null;
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = 0;
-    selectedImageUrl.value = product.value.image_url || ''; // Use selectedImageUrl (fallback to base image)
+    selectedImageUrl.value = product.value.image_url || '';
     addToCartDisabled.value = true;
   }
   quantity.value = 1;
@@ -236,7 +237,6 @@ async function fetchProduct() {
     if (product.value) {
       initializeSelections();
 
-      // Build galleryImages and set initial selectedImageUrl
       const imageUrls = new Set();
       if (product.value.image_url) {
         imageUrls.add(product.value.image_url);
@@ -250,9 +250,6 @@ async function fetchProduct() {
       }
       galleryImages.value = Array.from(imageUrls).map((url, index) => ({ id: `gallery_img_${index}`, url }));
 
-      // Set initial selectedImageUrl: try currentVariant's image, then product's main, then first gallery, then empty
-      // Note: currentVariant might be set by initializeSelections -> updateCurrentVariant
-      // So this logic might re-evaluate selectedImageUrl based on the initially selected variant.
       if (currentVariant.value && currentVariant.value.image_url) {
           selectedImageUrl.value = currentVariant.value.image_url;
       } else if (product.value.image_url) {
@@ -275,24 +272,23 @@ async function fetchProduct() {
 }
 
 const handleAddToCart = () => {
-  addToCartError.value = '';
   const productToAdd = currentVariant.value || product.value;
   const stockAvailable = displayStock.value;
 
   if (!productToAdd) {
-    addToCartError.value = "Product or variant not selected/available.";
+    toast.error("Product or variant not selected/available.");
     return;
   }
   if (stockAvailable <= 0) {
-    addToCartError.value = "This item is out of stock.";
+    toast.error("This item is out of stock.");
     return;
   }
   if (quantity.value <= 0) {
-    addToCartError.value = "Please enter a valid quantity.";
+    toast.error("Please enter a valid quantity.");
     return;
   }
   if (quantity.value > stockAvailable) {
-    addToCartError.value = `Cannot add ${quantity.value} items. Only ${stockAvailable} left in stock.`;
+    toast.error(`Cannot add ${quantity.value} items. Only ${stockAvailable} left in stock.`);
     return;
   }
 
@@ -301,15 +297,12 @@ const handleAddToCart = () => {
     productVariantId: currentVariant.value ? currentVariant.value.id : null,
     name: currentVariant.value ? `${product.value.name} (${currentVariant.value.selected_options.map(opt => opt.value_name).join(', ')})` : product.value.name,
     price: displayPrice.value,
-    image_url: selectedImageUrl.value, // Use selectedImageUrl for cart
+    image_url: selectedImageUrl.value,
     sku: displaySku.value,
   };
 
   addToCart(itemForCart, quantity.value);
-  itemAdded.value = true;
-  setTimeout(() => {
-    itemAdded.value = false;
-  }, 1500);
+  // Toast notification for successful add is now handled by useCart.js
 };
 
 onMounted(fetchProduct);
@@ -317,8 +310,6 @@ onMounted(fetchProduct);
 watch(product, (newProductData) => {
     if(newProductData) {
         initializeSelections();
-        // Potentially re-build gallery if product data could fundamentally change, though unlikely here
-        // For now, gallery is built once in fetchProduct.
     }
 }, { deep: true });
 
@@ -329,58 +320,13 @@ useHead({
 </script>
 
 <style scoped>
-.loading, .error-message { /* Keep existing error/loading styles */
+.loading, .error-message {
   padding: 1rem; margin-bottom: 1rem; border-radius: 4px; text-align: center;
 }
 .loading { background-color: #e0e0e0; }
 .error-message { background-color: #ffdddd; border: 1px solid #ff0000; color: #D8000C; }
 .error-message a { color: #D8000C; text-decoration: underline; }
 
-.loading, .error-message { /* Keep existing error/loading styles */
-  padding: 1rem; margin-bottom: 1rem; border-radius: 4px; text-align: center;
+.details-column h1 {
 }
-.loading { background-color: #e0e0e0; }
-.error-message { background-color: #ffdddd; border: 1px solid #ff0000; color: #D8000C; }
-.error-message a { color: #D8000C; text-decoration: underline; }
-
-/* Removed: .product-detail-layout, .image-column, .product-detail-image, .product-detail-image-placeholder */
-
-/* Styles for elements within details-column that are more complex or specific */
-.details-column h1 { /* Example if further customization needed beyond Tailwind */
-  /* margin-top: 0; */ /* Tailwind: mt-0 (if needed, but usually handled by spacing utilities) */
-  /* font-size: 1.8em; */ /* Tailwind: text-3xl */
-  /* color: #333; */ /* Tailwind: text-text-primary */
-  /* margin-bottom: 0.5rem; */ /* Tailwind: mb-2 */
-}
-/* .sku { font-size: 0.85em; color: #777; margin-bottom: 1rem; } */ /* Tailwind: text-sm text-text-secondary mb-4 */
-/* .description { font-size: 1em; color: #555; margin-bottom: 1rem; line-height: 1.6; } */ /* Tailwind: text-text-secondary leading-relaxed mb-6 */
-/* .price { font-size: 1.5em; color: #007bff; font-weight: bold; margin-bottom: 1rem; } */ /* Tailwind: text-3xl font-bold text-brand-primary mb-6 */
-/* .category { color: #666; margin-bottom: 1rem; } */ /* Tailwind: text-sm text-text-secondary mb-2 */
-/* .tags { margin-bottom: 1.5rem; } */ /* Tailwind: mb-6 */
-/* .tag { Tailwind: inline-block bg-neutral-medium text-text-secondary text-xs font-semibold mr-2 px-2.5 py-0.5 rounded-full } */
-
-/* .options-section { margin-bottom: 1.5rem; } */ /* Tailwind: space-y-4 mb-6 */
-/* .option-group { margin-bottom: 1rem; } */ /* Tailwind: Handled by space-y on parent */
-/* .option-name { font-weight: bold; margin-right: 0.5rem; display: block; margin-bottom: 0.5rem;} */ /* Tailwind: block text-sm font-medium text-text-primary mb-1 */
-/* .option-values { display: flex; flex-wrap: wrap; gap: 0.5rem; } */ /* Tailwind: flex flex-wrap gap-2 */
-/* .option-value-button { Tailwind classes provided in template } */
-/* .option-value-button.selected { Tailwind classes provided in template } */
-/* .option-value-button:hover:not(.selected) { Tailwind classes provided in template } */
-/* .variant-not-found-message { Tailwind classes provided in template } */
-
-
-/* .stock-info { text-align: left; margin: 1rem 0; padding: 0.5rem; border-radius: 4px; font-weight: bold; } */ /* Tailwind classes provided in template */
-/* .stock-in-stock { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;} */
-/* .stock-low { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba;} */
-/* .stock-out-of-stock { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;} */
-
-/* .add-to-cart-section { Tailwind: flex items-center gap-4 my-6 } */
-/* .quantity-input { Tailwind classes provided in template } */
-/* .quantity-input:disabled { Tailwind: handled by disabled:opacity-50 } */
-/* .add-to-cart-button { Tailwind classes provided in template } */
-/* .add-to-cart-button:hover:not(:disabled) { Tailwind: hover:bg-opacity-80 } */
-/* .add-to-cart-button:disabled { Tailwind: disabled:opacity-50 disabled:cursor-not-allowed } */
-
-/* .back-link { Tailwind: inline-block mt-6 text-brand-primary hover:underline } */
-/* .back-link:hover { text-decoration: underline; } */ /* Tailwind: hover:underline */
 </style>

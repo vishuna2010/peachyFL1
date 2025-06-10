@@ -21,7 +21,8 @@
     "puppeteer": "^24.10.0",
     "qrcode": "^1.5.4",
     "vue": "^3.5.16",
-    "vue-router": "^4.5.1"
+    "vue-router": "^4.5.1",
+    "vue-toastification": "^2.0.0-rc.5"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.1",

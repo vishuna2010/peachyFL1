@@ -1,4 +1,5 @@
 import { ref, computed, watch } from 'vue';
+import { useToast } from 'vue-toastification'; // Added import
 
 // Cart item structure:
 // {
@@ -19,7 +20,7 @@ const CART_STORAGE_KEY = 'myNuxtEcommerceCart';
 
 // --- Persistence ---
 const saveCartToLocalStorage = () => {
-  if (process.client) { // Ensure localStorage is only accessed on the client
+  if (process.client) {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems.value));
   }
 };
@@ -33,56 +34,45 @@ const loadCartFromLocalStorage = () => {
   }
 };
 
-// Watch for changes in cartItems and save to localStorage
-// This needs to be outside the useCart function if cartItems is truly global singleton shared across useCart calls
-// However, Nuxt composables usually return their own state unless explicitly shared via useState
-// For this example, we'll make cartItems a global singleton for simplicity of this file.
-// A more robust approach for multiple instances might involve Nuxt's useState for global reactive state.
-
-// --- Reactive State ---
-// These are effectively singletons due to Nuxt's module caching if not using useState explicitly.
-const appliedDiscount = ref(null); // Stores validated discount object from backend
+const appliedDiscount = ref(null);
 const discountValidationError = ref('');
 
-// Watch for changes in cartItems and save to localStorage
 watch(cartItems, (newCart) => {
   if (isCartInitialized.value) {
     saveCartToLocalStorage();
-    // If cart changes, re-evaluate discount applicability (e.g., min purchase amount)
-    // For simplicity, we might require users to re-apply discount if cart changes significantly.
-    // Or, the backend validation during order placement will be the final check.
-    // For now, let's clear discount if cart becomes empty, as min_order_amount might no longer be met.
     if (newCart.length === 0) {
-        clearAppliedDiscount();
+        clearAppliedDiscountGlobal(); // Use a global-scoped clear if needed
     }
   }
 }, { deep: true });
 
-// Also watch appliedDiscount to save/load from localStorage if desired (more complex UX)
-// For now, appliedDiscount is session-only and not persisted in localStorage with the cart.
+// Helper function to clear discount if cartItems is watched directly
+// This needs to be outside useCart if cartItems is a true global singleton.
+// For now, assuming cartItems is managed within the scope of useCart instances,
+// so clearAppliedDiscount from useCart context is fine.
+// If cartItems were a global useState, this would be:
+function clearAppliedDiscountGlobal() {
+    appliedDiscount.value = null;
+    discountValidationError.value = '';
+}
 
 
 export const useCart = () => {
-  const { $axios } = useNuxtApp(); // For API calls
+  const { $axios } = useNuxtApp();
+  const toast = useToast(); // Initialize toast
 
   const initCart = () => {
     if (process.client && !isCartInitialized.value) {
       loadCartFromLocalStorage();
-      // Note: appliedDiscount is not loaded from localStorage here to keep it simple.
-      // It resets on page load/refresh. User would need to re-apply.
       isCartInitialized.value = true;
       console.log('Cart initialized from localStorage.');
     }
   };
 
-  // productDetails should contain:
-  // id (base productId), productVariantId (optional), name (base name),
-  // price (final price), image_url (final image), sku (final sku),
-  // stock_quantity (available stock of item being added - for reference, not stored directly in cart item),
-  // selectedOptionsDescriptionArray (e.g., ["Color: Red", "Size: M"])
   const addToCart = (productDetails, quantity = 1) => {
     if (!productDetails || !productDetails.id) {
       console.error('Invalid productDetails passed to addToCart');
+      toast.error("Could not add item to cart due to invalid product data.");
       return;
     }
     if (!isCartInitialized.value && process.client) {
@@ -92,33 +82,44 @@ export const useCart = () => {
     const cartItemId = productDetails.id + '-' + (productDetails.productVariantId || 'base');
     const existingItem = cartItems.value.find(item => item.cartItemId === cartItemId);
 
+    let itemName = productDetails.name; // Default to base product name
     if (existingItem) {
       existingItem.quantity += quantity;
+      itemName = existingItem.name; // Use name already in cart for consistency in toast
+      toast.info(`Quantity of "${itemName}" updated to ${existingItem.quantity} in cart.`);
     } else {
       const selectedVariantDesc = productDetails.selectedOptionsDescriptionArray
                                   ? productDetails.selectedOptionsDescriptionArray.join(', ')
                                   : '';
-      cartItems.value.push({
+      const newItem = {
         cartItemId: cartItemId,
         productId: productDetails.id,
         productVariantId: productDetails.productVariantId || null,
-        name: productDetails.name, // Base product name
-        price: parseFloat(productDetails.price), // Final price for this item
+        name: productDetails.name,
+        price: parseFloat(productDetails.price),
         image_url: productDetails.image_url || null,
         sku: productDetails.sku || null,
         selectedVariantDescription: selectedVariantDesc,
         quantity: quantity,
-      });
+      };
+      cartItems.value.push(newItem);
+      itemName = newItem.name; // Use name from newly created item
+      toast.success(`"${itemName}" (Qty: ${quantity}) added to cart!`);
     }
-    console.log('Added to cart:', productDetails.name, 'Variant:', productDetails.productVariantId, 'Quantity:', quantity);
+    console.log('Cart operation:', productDetails.name, 'Variant:', productDetails.productVariantId, 'Quantity after op:', existingItem ? existingItem.quantity : quantity);
   };
 
   const removeFromCart = (cartItemIdToRemove) => {
      if (!isCartInitialized.value && process.client) {
         initCart();
     }
-    cartItems.value = cartItems.value.filter(item => item.cartItemId !== cartItemIdToRemove);
-    console.log('Removed from cart, cartItemId:', cartItemIdToRemove);
+    const itemIndex = cartItems.value.findIndex(item => item.cartItemId === cartItemIdToRemove);
+    if (itemIndex > -1) {
+        const removedItemName = cartItems.value[itemIndex].name;
+        cartItems.value.splice(itemIndex, 1);
+        toast.info(`"${removedItemName}" removed from cart.`);
+        console.log('Removed from cart, cartItemId:', cartItemIdToRemove);
+    }
   };
 
   const updateQuantity = (cartItemIdToUpdate, newQuantity) => {
@@ -128,9 +129,10 @@ export const useCart = () => {
     const item = cartItems.value.find(item => item.cartItemId === cartItemIdToUpdate);
     if (item) {
       if (newQuantity <= 0) {
-        removeFromCart(cartItemIdToUpdate); // Use the specific item's cartId
+        removeFromCart(cartItemIdToUpdate);
       } else {
         item.quantity = newQuantity;
+        toast.info(`Quantity of "${item.name}" updated to ${newQuantity}.`);
       }
     }
     console.log('Updated quantity for cartItemId:', cartItemIdToUpdate, 'New Quantity:', newQuantity);
@@ -138,53 +140,51 @@ export const useCart = () => {
 
   const clearCart = () => {
     cartItems.value = [];
-    clearAppliedDiscount(); // Also clear discount when cart is cleared
+    clearAppliedDiscount();
+    toast.info("Cart cleared.");
     console.log('Cart cleared.');
   };
 
-  // --- Discount Functions ---
   async function applyDiscountCode(codeToApply) {
     if (!codeToApply || codeToApply.trim() === '') {
       discountValidationError.value = 'Please enter a discount code.';
       appliedDiscount.value = null;
+      toast.error('Please enter a discount code.');
       return;
     }
     discountValidationError.value = '';
     appliedDiscount.value = null;
 
-    // Calculate current subtotal to send for validation
-    const subtotal = cartTotalPrice.value; // This is subtotal before any discount
+    const subtotal = cartSubtotal.value;
 
     try {
-      // This backend endpoint `/api/cart/validate-discount` needs to be created.
-      // It should validate the code against the cart subtotal and return discount details.
-      const response = await $axios.post('/cart/validate-discount', {
+      const response = await $axios.post('/api/cart/validate-discount', {
         discount_code: codeToApply.trim().toUpperCase(),
         cart_subtotal: subtotal
       });
-
-      // Assuming backend returns something like:
-      // { code, type, value, description, calculated_discount_amount_for_cart, message (optional) }
       appliedDiscount.value = response.data;
+      toast.success(`Discount "${response.data.code}" applied!`);
       console.log('Discount applied:', response.data);
     } catch (error) {
-      console.error('Error applying discount code:', error.response?.data?.message || error.message);
-      discountValidationError.value = error.response?.data?.message || 'Invalid or expired discount code.';
+      const errorMessage = error.response?.data?.message || 'Invalid or expired discount code.';
+      console.error('Error applying discount code:', errorMessage);
+      discountValidationError.value = errorMessage;
       appliedDiscount.value = null;
+      toast.error(errorMessage);
     }
   }
 
   function clearAppliedDiscount() {
+    if(appliedDiscount.value) { // Only show toast if a discount was actually cleared
+        toast.info(`Discount "${appliedDiscount.value.code}" removed.`);
+    }
     appliedDiscount.value = null;
     discountValidationError.value = '';
     console.log('Applied discount cleared.');
   }
 
-  // --- Computed Properties ---
-  const cartSubtotal = computed(() => { // Renamed cartTotalPrice to cartSubtotal for clarity
+  const cartSubtotal = computed(() => {
     if (!isCartInitialized.value && process.client && cartItems.value.length > 0) {
-        // Attempt to initialize if not done and items are present (e.g. direct navigation to cart)
-        // initCart(); // This might cause issues if called mid-computation. Better to ensure initCart runs early.
     }
     const total = cartItems.value.reduce((total, item) => total + (item.price * item.quantity), 0);
     return parseFloat(total.toFixed(2));
@@ -193,7 +193,7 @@ export const useCart = () => {
   const cartFinalTotalPrice = computed(() => {
     if (appliedDiscount.value && appliedDiscount.value.calculated_discount_amount_for_cart) {
       const finalTotal = cartSubtotal.value - parseFloat(appliedDiscount.value.calculated_discount_amount_for_cart);
-      return parseFloat(Math.max(0, finalTotal).toFixed(2)); // Ensure total isn't negative
+      return parseFloat(Math.max(0, finalTotal).toFixed(2));
     }
     return cartSubtotal.value;
   });
@@ -216,7 +216,7 @@ export const useCart = () => {
     applyDiscountCode,
     clearAppliedDiscount,
     cartTotalItems,
-    cartSubtotal, // Expose subtotal
-    cartFinalTotalPrice, // Expose final total
+    cartSubtotal,
+    cartFinalTotalPrice,
   };
 };
