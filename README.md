@@ -203,18 +203,96 @@ Deployment is planned using AWS Amplify.
 
 ## 11. Future Enhancements / To-Do
 
--   Payment Gateway Integration (Stripe, PayPal, etc.).
--   User Profile Management (frontend UI for users to update their details, view order history, manage 2FA).
--   Full-fledged Customer Order History/Tracking page.
--   Product Variants (e.g., size, color).
--   Customer Reviews & Ratings.
--   Admin Dashboard with key metrics and analytics visualization.
--   Advanced shipping and tax calculation modules.
--   Automated Low Stock Email Alerts & Notifications.
--   Marketing: More advanced Email Campaigns, Referral System.
--   Full implementation of AWS Amplify deployment (creating the `amplify/` backend definition).
--   Comprehensive test suites (unit, integration, e2e).
--   More robust error handling and user feedback across the application.
+This list outlines pending tasks and potential future features for the platform, categorized for clarity.
+
+### High Priority / Near-Term
+- **Frontend - Core User Features:**
+  - Connect "My Orders" list page (`pages/profile/orders.vue`) to the backend API.
+  - Connect "Order Detail" page (`pages/profile/orders/[id].vue`) to the backend API.
+  - Implement "Change Password" functionality:
+    - Backend: Create API endpoint for changing password.
+    - Frontend: Connect `profile.vue` form to the new endpoint.
+  - Implement "Update Profile Details" (e.g., user's name):
+    - Backend: Potentially add new fields to user model; create API endpoint.
+    - Frontend: Add form to `profile.vue` and connect to API.
+- **Backend - Core User Features:**
+  - Create API endpoint for "Change Password".
+  - Define updatable "Profile Details" and create corresponding API endpoint(s).
+- **Data Seeding:**
+  - Enhance `seed.js` to add sample products (including relations to categories, suppliers).
+
+### Frontend - UI/UX Enhancements
+- **Product Listing Page (`pages/index.vue`):**
+  - **Advanced Filters UI (Phase 2+):**
+    - Implement collapsible sidebar for filters on desktop.
+    - Implement modal/drawer for filters on mobile.
+    - Add visual filters (e.g., color swatches).
+    - Implement a price range slider.
+- **Product Detail Page (`pages/products/[id].vue`):**
+  - **Image Gallery Phase 2:** Implement click-to-zoom on main image, improve thumbnail interactions (e.g., scrolling for many images).
+  - **Variant Selector Refinement:** Display visual swatches for "Color" options; ensure "Size" or other options are clear and possibly indicate stock per selection.
+  - **Product Information Tabs:** For organizing description, specifications, reviews, shipping info.
+- **General UI Polish:**
+  - **Interactive Feedback (Phase 2+):**
+    - Implement Skeleton Loaders for PLP, PDP, Order History during data fetching.
+    - Refine Toast Notification usage/styling if needed.
+  - **Global Typography:** Further review and refine typographic scale, line heights, letter spacing with the Poppins font.
+  - **Login/Registration Pages:** Style `pages/login.vue` and `pages/register.vue` with Tailwind CSS.
+- **Empty States & Error Pages:**
+  - Design more engaging and helpful empty state components throughout the application.
+  - Ensure the custom 404 page (`error.vue`) is robust and potentially add more specific error pages if needed.
+
+### Frontend - Admin UI/UX (Continuing "Robotech" Inspiration)
+- **Admin Dashboard (`pages/admin/index.vue`):**
+  - Implement actual data fetching for Stat Cards.
+  - Integrate basic charts (e.g., sales over time - requires backend data source).
+  - Implement "Recent Activity" and "Recent Orders Table" sections with real data.
+- **Styling Core Admin Pages:**
+  - Refactor key admin pages (e.g., `admin/users/index.vue`, `admin/products/index.vue`, `admin/products/new.vue`, `admin/orders/index.vue`, etc.) to use Tailwind CSS for tables, forms, buttons, pagination, aligning with the Robotech style.
+  - Create reusable admin-specific form components if beneficial.
+- **Admin Layout Refinements:**
+  - Add SVG icons to all `AdminSidebar.vue` navigation items.
+  - Implement a functional global search bar in the top admin bar.
+  - Add notification icon/dropdown placeholder in top admin bar.
+  - Consider more sophisticated collapse mechanism for the sidebar (e.g., icon-only view).
+- **Admin - Missing Index Pages:**
+  - Create `frontend/pages/admin/categories/index.vue` (for listing/managing categories).
+  - Create `frontend/pages/admin/reports/index.vue` (as a dashboard for reports).
+- **Breadcrumbs:** Implement breadcrumb navigation within the admin section.
+
+### Backend - Enhancements & New Features
+- **Product Variants:**
+  - Full backend logic for creating, updating, and managing product variants with different options (size, color, etc.).
+  - Ensure variants correctly impact SKU, price, and stock quantity.
+  - API endpoints for managing options and variants associated with products.
+- **Customer Reviews & Ratings:**
+  - API endpoints for submitting product reviews (requires user authentication).
+  - API endpoints for retrieving (paginated) reviews for a product.
+  - Logic for calculating average ratings.
+- **Advanced Shipping & Tax Calculation:**
+  - Develop or integrate modules for more complex shipping cost calculations (e.g., based on weight, destination, provider APIs).
+  - Implement tax calculation logic based on region or product type.
+- **Payment Gateway Integration:**
+  - Integrate a payment provider like Stripe or PayPal for actual payment processing. This is a major feature involving frontend and backend.
+- **Email Templating:**
+  - Use HTML templates (e.g., with a library like Handlebars or EJS) for more professional and brandable transactional emails (order confirmation, password reset, etc.).
+- **Search API Refinements:**
+  - Enhance the product search functionality on `GET /api/products` for better partial match performance (e.g., using PostgreSQL's full-text search capabilities or `pg_trgm` for trigram similarity).
+- **Input Validation:**
+  - Systematically review and enhance input validation for all API endpoints using a library like `joi` or `express-validator`.
+
+### Testing
+- **Backend:**
+  - Develop unit tests for services and utility functions.
+  - Implement integration tests for API endpoints.
+- **Frontend:**
+  - Write unit tests for Vue components and composables (e.g., using Vitest).
+  - Implement End-to-End (E2E) tests for critical user flows (e.g., registration, login, add to cart, checkout).
+
+### Deployment & Operations
+- Finalize and document the AWS Amplify deployment strategy.
+- Implement database backup and restore procedures.
+- Setup monitoring and logging for the production environment.
 
 ## 12. Contributing
 
