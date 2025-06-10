@@ -80,13 +80,16 @@
           <tbody>
             <tr v-for="item in order.items" :key="item.order_item_id">
               <td>
-                <img
-                  v-if="item.product_image_url"
-                  :src="item.product_image_url" <!-- Removed backendUrl prefix -->
-                  :alt="item.product_name"
-                  class="item-image"
-                />
-                <div v-else class="item-image-placeholder">No Image</div>
+                <template v-if="item.product_image_url">
+                  <img
+                    :src="item.product_image_url" <!-- Removed backendUrl prefix -->
+                    :alt="item.product_name"
+                    class="item-image"
+                  />
+                </template>
+                <template v-else>
+                  <div class="item-image-placeholder">No Image</div>
+                </template>
               </td>
               <td>{{ item.product_name }} (ID: {{ item.product_id }})</td>
               <td>{{ item.quantity }}</td>
