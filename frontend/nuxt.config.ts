@@ -2,6 +2,9 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-05-15',
   devtools: { enabled: true },
+  devServer: {
+    port: 3001
+  },
   runtimeConfig: {
     public: {
       // Ensure this matches your backend server's address
