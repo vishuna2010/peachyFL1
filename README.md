@@ -95,8 +95,20 @@ Each directory has its own `package.json` and dependencies.
 5.  **Run the Backend Server:**
     `npm start`
     The API server should now be running (e.g., on `http://localhost:3000`).
+6.  **Seed Initial Data (Optional but Recommended for Development):**
+    *   After setting up your `.env` file and ensuring your database is accessible, you can run the seed script to populate the database with initial data.
+    *   This script will:
+        *   Create a default admin user. Credentials (from `.env` or defaults):
+            *   Email: `admin@example.com` (or value of `ADMIN_EMAIL` in `.env`)
+            *   Password: `admin123` (or value of `ADMIN_PASSWORD` in `.env`)
+        *   Create a set of sample product categories.
+    *   To run the seed script, navigate to the `backend` directory and run:
+        ```bash
+        npm run seed
+        ```
+    *   The script is designed to be run multiple times safely (it won't duplicate users or categories with the same unique keys).
 
-## 6. Frontend Setup
+## 7. Frontend Setup
 
 1.  **Navigate to Frontend Directory:**
     `cd frontend` (from the project root)
@@ -113,7 +125,7 @@ Each directory has its own `package.json` and dependencies.
     `npm run dev`
     The Nuxt.js frontend should now be running (e.g., on `http://localhost:3001` or another port shown in the console).
 
-## 7. Key Features Implemented
+## 8. Key Features Implemented
 
 *   **User Authentication:** Registration, Login (JWT-based), Password Hashing (bcrypt), Two-Factor Authentication (TOTP setup & login), Password Recovery (conceptual backend, email via Ethereal).
 *   **Product Catalog:** Listing with dynamic search, filtering (category, price range), and sorting. Product detail pages. Product image hosting on AWS S3.
@@ -139,7 +151,7 @@ Each directory has its own `package.json` and dependencies.
 *   **Transactional Emails:** Order confirmation emails sent via Nodemailer (using Ethereal.email for development/testing).
 *   **PDF Generation:** Product labels including name, SKU, price, and a Code128 barcode.
 
-## 8. API Endpoint Overview (High-Level)
+## 9. API Endpoint Overview (High-Level)
 
 ### Public Routes (Accessible by anyone):
 -   `/api/auth/register` (POST)
@@ -179,7 +191,7 @@ Each directory has its own `package.json` and dependencies.
 
 *(This is a summary; actual route definitions and parameter details are in the `backend/routes/` subdirectories.)*
 
-## 9. Deployment
+## 10. Deployment
 
 Deployment is planned using AWS Amplify.
 -   **Frontend (Nuxt.js):** To be deployed via Amplify Hosting, connecting to the Git repository. Environment variables (like `NUXT_PUBLIC_BACKEND_BASE_URL`) will be set in the Amplify console.
@@ -189,7 +201,7 @@ Deployment is planned using AWS Amplify.
 
 (Refer to internal research notes for more conceptual deployment details).
 
-## 10. Future Enhancements / To-Do
+## 11. Future Enhancements / To-Do
 
 -   Payment Gateway Integration (Stripe, PayPal, etc.).
 -   User Profile Management (frontend UI for users to update their details, view order history, manage 2FA).
@@ -204,7 +216,7 @@ Deployment is planned using AWS Amplify.
 -   Comprehensive test suites (unit, integration, e2e).
 -   More robust error handling and user feedback across the application.
 
-## 11. Contributing
+## 12. Contributing
 
 This project is currently under development by Project JulesBuild. Future contribution guidelines will be established if the project opens to external contributions.
 ```
