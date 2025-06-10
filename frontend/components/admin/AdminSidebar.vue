@@ -4,7 +4,7 @@
 
     <!-- Sidebar Header -->
     <div class="p-4 border-b border-neutral-700 flex justify-between items-center">
-      <NuxtLink to="/admin/users" @click="closeMobileSidebarIfNeeded">
+      <NuxtLink to="/admin" @click="closeMobileSidebarIfNeeded"> {/* Changed to /admin */}
         <h1 class="text-xl font-semibold hover:text-brand-primary transition-colors">Admin Panel</h1>
       </NuxtLink>
       <button @click="emit('toggleMobileSidebar')" class="lg:hidden text-neutral-300 hover:text-white p-1 rounded-md">
@@ -66,7 +66,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { useRoute } from 'vue-router';
-import CloseIcon from '~/components/icons/CloseIcon.vue'; // Assuming CloseIcon exists
+import CloseIcon from '~/components/icons/CloseIcon.vue';
 
 const props = defineProps({
   isOpenOnMobile: {
@@ -80,7 +80,7 @@ const emit = defineEmits(['toggleMobileSidebar']);
 const route = useRoute();
 
 const navigationItems = ref([
-  { name: 'Dashboard', href: '/admin/dashboard', /* icon: CalendarIcon (example) */ }, // Placeholder, /admin/dashboard needs to be created
+  { name: 'Dashboard', href: '/admin', /* icon: CalendarIcon (example) */ },
   { name: 'Users', href: '/admin/users', /* icon: UsersIcon */ },
   { name: 'Products', href: '/admin/products', /* icon: ShoppingBagIcon */ },
   { name: 'Categories', href: '/admin/categories', /* icon: FolderIcon */ },
@@ -102,11 +102,10 @@ const toggleReportsSubmenu = () => {
 };
 
 const isActive = (path) => {
-  // Check if current route path starts with the item's href for parent routes
-  // or is an exact match for specific sub-routes.
-  // For example, /admin/products should be active for /admin/products/new or /admin/products/edit/1
-  if (path === '/admin/dashboard' && (route.path === '/admin' || route.path === '/admin/dashboard')) return true;
-  return route.path.startsWith(path);
+  if (path === '/admin' && route.path === '/admin') return true; // Exact match for dashboard
+  // For other parent routes, ensure it's not just matching /admin itself unless it's the dashboard link
+  if (path !== '/admin' && route.path.startsWith(path)) return true;
+  return false;
 };
 
 const closeMobileSidebarIfNeeded = () => {
