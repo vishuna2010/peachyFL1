@@ -82,7 +82,7 @@
               <td>
                 <img
                   v-if="item.product_image_url"
-                  :src="item.product_image_url" <!-- Removed backendUrl prefix -->
+                  :src="item.product_image_url"
                   :alt="item.product_name"
                   class="item-image"
                 />
