@@ -135,6 +135,7 @@ import { useRoute, useNuxtApp, useRouter } from '#app';
 
 definePageMeta({
   layout: 'admin',
+  title: 'Purchase Order Details'
 });
 
 const ALLOWED_PO_STATUSES_FOR_RECEIVING = ['ordered', 'partially_received'];

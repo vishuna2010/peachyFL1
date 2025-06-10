@@ -28,6 +28,7 @@ import DiscountForm from '~/components/admin/DiscountForm.vue';
 
 definePageMeta({
   layout: 'admin',
+  title: 'Edit Discount'
 });
 
 const { $axios } = useNuxtApp();

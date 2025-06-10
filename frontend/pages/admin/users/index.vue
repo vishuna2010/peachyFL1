@@ -67,6 +67,7 @@ import { useAuth } from '~/composables/useAuth';
 // This is crucial for Nuxt 3 to assign the layout
 definePageMeta({
   layout: 'admin',
+  title: 'User Management'
 });
 
 const { $axios } = useNuxtApp();

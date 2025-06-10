@@ -69,6 +69,7 @@ import { useNuxtApp, useRouter } from '#app';
 
 definePageMeta({
   layout: 'admin',
+  title: 'New Purchase Order'
 });
 
 const { $axios } = useNuxtApp();

@@ -61,6 +61,7 @@ import { useNuxtApp } from '#app';
 
 definePageMeta({
   layout: 'admin',
+  title: 'Low Stock Report'
 });
 
 const { $axios } = useNuxtApp();

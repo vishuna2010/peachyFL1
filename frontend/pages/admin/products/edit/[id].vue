@@ -47,6 +47,7 @@ import ProductVariantsManager from '~/components/admin/ProductVariantsManager.vu
 
 definePageMeta({
   layout: 'admin',
+  title: 'Edit Product'
 });
 
 const { $axios } = useNuxtApp();

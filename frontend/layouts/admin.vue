@@ -1,116 +1,76 @@
 <template>
-  <div class="admin-layout">
-    <header class="admin-header">
-      <h1>Admin Panel</h1>
-      <nav>
-        <ul>
-          <li><NuxtLink to="/">Site Home</NuxtLink></li>
-          <li><NuxtLink to="/admin/users">User Management</NuxtLink></li>
-          <li><NuxtLink to="/admin/orders">Order Management</NuxtLink></li>
-          <li><NuxtLink to="/admin/discounts">Discount Codes</NuxtLink></li>
-          <li><NuxtLink to="/admin/suppliers">Supplier Management</NuxtLink></li>
-          <li><NuxtLink to="/admin/purchase-orders">Purchase Orders</NuxtLink></li>
-          <li class="nav-item-group">
-            <span>Reports</span>
-            <ul>
-              <li><NuxtLink to="/admin/reports/low-stock">Low Stock</NuxtLink></li>
-              <li><NuxtLink to="/admin/reports/sales">Sales</NuxtLink></li>
-              <li><NuxtLink to="/admin/reports/best-sellers">Best Sellers</NuxtLink></li>
-            </ul>
-          </li>
-          <!-- Add other admin navigation links here -->
-          <li v-if="isAuthenticated">
-            <button @click="handleLogout" class="logout-button">Logout ({{ user?.email }})</button>
-          </li>
-        </ul>
-      </nav>
-    </header>
-    <main class="admin-main">
-      <slot /> <!-- Page content will be injected here -->
-    </main>
-    <footer class="admin-footer">
-      <p>&copy; {{ new Date().getFullYear() }} Admin Area</p>
-    </footer>
+  <div class="flex h-screen bg-neutral-100 text-text-primary">
+    <!-- Admin Sidebar -->
+    <AdminSidebar :is-open-on-mobile="isMobileSidebarOpen" @toggle-mobile-sidebar="toggleMobileSidebar" />
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Top Bar -->
+      <header class="bg-white shadow-sm py-3 px-4 sm:px-6 border-b border-neutral-200">
+        <div class="flex items-center justify-between">
+          <!-- Mobile Hamburger to open sidebar -->
+          <button
+            @click="toggleMobileSidebar"
+            class="lg:hidden text-text-secondary hover:text-brand-primary p-1 -ml-1 rounded-md focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-primary"
+            aria-label="Open sidebar"
+          >
+            <MenuIcon class="w-6 h-6" />
+          </button>
+
+          <!-- Page Title (can be dynamic using $route.meta.title) -->
+          <div class="flex-1 min-w-0">
+             <h2 class="text-lg font-semibold text-gray-700 truncate pl-2 lg:pl-0">
+               {{ $route.meta.title || ($route.name === 'admin' || $route.name === 'admin-dashboard' ? 'Admin Dashboard' : 'Admin Page') }}
+             </h2>
+          </div>
+
+          <!-- User Info & Logout -->
+          <div class="flex items-center space-x-3 ml-auto flex-shrink-0">
+            <span class="text-sm text-text-secondary hidden sm:inline" v-if="user">
+              {{ user.email }}
+            </span>
+            <button
+              @click="handleLogout"
+              title="Logout"
+              class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-primary"
+            >
+              <LogoutIcon class="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Page Content Slot -->
+      <main class="flex-1 overflow-x-hidden overflow-y-auto bg-neutral-100 p-4 sm:p-6">
+        <slot />
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue'; // Added ref
 import { useAuth } from '~/composables/useAuth';
-import { useRouter } from 'vue-router';
+// useRouter is not strictly needed here if handleLogout only calls useAuth().logout() which handles redirect
+// import { useRouter } from 'vue-router';
+import AdminSidebar from '~/components/admin/AdminSidebar.vue';
+import LogoutIcon from '~/components/icons/LogoutIcon.vue';
+import MenuIcon from '~/components/icons/MenuIcon.vue';
 
 const { authToken, authUser, logout } = useAuth();
-const router = useRouter();
+// const router = useRouter(); // Only needed if handleLogout performs router.push directly
 
-const isAuthenticated = computed(() => !!authToken.value);
+const isAuthenticated = computed(() => !!authToken.value); // Kept for potential direct use, though sidebar handles its own logic
 const user = computed(() => authUser.value);
 
+const isMobileSidebarOpen = ref(false);
+const toggleMobileSidebar = () => {
+  isMobileSidebarOpen.value = !isMobileSidebarOpen.value;
+};
+
 const handleLogout = () => {
-  logout(); // This should redirect to login as per useAuth composable
+  logout();
+  // logout() in useAuth should handle redirecting to /login
 };
 </script>
-
-<style scoped>
-.admin-layout {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  background-color: #f4f7f6; /* Light gray background for admin area */
-}
-
-.admin-header {
-  background-color: #343a40; /* Dark background for admin header */
-  color: white;
-  padding: 1rem 1.5rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.admin-header h1 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.admin-header nav ul {
-  list-style-type: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.admin-header nav a, .admin-header .logout-button {
-  color: #cfd2d6; /* Lighter text color for dark background */
-  text-decoration: none;
-  padding: 0.5rem;
-  border-radius: 4px;
-}
-
-.admin-header nav a:hover, .admin-header .logout-button:hover {
-  color: #fff;
-  background-color: #495057; /* Slightly lighter dark for hover */
-}
-
-.logout-button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: inherit;
-}
-
-.admin-main {
-  flex-grow: 1;
-  padding: 1.5rem;
-}
-
-.admin-footer {
-  text-align: center;
-  padding: 1rem;
-  background-color: #e9ecef; /* Light background for footer */
-  border-top: 1px solid #dee2e6;
-  color: #6c757d;
-}
-</style>
+<!-- <style scoped> block removed -->

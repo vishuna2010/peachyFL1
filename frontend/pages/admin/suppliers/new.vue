@@ -16,6 +16,7 @@ import SupplierForm from '~/components/admin/SupplierForm.vue';
 
 definePageMeta({
   layout: 'admin',
+  title: 'New Supplier'
 });
 
 const { $axios } = useNuxtApp();

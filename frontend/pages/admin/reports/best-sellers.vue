@@ -91,6 +91,7 @@ import { useNuxtApp } from '#app';
 
 definePageMeta({
   layout: 'admin',
+  title: 'Best Sellers Report'
 });
 
 const { $axios } = useNuxtApp();

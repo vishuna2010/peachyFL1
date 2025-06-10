@@ -21,6 +21,7 @@ import ProductForm from '~/components/admin/ProductForm.vue';
 
 definePageMeta({
   layout: 'admin',
+  title: 'New Product'
 });
 
 const { $axios } = useNuxtApp();

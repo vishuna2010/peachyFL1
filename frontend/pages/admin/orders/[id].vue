@@ -82,7 +82,7 @@
               <td>
                 <img
                   v-if="item.product_image_url"
-                  :src="item.product_image_url"
+                  :src="item.product_image_url" <!-- Removed backendUrl prefix -->
                   :alt="item.product_name"
                   class="item-image"
                 />
@@ -109,6 +109,7 @@ import { useRoute, useNuxtApp, useRuntimeConfig } from '#app';
 
 definePageMeta({
   layout: 'admin',
+  title: 'Order Details'
 });
 
 const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
