@@ -4,7 +4,7 @@
 
     <div v-if="isLoading" class="text-center py-10 text-lg text-text-secondary font-medium">Loading profile...</div>
 
-    <div v-else-if="user" class="user-profile-content"> <!-- Wrapper for user info and actions -->
+    <div v-else-if="user" class="user-profile-content space-y-8"> <!-- Added space-y-8 to parent -->
       <div class="user-info bg-white p-6 sm:p-8 rounded-lg shadow-md border border-neutral-medium">
         <h2 class="text-2xl font-semibold text-text-primary mb-6">User Profile</h2>
         <p class="mb-3 text-text-secondary"><strong class="font-medium text-text-primary">Email:</strong> {{ user.email }}</p>
@@ -19,8 +19,41 @@
         </div>
       </div>
 
+      <!-- Change Password Section -->
+      <div class="bg-white shadow-md rounded-lg p-6 sm:p-8 border border-neutral-medium">
+        <h2 class="text-xl font-semibold text-text-primary mb-6">Change Password</h2>
+        <form @submit.prevent="handleChangePassword" class="space-y-4">
+          <div>
+            <label for="currentPassword" class="block text-sm font-medium text-text-primary mb-1">Current Password</label>
+            <input type="password" id="currentPassword" v-model="currentPassword" required
+                   class="w-full px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary placeholder:text-neutral-dark" />
+          </div>
+          <div>
+            <label for="newPassword" class="block text-sm font-medium text-text-primary mb-1">New Password</label>
+            <input type="password" id="newPassword" v-model="newPassword" required
+                   class="w-full px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary placeholder:text-neutral-dark" />
+          </div>
+          <div>
+            <label for="confirmNewPassword" class="block text-sm font-medium text-text-primary mb-1">Confirm New Password</label>
+            <input type="password" id="confirmNewPassword" v-model="confirmNewPassword" required
+                   class="w-full px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary placeholder:text-neutral-dark" />
+          </div>
+
+          <div v-if="changePasswordError" class="my-3 p-3 text-sm text-red-700 bg-red-100 border border-red-200 rounded-md" role="alert">{{ changePasswordError }}</div>
+          <div v-if="changePasswordSuccess" class="my-3 p-3 text-sm text-green-700 bg-green-100 border border-green-200 rounded-md" role="alert">{{ changePasswordSuccess }}</div>
+
+          <button
+            type="submit"
+            :disabled="isChangingPassword"
+            class="w-full sm:w-auto mt-2 px-6 py-2.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-brand-primary hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary disabled:opacity-60 transition-colors"
+          >
+            {{ isChangingPassword ? 'Changing...' : 'Change Password' }}
+          </button>
+        </form>
+      </div>
+
       <!-- Action Links/Buttons -->
-      <div class="mt-8 pt-6 border-t border-neutral-medium space-y-3 sm:space-y-0 sm:flex sm:space-x-4">
+      <div class="pt-6 border-t border-neutral-medium space-y-3 sm:space-y-0 sm:flex sm:space-x-4"> {/* Removed mt-8 as parent div has space-y-8 */}
         <NuxtLink
           to="/profile/2fa-setup"
           class="block w-full sm:w-auto text-center px-5 py-2.5 border border-neutral-dark text-text-primary bg-white hover:bg-neutral-light rounded-md shadow-sm text-sm font-medium transition-colors duration-150"
@@ -63,6 +96,30 @@ const router = useRouter();
 const user = ref(authUser.value);
 const isLoading = ref(false);
 
+// Added for Change Password form
+const currentPassword = ref('');
+const newPassword = ref('');
+const confirmNewPassword = ref('');
+const isChangingPassword = ref(false);
+const changePasswordError = ref('');
+const changePasswordSuccess = ref('');
+
+const handleChangePassword = async () => {
+  // Placeholder logic - actual implementation in next step
+  isChangingPassword.value = true;
+  changePasswordError.value = '';
+  changePasswordSuccess.value = '';
+  console.log('Attempting to change password with:', currentPassword.value, newPassword.value, confirmNewPassword.value);
+  // Simulate API call
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  // Example outcomes:
+  // changePasswordError.value = 'Failed to change password. Incorrect current password.';
+  // changePasswordSuccess.value = 'Password changed successfully.';
+  // currentPassword.value = ''; newPassword.value = ''; confirmNewPassword.value = '';
+  isChangingPassword.value = false;
+};
+
+
 onMounted(async () => {
   if (!user.value && authToken.value) {
     isLoading.value = true;
@@ -72,11 +129,6 @@ onMounted(async () => {
   }
 
   if (!user.value && !authToken.value) {
-    // The redirect to login is slightly different in the original.
-    // For now, this subtask focuses on styling, but original had /login?redirect=/profile
-    // Let's keep current logic and assume middleware/guards handle proper redirect.
-    // router.push('/login'); // Original had this, but the template also has a link.
-    // If middleware is not yet set up, the v-else block will show the login link.
   }
 });
 
