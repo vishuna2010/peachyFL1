@@ -86,11 +86,6 @@
                   :alt="item.product_name"
                   class="item-image"
                 />
-                <img
-  v-if="item.image"
-  :src="item.image"
-  class="item-image"
-/>
                 <div v-else class="item-image-placeholder">No Image</div>
               </td>
               <td>{{ item.product_name }} (ID: {{ item.product_id }})</td>

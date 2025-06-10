@@ -25,7 +25,7 @@ const path = require('path'); // Import path module
 const globalErrorHandler = require('./middleware/errorHandler'); // Import global error handler
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.use(cors()); // Enable CORS for all routes
 app.use(express.json()); // Middleware to parse JSON bodies
