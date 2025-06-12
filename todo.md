@@ -10,7 +10,7 @@ This document consolidates future enhancements and pending tasks for the platfor
 - **Advanced Filters UI (Phase 2+):**
   - Implement collapsible sidebar for filters on desktop. *(DONE - Basic structure implemented)*
   - Implement modal/drawer for filters on mobile. *(DONE - Basic structure implemented)*
-  - Add visual filters (e.g., color swatches for applicable options).
+  - [X] Add visual filters: Color swatches implemented for "Color" option on PLP.
   - [X] Enhance price range filter with improved number inputs, validation, and styling (deferred more visual slider).
 - **General UI/UX:**
   - Further review and refine global typography (Poppins font, scale, line heights, spacing).
@@ -82,8 +82,8 @@ This document consolidates future enhancements and pending tasks for the platfor
   - Page to manage global option types (`/admin/options/index.vue`). *(DONE)*
   - Page to manage global values for an option type (`/admin/options/[optionId]/values.vue`). *(DONE)*
 - **Product-Specific Variant UI (likely within product edit page `/admin/products/edit/[id].vue` or a dedicated sub-page):**
-  - Assign global options to a specific product.
-  - Specify which global option values are applicable for that product's assigned options.
+  - [X] Assign global options to a specific product (UI implemented in ProductOptionsManager on product edit page).
+  - [X] Specify which global option values are applicable for that product's assigned options (UI implemented on `.../manage-values.vue` page).
   - Create/edit/delete variants based on combinations of these values (setting SKU, price modifier, stock, image).
 
 ### F. Review Moderation

@@ -19,26 +19,52 @@ async function getAllProducts({
   minPrice,
   maxPrice,
   sortBy,
+  optionValueId, // New filter parameter
   page = 1,
   limit = 10
 }) {
   const queryValues = [];
   let paramIndex = 1;
 
-  let baseSelect = `
-    SELECT p.id, p.name, p.description, p.price, p.category_id, p.image_url,
-           p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold, p.created_at, p.updated_at,
-           c.name as category_name,
-           s.name as supplier_name,
-           COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags,
-           EXISTS(SELECT 1 FROM product_variants pv WHERE pv.product_id = p.id) AS has_variants
+  // Base columns to select from products p.
+  // average_rating and review_count are now part of products table.
+  const productColumns = `p.id, p.name, p.description, p.price, p.category_id, p.image_url,
+                          p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold,
+                          p.has_variants, p.average_rating, p.review_count,
+                          p.created_at, p.updated_at`;
+
+  let fromClause = `
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
     LEFT JOIN suppliers s ON p.supplier_id = s.id
     LEFT JOIN product_tags pt ON p.id = pt.product_id
     LEFT JOIN tags t ON pt.tag_id = t.id
   `;
+
+  let selectPrefix = `SELECT ${productColumns},
+                             c.name as category_name, s.name as supplier_name,
+                             COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags`;
+
+  // If filtering by optionValueId, we need to ensure products are distinct and join with variant tables.
+  if (optionValueId) {
+    selectPrefix = `SELECT DISTINCT ${productColumns},
+                                  c.name as category_name, s.name as supplier_name,
+                                  COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags`;
+    fromClause += `
+      LEFT JOIN product_variants pv ON p.id = pv.product_id
+      LEFT JOIN product_variant_option_values pvov ON pv.id = pvov.product_variant_id
+    `;
+  }
+
+  let baseSelect = selectPrefix + fromClause;
   let countBaseQuery = `SELECT COUNT(DISTINCT p.id) as total_count FROM products p `;
+  if (optionValueId) { // Also add joins to count query if filtering by optionValueId
+      countBaseQuery += `
+        LEFT JOIN product_variants pv ON p.id = pv.product_id
+        LEFT JOIN product_variant_option_values pvov ON pv.id = pvov.product_variant_id
+      `;
+  }
+
 
   let whereClauses = [];
   if (searchTerm) {
@@ -50,8 +76,12 @@ async function getAllProducts({
     whereClauses.push(`p.category_id = $${paramIndex}`);
     queryValues.push(categoryId);
     paramIndex++;
-    if (!countBaseQuery.includes('LEFT JOIN categories')) {
-        countBaseQuery += `LEFT JOIN categories c ON p.category_id = c.id `;
+    // Ensure category join is in countBaseQuery if categoryId is used (already part of fromClause for baseSelect)
+    if (!countBaseQuery.includes('LEFT JOIN categories c ON p.category_id = c.id') && optionValueId) { // If optionValueId already added its joins
+        // This logic might be tricky if category join isn't always part of optionValueId path
+    } else if (!countBaseQuery.includes('LEFT JOIN categories c ON p.category_id = c.id')) {
+        // Add if not present from optionValueId path
+        countBaseQuery += ` LEFT JOIN categories c ON p.category_id = c.id `;
     }
   }
   if (minPrice !== undefined) {
@@ -64,14 +94,25 @@ async function getAllProducts({
     queryValues.push(maxPrice);
     paramIndex++;
   }
+  if (optionValueId) {
+    whereClauses.push(`pvov.product_option_value_id = $${paramIndex}`);
+    queryValues.push(optionValueId);
+    paramIndex++;
+  }
 
   if (whereClauses.length > 0) {
     const whereString = " WHERE " + whereClauses.join(" AND ");
     baseSelect += whereString;
-    countBaseQuery += whereString;
+    countBaseQuery += whereString; // Apply same filters to count
   }
 
-  baseSelect += " GROUP BY p.id, c.name, s.name ";
+  // Group by all selected non-aggregated columns from products, categories, and suppliers
+  // This is necessary because of the array_agg for tags and potential DISTINCT on product columns.
+  // If using SELECT DISTINCT p.id, p.name ..., then GROUP BY those same columns.
+  // The productColumns string already lists all p.* columns.
+  // c.name and s.name are from LEFT JOINs and also selected.
+  baseSelect += ` GROUP BY ${productColumns}, c.name, s.name `;
+
 
   let orderByClause = " ORDER BY p.created_at DESC ";
   const allowedSorts = {

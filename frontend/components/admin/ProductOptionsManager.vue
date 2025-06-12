@@ -1,262 +1,221 @@
 <template>
-  <div class="options-manager card">
-    <h3>Product Options Management</h3>
+  <div class="p-4 border border-gray-200 rounded-lg shadow-sm mt-6 bg-white">
+    <h2 class="text-xl font-semibold text-gray-800 mb-4">Manage Assigned Product Options</h2>
 
-    <div v-if="isLoading" class="loading-state">Loading options...</div>
-    <div v-if="fetchError" class="error-message">{{ fetchError }}</div>
-    <div v-if="actionFeedback.message" :class="['action-feedback', actionFeedback.isError ? 'error' : 'success']">
-      {{ actionFeedback.message }}
+    <div v-if="isLoadingGlobalOptions || isLoadingAssignedOptions" class="text-center py-6">
+      <p class="text-gray-500">Loading options data...</p>
+      <div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-500 mt-2"></div>
     </div>
-
-    <!-- Add New Option Type -->
-    <div class="add-new-option-type section">
-      <h4>Add New Option Type</h4>
-      <form @submit.prevent="handleAddOptionType" class="form-inline">
-        <input type="text" v-model="newOptionName" placeholder="e.g., Color, Size" required :disabled="isLoadingAction"/>
-        <button type="submit" :disabled="isLoadingAction || !newOptionName.trim()">
-          {{ isLoadingAction && currentAction === 'addOptionType' ? 'Adding...' : 'Add Option Type' }}
-        </button>
-      </form>
+    <div v-else-if="fetchError" class="my-4 p-3 bg-red-100 text-red-700 border border-red-200 rounded-lg shadow text-sm">
+      <p>Error loading options data: {{ fetchError }}</p>
     </div>
-
-    <!-- Existing Options and Values -->
-    <div v-if="productOptions.length > 0" class="existing-options section">
-      <h4>Existing Options</h4>
-      <ul class="options-list">
-        <li v-for="option in productOptions" :key="option.id" class="option-item card">
-          <div class="option-header">
-            <!-- Edit Option Name (Simplified: for now, just display; edit would need more UI) -->
-            <strong>{{ option.name }}</strong> (ID: {{ option.id }})
-            <div class="option-actions">
-                <!-- <button @click="promptEditOptionName(option)" class="edit-link-button" :disabled="isLoadingAction">Rename</button> -->
-                <button @click="handleDeleteOptionType(option.id)" class="delete-link-button" :disabled="isLoadingAction">Delete Option Type</button>
+    <div v-else class="space-y-8">
+      <!-- Section 1: Display Assigned Options -->
+      <div>
+        <h3 class="text-lg font-semibold text-gray-700 mb-3">Assigned Options to Product</h3>
+        <div v-if="isLoadingAssignedOptions && !assignedProductOptions.length" class="text-sm text-gray-500 italic">Loading assigned options...</div>
+        <div v-else-if="assignedProductOptions.length === 0" class="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-md">
+          No options have been assigned to this product yet.
+        </div>
+        <ul v-else class="space-y-3">
+          <li v-for="assignedOpt in assignedProductOptions" :key="assignedOpt.id" class="p-3 bg-white rounded-md border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+            <div>
+              <div class="font-semibold text-gray-800">{{ assignedOpt.option_name }}</div>
+              <div class="text-xs text-gray-500">Global Option ID: {{ assignedOpt.option_id }} <span class="text-gray-300 mx-1">|</span> Assigned ID: {{ assignedOpt.id }}</div>
             </div>
-          </div>
+            <div class="flex items-center space-x-2 flex-shrink-0 mt-2 sm:mt-0">
+              <NuxtLink
+                :to="`/admin/options/assigned/${assignedOpt.id}/manage-values`"
+                class="px-3 py-1.5 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 whitespace-nowrap"
+              >
+                Configure Values
+              </NuxtLink>
+              <button
+                @click="handleRemoveAssignedOption(assignedOpt.id)"
+                :disabled="actionLoading.type === 'remove' && actionLoading.id === assignedOpt.id"
+                class="px-3 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 disabled:opacity-50 whitespace-nowrap"
+              >
+                <span v-if="actionLoading.type === 'remove' && actionLoading.id === assignedOpt.id" class="animate-pulse">Removing...</span>
+                <span v-else>Remove</span>
+              </button>
+            </div>
+          </li>
+        </ul>
+      </div>
 
-          <ul class="values-list">
-            <li v-for="value in option.option_values" :key="value.id" class="value-item">
-              <span>{{ value.value }} (ID: {{value.id}})</span>
-              <div class="value-actions">
-                <!-- <button @click="promptEditOptionValue(value, option.id)" class="edit-link-button" :disabled="isLoadingAction">Rename</button> -->
-                <button @click="handleDeleteOptionValue(value.id, option.id)" class="delete-link-button" :disabled="isLoadingAction">Delete Value</button>
-              </div>
-            </li>
-            <li v-if="option.option_values.length === 0" class="no-values">No values yet for this option.</li>
-          </ul>
-
-          <form @submit.prevent="handleAddOptionValue(option.id)" class="form-inline add-value-form">
-            <input type="text" v-model="newOptionValues[option.id]" placeholder="e.g., Red, Small" required :disabled="isLoadingAction"/>
-            <button type="submit" :disabled="isLoadingAction || !newOptionValues[option.id]?.trim()">
-              {{ isLoadingAction && currentAction === `addValue-${option.id}` ? 'Adding...' : 'Add Value to ' + option.name }}
-            </button>
-          </form>
-        </li>
-      </ul>
-    </div>
-    <div v-else-if="!isLoading && !fetchError" class="empty-state">
-      No options defined for this product yet.
+      <!-- Section 2: Assign New Global Option -->
+      <div class="pt-6 border-t border-gray-200">
+        <h3 class="text-lg font-semibold text-gray-700 mb-3">Assign New Global Option Type</h3>
+        <div v-if="isLoadingGlobalOptions && !allGlobalOptions.length" class="text-sm text-gray-500 italic">Loading global options...</div>
+        <div v-else-if="assignableGlobalOptions.length === 0 && !isLoadingGlobalOptions" class="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-md">
+          All available global option types have been assigned, or no global options exist to assign.
+        </div>
+        <div v-else class="flex flex-col sm:flex-row items-start sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
+          <select
+            v-model="selectedGlobalOptionIdToAssign"
+            class="block w-full sm:w-auto sm:flex-grow px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+          >
+            <option :value="null" disabled>Select an option to assign</option>
+            <option v-for="globalOpt in assignableGlobalOptions" :key="globalOpt.id" :value="globalOpt.id">
+              {{ globalOpt.name }}
+            </option>
+          </select>
+          <button
+            @click="handleAssignOptionToProduct"
+            :disabled="!selectedGlobalOptionIdToAssign || (actionLoading.type === 'assign' && actionLoading.id === selectedGlobalOptionIdToAssign)"
+            class="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-500 disabled:opacity-50 whitespace-nowrap"
+          >
+            <span v-if="actionLoading.type === 'assign' && actionLoading.id === selectedGlobalOptionIdToAssign" class="animate-pulse">Assigning...</span>
+            <span v-else>Assign to Product</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, toRefs, computed } from 'vue';
 import { useNuxtApp } from '#app';
+import { useToast } from 'vue-toastification';
 
 const props = defineProps({
   productId: {
     type: [String, Number],
-    required: true
+    required: true,
   }
 });
+
+const { productId: propProductId } = toRefs(props);
+
+const allGlobalOptions = ref([]);
+const assignedProductOptions = ref([]);
+const isLoadingGlobalOptions = ref(false);
+const isLoadingAssignedOptions = ref(false);
+const fetchError = ref(null);
+
+const selectedGlobalOptionIdToAssign = ref(null);
+const actionLoading = ref({ type: null, id: null });
 
 const { $axios } = useNuxtApp();
+const toast = useToast();
 
-const productOptions = ref([]); // Array of { id, name, product_id, option_values: [{ id, value }, ...] }
-const isLoading = ref(false);
-const fetchError = ref('');
+const assignableGlobalOptions = computed(() => {
+  if (!allGlobalOptions.value || !assignedProductOptions.value) return [];
+  const assignedOptionIds = new Set(assignedProductOptions.value.map(ao => ao.option_id));
+  return allGlobalOptions.value.filter(globalOpt => !assignedOptionIds.has(globalOpt.id));
+});
 
-const newOptionName = ref('');
-const newOptionValues = reactive({}); // { <optionId>: 'NewValueString' }
-
-const isLoadingAction = ref(false); // Generic loading for any CUD action
-const currentAction = ref(''); // To specify which action is loading e.g. 'addOptionType', 'addValue-123'
-const actionFeedback = reactive({ message: '', isError: false });
-
-function setActionFeedback(message, isError = false) {
-  actionFeedback.message = message;
-  actionFeedback.isError = isError;
-  setTimeout(() => {
-    actionFeedback.message = '';
-    actionFeedback.isError = false;
-  }, 4000);
-}
-
-async function fetchProductOptions() {
-  if (!props.productId) return;
-  isLoading.value = true;
-  fetchError.value = '';
+async function fetchAllGlobalOptionsInternal() {
   try {
-    const response = await $axios.get(`/admin/products/${props.productId}/options`);
-    productOptions.value = response.data;
-    // Initialize newOptionValues keys for existing options
-    response.data.forEach(opt => {
-      if (!newOptionValues[opt.id]) {
-        newOptionValues[opt.id] = '';
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching product options:', error);
-    fetchError.value = error.response?.data?.message || 'Failed to load product options.';
+    const response = await $axios.get('/api/admin/options');
+    allGlobalOptions.value = response.data;
+  } catch (err) {
+    allGlobalOptions.value = [];
+    throw err;
   } finally {
-    isLoading.value = false;
+    isLoadingGlobalOptions.value = false;
   }
 }
 
-async function handleAddOptionType() {
-  if (!newOptionName.value.trim()) return;
-  isLoadingAction.value = true;
-  currentAction.value = 'addOptionType';
+async function fetchAssignedProductOptionsInternal() {
+  if (!propProductId.value) {
+    assignedProductOptions.value = [];
+    isLoadingAssignedOptions.value = false;
+    return;
+  }
   try {
-    await $axios.post(`/admin/products/${props.productId}/options`, { name: newOptionName.value.trim() });
-    newOptionName.value = '';
-    setActionFeedback('Option type added successfully.', false);
-    await fetchProductOptions(); // Refresh list
-  } catch (error) {
-    console.error('Error adding option type:', error);
-    setActionFeedback(error.response?.data?.message || 'Failed to add option type.', true);
+    const response = await $axios.get(`/api/admin/products/${propProductId.value}/assigned-options`);
+    assignedProductOptions.value = response.data;
+  } catch (err) {
+    assignedProductOptions.value = [];
+    throw err;
   } finally {
-    isLoadingAction.value = false;
-    currentAction.value = '';
+    isLoadingAssignedOptions.value = false;
   }
 }
 
-async function handleDeleteOptionType(optionId) {
-  if (!confirm(`Are you sure you want to delete this option type? All its values and associations with variants will be removed.`)) return;
-  isLoadingAction.value = true;
-  currentAction.value = `deleteOptionType-${optionId}`;
-  try {
-    await $axios.delete(`/admin/product-options/${optionId}`);
-    setActionFeedback('Option type deleted successfully.', false);
-    await fetchProductOptions(); // Refresh list
-  } catch (error) {
-    console.error('Error deleting option type:', error);
-    setActionFeedback(error.response?.data?.message || 'Failed to delete option type.', true);
-  } finally {
-    isLoadingAction.value = false;
-    currentAction.value = '';
+async function loadInitialData() {
+  fetchError.value = null;
+  isLoadingGlobalOptions.value = true;
+  isLoadingAssignedOptions.value = true;
+
+  const results = await Promise.allSettled([
+    fetchAllGlobalOptionsInternal(),
+    fetchAssignedProductOptionsInternal()
+  ]);
+
+  let combinedErrorMessages = [];
+  if (results[0].status === 'rejected') {
+    console.error("Failed to load global options:", results[0].reason);
+    combinedErrorMessages.push(results[0].reason.response?.data?.message || results[0].reason.message || 'Failed to load global options.');
+  }
+  if (results[1].status === 'rejected') {
+     console.error("Failed to load assigned options:", results[1].reason);
+    combinedErrorMessages.push(results[1].reason.response?.data?.message || results[1].reason.message || 'Failed to load assigned options.');
+  }
+
+  if (combinedErrorMessages.length > 0) {
+    fetchError.value = combinedErrorMessages.join(' ');
+    toast.error(fetchError.value);
   }
 }
 
-async function handleAddOptionValue(optionId) {
-  const value = newOptionValues[optionId]?.trim();
-  if (!value) return;
-  isLoadingAction.value = true;
-  currentAction.value = `addValue-${optionId}`;
-  try {
-    await $axios.post(`/admin/product-options/${optionId}/values`, { value: value });
-    newOptionValues[optionId] = ''; // Clear input
-    setActionFeedback('Option value added successfully.', false);
-    await fetchProductOptions(); // Refresh list
-  } catch (error) {
-    console.error('Error adding option value:', error);
-    setActionFeedback(error.response?.data?.message || 'Failed to add option value.', true);
-  } finally {
-    isLoadingAction.value = false;
-    currentAction.value = '';
-  }
-}
-
-async function handleDeleteOptionValue(valueId, optionIdForFeedback) {
-   if (!confirm(`Are you sure you want to delete this option value? This may affect existing product variants.`)) return;
-  isLoadingAction.value = true;
-  currentAction.value = `deleteValue-${valueId}`;
-  try {
-    await $axios.delete(`/admin/product-option-values/${valueId}`);
-    setActionFeedback('Option value deleted successfully.', false);
-    await fetchProductOptions(); // Refresh list
-  } catch (error) {
-    console.error('Error deleting option value:', error);
-    setActionFeedback(error.response?.data?.message || 'Failed to delete option value.', true);
-  } finally {
-    isLoadingAction.value = false;
-    currentAction.value = '';
-  }
-}
-
-// Edit functions are simplified for now (not implemented with inline edit or modals)
-// async function promptEditOptionName(option) {
-//   const newName = prompt("Enter new name for option:", option.name);
-//   if (newName && newName.trim() !== option.name) {
-//     // Call PUT /api/admin/product-options/:optionId { name: newName }
-//   }
-// }
-// async function promptEditOptionValue(value, optionId) {
-//   const newValue = prompt("Enter new value:", value.value);
-//   if (newValue && newValue.trim() !== value.value) {
-//     // Call PUT /api/admin/product-option-values/:valueId { value: newValue }
-//   }
-// }
-
-
-onMounted(fetchProductOptions);
-
-// Watch for productId changes if this component can be reused for different products without remounting
-watch(() => props.productId, (newProductId, oldProductId) => {
-  if (newProductId !== oldProductId && newProductId) {
-    fetchProductOptions();
+onMounted(() => {
+  if (propProductId.value) {
+    loadInitialData();
   }
 });
 
+watch(propProductId, (newProductId, oldProductId) => {
+  if (newProductId && newProductId !== oldProductId) {
+    loadInitialData();
+  } else if (!newProductId) {
+    allGlobalOptions.value = [];
+    assignedProductOptions.value = [];
+    fetchError.value = null;
+  }
+}, { immediate: false });
+
+async function handleAssignOptionToProduct() {
+  if (!selectedGlobalOptionIdToAssign.value) {
+    toast.error('Please select a global option type to assign.');
+    return;
+  }
+  actionLoading.value = { type: 'assign', id: selectedGlobalOptionIdToAssign.value };
+  try {
+    await $axios.post(`/api/admin/products/${propProductId.value}/options`, {
+      option_id: selectedGlobalOptionIdToAssign.value
+    });
+    toast.success('Option assigned to product successfully.');
+    await fetchAssignedProductOptionsInternal();
+    selectedGlobalOptionIdToAssign.value = null;
+  } catch (error) {
+    console.error('Error assigning option to product:', error);
+    toast.error(error.response?.data?.message || 'Failed to assign option.');
+  } finally {
+    actionLoading.value = { type: null, id: null };
+  }
+}
+
+async function handleRemoveAssignedOption(assignedOptionId) {
+  if (!window.confirm('Are you sure you want to remove this option from the product? This will also remove any specific values set for it and may affect variants that depend on this option assignment.')) {
+    return;
+  }
+  actionLoading.value = { type: 'remove', id: assignedOptionId };
+  try {
+    await $axios.delete(`/api/admin/assigned-options/${assignedOptionId}`);
+    toast.success('Option assignment removed successfully.');
+    await fetchAssignedProductOptionsInternal();
+  } catch (error) {
+    console.error(`Error removing assigned option ${assignedOptionId}:`, error);
+    toast.error(error.response?.data?.message || 'Failed to remove option assignment.');
+  } finally {
+    actionLoading.value = { type: null, id: null };
+  }
+}
 </script>
 
 <style scoped>
-.options-manager {
-  margin-top: 2rem;
-  padding: 1.5rem;
-}
-.options-manager h3 { margin-top:0; }
-.section { margin-bottom: 1.5rem; }
-.form-inline { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
-.form-inline input[type="text"] { flex-grow: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
-.form-inline button { padding: 0.5rem 1rem; background-color: #007bff; color: white; border:none; border-radius: 4px; cursor:pointer; }
-.form-inline button:disabled { background-color: #aaa; }
-.form-inline button:hover:not(:disabled) { background-color: #0056b3; }
-
-.options-list { list-style: none; padding: 0; }
-.option-item {
-  margin-bottom: 1rem;
-  padding: 1rem;
-  /* background-color: #f9f9f9; */
-  /* border: 1px solid #eee; */
-  /* border-radius: 4px; */
-}
-.option-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-.option-header strong { font-size: 1.1em; }
-.option-actions button, .value-actions button { font-size: 0.8em; margin-left: 0.5rem; }
-
-.values-list { list-style: none; padding-left: 1rem; margin-top: 0.5rem; }
-.value-item { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px dotted #eee; }
-.value-item:last-child { border-bottom: none; }
-.no-values { color: #777; font-style: italic; }
-.add-value-form { margin-top: 0.75rem; }
-
-.delete-link-button { background-color: #dc3545; color:white; }
-.delete-link-button:hover:not(:disabled) { background-color: #c82333; }
-.edit-link-button { background-color: #ffc107; color:#333; }
-.edit-link-button:hover:not(:disabled) { background-color: #e0a800; }
-
-
-.loading-state, .error-message, .empty-state, .action-feedback { text-align: center; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; }
-.loading-state { background-color: #eef; }
-.error-message, .action-feedback.error { background-color: #fdd; color: #900; }
-.action-feedback.success { background-color: #dfd; color: #070; }
-.empty-state { background-color: #f8f9fa; }
-
-.card { /* Re-added basic card style for nested items */
-  background-color: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
+/* Scoped styles if needed. Using Tailwind for now. */
 </style>

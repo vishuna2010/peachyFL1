@@ -111,37 +111,41 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
 });
 
 // GET /products - Get all products with filtering, sorting, and pagination
-router.get('/', async (req, res, next) => {
+router.get('/', [
+    query('search_term').optional().isString().trim(),
+    query('category_id').optional().isInt({ gt: 0 }).toInt(),
+    query('min_price').optional().isDecimal(),
+    query('max_price').optional().isDecimal(),
+    query('sort_by').optional().isString().trim(),
+    query('optionValueId').optional().isInt({ gt: 0 }).toInt(), // New validator
+    query('page').optional().isInt({ min: 1 }).toInt().default(1),
+    query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10)
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      // Map validation errors to a more structured format if desired
+      return res.status(400).json({ errors: errors.array().map(e => ({ field: e.param, message: e.msg })) });
+    }
   try {
-    const { search_term, category_id, min_price, max_price, sort_by, page: queryPage = '1', limit: queryLimit = '10' } = req.query;
+    // Use validated and sanitized values from req.query
+    const { search_term, category_id, min_price, max_price, sort_by, optionValueId, page, limit } = req.query;
 
-    // Validation and Parsing
-    let parsedPage = parseInt(queryPage, 10);
-    let parsedLimit = parseInt(queryLimit, 10);
-    let parsedCategoryId = category_id ? parseInt(category_id, 10) : undefined;
-    let parsedMinPrice = min_price ? parseFloat(min_price) : undefined;
+    // Validation and Parsing (some parsing already handled by express-validator's toInt/toFloat)
+    // Re-parsing might not be strictly necessary if trusting express-validator output, but explicit parsing ensures type.
+    let parsedPage = page; // Already an int due to .toInt().default(1)
+    let parsedLimit = limit; // Already an int due to .toInt().default(10)
+    let parsedCategoryId = category_id; // Already an int or undefined
+    let parsedMinPrice = min_price ? parseFloat(min_price) : undefined; // parseFloat for decimals
     let parsedMaxPrice = max_price ? parseFloat(max_price) : undefined;
+    let parsedOptionValueId = optionValueId; // Already an int or undefined
 
-    if (isNaN(parsedPage) || parsedPage < 1) {
-      throw new BadRequestError('Invalid page number. Must be a positive integer.');
-    }
-    if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
-      throw new BadRequestError('Invalid limit value. Must be an integer between 1 and 100.');
-    }
-    if (category_id && (isNaN(parsedCategoryId) || parsedCategoryId < 1)) {
-      throw new BadRequestError('Invalid category_id format. Must be a positive integer.');
-    }
-    if (min_price && isNaN(parsedMinPrice)) {
-      throw new BadRequestError('Invalid min_price format. Must be a number.');
-    }
-    if (max_price && isNaN(parsedMaxPrice)) {
-      throw new BadRequestError('Invalid max_price format. Must be a number.');
-    }
+    // Additional custom validation not easily covered by express-validator (like min_price <= max_price)
     if (parsedMinPrice !== undefined && parsedMaxPrice !== undefined && parsedMinPrice > parsedMaxPrice) {
       throw new BadRequestError('min_price cannot be greater than max_price.');
     }
 
-    // sort_by validation is handled by the service, which throws BadRequestError if invalid
+    // sort_by validation is handled by the service, which might throw BadRequestError if invalid
 
     const result = await productService.getAllProducts({
       searchTerm: search_term,
@@ -149,6 +153,7 @@ router.get('/', async (req, res, next) => {
       minPrice: parsedMinPrice,
       maxPrice: parsedMaxPrice,
       sortBy: sort_by,
+      optionValueId: parsedOptionValueId, // Pass to service
       page: parsedPage,
       limit: parsedLimit
     });
