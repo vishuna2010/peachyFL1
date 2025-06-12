@@ -117,6 +117,7 @@ This section outlines the primary driver for future backend development, based o
     - [X] Buying Price
         - [~] Historical tracking per supplier
           - [X] Phase 1: Schema created (`product_cost_history`) and PO receipts log entries.
+          - [X] Phase 2: API endpoint to view product cost history (paginated & filterable).
         - Supports multi-currency
     - [X] Selling Price
         - Retail and wholesale options
@@ -129,6 +130,7 @@ This section outlines the primary driver for future backend development, based o
       - [X] Manual stock adjustments logged to database (Phase 1)
       - [X] Logging for Initial Stock setup (products & variants).
       - [X] Logging for Stock Write-offs/Damage (via new admin endpoint).
+      - [X] Logging for Customer Returns (restock).
     - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
     - Batch and expiry tracking
     - (Consider: Stock Takes / Cycle Counting - Admin UI)
