@@ -83,51 +83,73 @@
                 </span>
               </label>
               <div class="flex flex-wrap gap-2">
-                <template v-for="value_obj in option_type.values" :key="value_obj.value_id">
+                <template v-for="valueDetail in availableValuesMap[option_type.option_id]" :key="valueDetail.value_id">
                   <button
                     v-if="isColorOption(option_type.option_name)"
                     type="button"
-                    @click="availableValuesMap[option_type.option_id]?.has(value_obj.value_id) && selectOption(option_type.option_id, value_obj.value_id)"
-                    :disabled="!availableValuesMap[option_type.option_id]?.has(value_obj.value_id)"
+                    @click="valueDetail.isPotentiallyAvailable && selectOption(option_type.option_id, valueDetail.value_id)"
+                    :disabled="!valueDetail.isPotentiallyAvailable"
                     :class="[
-                      'p-1.5 border rounded-lg flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-150',
-                      selectedOptions[option_type.option_id] === value_obj.value_id
-                        ? 'border-indigo-600 ring-2 ring-indigo-500 shadow-md'
-                        : (availableValuesMap[option_type.option_id]?.has(value_obj.value_id)
-                            ? 'border-gray-300 hover:border-gray-400 hover:shadow-sm focus:ring-indigo-500'
-                            : 'border-gray-200 opacity-50 cursor-not-allowed'),
+                      'p-1.5 border rounded-lg flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-1 transition-all duration-150',
+                      selectedOptions[option_type.option_id] === valueDetail.value_id
+                        ? 'border-indigo-600 ring-2 ring-indigo-500 shadow-md' // Selected
+                        : !valueDetail.isPotentiallyAvailable
+                          ? 'border-gray-200 opacity-40 cursor-not-allowed' // Fully unavailable
+                          : 'border-gray-300 hover:border-gray-400 focus:ring-indigo-500', // Available (stock hint by text/icon)
+                       // Add a subtle indicator for OOS if it's not selected but available
+                      valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id ? 'bg-yellow-50' : ''
                     ]"
-                    :aria-pressed="selectedOptions[option_type.option_id] === value_obj.value_id"
+                    :aria-pressed="selectedOptions[option_type.option_id] === valueDetail.value_id"
+                    :title="valueDetail.isPotentiallyAvailable
+                              ? (valueDetail.anyResultingVariantInStock ? valueDetail.value_name : `${valueDetail.value_name} (Out of stock with current selections)`)
+                              : `${valueDetail.value_name} (Unavailable with current selections)`"
                   >
                     <span
-                      class="w-6 h-6 rounded-md border border-gray-400 inline-block"
-                      :style="{ backgroundColor: value_obj.value_name.toLowerCase() }"
-                      :class="{ 'opacity-50': !availableValuesMap[option_type.option_id]?.has(value_obj.value_id) }"
-                      :title="`Select ${option_type.option_name}: ${value_obj.value_name}`"
-                    ></span>
+                      class="w-6 h-6 rounded-md border border-gray-400 inline-block relative"
+                      :style="{ backgroundColor: valueDetail.value_name.toLowerCase() }"
+                      :class="{
+                        'opacity-40': !valueDetail.isPotentiallyAvailable,
+                        'group-hover:opacity-75': valueDetail.isPotentiallyAvailable
+                      }"
+                    >
+                      <span v-if="valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id"
+                            class="absolute inset-0 flex items-center justify-center text-yellow-700 font-bold text-xs">
+                        !
+                      </span>
+                    </span>
                     <span
                       class="text-sm text-gray-700 pr-1"
-                      :class="{ 'opacity-60 line-through': !availableValuesMap[option_type.option_id]?.has(value_obj.value_id) }"
+                      :class="{
+                        'opacity-60 line-through': !valueDetail.isPotentiallyAvailable,
+                        'text-yellow-700': valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id
+                      }"
                     >
-                      {{ value_obj.value_name }}
+                      {{ valueDetail.value_name }}
+                       <span v-if="valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id" class="text-xs">(OOS)</span>
                     </span>
                   </button>
                   <button
                     v-else
                     type="button"
-                    @click="availableValuesMap[option_type.option_id]?.has(value_obj.value_id) && selectOption(option_type.option_id, value_obj.value_id)"
-                    :disabled="!availableValuesMap[option_type.option_id]?.has(value_obj.value_id)"
+                    @click="valueDetail.isPotentiallyAvailable && selectOption(option_type.option_id, valueDetail.value_id)"
+                    :disabled="!valueDetail.isPotentiallyAvailable"
                     :class="[
                       'px-3 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors duration-150',
-                      selectedOptions[option_type.option_id] === value_obj.value_id
-                        ? 'bg-indigo-600 text-white border-indigo-600 focus:ring-indigo-500'
-                        : (availableValuesMap[option_type.option_id]?.has(value_obj.value_id)
-                            ? 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400 focus:ring-indigo-500'
-                            : 'bg-gray-100 text-gray-400 border-gray-200 opacity-75 cursor-not-allowed line-through')
+                      selectedOptions[option_type.option_id] === valueDetail.value_id
+                        ? 'bg-indigo-600 text-white border-indigo-600 focus:ring-indigo-500' // Selected
+                        : !valueDetail.isPotentiallyAvailable
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-75 cursor-not-allowed line-through' // Fully unavailable
+                          : !valueDetail.anyResultingVariantInStock
+                            ? 'bg-yellow-50 text-yellow-700 border-yellow-300 hover:bg-yellow-100 focus:ring-yellow-500' // Available, but leads to OOS
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400 focus:ring-indigo-500' // Available and in stock
                     ]"
-                    :aria-pressed="selectedOptions[option_type.option_id] === value_obj.value_id"
+                    :aria-pressed="selectedOptions[option_type.option_id] === valueDetail.value_id"
+                    :title="valueDetail.isPotentiallyAvailable
+                              ? (valueDetail.anyResultingVariantInStock ? valueDetail.value_name : `${valueDetail.value_name} (Out of stock with current selections)`)
+                              : `${valueDetail.value_name} (Unavailable with current selections)`"
                   >
-                    {{ value_obj.value_name }}
+                    {{ valueDetail.value_name }}
+                    <span v-if="valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id" class="text-xs ml-1">(Out of Stock)</span>
                   </button>
                 </template>
               </div>
@@ -347,38 +369,66 @@ function variantMatchesSelection(variant, selectionsToMatch) {
 }
 
 // Determines available values for a specific option type, considering other current selections
+// and provides stock status hints for those potential selections.
 const getAvailableValuesForOption = (optionToFilter, currentSelectionsForOtherTypes) => {
-  const availableValueIds = new Set();
-  if (!product.value || !product.value.has_variants || !product.value.variants || !optionToFilter || !optionToFilter.values) {
-     if (optionToFilter && optionToFilter.values && Object.keys(currentSelectionsForOtherTypes).length === 0) {
-        optionToFilter.values.forEach(val => availableValueIds.add(val.value_id));
-     }
-    return availableValueIds;
+  const detailedOptionValues = [];
+  if (!product.value || !product.value.variants || !optionToFilter || !optionToFilter.values) {
+    // If no product variants or option values, return empty or all values as not potentially available
+    if (optionToFilter && optionToFilter.values) {
+      return optionToFilter.values.map(val => ({
+        value_id: val.value_id,
+        value_name: val.value_name,
+        isPotentiallyAvailable: false,
+        anyResultingVariantInStock: false,
+      }));
+    }
+    return detailedOptionValues;
   }
 
   for (const potentialValue of optionToFilter.values) {
+    let isPotentiallyAvailable = false;
+    let anyResultingVariantInStock = false;
+
     const testSelections = {
       ...currentSelectionsForOtherTypes,
-      [optionToFilter.option_id]: potentialValue.value_id
+      [optionToFilter.option_id]: potentialValue.value_id,
     };
 
     for (const variant of product.value.variants) {
-      if (variant.stock_quantity > 0 && variantMatchesSelection(variant, testSelections)) {
-        availableValueIds.add(potentialValue.value_id);
-        break;
+      if (variantMatchesSelection(variant, testSelections)) {
+        isPotentiallyAvailable = true;
+        if (variant.stock_quantity > 0) {
+          anyResultingVariantInStock = true;
+          // Optimization: if we only care that *any* variant is in stock for this specific potentialValue combination,
+          // and we've found one, we can break this inner loop.
+          // However, if other logic might depend on checking ALL variants that match testSelections, remove break.
+          // For current usage (disabling buttons, showing stock hints), this break is fine.
+          break;
+        }
+        // If a variant matches but is out of stock, we continue checking other variants
+        // that might also match this testSelection and *are* in stock.
       }
     }
+    detailedOptionValues.push({
+      value_id: potentialValue.value_id,
+      value_name: potentialValue.value_name,
+      isPotentiallyAvailable,
+      anyResultingVariantInStock,
+    });
   }
-  return availableValueIds;
+  return detailedOptionValues;
 };
-
 
 const availableValuesMap = computed(() => {
   const map = {};
   if (product.value && product.value.has_variants && product.value.available_options) {
     product.value.available_options.forEach(optionType => {
+      // Create a true copy for 'otherSelections' to avoid modifying 'selectedOptions' directly
+      // when deleting a key for the current option type being processed.
       const otherSelections = { ...selectedOptions };
-      delete otherSelections[optionType.option_id];
+      if (Object.prototype.hasOwnProperty.call(otherSelections, optionType.option_id)) {
+        delete otherSelections[optionType.option_id];
+      }
       map[optionType.option_id] = getAvailableValuesForOption(optionType, otherSelections);
     });
   }
