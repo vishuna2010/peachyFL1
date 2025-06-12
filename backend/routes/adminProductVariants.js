@@ -148,11 +148,43 @@ router.post(
       await client.query('UPDATE products SET has_variants = TRUE, updated_at = NOW() WHERE id = $1', [productId]);
       await client.query('COMMIT');
 
+      // Log initial stock for the new variant, if applicable
+      if (newVariant.stock_quantity > 0) {
+        try {
+          const logMovementQuery = `
+            INSERT INTO stock_movement_logs
+              (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `;
+          // req.user should be available due to isAuthenticated middleware
+          const userIdForLog = req.user ? req.user.userId : null;
+          const logMovementValues = [
+            newVariant.product_id, // This is productId from req.params
+            newVariant.id,
+            userIdForLog,
+            'initial_stock_setup',
+            newVariant.stock_quantity, // quantity_changed is the full initial stock
+            newVariant.stock_quantity, // new_quantity_on_hand is the initial stock
+            'Initial stock for new variant',
+            newVariant.id.toString() // Reference could be the variant ID itself
+          ];
+          // Use db.query for a new client from the pool, as original client related to the transaction is now released.
+          await db.query(logMovementQuery, logMovementValues);
+          console.log(`Initial stock logged for variant ID ${newVariant.id}`);
+        } catch (logError) {
+          console.error(`Error logging initial stock for variant ID ${newVariant.id}:`, logError);
+          // Non-critical error, so don't fail the main request if it already succeeded.
+        }
+      }
+
       const variantDetails = await getVariantDetailsForResponse(newVariant.id);
       res.status(201).json({ ...newVariant, selected_options: variantDetails });
 
     } catch (error) {
-      await client.query('ROLLBACK');
+      // Ensure client.query('ROLLBACK') is only called if transaction was actually started and client is valid
+      if (client && !client._hadError && client._queryable) {
+          try { await client.query('ROLLBACK'); } catch (rbError) { console.error("Rollback error on variant creation:", rbError); }
+      }
       if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof ConflictError) {
         return next(error);
       }

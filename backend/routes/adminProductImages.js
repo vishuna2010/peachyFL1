@@ -12,7 +12,8 @@ router.use(isAuthenticated, isAdmin); // Apply to all routes in this file
 router.post(
   '/:productId/images',
   [ // productId validation
-    param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.')
+    param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.'),
+    body('is_primary').optional().isBoolean().toBoolean() // Added validator for is_primary
   ],
   productImageUploadMiddleware, // Handles single file upload to req.file
   handleMulterError,
@@ -23,7 +24,7 @@ router.post(
     }
 
     const { productId } = req.params;
-    const { alt_text, display_order } = req.body; // display_order can be optional
+    const { alt_text, display_order, is_primary } = req.body; // Added is_primary
 
     if (!req.file) {
       return res.status(400).json({ message: 'Image file is required.' });
@@ -56,9 +57,29 @@ router.post(
         return res.status(500).json({ message: "Image storage service is not configured for gallery." });
       }
 
+      // Handle is_primary logic
+      let newImageIsPrimary = is_primary || false; // is_primary from body (coerced to boolean), defaults to false
+
+      if (newImageIsPrimary) {
+        // Unset other primary images for this product
+        await client.query(
+          'UPDATE product_images SET is_primary = FALSE, updated_at = CURRENT_TIMESTAMP WHERE product_id = $1 AND is_primary = TRUE',
+          [productId]
+        );
+      } else {
+        // Check if any other image is primary for this product
+        const primaryCheck = await client.query(
+          'SELECT id FROM product_images WHERE product_id = $1 AND is_primary = TRUE LIMIT 1',
+          [productId]
+        );
+        if (primaryCheck.rows.length === 0) {
+          newImageIsPrimary = true; // Make this one primary if no other primary exists
+        }
+      }
+
       const insertQuery = `
-        INSERT INTO product_images (product_id, image_url, s3_key, alt_text, display_order)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO product_images (product_id, image_url, s3_key, alt_text, display_order, is_primary)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *;
       `;
       // display_order validation and parsing
@@ -80,12 +101,23 @@ router.post(
         imageUrl,
         s3FileKey,
         alt_text || null,
-        parsedDisplayOrder
+        parsedDisplayOrder,
+        newImageIsPrimary // Use the determined is_primary state
       ];
 
       const result = await client.query(insertQuery, values);
+      const newImage = result.rows[0]; // Get the newly inserted image
+
+      if (newImage.is_primary) {
+        // Update the parent product's image_url
+        await client.query(
+          'UPDATE products SET image_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [newImage.image_url, productId]
+        );
+      }
+
       await client.query('COMMIT');
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(newImage); // Return the new image object
 
     } catch (error) {
       if (!client._hadError) { // Check if rollback hasn't already been called by a client error
@@ -117,8 +149,8 @@ router.put(
   [
     param('imageId').isInt({ gt: 0 }).withMessage('Image ID must be a positive integer.'),
     body('alt_text').optional({ nullable: true }).isString().trim().isLength({ max: 255 }).withMessage('Alt text must be a string up to 255 characters.'),
-    // Ensure display_order is an integer. toInt() will coerce valid number strings.
-    body('display_order').optional().isInt({min: 0}).withMessage('Display order must be a non-negative integer.').toInt()
+    body('display_order').optional().isInt({min: 0}).withMessage('Display order must be a non-negative integer.').toInt(),
+    body('is_primary').optional().isBoolean().toBoolean() // Added is_primary validation
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -127,22 +159,33 @@ router.put(
     }
 
     const { imageId } = req.params;
-    // req.body will have coerced values if validation passed
-    const { alt_text, display_order } = req.body;
+    const { alt_text, display_order, is_primary } = req.body; // Added is_primary
 
-    if (alt_text === undefined && display_order === undefined) {
-      return res.status(400).json({ message: 'No fields provided for update. Please provide alt_text or display_order.' });
+    if (alt_text === undefined && display_order === undefined && is_primary === undefined) {
+      return res.status(400).json({ message: 'No fields provided for update. Please provide alt_text, display_order, or is_primary.' });
     }
 
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
 
-      // Check if image exists and lock the row
-      const currentImageResult = await client.query('SELECT id FROM product_images WHERE id = $1 FOR UPDATE', [imageId]);
+      // Fetch current image details to know its product_id and current is_primary state
+      const currentImageQuery = 'SELECT id, product_id, is_primary as current_is_primary, image_url FROM product_images WHERE id = $1 FOR UPDATE';
+      const currentImageResult = await client.query(currentImageQuery, [imageId]);
       if (currentImageResult.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ message: `Product image with ID ${imageId} not found.` });
+      }
+      const currentImage = currentImageResult.rows[0];
+      const parentProductId = currentImage.product_id;
+
+      // If is_primary is true in the request and the image is not already primary
+      if (is_primary === true && !currentImage.current_is_primary) {
+        // Unset other primary images for this product
+        await client.query(
+          'UPDATE product_images SET is_primary = FALSE, updated_at = CURRENT_TIMESTAMP WHERE product_id = $1 AND is_primary = TRUE',
+          [parentProductId]
+        );
       }
 
       const setClauses = [];
@@ -151,24 +194,27 @@ router.put(
 
       if (alt_text !== undefined) {
         setClauses.push(`alt_text = $${paramIndex++}`);
-        // If alt_text is an empty string, it will be stored as such.
-        // If it was validated with .optional({nullable: true}) and client sends null, it will be null.
         values.push(alt_text);
       }
       if (display_order !== undefined) {
-        // display_order is already an integer due to .isInt().toInt() or undefined
         setClauses.push(`display_order = $${paramIndex++}`);
         values.push(display_order);
       }
+      if (is_primary !== undefined) {
+        setClauses.push(`is_primary = $${paramIndex++}`);
+        values.push(is_primary);
+      }
 
-      // This check should ideally not be hit if the initial check for no fields is in place.
       if (setClauses.length === 0) {
-        await client.query('ROLLBACK'); // Should not happen due to initial check
-        return res.status(400).json({ message: 'No valid fields to update provided.' });
+        // This case is effectively handled by the initial check for any undefined fields.
+        // If somehow reached, returning the current image might be an option, or 304 Not Modified.
+        // For now, consistent with previous check, this implies an issue if reached.
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'No valid fields specified for update.' });
       }
 
       setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
-      values.push(imageId); // For the WHERE id = $N clause
+      values.push(imageId);
 
       const updateQuery = `
         UPDATE product_images
@@ -178,9 +224,35 @@ router.put(
       `;
 
       const result = await client.query(updateQuery, values);
-      await client.query('COMMIT');
+      const updatedImage = result.rows[0];
 
-      res.status(200).json(result.rows[0]);
+      // Update parent product's image_url based on is_primary changes
+      if (is_primary !== undefined) { // Only if is_primary was part of this update request
+        if (updatedImage.is_primary) {
+          await client.query(
+            'UPDATE products SET image_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [updatedImage.image_url, parentProductId]
+          );
+        } else if (currentImage.current_is_primary) {
+          // If this image WAS primary and is now set to false, set parent product image_url to null
+          // This assumes no other image was made primary in this same transaction explicitly by this logic path.
+          // The unique constraint handles direct conflicts.
+           const productUrlCheck = await client.query(
+              'SELECT image_url FROM products WHERE id = $1',
+              [parentProductId]
+           );
+           // Only set to NULL if this specific image_url was the one on the product record
+           if (productUrlCheck.rows.length > 0 && productUrlCheck.rows[0].image_url === currentImage.image_url) {
+              await client.query(
+                'UPDATE products SET image_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+                [parentProductId]
+              );
+           }
+        }
+      }
+
+      await client.query('COMMIT');
+      res.status(200).json(updatedImage);
 
     } catch (error) {
       if (!client._hadError) { // Check if rollback hasn't already been called
@@ -213,13 +285,21 @@ router.delete(
     try {
       await client.query('BEGIN');
 
-      // Fetch image details, especially s3_key
-      const imageResult = await client.query('SELECT product_id, s3_key, image_url FROM product_images WHERE id = $1 FOR UPDATE', [imageId]);
+      // Fetch image details, including is_primary, s3_key
+      const imageResult = await client.query('SELECT product_id, s3_key, image_url, is_primary FROM product_images WHERE id = $1 FOR UPDATE', [imageId]);
       if (imageResult.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ message: `Product image with ID ${imageId} not found.` });
       }
-      const { product_id, s3_key, image_url } = imageResult.rows[0];
+      const { product_id, s3_key, image_url, is_primary } = imageResult.rows[0];
+
+      // If the image being deleted was primary, set parent product's image_url to NULL
+      if (is_primary) {
+        await client.query(
+          'UPDATE products SET image_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+          [product_id]
+        );
+      }
 
       // Delete from product_images table
       const deleteDbResult = await client.query('DELETE FROM product_images WHERE id = $1 RETURNING id', [imageId]);

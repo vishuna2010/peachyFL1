@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
+const productService = require('../services/productService');
+const { param, validationResult } = require('express-validator');
+const { NotFoundError } = require('../utils/AppError');
+
 
 // Apply auth middleware to all routes in this router
 router.use(isAuthenticated, isAdmin);
@@ -151,6 +155,86 @@ router.get('/:id/label', async (req, res) => {
     }
   }
 });
+
+// GET /api/admin/products/:productId/label-data - Get structured data for product labels
+router.get(
+  '/:productId/label-data',
+  [
+    param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { productId } = req.params;
+
+    try {
+      const product = await productService.getProductById(parseInt(productId));
+      // productService.getProductById should throw NotFoundError if product doesn't exist.
+
+      // For now, assume a base store currency. This can be enhanced later.
+      const STORE_CURRENCY_CODE = 'USD'; // Example, ideally from config
+      const STORE_CURRENCY_SYMBOL = '$';   // Example, ideally from config or currency data
+
+      const labelsData = [];
+
+      if (product.has_variants && product.variants && product.variants.length > 0) {
+        for (const variant of product.variants) {
+          let suffixParts = [];
+          if (product.available_options && variant.option_value_ids) {
+            for (const valId of variant.option_value_ids) {
+              for (const opt of product.available_options) {
+                const foundValue = opt.values.find(v => v.value_id === valId);
+                if (foundValue) {
+                  suffixParts.push(`${opt.option_name}: ${foundValue.value_name}`);
+                  break;
+                }
+              }
+            }
+          }
+          const constructed_suffix = suffixParts.length > 0 ? ` - ${suffixParts.join(', ')}` : '';
+
+          labelsData.push({
+            product_id: product.id,
+            variant_id: variant.id,
+            product_name: product.name,
+            variant_name_suffix: constructed_suffix,
+            full_display_name: `${product.name}${constructed_suffix}`,
+            sku: variant.sku || product.sku, // Prioritize variant SKU
+            // A more robust barcode might include product ID and variant ID if SKU is not guaranteed unique across all
+            barcode_value: variant.sku || product.sku || `${product.id}${variant.id ? '-' + variant.id : ''}`,
+            selling_price: parseFloat(variant.final_price).toFixed(2), // final_price is already calculated in getProductById
+            currency_code: STORE_CURRENCY_CODE, // Assuming product/variant prices are in store's base currency
+            currency_symbol: STORE_CURRENCY_SYMBOL
+          });
+        }
+      } else {
+        labelsData.push({
+          product_id: product.id,
+          variant_id: null,
+          product_name: product.name,
+          variant_name_suffix: null,
+          full_display_name: product.name,
+          sku: product.sku,
+          barcode_value: product.sku || product.id.toString(),
+          selling_price: parseFloat(product.price).toFixed(2),
+          currency_code: STORE_CURRENCY_CODE,
+          currency_symbol: STORE_CURRENCY_SYMBOL
+        });
+      }
+      res.status(200).json(labelsData);
+
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      // Pass other errors to global error handler
+      next(error);
+    }
+  }
+);
 
 
 module.exports = router;

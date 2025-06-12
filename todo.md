@@ -111,10 +111,12 @@ This section outlines the primary driver for future backend development, based o
     - [X] Supplier Reference
     - [~] Image Gallery
       - [X] Phase 1: Backend CRUD for multiple images, images included in product detail API.
+      - [X] Phase 2: Primary image selection and sync with main product image_url.
     - [X] Status (Active / Inactive / Archived)
 2.  **Pricing Engine**
     - [X] Buying Price
-        - Historical tracking per supplier
+        - [~] Historical tracking per supplier
+          - [X] Phase 1: Schema created (`product_cost_history`) and PO receipts log entries.
         - Supports multi-currency
     - [X] Selling Price
         - Retail and wholesale options
@@ -125,18 +127,22 @@ This section outlines the primary driver for future backend development, based o
     - [X] Real-time inventory levels (Admin UI: Stock Levels View - filterable, searchable, committed vs. available)
     - [~] Stock Movement Logs (Inbound/Outbound) (Admin UI: Recent Inventory Activity Log, Manual Stock Adjustments with reason codes, history)
       - [X] Manual stock adjustments logged to database (Phase 1)
+      - [X] Logging for Initial Stock setup (products & variants).
+      - [X] Logging for Stock Write-offs/Damage (via new admin endpoint).
     - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
     - Batch and expiry tracking
     - (Consider: Stock Takes / Cycle Counting - Admin UI)
     - (Consider: Stock Movement Tracking (Advanced - for multi-location) - Admin UI)
     - (Consider: Settings - Default Units of Measure, Reason Codes for Stock Adjustments, Warehouse/Location Management - Admin UI)
 4.  **Label Generation & QR Code Printing**
-    - Printable product labels (Avery/Thermal formats)
+    - [~] Printable product labels (Avery/Thermal formats)
+      - [X] Phase 1: Backend API endpoint (/api/admin/products/:productId/label-data) provides structured JSON data for labels.
     - QR codes linking to product page, order form, or promotion
     - Integration with Zebra/Brother printers
 5.  **Supplier & Purchase Management**
     - [X] Supplier profiles with contact and currency info (Admin UI: Manage Suppliers - CRUD for details including currency_code exists, ensure UI is styled)
-    - Purchase orders and invoice matching (Admin UI: Manage Purchase Orders, Receiving Stock against POs, PO History & Reporting)
+    - [~] Purchase orders and invoice matching (Admin UI: Manage Purchase Orders, Receiving Stock against POs, PO History & Reporting)
+      - [X] PO items store supplier's currency code for unit_cost_price.
     - Delivery tracking and status updates
 6.  **Sales Order & Fulfillment**
     - Integration with e-commerce platforms
