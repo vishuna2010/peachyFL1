@@ -181,3 +181,45 @@ This document consolidates future enhancements and pending tasks for the platfor
 
 ---
 *This list will be updated as features are implemented or new requirements arise.*
+
+## VI. Core Modules (User Feedback - New Specification)
+
+1.  Product Catalog Management
+    - Product ID (auto-generated)
+    - Product Name
+    - SKU
+    - Category
+    - Description
+    - Brand / Manufacturer
+    - Supplier Reference
+    - Image Gallery
+    - Status (Active / Inactive / Archived)
+2.  Pricing Engine
+    - Buying Price
+        - Historical tracking per supplier
+        - Supports multi-currency
+    - Selling Price
+        - Retail and wholesale options
+        - Bulk discounts and dynamic pricing
+    - Profit Margin Calculator
+3.  Stock Control & Movement
+    - Real-time inventory levels
+    - Stock Movement Logs (Inbound/Outbound)
+    - Reorder threshold alerts
+    - Batch and expiry tracking
+4.  Label Generation & QR Code Printing
+    - Printable product labels (Avery/Thermal formats)
+    - QR codes linking to product page, order form, or promotion
+    - Integration with Zebra/Brother printers
+5.  Supplier & Purchase Management
+    - Supplier profiles with contact and currency info
+    - Purchase orders and invoice matching
+    - Delivery tracking and status updates
+6.  Sales Order & Fulfillment
+    - Integration with e-commerce platforms
+    - FIFO or batch-aware stock deduction
+    - PDF invoice generation
+    - Order packing label printing
+7.  Barcode / QR Scanning Support
+    - Mobile or USB scanner support
+    - Use QR codes for fast lookups or reorders
