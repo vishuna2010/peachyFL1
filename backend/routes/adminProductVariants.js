@@ -37,7 +37,15 @@ router.post(
     body('sku').optional({ checkFalsy: true }).isString().trim().isLength({ min: 1, max: 100 }).withMessage('SKU must be between 1 and 100 characters if provided.'),
     body('image_url').optional({ nullable: true, checkFalsy: true }).isURL().withMessage('Image URL must be a valid URL or null.'),
     body('option_value_ids').isArray({ min: 1 }).withMessage('At least one global option value ID is required.'),
-    body('option_value_ids.*').isInt({ gt: 0 }).withMessage('Each option value ID must be a positive integer.')
+    body('option_value_ids.*').isInt({ gt: 0 }).withMessage('Each option value ID must be a positive integer.'),
+    body('cost_price').optional({ nullable: true, checkFalsy: true }).isDecimal({ decimal_digits: '0,2' }).toFloat().custom(value => {
+      // checkFalsy allows 0, custom validator ensures it's not negative.
+      // null is allowed by nullable:true
+      if (value < 0) {
+        throw new Error('Cost price must be a non-negative decimal.');
+      }
+      return true;
+    }).withMessage('Cost price must be a non-negative decimal or null.')
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -46,8 +54,18 @@ router.post(
     }
 
     const { productId } = req.params;
-    const { sku, price_modifier, stock_quantity, image_url, option_value_ids } = req.body;
+    // cost_price is now validated and coerced by express-validator if provided
+    const { sku, price_modifier, stock_quantity, image_url, option_value_ids, cost_price } = req.body;
     const finalSku = sku && sku.trim() !== '' ? sku.trim() : null;
+
+    // Manual validation for cost_price is no longer needed here due to express-validator
+    // let parsed_cost_price = null;
+    // if (cost_price !== undefined && cost_price !== null && cost_price !== '') {
+    //   parsed_cost_price = parseFloat(cost_price);
+    //   if (isNaN(parsed_cost_price) || parsed_cost_price < 0) {
+    //     return next(new BadRequestError('Cost price must be a non-negative number.'));
+    //   }
+    // }
 
     const client = await db.pool.connect();
     try {
@@ -115,9 +133,9 @@ router.post(
       }
 
       const variantInsertResult = await client.query(
-        `INSERT INTO product_variants (product_id, sku, price_modifier, stock_quantity, image_url)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [productId, finalSku, price_modifier, stock_quantity, image_url || null]
+        `INSERT INTO product_variants (product_id, sku, price_modifier, stock_quantity, image_url, cost_price)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [productId, finalSku, price_modifier, stock_quantity, image_url || null, cost_price === undefined ? null : cost_price] // use validated/coerced cost_price
       );
       const newVariant = variantInsertResult.rows[0];
 
@@ -197,14 +215,21 @@ router.put(
     body('image_url').optional({ nullable: true, checkFalsy: true }).isURL().withMessage('Image URL must be a valid URL or null.'),
     body('option_value_ids').optional().isArray({min:1}).withMessage('Option values must be a non-empty array if provided.'),
     body('option_value_ids.*').optional().isInt({ gt: 0 }).withMessage('Each option value ID must be a positive integer.'),
-    body('reason').optional().isString().trim().withMessage('Reason must be a string if provided.')
+    body('reason').optional().isString().trim().withMessage('Reason must be a string if provided.'),
+    body('cost_price').optional({ nullable: true, checkFalsy: true }).isDecimal({ decimal_digits: '0,2' }).toFloat().custom(value => {
+      if (value < 0) { // checkFalsy allows 0
+        throw new Error('Cost price must be a non-negative decimal.');
+      }
+      return true;
+    }).withMessage('Cost price must be a non-negative decimal or null.')
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { variantId } = req.params;
-    const { sku, price_modifier, stock_quantity, image_url, option_value_ids, reason } = req.body;
+    // cost_price is now validated and coerced by express-validator if provided
+    const { sku, price_modifier, stock_quantity, image_url, option_value_ids, reason, cost_price } = req.body;
 
     if (Object.keys(req.body).length === 0) {
         return next(new BadRequestError("No fields provided for update."));
@@ -222,17 +247,27 @@ router.put(
       // Log stock adjustment if stock_quantity is changing
       if (stock_quantity !== undefined && stock_quantity !== currentVariant.stock_quantity) {
           const oldStock = currentVariant.stock_quantity;
-          const newStock = parseInt(stock_quantity); // Assumes stock_quantity is validated
+          const newStock = parseInt(stock_quantity); // Assumes stock_quantity is validated by express-validator
           const stockChange = newStock - oldStock;
-          const userId = req.user && req.user.userId ? req.user.userId : 'SYSTEM'; // Safely access userId
+          // req.user should be populated by isAuthenticated middleware
+          const userId = req.user && req.user.userId ? req.user.userId : null;
 
-          console.log(`Stock Adjustment for Variant ID ${variantId}:
-              User ID: ${userId},
-              Old Stock: ${oldStock},
-              New Stock: ${newStock},
-              Change: ${stockChange},
-              Reason: ${reason || 'No reason provided'}`);
-          // TODO: In a future enhancement, this information should be saved to a dedicated 'stock_adjustment_logs' table.
+          const logMovementQuery = `
+            INSERT INTO stock_movement_logs
+                (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `;
+          const logMovementValues = [
+              currentVariant.product_id,
+              variantId, // from req.params
+              userId,
+              'manual_adjustment',
+              stockChange,
+              newStock,
+              reason || null, // destructured from req.body, defaults to null if not provided
+              null // reference_id for manual adjustment
+          ];
+          await client.query(logMovementQuery, logMovementValues);
       }
 
       let newOptionValueIds = null;
@@ -286,14 +321,15 @@ router.put(
 
       const updatedVariantResult = await client.query(
         `UPDATE product_variants
-         SET sku = $1, price_modifier = $2, stock_quantity = $3, image_url = $4, updated_at = NOW()
+         SET sku = $1, price_modifier = $2, stock_quantity = $3, image_url = $4, cost_price = $6, updated_at = NOW()
          WHERE id = $5 RETURNING *`,
         [
           effectiveSku,
           price_modifier !== undefined ? price_modifier : currentVariant.price_modifier,
           stock_quantity !== undefined ? stock_quantity : currentVariant.stock_quantity,
           image_url !== undefined ? image_url : currentVariant.image_url,
-          variantId
+          variantId,
+          cost_price !== undefined ? cost_price : currentVariant.cost_price // Use validated/coerced cost_price
         ]
       );
       await client.query('COMMIT');
