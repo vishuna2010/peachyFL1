@@ -7,6 +7,7 @@ const { isAuthenticated, isAdmin } = require('../auth');
 const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload');
 const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../services/s3Service');
 const path = require('path');
+const { query, validationResult } = require('express-validator'); // Import express-validator
 
 // Helper function to get or create tag IDs
 async function getOrCreateTagIds(tagNames, client) {
