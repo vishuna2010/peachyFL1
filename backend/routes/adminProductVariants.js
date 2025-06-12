@@ -196,14 +196,15 @@ router.put(
     body('stock_quantity').optional().isInt({ gt: -1 }).withMessage('Stock quantity must be an integer (0 or more).'),
     body('image_url').optional({ nullable: true, checkFalsy: true }).isURL().withMessage('Image URL must be a valid URL or null.'),
     body('option_value_ids').optional().isArray({min:1}).withMessage('Option values must be a non-empty array if provided.'),
-    body('option_value_ids.*').optional().isInt({ gt: 0 }).withMessage('Each option value ID must be a positive integer.')
+    body('option_value_ids.*').optional().isInt({ gt: 0 }).withMessage('Each option value ID must be a positive integer.'),
+    body('reason').optional().isString().trim().withMessage('Reason must be a string if provided.')
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { variantId } = req.params;
-    const { sku, price_modifier, stock_quantity, image_url, option_value_ids } = req.body;
+    const { sku, price_modifier, stock_quantity, image_url, option_value_ids, reason } = req.body;
 
     if (Object.keys(req.body).length === 0) {
         return next(new BadRequestError("No fields provided for update."));
@@ -217,6 +218,22 @@ router.put(
       const currentVariantResult = await client.query('SELECT * FROM product_variants WHERE id = $1', [variantId]);
       if (currentVariantResult.rows.length === 0) throw new NotFoundError(`Variant with ID ${variantId} not found.`);
       const currentVariant = currentVariantResult.rows[0];
+
+      // Log stock adjustment if stock_quantity is changing
+      if (stock_quantity !== undefined && stock_quantity !== currentVariant.stock_quantity) {
+          const oldStock = currentVariant.stock_quantity;
+          const newStock = parseInt(stock_quantity); // Assumes stock_quantity is validated
+          const stockChange = newStock - oldStock;
+          const userId = req.user && req.user.userId ? req.user.userId : 'SYSTEM'; // Safely access userId
+
+          console.log(`Stock Adjustment for Variant ID ${variantId}:
+              User ID: ${userId},
+              Old Stock: ${oldStock},
+              New Stock: ${newStock},
+              Change: ${stockChange},
+              Reason: ${reason || 'No reason provided'}`);
+          // TODO: In a future enhancement, this information should be saved to a dedicated 'stock_adjustment_logs' table.
+      }
 
       let newOptionValueIds = null;
       if (option_value_ids) {

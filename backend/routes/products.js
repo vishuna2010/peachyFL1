@@ -201,7 +201,7 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
 
   try {
     await client.query('BEGIN');
-    const currentProductResult = await client.query('SELECT image_url, sku FROM products WHERE id = $1 FOR UPDATE', [id]);
+    const currentProductResult = await client.query('SELECT image_url, sku, has_variants FROM products WHERE id = $1 FOR UPDATE', [id]);
     if (currentProductResult.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Product not found.' }); }
     const currentProduct = currentProductResult.rows[0];
     finalImageUrlToStoreInDb = currentProduct.image_url;
@@ -234,9 +234,15 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
     addClause('name', name); addClause('description', description); addClause('price', price, true);
     addClause('category_id', category_id, false, true);
     if (stock_quantity !== undefined) {
-      const stock = parseInt(stock_quantity);
-      if (isNaN(stock) || stock < 0) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Stock quantity must be a non-negative integer.'}); }
-      addClause('stock_quantity', stock, false, true);
+      if (currentProduct.has_variants) {
+        // Optionally, log a warning or add a message to the response if desired,
+        // but for now, we will just silently ignore it to prevent breaking updates of other fields.
+        console.warn(`Attempted to update base stock for product ${id} which has variants. Base stock update ignored.`);
+      } else {
+        const stock = parseInt(stock_quantity);
+        if (isNaN(stock) || stock < 0) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Stock quantity must be a non-negative integer.'}); }
+        addClause('stock_quantity', stock, false, true);
+      }
     }
     addClause('supplier_id', supplier_id, false, true);
     const finalSku = sku === '' ? null : sku; // Allow unsetting SKU with empty string
