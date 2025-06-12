@@ -220,35 +220,94 @@ function closeAddOrEditVariantModal() {
   showAddOrEditVariantModal.value = false;
 }
 
-// Placeholder for actual submission logic (to be implemented in a later step)
 async function handleVariantFormSubmit() {
+  // 1. Add Mode Check
+  if (isEditingVariant.value) {
+    // Placeholder for edit logic - this subtask focuses on adding.
+    console.log('Edit mode - submission not implemented yet.');
+    toast.info('Edit functionality is not yet implemented.');
+    return;
+  }
+
+  // 2. Clear Previous Form Errors
   addVariantFormError.value = null;
+
+  // 3. Client-Side Validation
+  // Option Selection
+  for (const configOpt of configuredProductOptions.value) {
+    if (newVariantForm.selected_option_values[configOpt.option_id] === null || newVariantForm.selected_option_values[configOpt.option_id] === undefined) {
+      addVariantFormError.value = `Please select a value for ${configOpt.option_name}.`;
+      toast.error(addVariantFormError.value);
+      return;
+    }
+  }
+
+  // Stock Quantity
+  if (typeof newVariantForm.stock_quantity !== 'number' || newVariantForm.stock_quantity < 0 || !Number.isInteger(newVariantForm.stock_quantity)) {
+    addVariantFormError.value = "Stock quantity must be a non-negative integer.";
+    toast.error(addVariantFormError.value);
+    return;
+  }
+
+  // Price Modifier (ensure it's a number, though v-model.number helps)
+  if (typeof newVariantForm.price_modifier !== 'number') {
+     // This case should ideally be handled by v-model.number, but as a fallback:
+    newVariantForm.price_modifier = parseFloat(newVariantForm.price_modifier) || 0.00;
+    if (isNaN(newVariantForm.price_modifier)) {
+        addVariantFormError.value = "Price modifier must be a valid number.";
+        toast.error(addVariantFormError.value);
+        return;
+    }
+  }
+
+
+  // 4. Prepare Payload for API
+  const option_value_ids = Object.values(newVariantForm.selected_option_values).filter(id => id !== null && id !== undefined);
+
+  const payload = {
+    sku: newVariantForm.sku || null,
+    price_modifier: newVariantForm.price_modifier, // Defaulted to 0.00 in reactive state
+    stock_quantity: newVariantForm.stock_quantity,
+    image_url: newVariantForm.image_url || null,
+    option_value_ids: option_value_ids
+  };
+
+  // 5. API Call Logic
   isSubmittingNewVariant.value = true;
-  console.log("Submitting variant form:", JSON.parse(JSON.stringify(newVariantForm)));
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  try {
+    // Assuming propProductId.value holds the current product's ID
+    const response = await $axios.post(`/api/admin/products/${propProductId.value}/variants`, payload);
 
-  // Example:
-  // try {
-  //   if (isEditingVariant.value) {
-  //     // Call edit API
-  //   } else {
-  //     // Call add API: $axios.post(`/api/admin/products/${propProductId.value}/variants`, payload)
-  //   }
-  //   toast.success(`Variant ${isEditingVariant.value ? 'updated' : 'added'} successfully!`);
-  //   closeAddOrEditModal();
-  //   fetchProductVariants(); // Refresh list
-  // } catch (error) {
-  //   console.error("Error submitting variant:", error);
-  //   addVariantFormError.value = error.response?.data?.message || `Failed to ${isEditingVariant.value ? 'update' : 'add'} variant.`;
-  //   toast.error(addVariantFormError.value);
-  // } finally {
-  //   isSubmittingNewVariant.value = false;
-  // }
-
-  isSubmittingNewVariant.value = false; // Remove this line when actual logic is added
-  toast.info("Form submission simulated. Implement actual API call.");
-  // closeAddOrEditModal(); // Keep modal open for now to see data
+    // Check for successful response (status 201 for POST typically)
+    // $axios typically throws for non-2xx statuses, so direct check might not be needed if default behavior is kept
+    if (response && (response.status === 201 || response.status === 200)) { // 200 if backend returns updated list or variant
+      toast.success('Variant added successfully!');
+      fetchProductVariants(); // Refresh the list of variants
+      closeAddOrEditVariantModal(); // Close the modal
+    } else {
+      // This case might be rare if $axios throws on non-2xx.
+      // Handle non-ideal successful responses if necessary.
+      addVariantFormError.value = 'Variant creation may not have been successful. Status: ' + response.status;
+      toast.error(addVariantFormError.value);
+    }
+  } catch (error) {
+    console.error("Error adding variant:", error.response || error);
+    if (error.response && error.response.data && error.response.data.message) {
+      addVariantFormError.value = error.response.data.message;
+      toast.error(error.response.data.message);
+    } else if (error.response && error.response.data && Array.isArray(error.response.data.errors)) {
+      // Handle express-validator style errors
+      const formattedErrors = error.response.data.errors.map(e => e.msg).join('; ');
+      addVariantFormError.value = formattedErrors;
+      toast.error(formattedErrors);
+    }
+    else {
+      addVariantFormError.value = 'An unexpected error occurred while adding the variant.';
+      toast.error(addVariantFormError.value);
+    }
+  } finally {
+    isSubmittingNewVariant.value = false;
+  }
 }
 
 
