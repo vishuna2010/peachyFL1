@@ -1,34 +1,77 @@
 <template>
-  <div class="auth-page">
-    <h2>Register</h2>
-    <form @submit.prevent="handleRegister" class="auth-form">
-      <div class="form-group">
-        <label for="email">Email:</label>
-        <input type="email" id="email" v-model="email" required />
+  <div class="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div class="sm:mx-auto sm:w-full sm:max-w-md">
+      <img class="mx-auto h-12 w-auto" src="/logo.svg" alt="Workflow" /> <!-- Placeholder logo -->
+      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        Create your account
+      </h2>
+    </div>
+
+    <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+      <div class="bg-white py-8 px-4 shadow-xl rounded-lg sm:px-10">
+        <form @submit.prevent="handleRegister" class="space-y-6">
+          <div>
+            <label for="email" class="block text-sm font-medium text-gray-700">
+              Email address
+            </label>
+            <div class="mt-1">
+              <input id="email" v-model="email" name="email" type="email" autocomplete="email" required
+                     :disabled="isLoading"
+                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-70" />
+            </div>
+          </div>
+
+          <div>
+            <label for="password" class="block text-sm font-medium text-gray-700">
+              Password
+            </label>
+            <div class="mt-1">
+              <input id="password" v-model="password" name="password" type="password" autocomplete="new-password" required
+                     :disabled="isLoading"
+                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-70" />
+            </div>
+          </div>
+
+          <div>
+            <label for="confirmPassword" class="block text-sm font-medium text-gray-700">
+              Confirm Password
+            </label>
+            <div class="mt-1">
+              <input id="confirmPassword" v-model="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required
+                     :disabled="isLoading"
+                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-70" />
+            </div>
+          </div>
+
+          <div v-if="errorMessage" class="p-3 text-sm text-red-700 bg-red-100 rounded-md border border-red-200 text-center">
+            {{ errorMessage }}
+          </div>
+          <div v-if="successMessage" class="p-3 text-sm text-green-700 bg-green-100 rounded-md border border-green-200 text-center">
+            {{ successMessage }}
+          </div>
+
+          <div>
+            <button type="submit" :disabled="isLoading"
+                    class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed">
+              {{ isLoading ? 'Registering...' : 'Register' }}
+            </button>
+          </div>
+        </form>
+
+        <p class="mt-8 text-center text-sm text-gray-600">
+          Already have an account?
+          <NuxtLink to="/login" class="font-medium text-indigo-600 hover:text-indigo-500 hover:underline">
+            Sign in
+          </NuxtLink>
+        </p>
       </div>
-      <div class="form-group">
-        <label for="password">Password:</label>
-        <input type="password" id="password" v-model="password" required />
-      </div>
-      <div class="form-group">
-        <label for="confirmPassword">Confirm Password:</label>
-        <input type="password" id="confirmPassword" v-model="confirmPassword" required />
-      </div>
-      <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
-      <div v-if="successMessage" class="success-message">{{ successMessage }}</div>
-      <button type="submit" :disabled="isLoading">
-        {{ isLoading ? 'Registering...' : 'Register' }}
-      </button>
-    </form>
-    <p>
-      Already have an account? <NuxtLink to="/login">Login here</NuxtLink>
-    </p>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useHead } from '#app'; // Added useHead
 import { useAuth } from '~/composables/useAuth';
 
 const email = ref('');
@@ -69,71 +112,4 @@ useHead({
 });
 </script>
 
-<style scoped>
-/* Using similar styles to login.vue for consistency */
-.auth-page {
-  max-width: 400px;
-  margin: 2rem auto;
-  padding: 2rem;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  background-color: #f9f9f9;
-}
-h2 {
-  text-align: center;
-  margin-bottom: 1.5rem;
-  color: #333;
-}
-.auth-form .form-group {
-  margin-bottom: 1rem;
-}
-.auth-form label {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: #555;
-}
-.auth-form input[type="email"],
-.auth-form input[type="password"] {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  box-sizing: border-box; /* Ensures padding doesn't expand width */
-}
-.error-message {
-  color: red;
-  margin-bottom: 1rem;
-  text-align: center;
-  background-color: #ffe0e0;
-  padding: 0.5rem;
-  border-radius: 4px;
-}
-.success-message {
-  color: green;
-  margin-bottom: 1rem;
-  text-align: center;
-  background-color: #e0ffe0;
-  padding: 0.5rem;
-  border-radius: 4px;
-}
-button[type="submit"] {
-  width: 100%;
-  padding: 0.75rem;
-  background-color: #28a745; /* Green for register */
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-}
-button[type="submit"]:disabled {
-  background-color: #aaa;
-}
-button[type="submit"]:hover:not(:disabled) {
-  background-color: #1e7e34;
-}
-p {
-  margin-top: 1.5rem;
-  text-align: center;
-}
-</style>
+// No <style scoped> block needed with Tailwind CSS

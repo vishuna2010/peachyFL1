@@ -1,48 +1,110 @@
 <template>
-  <div class="auth-page">
-    <h2>Login</h2>
-    <form @submit.prevent="isTwoFactorStep ? handleTwoFactorVerify() : handleLogin()" class="auth-form">
-      <template v-if="!isTwoFactorStep">
-        <div class="form-group">
-          <label for="email">Email:</label>
-          <input type="email" id="email" v-model="email" required :disabled="isLoading" />
-        </div>
-        <div class="form-group">
-          <label for="password">Password:</label>
-          <input type="password" id="password" v-model="password" required :disabled="isLoading" />
-        </div>
-      </template>
-      <template v-else>
-        <p class="info-message">A verification code has been sent to your authenticator app. Please enter it below.</p>
-        <div class="form-group">
-          <label for="twoFactorToken">2FA Verification Code:</label>
-          <input type="text" id="twoFactorToken" v-model="twoFactorToken" required pattern="\d{6}" title="Enter a 6-digit code" :disabled="isLoading" />
-        </div>
-      </template>
+  <div class="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div class="sm:mx-auto sm:w-full sm:max-w-md">
+      <img class="mx-auto h-12 w-auto" src="/logo.svg" alt="Workflow" /> <!-- Placeholder logo, replace with actual if available -->
+      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        {{ isTwoFactorStep ? 'Enter Verification Code' : 'Sign in to your account' }}
+      </h2>
+    </div>
 
-      <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
+    <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+      <div class="bg-white py-8 px-4 shadow-xl rounded-lg sm:px-10">
+        <form @submit.prevent="isTwoFactorStep ? handleTwoFactorVerify() : handleLogin()" class="space-y-6">
+          <template v-if="!isTwoFactorStep">
+            <div>
+              <label for="email" class="block text-sm font-medium text-gray-700">
+                Email address
+              </label>
+              <div class="mt-1">
+                <input id="email" v-model="email" name="email" type="email" autocomplete="email" required
+                       :disabled="isLoading"
+                       class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200" />
+              </div>
+            </div>
 
-      <button type="submit" :disabled="isLoading" class="submit-button">
-        <span v-if="isLoading">{{ isLoadingText }}</span>
-        <span v-else>{{ isTwoFactorStep ? 'Verify Code' : 'Login' }}</span>
-      </button>
+            <div>
+              <label for="password" class="block text-sm font-medium text-gray-700">
+                Password
+              </label>
+              <div class="mt-1">
+                <input id="password" v-model="password" name="password" type="password" autocomplete="current-password" required
+                       :disabled="isLoading"
+                       class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200" />
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <p class="p-3 text-sm text-blue-700 bg-blue-100 rounded-md border border-blue-200 text-center">
+              A verification code has been sent to your authenticator app. Please enter it below.
+            </p>
+            <div>
+              <label for="twoFactorToken" class="block text-sm font-medium text-gray-700">
+                6-Digit Verification Code
+              </label>
+              <div class="mt-1">
+                <input id="twoFactorToken" v-model="twoFactorToken" name="twoFactorToken" type="text" required
+                       pattern="\d{6}" title="Enter a 6-digit code" :disabled="isLoading"
+                       class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200" />
+              </div>
+            </div>
+          </template>
 
-      <button type="button" v-if="isTwoFactorStep" @click="cancelTwoFactor" :disabled="isLoading" class="cancel-button">
-        Cancel / Try Password Again
-      </button>
-    </form>
-    <p v-if="!isTwoFactorStep">
-      Don't have an account? <NuxtLink to="/register">Register here</NuxtLink>
-    </p>
-    <p v-if="!isTwoFactorStep">
-      <NuxtLink to="/auth/request-password-reset-page">Forgot Password?</NuxtLink> <!-- Assuming such a page exists or will -->
-    </p>
+          <div v-if="errorMessage" class="p-3 text-sm text-red-700 bg-red-100 rounded-md border border-red-200 text-center">
+            {{ errorMessage }}
+          </div>
+
+          <div>
+            <button type="submit" :disabled="isLoading"
+                    class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed">
+              <span v-if="isLoading">{{ isLoadingText }}</span>
+              <span v-else>{{ isTwoFactorStep ? 'Verify Code' : 'Sign in' }}</span>
+            </button>
+          </div>
+
+          <div v-if="isTwoFactorStep">
+            <button type="button" @click="cancelTwoFactor" :disabled="isLoading"
+                    class="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed">
+              Cancel / Try Password Again
+            </button>
+          </div>
+        </form>
+
+        <div class="mt-6" v-if="!isTwoFactorStep">
+          <div class="relative">
+            <div class="absolute inset-0 flex items-center">
+              <div class="w-full border-t border-gray-300"></div>
+            </div>
+            <div class="relative flex justify-center text-sm">
+              <span class="px-2 bg-white text-gray-500">
+                Or
+              </span>
+            </div>
+          </div>
+
+          <div class="mt-6 text-center">
+            <p class="text-sm text-gray-600">
+              <NuxtLink to="/auth/request-password-reset-page" class="font-medium text-indigo-600 hover:text-indigo-500 hover:underline">
+                Forgot your password?
+              </NuxtLink>
+            </p>
+          </div>
+          <div class="mt-2 text-center">
+             <p class="text-sm text-gray-600">
+              Don't have an account?
+              <NuxtLink to="/register" class="font-medium text-indigo-600 hover:text-indigo-500 hover:underline">
+                Sign up
+              </NuxtLink>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue';
-import { useRouter, useRoute, useNuxtApp } from '#app';
+import { useRouter, useRoute, useNuxtApp, useHead } from '#app'; // Added useHead
 import { useAuth } from '~/composables/useAuth';
 
 const email = ref('');
@@ -146,94 +208,4 @@ useHead({
 });
 </script>
 
-<style scoped>
-.auth-page {
-  max-width: 400px;
-  margin: 2rem auto;
-  padding: 2rem;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  background-color: #f9f9f9;
-}
-h2 {
-  text-align: center;
-  margin-bottom: 1.5rem;
-  color: #333;
-}
-.auth-form .form-group {
-  margin-bottom: 1rem;
-}
-.auth-form label {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: #555;
-}
-.auth-form input[type="email"],
-.auth-form input[type="password"],
-.auth-form input[type="text"] { /* For 2FA token */
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  box-sizing: border-box;
-}
-.auth-form input:disabled {
-    background-color: #e9ecef;
-}
-.error-message {
-  color: red;
-  margin-bottom: 1rem;
-  text-align: center;
-  background-color: #ffe0e0;
-  padding: 0.5rem;
-  border-radius: 4px;
-}
-.info-message {
-  color: #0056b3;
-  background-color: #e7f3ff;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
-  text-align: center;
-  font-size: 0.9em;
-}
-.submit-button {
-  width: 100%;
-  padding: 0.75rem;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-  margin-bottom: 0.5rem; /* Space for cancel button */
-}
-.submit-button:disabled {
-  background-color: #aaa;
-}
-.submit-button:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-.cancel-button {
-  width: 100%;
-  padding: 0.6rem;
-  background-color: #6c757d;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
-}
-.cancel-button:disabled {
-    background-color: #aaa;
-}
-.cancel-button:hover:not(:disabled) {
-    background-color: #545b62;
-}
-p {
-  margin-top: 1rem;
-  text-align: center;
-  font-size: 0.9em;
-}
-</style>
+// No <style scoped> block needed with Tailwind CSS

@@ -2,8 +2,8 @@
   <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 min-h-[calc(100vh-theme(spacing.16))]">
     <h1 class="text-3xl sm:text-4xl font-bold text-text-primary mb-8 text-center">My Orders</h1>
 
-    <div v-if="isLoading" class="text-center py-10 text-lg text-text-secondary font-medium">
-      Loading your orders...
+    <div v-if="isLoading" class="space-y-4">
+      <OrderListItemSkeleton v-for="n in 4" :key="`order-skeleton-${n}`" />
     </div>
     <div v-else-if="fetchError" class="my-6 p-4 bg-red-100 text-red-700 border border-red-200 rounded-lg shadow text-sm text-center">
       <p>Could not load your orders: {{ fetchError }}</p>
@@ -66,7 +66,8 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import { useAuth } from '~/composables/useAuth';
-import { navigateTo, useNuxtApp, useRoute, useRouter } from '#app';
+import { navigateTo, useNuxtApp, useRoute, useRouter, useHead } from '#app'; // Added useHead
+import OrderListItemSkeleton from '~/components/OrderListItemSkeleton.vue'; // Import skeleton
 
 definePageMeta({
   layout: 'default',
