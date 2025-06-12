@@ -82,7 +82,7 @@ This document consolidates future enhancements and pending tasks for the platfor
   - Page to manage global option types (`/admin/options/index.vue`). *(DONE)*
   - Page to manage global values for an option type (`/admin/options/[optionId]/values.vue`). *(DONE)*
 - **Product-Specific Variant UI (likely within product edit page `/admin/products/edit/[id].vue` or a dedicated sub-page):**
-  - Assign global options to a specific product.
+  - [X] Assign global options to a specific product (UI implemented in ProductOptionsManager on product edit page).
   - Specify which global option values are applicable for that product's assigned options.
   - Create/edit/delete variants based on combinations of these values (setting SKU, price modifier, stock, image).
 
