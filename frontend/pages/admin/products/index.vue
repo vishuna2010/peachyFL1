@@ -1,90 +1,131 @@
 <template>
-  <div class="admin-products-page">
-    <h2>Product Management (Admin)</h2>
-
-    <div class="actions-bar">
-      <NuxtLink to="/admin/products/new" class="create-new-button">Create New Product</NuxtLink>
+  <div class="p-4 sm:p-6 lg:p-8">
+    <div class="sm:flex sm:items-center sm:justify-between mb-6">
+      <h1 class="text-2xl font-semibold text-gray-800">Product Management</h1>
+      <NuxtLink
+        to="/admin/products/new"
+        class="mt-3 sm:mt-0 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+      >
+        Create New Product
+      </NuxtLink>
     </div>
 
-     <div v-if="actionMessage" class="action-message" :class="{ 'success': !actionError, 'error': actionError }">
+    <div
+      v-if="actionMessage"
+      :class="[
+        'p-3 mb-4 text-sm rounded-md border',
+        actionError ? 'text-red-700 bg-red-100 border-red-200' : 'text-green-700 bg-green-100 border-green-200'
+      ]"
+      role="alert"
+    >
       {{ actionMessage }}
     </div>
 
-    <!-- Basic Filters (can be expanded) -->
-    <div class="filters-container">
-      <input type="text" v-model="searchTerm" placeholder="Search products..." @keyup.enter="applyFilters" class="filter-input search-input" />
-      <button @click="applyFilters" class="apply-filters-button">Search</button>
-      <button @click="resetFilters" class="reset-filters-button">Clear Search</button>
+    <!-- Filters -->
+    <div class="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <input
+          type="text"
+          v-model="searchTerm"
+          placeholder="Search products (name, SKU)..."
+          @keyup.enter="applyFilters"
+          class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+        />
+        <!-- Add other filters like category, stock status, etc. here if needed -->
+        <div class="col-span-1 sm:col-span-2 md:col-span-4 flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
+           <button
+            @click="applyFilters"
+            class="w-full sm:w-auto inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            Search
+          </button>
+          <button
+            @click="resetFilters"
+            class="w-full sm:w-auto inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            Clear Search
+          </button>
+        </div>
+      </div>
     </div>
 
-    <div v-if="isLoading" class="loading-state">Loading products...</div>
-    <div v-if="fetchError" class="error-message">
+    <div v-if="isLoading" class="text-center py-10 text-lg text-gray-500">
+      Loading products...
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mt-4"></div>
+    </div>
+    <div v-else-if="fetchError" class="my-6 p-4 bg-red-100 text-red-700 border border-red-200 rounded-lg shadow text-sm text-center">
       Error fetching products: {{ fetchError.message || fetchError }}
     </div>
 
-    <table v-if="products.length > 0 && !isLoading" class="products-table">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Image</th>
-          <th>Name</th>
-          <th>SKU</th>
-          <th>Price</th>
-          <th>Stock</th>
-          <th>Reorder At</th>
-          <th>Category</th>
-          <th>Supplier</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="product in products" :key="product.id">
-          <td>{{ product.id }}</td>
-          <td>
-            <img
-              v-if="product.image_url"
-              :src="product.image_url"
-              :alt="product.name"
-              class="product-thumbnail"
-            />
-            <div v-else class="product-thumbnail-placeholder">N/A</div>
-          </td>
-          <td><strong>{{ product.name }}</strong></td>
-          <td>{{ product.sku || 'N/A' }}</td>
-          <td>${{ parseFloat(product.price).toFixed(2) }}</td>
-          <td>{{ product.stock_quantity }}</td>
-          <td>{{ product.reorder_threshold !== null ? product.reorder_threshold : 'N/A' }}</td>
-          <td>{{ product.category_name || 'N/A' }}</td>
-          <td>{{ product.supplier_name || 'N/A' }}</td>
-          <td class="actions-cell">
-            <NuxtLink :to="`/admin/products/edit/${product.id}`" class="action-link edit-link">Edit</NuxtLink>
-            <button @click="confirmDeleteProduct(product)" class="action-link delete-button" :disabled="deletingId === product.id">
-              {{ deletingId === product.id ? 'Deleting...' : 'Delete' }}
-            </button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="pagination-controls" v-if="pagination.total_pages > 1 && !isLoading">
-        <button @click="changePage(pagination.current_page - 1)" :disabled="pagination.current_page === 1 || isLoading">
-          Previous
-        </button>
-        <span>Page {{ pagination.current_page }} of {{ pagination.total_pages }} (Total: {{ pagination.total_products }})</span>
-        <button @click="changePage(pagination.current_page + 1)" :disabled="pagination.current_page === pagination.total_pages || isLoading">
-          Next
-        </button>
+    <div v-else-if="products.length === 0" class="my-6 p-8 bg-gray-50 text-gray-500 rounded-lg shadow text-center">
+      <p class="text-xl mb-2">No products found.</p>
+      <p class="text-sm">
+        Try adjusting your search terms or
+        <NuxtLink to="/admin/products/new" class="font-medium text-indigo-600 hover:text-indigo-500 hover:underline">create a new product</NuxtLink>.
+      </p>
     </div>
 
-    <div v-if="products.length === 0 && !isLoading && !fetchError" class="empty-state">
-      <p>No products found. <NuxtLink to="/admin/products/new">Create one now!</NuxtLink></p>
+    <div v-else class="bg-white shadow-md rounded-lg border border-gray-200 overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supplier</th>
+            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <tr v-for="product in products" :key="product.id" class="hover:bg-gray-50 transition-colors duration-150">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <img
+                v-if="product.image_url"
+                :src="product.image_url"
+                :alt="product.name"
+                class="w-12 h-12 object-cover rounded border border-gray-200"
+              />
+              <div v-else class="w-12 h-12 flex items-center justify-center bg-gray-100 text-gray-400 text-xs rounded border border-gray-200">N/A</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ product.name }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.sku || 'N/A' }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${{ parseFloat(product.price).toFixed(2) }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.stock_quantity }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.category_name || 'N/A' }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.supplier_name || 'N/A' }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+              <NuxtLink :to="`/admin/products/edit/${product.id}`" class="text-indigo-600 hover:text-indigo-900 hover:underline">Edit</NuxtLink>
+              <button @click="confirmDeleteProduct(product)" class="text-red-600 hover:text-red-800 hover:underline disabled:opacity-50" :disabled="deletingId === product.id">
+                {{ deletingId === product.id ? 'Deleting...' : 'Delete' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-6 flex justify-center items-center space-x-3" v-if="!isLoading && !fetchError && products.length > 0 && pagination.total_pages > 1">
+        <button @click="changePage(pagination.current_page - 1)" :disabled="pagination.current_page <= 1"
+                class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+          Previous
+        </button>
+        <span class="text-sm text-gray-700">
+          Page {{ pagination.current_page }} of {{ pagination.total_pages }}
+        </span>
+        <button @click="changePage(pagination.current_page + 1)" :disabled="pagination.current_page >= pagination.total_pages"
+                class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+          Next
+        </button>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import { useNuxtApp, useRoute, useRouter } from '#app';
+import { useNuxtApp, useRoute, useRouter, definePageMeta, useHead } from '#app'; // Added definePageMeta, useHead
 
 definePageMeta({
   layout: 'admin',
@@ -222,42 +263,4 @@ useHead({
 });
 </script>
 
-<style scoped>
-.admin-products-page { padding: 1rem; }
-h2 { margin-bottom: 1.5rem; }
-.actions-bar { margin-bottom: 1rem; display: flex; justify-content: flex-end; }
-.create-new-button { padding: 0.6rem 1.2rem; background-color: #28a745; color: white; text-decoration: none; border-radius: 4px; font-size: 0.9em; }
-.create-new-button:hover { background-color: #218838; }
-
-.filters-container { display: flex; gap: 1rem; margin-bottom: 1rem; padding: 0.75rem; background-color: #f8f9fa; border-radius: 4px;}
-.filter-input { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
-.search-input { flex-grow: 1; }
-.apply-filters-button, .reset-filters-button { padding: 0.5rem 1rem; border: none; border-radius: 4px; color: white; cursor: pointer; }
-.apply-filters-button { background-color: #007bff; }
-.apply-filters-button:hover { background-color: #0056b3; }
-.reset-filters-button { background-color: #6c757d; }
-.reset-filters-button:hover { background-color: #545b62; }
-
-.loading-state, .error-message, .empty-state, .action-message { text-align: center; padding: 1rem; border-radius: 4px; margin-top: 1rem; }
-.loading-state { background-color: #eef; }
-.error-message, .action-message.error { background-color: #fdd; color: #900; }
-.action-message.success { background-color: #dfd; color: #070; }
-
-.products-table { width: 100%; border-collapse: collapse; margin-top: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); font-size: 0.85em; }
-.products-table th, .products-table td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; vertical-align: middle; }
-.products-table th { background-color: #f2f2f2; }
-.product-thumbnail, .product-thumbnail-placeholder { width: 50px; height: 50px; object-fit: cover; border-radius: 3px; background-color: #eee; }
-.product-thumbnail-placeholder { display:flex; align-items:center; justify-content:center; font-size:0.8em; color:#aaa; }
-.actions-cell { white-space: nowrap; }
-.action-link { padding: 0.3rem 0.6rem; border-radius: 4px; text-decoration: none; margin-right: 0.4rem; font-size: 0.9em; }
-.edit-link { background-color: #ffc107; color: #333; }
-.edit-link:hover { background-color: #e0a800; }
-.delete-button { background-color: #dc3545; color: white; border: none; cursor: pointer; }
-.delete-button:hover:not(:disabled) { background-color: #c82333; }
-.delete-button:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.pagination-controls { margin-top: 1.5rem; text-align: center; }
-.pagination-controls button { padding: 0.5rem 1rem; margin: 0 0.5rem; border: 1px solid #ccc; background-color: #f8f9fa; border-radius: 4px; cursor: pointer; }
-.pagination-controls button:disabled { cursor: not-allowed; opacity: 0.6; }
-.pagination-controls span { margin: 0 0.5rem; }
-</style>
+// Removed <style scoped> block
