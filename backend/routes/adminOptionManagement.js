@@ -1,207 +1,301 @@
 const express = require('express');
-const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
+const { body, param, validationResult } = require('express-validator');
+const { BadRequestError, NotFoundError, ConflictError } = require('../utils/AppError');
 
-// Apply auth middleware to all routes in this router
-router.use(isAuthenticated, isAdmin);
+// Router for /api/admin/options
+const optionsRouter = express.Router();
+optionsRouter.use(isAuthenticated, isAdmin); // Protect all routes on this router
 
-// --- Product Option Management ---
+// Router for /api/admin/option-values
+const optionValuesRouter = express.Router();
+optionValuesRouter.use(isAuthenticated, isAdmin); // Protect all routes on this router
 
-// PUT /api/admin/product-options/:optionId - Update an option's name
-router.put('/product-options/:optionId', async (req, res) => {
-  const { optionId } = req.params;
-  const { name } = req.body;
 
-  if (isNaN(parseInt(optionId))) {
-    return res.status(400).json({ message: 'Invalid option ID.' });
+// === Product Options (Global Types like "Color", "Size") ===
+
+// POST /api/admin/options - Create a new global option type
+optionsRouter.post(
+  '/',
+  [
+    body('name').isString().trim().notEmpty().withMessage('Option name is required.')
+      .isLength({ min: 2, max: 255 }).withMessage('Option name must be between 2 and 255 characters.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { name } = req.body;
+    try {
+      const result = await db.query(
+        'INSERT INTO product_options (name) VALUES ($1) RETURNING *',
+        [name]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      if (error.code === '23505' && error.constraint === 'product_options_name_key') {
+        return next(new ConflictError(`An option type with the name "${name}" already exists.`));
+      }
+      next(error);
+    }
   }
-  if (!name || typeof name !== 'string' || name.trim() === '') {
-    return res.status(400).json({ message: 'Option name is required.' });
-  }
+);
 
-  const client = await db.pool.connect();
+// GET /api/admin/options - List all global option types
+optionsRouter.get('/', async (req, res, next) => {
   try {
-    // Fetch the option to get its product_id for unique name check scope
-    const currentOptionResult = await client.query('SELECT product_id FROM product_options WHERE id = $1', [optionId]);
-    if (currentOptionResult.rows.length === 0) {
-      return res.status(404).json({ message: `Product option with ID ${optionId} not found.` });
-    }
-    const { product_id } = currentOptionResult.rows[0];
-
-    const updateQuery = `
-      UPDATE product_options
-      SET name = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2 AND product_id = $3
-      RETURNING *;
-    `;
-    const result = await client.query(updateQuery, [name.trim(), optionId, product_id]);
-
-    if (result.rows.length === 0) { // Should not happen if previous check passed, but as safeguard
-        return res.status(404).json({ message: `Product option with ID ${optionId} not found or update failed.` });
-    }
-    res.status(200).json(result.rows[0]);
+    // Consider pagination if the list grows very large in a real application
+    const result = await db.query('SELECT * FROM product_options ORDER BY name ASC');
+    res.json(result.rows);
   } catch (error) {
-    if (error.code === '23505' && error.constraint === 'uk_product_option_name') {
-      return res.status(409).json({ message: `Option name "${name.trim()}" already exists for this product.` });
-    }
-    console.error(`Error updating product option ${optionId}:`, error);
-    res.status(500).json({ message: 'Failed to update product option.' });
-  } finally {
-    client.release();
+    next(error);
   }
 });
 
-// DELETE /api/admin/product-options/:optionId - Delete an option
-router.delete('/product-options/:optionId', async (req, res) => {
-  const { optionId } = req.params;
-  if (isNaN(parseInt(optionId))) {
-    return res.status(400).json({ message: 'Invalid option ID.' });
-  }
-  try {
-    // CASCADE on product_option_id in product_option_values will delete associated values.
-    // CASCADE on product_option_value_id in product_variant_option_values will delete links to variants.
-    const result = await db.query('DELETE FROM product_options WHERE id = $1 RETURNING *;', [optionId]);
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: `Product option with ID ${optionId} not found.` });
+// GET /api/admin/options/:optionId - Get a specific global option type
+optionsRouter.get(
+  '/:optionId',
+  [
+    param('optionId').isInt({ gt: 0 }).withMessage('Option ID must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    res.status(200).json({ message: 'Product option and its values deleted successfully.', deletedOption: result.rows[0] });
-  } catch (error) {
-    console.error(`Error deleting product option ${optionId}:`, error);
-    res.status(500).json({ message: 'Failed to delete product option.' });
-  }
-});
-
-
-// --- Product Option Value Management ---
-
-// POST /api/admin/product-options/:optionId/values - Create a new value for an option
-router.post('/product-options/:optionId/values', async (req, res) => {
-  const { optionId } = req.params;
-  const { value } = req.body;
-
-  if (isNaN(parseInt(optionId))) {
-    return res.status(400).json({ message: 'Invalid option ID.' });
-  }
-  if (!value || typeof value !== 'string' || value.trim() === '') {
-    return res.status(400).json({ message: 'Option value is required.' });
-  }
-
-  const client = await db.pool.connect();
-  try {
-    // Check if product_option exists
-    const optionCheck = await client.query('SELECT id FROM product_options WHERE id = $1', [optionId]);
-    if (optionCheck.rows.length === 0) {
-      return res.status(404).json({ message: `Product option with ID ${optionId} not found.` });
+    const { optionId } = req.params;
+    try {
+      const result = await db.query('SELECT * FROM product_options WHERE id = $1', [optionId]);
+      if (result.rows.length === 0) {
+        return next(new NotFoundError(`Option type with ID ${optionId} not found.`));
+      }
+      res.json(result.rows[0]);
+    } catch (error) {
+      next(error);
     }
+  }
+);
 
-    const insertQuery = `
-      INSERT INTO product_option_values (product_option_id, value, updated_at)
-      VALUES ($1, $2, CURRENT_TIMESTAMP)
-      RETURNING *;
-    `;
-    const result = await client.query(insertQuery, [optionId, value.trim()]);
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    if (error.code === '23505' && error.constraint === 'uk_option_value') {
-      return res.status(409).json({ message: `Value "${value.trim()}" already exists for this option.` });
+// PUT /api/admin/options/:optionId - Update a global option type's name
+optionsRouter.put(
+  '/:optionId',
+  [
+    param('optionId').isInt({ gt: 0 }).withMessage('Option ID must be a positive integer.'),
+    body('name').isString().trim().notEmpty().withMessage('Option name is required.')
+      .isLength({ min: 2, max: 255 }).withMessage('Option name must be between 2 and 255 characters.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    console.error(`Error creating value for option ${optionId}:`, error);
-    res.status(500).json({ message: 'Failed to create option value.' });
-  } finally {
-    client.release();
-  }
-});
-
-// GET /api/admin/product-options/:optionId/values - List values for a specific option
-router.get('/product-options/:optionId/values', async (req, res) => {
-  const { optionId } = req.params;
-  if (isNaN(parseInt(optionId))) {
-    return res.status(400).json({ message: 'Invalid option ID.' });
-  }
-  try {
-    // Check if product_option exists
-    const optionCheck = await db.query('SELECT id FROM product_options WHERE id = $1', [optionId]);
-    if (optionCheck.rows.length === 0) {
-      return res.status(404).json({ message: `Product option with ID ${optionId} not found.` });
+    const { optionId } = req.params;
+    const { name } = req.body;
+    try {
+      const result = await db.query(
+        'UPDATE product_options SET name = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+        [name, optionId]
+      );
+      if (result.rows.length === 0) {
+        return next(new NotFoundError(`Option type with ID ${optionId} not found.`));
+      }
+      res.json(result.rows[0]);
+    } catch (error) {
+      if (error.code === '23505' && error.constraint === 'product_options_name_key') {
+        return next(new ConflictError(`An option type with the name "${name}" already exists.`));
+      }
+      next(error);
     }
-
-    const result = await db.query('SELECT * FROM product_option_values WHERE product_option_id = $1 ORDER BY value ASC', [optionId]);
-    res.status(200).json(result.rows);
-  } catch (error) {
-    console.error(`Error fetching values for option ${optionId}:`, error);
-    res.status(500).json({ message: 'Failed to retrieve option values.' });
   }
-});
+);
 
-// PUT /api/admin/product-option-values/:valueId - Update an option value's string
-router.put('/product-option-values/:valueId', async (req, res) => {
-  const { valueId } = req.params;
-  const { value } = req.body;
-
-  if (isNaN(parseInt(valueId))) {
-    return res.status(400).json({ message: 'Invalid option value ID.' });
-  }
-  if (!value || typeof value !== 'string' || value.trim() === '') {
-    return res.status(400).json({ message: 'New value is required.' });
-  }
-
-  const client = await db.pool.connect();
-  try {
-    // Fetch the option value to get its product_option_id for unique name check scope
-    const currentValueResult = await client.query('SELECT product_option_id FROM product_option_values WHERE id = $1', [valueId]);
-    if (currentValueResult.rows.length === 0) {
-      return res.status(404).json({ message: `Product option value with ID ${valueId} not found.` });
+// DELETE /api/admin/options/:optionId - Delete a global option type
+optionsRouter.delete(
+  '/:optionId',
+  [
+    param('optionId').isInt({ gt: 0 }).withMessage('Option ID must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    const { product_option_id } = currentValueResult.rows[0];
-
-
-    const updateQuery = `
-      UPDATE product_option_values
-      SET value = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2 AND product_option_id = $3
-      RETURNING *;
-    `;
-    const result = await client.query(updateQuery, [value.trim(), valueId, product_option_id]);
-
-    if (result.rows.length === 0) { // Should not happen if previous check passed
-        return res.status(404).json({ message: `Product option value with ID ${valueId} not found or update failed.` });
+    const { optionId } = req.params;
+    try {
+      const valueCountResult = await db.query('SELECT COUNT(*) FROM product_option_values WHERE product_option_id = $1', [optionId]);
+      const valueCount = parseInt(valueCountResult.rows[0].count, 10);
+      if (valueCount > 0) {
+        return next(new BadRequestError(`Option type has ${valueCount} associated value(s). Please delete them first or reassign.`));
+      }
+      const result = await db.query('DELETE FROM product_options WHERE id = $1 RETURNING id', [optionId]);
+      if (result.rowCount === 0) {
+        return next(new NotFoundError(`Option type with ID ${optionId} not found.`));
+      }
+      res.status(204).send();
+    } catch (error) {
+      next(error);
     }
-    res.status(200).json(result.rows[0]);
-  } catch (error) {
-    if (error.code === '23505' && error.constraint === 'uk_option_value') {
-      return res.status(409).json({ message: `Value "${value.trim()}" already exists for this option.` });
-    }
-    console.error(`Error updating option value ${valueId}:`, error);
-    res.status(500).json({ message: 'Failed to update option value.' });
-  } finally {
-    client.release();
   }
-});
+);
 
-// DELETE /api/admin/product-option-values/:valueId - Delete an option value
-router.delete('/product-option-values/:valueId', async (req, res) => {
-  const { valueId } = req.params;
-  if (isNaN(parseInt(valueId))) {
-    return res.status(400).json({ message: 'Invalid option value ID.' });
-  }
-  try {
-    // CASCADE on product_option_value_id in product_variant_option_values will delete links to variants.
-    const result = await db.query('DELETE FROM product_option_values WHERE id = $1 RETURNING *;', [valueId]);
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: `Product option value with ID ${valueId} not found.` });
+
+// === Product Option Values (Values like "Red", "Small" for a given Option Type) ===
+
+// POST /api/admin/options/:optionId/values - Create a new value for a specific global option type
+optionsRouter.post(
+  '/:optionId/values',
+  [
+    param('optionId').isInt({ gt: 0 }).withMessage('Option ID must be a positive integer.'),
+    body('value').isString().trim().notEmpty().withMessage('Option value is required.')
+      .isLength({ min: 1, max: 255 }).withMessage('Option value must be between 1 and 255 characters.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    res.status(200).json({ message: 'Product option value deleted successfully.', deletedValue: result.rows[0] });
-  } catch (error) {
-    console.error(`Error deleting option value ${valueId}:`, error);
-    // Check for foreign key violation if a variant still uses it (though CASCADE should handle)
-    // This might occur if a product_variant_option_values entry was somehow orphaned or constraint issue.
-    if (error.code === '23503') {
-        return res.status(409).json({ message: 'Cannot delete option value: It is currently in use by product variants.' });
+    const { optionId } = req.params;
+    const { value } = req.body;
+    try {
+      const optionType = await db.query('SELECT id FROM product_options WHERE id = $1', [optionId]);
+      if (optionType.rows.length === 0) {
+        return next(new NotFoundError(`Option type with ID ${optionId} not found.`));
+      }
+      const result = await db.query(
+        'INSERT INTO product_option_values (product_option_id, value) VALUES ($1, $2) RETURNING *',
+        [optionId, value]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      if (error.code === '23505' && error.constraint === 'uk_option_value') {
+        return next(new ConflictError(`The value "${value}" already exists for this option type.`));
+      }
+      next(error);
     }
-    res.status(500).json({ message: 'Failed to delete option value.' });
   }
-});
+);
+
+// GET /api/admin/options/:optionId/values - List all global values for a specific option type
+optionsRouter.get(
+  '/:optionId/values',
+  [
+    param('optionId').isInt({ gt: 0 }).withMessage('Option ID must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { optionId } = req.params;
+    try {
+      const optionType = await db.query('SELECT id FROM product_options WHERE id = $1', [optionId]);
+      if (optionType.rows.length === 0) {
+        return next(new NotFoundError(`Option type with ID ${optionId} not found.`));
+      }
+      const result = await db.query('SELECT * FROM product_option_values WHERE product_option_id = $1 ORDER BY value ASC', [optionId]);
+      res.json(result.rows);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 
-module.exports = router;
+// === Standalone Option Value Management via /api/admin/option-values ===
+
+// GET /api/admin/option-values/:valueId - Get a specific global option value
+optionValuesRouter.get(
+  '/:valueId',
+  [
+    param('valueId').isInt({ gt: 0 }).withMessage('Value ID must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { valueId } = req.params;
+    try {
+      const result = await db.query('SELECT * FROM product_option_values WHERE id = $1', [valueId]);
+      if (result.rows.length === 0) {
+        return next(new NotFoundError(`Option value with ID ${valueId} not found.`));
+      }
+      res.json(result.rows[0]);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// PUT /api/admin/option-values/:valueId - Update a global option value
+optionValuesRouter.put(
+  '/:valueId',
+  [
+    param('valueId').isInt({ gt: 0 }).withMessage('Value ID must be a positive integer.'),
+    body('value').isString().trim().notEmpty().withMessage('Option value is required.')
+      .isLength({ min: 1, max: 255 }).withMessage('Option value must be between 1 and 255 characters.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { valueId } = req.params;
+    const { value } = req.body;
+    try {
+      const currentValueData = await db.query('SELECT product_option_id FROM product_option_values WHERE id = $1', [valueId]);
+      if(currentValueData.rows.length === 0) {
+        return next(new NotFoundError(`Option value with ID ${valueId} not found.`));
+      }
+      // product_option_id is not changed here, only the value string.
+      // The unique constraint `uk_option_value` is on (product_option_id, value).
+      const result = await db.query(
+        'UPDATE product_option_values SET value = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+        [value, valueId]
+      );
+      res.json(result.rows[0]);
+    } catch (error) {
+      if (error.code === '23505' && error.constraint === 'uk_option_value') {
+         // Need to fetch product_option_id if we want to include it in the message for context
+        return next(new ConflictError(`The value "${value}" already exists for the parent option type.`));
+      }
+      next(error);
+    }
+  }
+);
+
+// DELETE /api/admin/option-values/:valueId - Delete a specific global option value
+optionValuesRouter.delete(
+  '/:valueId',
+  [
+    param('valueId').isInt({ gt: 0 }).withMessage('Value ID must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { valueId } = req.params;
+    try {
+      const usageResult = await db.query('SELECT COUNT(*) FROM product_variant_option_values WHERE product_option_value_id = $1', [valueId]);
+      const usageCount = parseInt(usageResult.rows[0].count, 10);
+      if (usageCount > 0) {
+        return next(new BadRequestError(`Option value is in use by ${usageCount} product variant(s) and cannot be deleted.`));
+      }
+      const result = await db.query('DELETE FROM product_option_values WHERE id = $1 RETURNING id', [valueId]);
+      if (result.rowCount === 0) {
+        return next(new NotFoundError(`Option value with ID ${valueId} not found.`));
+      }
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+module.exports = {
+  optionsRouter,      // To be mounted at /api/admin/options
+  optionValuesRouter  // To be mounted at /api/admin/option-values
+};

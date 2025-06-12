@@ -13,12 +13,13 @@ const adminDiscountRoutes = require('./routes/adminDiscounts'); // Import admin 
 const adminSupplierRoutes = require('./routes/adminSuppliers'); // Import admin supplier routes
 const adminPurchaseOrderRoutes = require('./routes/adminPurchaseOrders'); // Import admin PO routes
 const adminReportRoutes = require('./routes/adminReports'); // Import admin report routes
-const adminProductSpecificOptionsRoutes = require('./routes/adminProductSpecificOptions'); // Import product-specific option routes
-const adminOptionManagementRoutes = require('./routes/adminOptionManagement'); // Import general option/value management routes
-const adminProductVariantsRoutes = require('./routes/adminProductVariants.js'); // For product-scoped variant actions
-const adminVariantDetailRoutes = require('./routes/adminVariantDetails.js');   // For variant-specific GET/PUT/DELETE by variant ID
+const adminProductSpecificOptionsRoutes = require('./routes/adminProductSpecificOptions'); // Import product-specific option config routes
+const adminOptionManagementRoutes = require('./routes/adminOptionManagement'); // Import admin option management routes
+const adminProductVariantsRoutes = require('./routes/adminProductVariants.js'); // Import admin product variants routes
+const adminVariantDetailRoutes = require('./routes/adminVariantDetails.js');   // For variant-specific GET/PUT/DELETE by variant ID - Note: adminProductVariantsRoutes now includes /variants/:variantId
 const adminCategoryRoutes = require('./routes/adminCategories'); // Import admin category routes
 const adminStatsRoutes = require('./routes/adminStats'); // Import admin statistics routes
+// Duplicate imports for adminOptionManagementRoutes and adminProductSpecificOptionsRoutes were removed by only keeping the first ones.
 const userRoutes = require('./routes/users'); // Import user profile routes
 const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
@@ -54,6 +55,13 @@ app.use('/api/products', productRoutes); // Mount product routes under /api/prod
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/categories', adminCategoryRoutes); // Mount admin category routes
 app.use('/api/admin/stats', adminStatsRoutes); // Mount admin statistics routes
+app.use('/api/admin/options', adminOptionManagementRoutes.optionsRouter); // Mount global options API
+app.use('/api/admin/option-values', adminOptionManagementRoutes.optionValuesRouter); // Mount global option values API
+app.use('/api/admin', adminProductSpecificOptionsRoutes); // Mount product-specific option config routes
+app.use('/api/admin', adminProductVariantsRoutes); // Mount product variants routes (e.g., /products/:productId/variants and /variants/:variantId)
+// Consider if adminVariantDetailRoutes is still needed or if its functionality is covered by adminProductVariantsRoutes. For now, keeping it if it serves other specific details.
+app.use('/api/admin', adminVariantDetailRoutes); // If it has distinct routes like /variant-details/:id for other purposes.
+
 // Mount order management specific admin routes
 // Note: adminOrderRoutes might contain routes starting with just '/orders', '/products' etc.
 // Ensure its routes are specific enough or consider prefixing them within adminOrders.js if they are too generic.
