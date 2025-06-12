@@ -90,30 +90,43 @@
               </span>
             </label>
             <div class="flex flex-wrap gap-2">
-              <button
-                v-for="value_obj in option_type.values"
-                :key="value_obj.value_id"
-                @click="selectOption(option_type.option_id, value_obj.value_id)"
-                type="button"
-                :class="[
-                  'px-3 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 transition-colors duration-150',
-                  selectedOptions[option_type.option_id] === value_obj.value_id
-                    ? 'bg-indigo-600 text-white border-indigo-600 ring-indigo-500'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
-                ]"
-              >
-                <span v-if="option_type.option_name.toLowerCase() === 'color'" class="flex items-center">
+              <template v-for="value_obj in option_type.values" :key="value_obj.value_id">
+                <!-- Color Swatch Button -->
+                <button
+                  v-if="isColorOption(option_type.option_name)"
+                  type="button"
+                  @click="selectOption(option_type.option_id, value_obj.value_id)"
+                  :class="[
+                    'p-1.5 border rounded-lg flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-150',
+                    selectedOptions[option_type.option_id] === value_obj.value_id
+                      ? 'border-indigo-600 ring-2 ring-indigo-400 shadow-md'
+                      : 'border-gray-300 hover:border-gray-400 hover:shadow-sm'
+                  ]"
+                  :aria-pressed="selectedOptions[option_type.option_id] === value_obj.value_id"
+                >
                   <span
-                    class="w-4 h-4 rounded-full inline-block mr-2 border border-gray-400"
+                    class="w-6 h-6 rounded-md border border-gray-400 inline-block"
                     :style="{ backgroundColor: value_obj.value_name.toLowerCase() }"
-                    :title="value_obj.value_name"
+                    :title="`Select ${option_type.option_name}: ${value_obj.value_name}`"
                   ></span>
+                  <span class="text-sm text-gray-700 pr-1">{{ value_obj.value_name }}</span>
+                </button>
+                <!-- Default Button for other options -->
+                <button
+                  v-else
+                  type="button"
+                  @click="selectOption(option_type.option_id, value_obj.value_id)"
+                  :class="[
+                    'px-3 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 transition-colors duration-150',
+                    selectedOptions[option_type.option_id] === value_obj.value_id
+                      ? 'bg-indigo-600 text-white border-indigo-600 ring-indigo-500'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                  ]"
+                  :aria-pressed="selectedOptions[option_type.option_id] === value_obj.value_id"
+                >
                   {{ value_obj.value_name }}
-                </span>
-                <span v-else>
-                  {{ value_obj.value_name }}
-                </span>
-              </button>
+                </button>
+              </template>
             </div>
           </div>
         </div>
@@ -396,6 +409,10 @@ const stockStatusMessage = computed(() => {
 // stockStatusClass computed property remains the same
 
 // --- Functions ---
+
+const isColorOption = (optionName) => {
+  return optionName.toLowerCase() === 'color';
+};
 
 // Helper to get selected value name for display next to option label
 const getSelectedValueName = (optionType, selectedValueId) => {
