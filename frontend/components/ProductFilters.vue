@@ -35,6 +35,37 @@
         </select>
       </div>
 
+      <!-- Color Swatch Filter -->
+      <div v-if="isLoadingOptions">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Color</label>
+        <div class="h-8 bg-gray-200 rounded w-full animate-pulse"></div>
+      </div>
+      <div v-else-if="colorOption && colorOptionValues.length > 0">
+        <label class="block text-sm font-medium text-gray-700 mb-1">{{ colorOption.name }}</label>
+        <div class="flex flex-wrap gap-2 mt-1">
+          <button
+            v-for="colorValObj in colorOptionValues"
+            :key="colorValObj.id"
+            type="button"
+            @click="selectColor(colorValObj.id)"
+            :class="[
+              'p-1.5 border rounded-lg flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-150',
+              localSelectedColorValueId === colorValObj.id
+                ? 'border-indigo-600 ring-2 ring-indigo-400 shadow-md'
+                : 'border-gray-300 hover:border-gray-400 hover:shadow-sm'
+            ]"
+            :aria-pressed="localSelectedColorValueId === colorValObj.id"
+          >
+            <span
+              class="w-5 h-5 sm:w-6 sm:h-6 rounded-md border border-gray-400 inline-block"
+              :style="{ backgroundColor: colorValObj.value.toLowerCase() }"
+              :title="`Select ${colorOption.name}: ${colorValObj.value}`"
+            ></span>
+            <span class="text-sm text-gray-700 pr-1">{{ colorValObj.value }}</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Price Range -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Price Range</label>
@@ -129,6 +160,10 @@ const props = defineProps({
     type: String,
     default: 'created_at_desc'
   },
+  initialSelectedColorValueId: { // New prop for pre-selecting a color
+    type: [String, Number],
+    default: null
+  },
   isMobile: {
     type: Boolean,
     default: false
@@ -142,21 +177,67 @@ const localSearchTerm = ref(props.initialSearchTerm);
 const localMinPrice = ref(props.initialMinPrice);
 const localMaxPrice = ref(props.initialMaxPrice);
 const localSortBy = ref(props.initialSortBy);
+const localSelectedColorValueId = ref(props.initialSelectedColorValueId);
 
-watch(() => props.initialSelectedCategoryId, (newVal) => {
-  localSelectedCategoryId.value = newVal;
-});
-watch(() => props.initialSearchTerm, (newVal) => {
-  localSearchTerm.value = newVal;
-});
-watch(() => props.initialMinPrice, (newVal) => {
-  localMinPrice.value = newVal;
-});
-watch(() => props.initialMaxPrice, (newVal) => {
-  localMaxPrice.value = newVal;
-});
-watch(() => props.initialSortBy, (newVal) => {
-  localSortBy.value = newVal;
+// New state for fetching global color options
+const allGlobalOptions = ref([]); // Not strictly needed if only fetching "Color"
+const colorOption = ref(null); // Stores the {id, name} of the "Color" global option
+const colorOptionValues = ref([]); // Stores values for the "Color" option
+const isLoadingOptions = ref(false);
+const optionsFetchError = ref(null);
+
+const { $axios } = useNuxtApp(); // Get $axios instance
+
+watch(() => props.initialSelectedCategoryId, (newVal) => { localSelectedCategoryId.value = newVal; });
+watch(() => props.initialSearchTerm, (newVal) => { localSearchTerm.value = newVal; });
+watch(() => props.initialMinPrice, (newVal) => { localMinPrice.value = newVal; });
+watch(() => props.initialMaxPrice, (newVal) => { localMaxPrice.value = newVal; });
+watch(() => props.initialSortBy, (newVal) => { localSortBy.value = newVal; });
+watch(() => props.initialSelectedColorValueId, (newVal) => { localSelectedColorValueId.value = newVal; });
+
+const selectColor = (valueId) => {
+  if (localSelectedColorValueId.value === valueId) {
+    localSelectedColorValueId.value = null; // Toggle off
+  } else {
+    localSelectedColorValueId.value = valueId;
+  }
+  // Note: Applying filters immediately on color click might be an option too,
+  // but current design uses a main "Apply Filters" button.
+};
+
+async function fetchGlobalOptionsAndColorValues() {
+  isLoadingOptions.value = true;
+  optionsFetchError.value = null;
+  try {
+    // Fetch all global option types
+    const optionsResponse = await $axios.get('/api/admin/options'); // Assuming admin endpoint lists all global options
+    allGlobalOptions.value = optionsResponse.data;
+
+    // Find the "Color" option
+    const foundColorOption = allGlobalOptions.value.find(
+      opt => opt.name.toLowerCase() === 'color'
+    );
+
+    if (foundColorOption) {
+      colorOption.value = foundColorOption;
+      // Fetch values for the "Color" option
+      const valuesResponse = await $axios.get(`/api/admin/options/${colorOption.value.id}/values`);
+      colorOptionValues.value = valuesResponse.data;
+    } else {
+      console.warn('Global "Color" option type not found.');
+      colorOptionValues.value = []; // Ensure it's empty if color option doesn't exist
+    }
+  } catch (err) {
+    console.error('Error fetching global options or color values:', err);
+    optionsFetchError.value = err.response?.data?.message || err.message || 'Failed to load filter options.';
+    toast.error(optionsFetchError.value); // Notify user
+  } finally {
+    isLoadingOptions.value = false;
+  }
+}
+
+onMounted(() => {
+  fetchGlobalOptionsAndColorValues();
 });
 
 const validatePriceRange = () => {
@@ -191,6 +272,7 @@ const handleApplyFilters = () => {
     minPrice: localMinPrice.value,
     maxPrice: localMaxPrice.value,
     sortBy: localSortBy.value,
+    selectedColorValueId: localSelectedColorValueId.value, // Add color to emitted filters
   });
   if (props.isMobile) {
     emit('closeMobileFilters');
@@ -203,6 +285,7 @@ const handleResetFilters = () => {
   localMinPrice.value = null;
   localMaxPrice.value = null;
   localSortBy.value = 'created_at_desc';
+  localSelectedColorValueId.value = null; // Reset color selection
   // Emit reset so parent can clear and refetch
   emit('resetFilters');
   if (props.isMobile) {

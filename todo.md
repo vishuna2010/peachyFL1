@@ -10,7 +10,7 @@ This document consolidates future enhancements and pending tasks for the platfor
 - **Advanced Filters UI (Phase 2+):**
   - Implement collapsible sidebar for filters on desktop. *(DONE - Basic structure implemented)*
   - Implement modal/drawer for filters on mobile. *(DONE - Basic structure implemented)*
-  - Add visual filters (e.g., color swatches for applicable options).
+  - [X] Add visual filters: Color swatches implemented for "Color" option on PLP.
   - [X] Enhance price range filter with improved number inputs, validation, and styling (deferred more visual slider).
 - **General UI/UX:**
   - Further review and refine global typography (Poppins font, scale, line heights, spacing).
