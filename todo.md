@@ -84,7 +84,7 @@ This document consolidates future enhancements and pending tasks for the platfor
 - **Product-Specific Variant UI (likely within product edit page `/admin/products/edit/[id].vue` or a dedicated sub-page):**
   - [X] Assign global options to a specific product (UI implemented in ProductOptionsManager on product edit page).
   - [X] Specify which global option values are applicable for that product's assigned options (UI implemented on `.../manage-values.vue` page).
-  - Create/edit/delete variants based on combinations of these values (setting SKU, price modifier, stock, image). (Display of existing variants and Add Variant form structure implemented; Add/Edit/Delete logic pending).
+  - Create/edit/delete variants based on combinations of these values (setting SKU, price modifier, stock, image). (Display, Add Form, Add Logic, Edit Form & Logic implemented; Delete logic pending).
 
 ### F. Review Moderation
 - Create Admin Page for Review Moderation (`/admin/reviews/index.vue`). *(DONE)*

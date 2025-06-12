@@ -57,8 +57,8 @@
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ variant.stock_quantity }}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                  <button class="text-indigo-600 hover:text-indigo-900 hover:underline">Edit</button>
-                  <button class="text-red-600 hover:text-red-900 hover:underline">Delete</button>
+                  <button @click="openEditVariantModal(variant)" class="text-indigo-600 hover:text-indigo-900 hover:underline focus:outline-none focus:underline">Edit</button>
+                  <button class="text-red-600 hover:text-red-900 hover:underline focus:outline-none focus:underline">Delete</button>
                 </td>
               </tr>
             </tbody>
@@ -220,35 +220,151 @@ function closeAddOrEditVariantModal() {
   showAddOrEditVariantModal.value = false;
 }
 
-// Placeholder for actual submission logic (to be implemented in a later step)
-async function handleVariantFormSubmit() {
+function openEditVariantModal(variantToEdit) {
+  if (!variantToEdit) {
+    console.error("openEditVariantModal: variantToEdit is undefined");
+    toast.error("Could not open edit modal: variant data missing.");
+    return;
+  }
+
+  isEditingVariant.value = true;
+  editingVariantId.value = variantToEdit.id;
+
+  // Populate form with variant data
+  newVariantForm.sku = variantToEdit.sku || '';
+  newVariantForm.price_modifier = variantToEdit.price_modifier === null || variantToEdit.price_modifier === undefined
+                                  ? 0.00
+                                  : parseFloat(variantToEdit.price_modifier);
+  newVariantForm.stock_quantity = variantToEdit.stock_quantity === null || variantToEdit.stock_quantity === undefined
+                                  ? 0
+                                  : parseInt(variantToEdit.stock_quantity);
+  newVariantForm.image_url = variantToEdit.image_url || '';
+
+  // Populate selected_option_values
+  const newSelectedOptionValues = {};
+  if (configuredProductOptions.value && Array.isArray(configuredProductOptions.value)) {
+    configuredProductOptions.value.forEach(configOpt => {
+      const foundSelectedOpt = variantToEdit.selected_options?.find(
+        selectedOpt => selectedOpt.option_id === configOpt.option_id
+      );
+      if (foundSelectedOpt) {
+        newSelectedOptionValues[configOpt.option_id] = foundSelectedOpt.value_id;
+      } else {
+        // This option from configuredProductOptions was not in the variant's selected_options
+        // This might happen if an option was removed from the product after variant creation,
+        // or if data is inconsistent. Set to undefined to show placeholder.
+        newSelectedOptionValues[configOpt.option_id] = undefined;
+      }
+    });
+  }
+  newVariantForm.selected_option_values = newSelectedOptionValues;
+
   addVariantFormError.value = null;
+  showAddOrEditVariantModal.value = true;
+}
+
+async function handleVariantFormSubmit() {
+  addVariantFormError.value = null; // Clear previous errors at the beginning for both add/edit
+
+  // Client-Side Validation (common for both add and edit)
+  for (const configOpt of configuredProductOptions.value) {
+    if (newVariantForm.selected_option_values[configOpt.option_id] === null || newVariantForm.selected_option_values[configOpt.option_id] === undefined) {
+      addVariantFormError.value = `Please select a value for ${configOpt.option_name}.`;
+      toast.error(addVariantFormError.value);
+      return;
+    }
+  }
+
+  if (typeof newVariantForm.stock_quantity !== 'number' || newVariantForm.stock_quantity < 0 || !Number.isInteger(newVariantForm.stock_quantity)) {
+    addVariantFormError.value = "Stock quantity must be a non-negative integer.";
+    toast.error(addVariantFormError.value);
+    return;
+  }
+
+  if (typeof newVariantForm.price_modifier !== 'number') {
+    newVariantForm.price_modifier = parseFloat(newVariantForm.price_modifier) || 0.00;
+    if (isNaN(newVariantForm.price_modifier)) {
+      addVariantFormError.value = "Price modifier must be a valid number.";
+      toast.error(addVariantFormError.value);
+      return;
+    }
+  }
+
+  // Prepare Payload (common for both add and edit)
+  const option_value_ids = Object.values(newVariantForm.selected_option_values).filter(id => id !== null && id !== undefined);
+  const payload = {
+    sku: newVariantForm.sku || null,
+    price_modifier: newVariantForm.price_modifier,
+    stock_quantity: newVariantForm.stock_quantity,
+    image_url: newVariantForm.image_url || null,
+    option_value_ids: option_value_ids
+  };
+
   isSubmittingNewVariant.value = true;
-  console.log("Submitting variant form:", JSON.parse(JSON.stringify(newVariantForm)));
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1500));
 
-  // Example:
-  // try {
-  //   if (isEditingVariant.value) {
-  //     // Call edit API
-  //   } else {
-  //     // Call add API: $axios.post(`/api/admin/products/${propProductId.value}/variants`, payload)
-  //   }
-  //   toast.success(`Variant ${isEditingVariant.value ? 'updated' : 'added'} successfully!`);
-  //   closeAddOrEditModal();
-  //   fetchProductVariants(); // Refresh list
-  // } catch (error) {
-  //   console.error("Error submitting variant:", error);
-  //   addVariantFormError.value = error.response?.data?.message || `Failed to ${isEditingVariant.value ? 'update' : 'add'} variant.`;
-  //   toast.error(addVariantFormError.value);
-  // } finally {
-  //   isSubmittingNewVariant.value = false;
-  // }
-
-  isSubmittingNewVariant.value = false; // Remove this line when actual logic is added
-  toast.info("Form submission simulated. Implement actual API call.");
-  // closeAddOrEditModal(); // Keep modal open for now to see data
+  if (isEditingVariant.value) {
+    // EDIT MODE
+    if (!editingVariantId.value) {
+      addVariantFormError.value = "Editing variant ID is missing. Cannot update.";
+      toast.error(addVariantFormError.value);
+      isSubmittingNewVariant.value = false;
+      return;
+    }
+    try {
+      const response = await $axios.put(`/api/admin/variants/${editingVariantId.value}`, payload);
+      if (response && (response.status === 200 || response.status === 204)) { // 204 for No Content is also success
+        toast.success('Variant updated successfully!');
+        fetchProductVariants();
+        closeAddOrEditVariantModal();
+      } else {
+        addVariantFormError.value = 'Variant update may not have been successful. Status: ' + response.status;
+        toast.error(addVariantFormError.value);
+      }
+    } catch (error) {
+      console.error("Error updating variant:", error.response || error);
+      if (error.response && error.response.data && error.response.data.message) {
+        addVariantFormError.value = error.response.data.message;
+        toast.error(error.response.data.message);
+      } else if (error.response && error.response.data && Array.isArray(error.response.data.errors)) {
+        const formattedErrors = error.response.data.errors.map(e => e.msg).join('; ');
+        addVariantFormError.value = formattedErrors;
+        toast.error(formattedErrors);
+      } else {
+        addVariantFormError.value = 'An unexpected error occurred while updating the variant.';
+        toast.error(addVariantFormError.value);
+      }
+    } finally {
+      isSubmittingNewVariant.value = false;
+    }
+  } else {
+    // ADD MODE (existing logic)
+    try {
+      const response = await $axios.post(`/api/admin/products/${propProductId.value}/variants`, payload);
+      if (response && (response.status === 201 || response.status === 200)) {
+        toast.success('Variant added successfully!');
+        fetchProductVariants();
+        closeAddOrEditVariantModal();
+      } else {
+        addVariantFormError.value = 'Variant creation may not have been successful. Status: ' + response.status;
+        toast.error(addVariantFormError.value);
+      }
+    } catch (error) {
+      console.error("Error adding variant:", error.response || error);
+      if (error.response && error.response.data && error.response.data.message) {
+        addVariantFormError.value = error.response.data.message;
+        toast.error(error.response.data.message);
+      } else if (error.response && error.response.data && Array.isArray(error.response.data.errors)) {
+        const formattedErrors = error.response.data.errors.map(e => e.msg).join('; ');
+        addVariantFormError.value = formattedErrors;
+        toast.error(formattedErrors);
+      } else {
+        addVariantFormError.value = 'An unexpected error occurred while adding the variant.';
+        toast.error(addVariantFormError.value);
+      }
+    } finally {
+      isSubmittingNewVariant.value = false;
+    }
+  }
 }
 
 
