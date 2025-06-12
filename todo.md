@@ -22,7 +22,7 @@ This document consolidates future enhancements and pending tasks for the platfor
   - Improve thumbnail interactions (e.g., better scrolling for many images). *(DONE - basic scroll, active styling)*
 - **Variant Selector Refinement:**
   - [X] Display visual swatches for "Color" options on PDP selector.
-  - Ensure "Size" or other options are clear and possibly indicate stock per selection dynamically.
+  - [X] Ensure "Size" or other options are clear and possibly indicate stock per selection dynamically (Implemented visual hints for out-of-stock combinations based on current selections).
 - **Product Information Tabs:** *(DONE - Description, Specs (placeholder), Reviews (placeholder))*
   - Enhance "Specifications" tab with actual data if/when available from backend.
 - **Customer Reviews Display:**
@@ -157,7 +157,7 @@ This document consolidates future enhancements and pending tasks for the platfor
   - Systematically review and enhance input validation for all API endpoints using a library like `joi` or `express-validator` (already started using `express-validator`).
 
 ### E. Data Seeding
-- Enhance `seed.js` to add sample products with variants and reviews. *(Partially DONE - products added, variants/reviews can be next)*
+- [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
 
 ---
 
