@@ -130,8 +130,9 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { useCart } from '~/composables/useCart';
-import { useNuxtApp, useRoute, useRouter, useRuntimeConfig } from '#app';
+import { useNuxtApp, useRoute, useRouter, useRuntimeConfig, useHead } from '#app'; // Added useHead
 import ProductCard from '~/components/ProductCard.vue';
+import ProductCardSkeleton from '~/components/ProductCardSkeleton.vue'; // Import skeleton
 import HeroBanner from '~/components/HeroBanner.vue';
 import FilterIcon from '~/components/icons/FilterIcon.vue';
 import CloseIcon from '~/components/icons/CloseIcon.vue';

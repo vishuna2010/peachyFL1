@@ -1,9 +1,10 @@
 <template>
   <div>
-    <div v-if="pending" class="loading">Loading product details...</div>
-    <div v-if="fetchError" class="error-message">
-      <p>Error fetching product: {{ fetchError.message || fetchError }}</p>
-      <p v-if="fetchError.response && fetchError.response.status === 404">
+    <ProductDetailSkeleton v-if="pending" />
+    <div v-else-if="fetchError" class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+      <h2 class="text-2xl font-semibold text-red-600 mb-4">Error Loading Product</h2>
+      <p class="text-gray-600 mb-2">{{ fetchError.message || fetchError }}</p>
+      <p v-if="fetchError.response && fetchError.response.status === 404" class="text-gray-600 mb-6">
         The product you are looking for does not exist.
       </p>
       <NuxtLink to="/">Go back to Home</NuxtLink>
@@ -119,10 +120,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch, reactive, nextTick } from 'vue';
+import { ref, onMounted, computed, watch, reactive, nextTick, useHead } from 'vue'; // Added useHead
 import { useRoute, useNuxtApp } from '#app';
 import { useCart } from '~/composables/useCart';
 import { useToast } from 'vue-toastification';
+import ProductDetailSkeleton from '~/components/ProductDetailSkeleton.vue'; // Import skeleton
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
@@ -319,14 +321,4 @@ useHead({
 
 </script>
 
-<style scoped>
-.loading, .error-message {
-  padding: 1rem; margin-bottom: 1rem; border-radius: 4px; text-align: center;
-}
-.loading { background-color: #e0e0e0; }
-.error-message { background-color: #ffdddd; border: 1px solid #ff0000; color: #D8000C; }
-.error-message a { color: #D8000C; text-decoration: underline; }
-
-.details-column h1 {
-}
-</style>
+<!-- <style scoped> block removed as Tailwind is used -->
