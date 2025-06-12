@@ -157,7 +157,7 @@ This document consolidates future enhancements and pending tasks for the platfor
   - Systematically review and enhance input validation for all API endpoints using a library like `joi` or `express-validator` (already started using `express-validator`).
 
 ### E. Data Seeding
-- Enhance `seed.js` to add sample products with variants and reviews. *(Partially DONE - products added, variants/reviews can be next)*
+- [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
 
 ---
 
