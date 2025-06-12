@@ -117,9 +117,42 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
     } else { newProduct.tags = []; }
 
     await client.query('COMMIT');
-    res.status(201).json(newProduct);
+    res.status(201).json(newProduct); // Send response to client
+
+    // Log initial stock after successful commit and response
+    if (newProduct.stock_quantity > 0) {
+      try {
+        const logMovementQuery = `
+          INSERT INTO stock_movement_logs
+            (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `;
+        // req.user should be available due to isAuthenticated middleware
+        const userIdForLog = req.user ? req.user.userId : null;
+        const logMovementValues = [
+          newProduct.id,
+          null, // No variant_id for base product initial stock
+          userIdForLog,
+          'initial_stock_setup',
+          newProduct.stock_quantity, // quantity_changed is the full initial stock
+          newProduct.stock_quantity, // new_quantity_on_hand is the initial stock
+          'Initial stock for new product',
+          newProduct.id.toString() // Reference could be the product ID itself
+        ];
+        // Use db.query for a new client from the pool, as original client related to the transaction is now released.
+        await db.query(logMovementQuery, logMovementValues);
+        console.log(`Initial stock logged for product ID ${newProduct.id}`);
+      } catch (logError) {
+        console.error(`Error logging initial stock for product ID ${newProduct.id}:`, logError);
+        // Non-critical error, so don't fail the main request if it already succeeded.
+      }
+    }
+
   } catch (error) {
-    await client.query('ROLLBACK');
+    // Ensure client.query('ROLLBACK') is only called if transaction was actually started and client is valid
+    if (client && !client._hadError && client._queryable) { // Check if client is still valid for rollback
+        try { await client.query('ROLLBACK'); } catch (rbError) { console.error("Rollback error:", rbError); }
+    }
     if (s3FileKey && isS3Configured()) {
       try { await deleteFileFromS3(s3FileKey); console.log(`Rolled back S3 upload for key: ${s3FileKey} due to DB error.`); }
       catch (s3DeleteError) { console.error(`Failed to rollback S3 upload for key ${s3FileKey}:`, s3DeleteError); }

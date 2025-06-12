@@ -42,12 +42,13 @@ router.post('/', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Check if supplier exists
-    const supplierCheck = await client.query('SELECT id FROM suppliers WHERE id = $1', [supplier_id]);
-    if (supplierCheck.rows.length === 0) {
+    // Check if supplier exists AND GET CURRENCY CODE
+    const supplierResult = await client.query('SELECT id, currency_code FROM suppliers WHERE id = $1', [supplier_id]);
+    if (supplierResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ message: `Supplier with ID ${supplier_id} not found.` });
     }
+    const supplierCurrencyCode = supplierResult.rows[0].currency_code; // Can be null if supplier doesn't have one
 
     // Check if all products exist (can be done in loop or with IN clause)
     for (const item of items) {
@@ -77,8 +78,8 @@ router.post('/', async (req, res) => {
 
     const itemInsertQuery = `
       INSERT INTO purchase_order_items
-        (purchase_order_id, product_id, quantity_ordered, unit_cost_price)
-      VALUES ($1, $2, $3, $4)
+        (purchase_order_id, product_id, quantity_ordered, unit_cost_price, currency_code)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *;
     `;
     const createdItems = [];
@@ -87,7 +88,8 @@ router.post('/', async (req, res) => {
         newPurchaseOrder.id,
         parseInt(item.product_id),
         parseInt(item.quantity_ordered),
-        parseFloat(item.unit_cost_price)
+        parseFloat(item.unit_cost_price),
+        supplierCurrencyCode // Add the fetched currency code here
       ]);
       createdItems.push(itemResult.rows[0]);
     }
