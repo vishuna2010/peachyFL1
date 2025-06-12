@@ -1,17 +1,5 @@
 const { Pool } = require('pg');
 
-// Replace with your actual connection string or individual connection parameters
-// For example, using environment variables:
-// const pool = new Pool({
-//   user: process.env.DB_USER,
-//   host: process.env.DB_HOST,
-//   database: process.env.DB_DATABASE,
-//   password: process.env.DB_PASSWORD,
-//   port: process.env.DB_PORT,
-// });
-
-// For this example, we'll use a placeholder connection string.
-// In a real application, you would use environment variables or a config file.
 const placeholderConnectionString = 'postgresql://user:password@host:port/database';
 let connectionString = process.env.DATABASE_URL;
 
@@ -38,57 +26,110 @@ pool.on('connect', () => {
 const createTables = async () => {
   const client = await pool.connect();
   try {
+    // --- Function to update updated_at timestamp ---
+    await client.query(`
+      CREATE OR REPLACE FUNCTION trigger_set_timestamp()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+    console.log('Function "trigger_set_timestamp" created or replaced successfully.');
+
+    // --- Users Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
-        name VARCHAR(255) NULL, -- Added name column
+        name VARCHAR(255) NULL,
         role VARCHAR(50) NOT NULL DEFAULT 'customer',
         two_fa_secret VARCHAR(255) NULL,
         is_two_fa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Added updated_at column
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "users" created successfully or already exists (and altered for role, 2FA, name, updated_at).');
-
+    console.log('Table "users" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_users') THEN
+          CREATE TRIGGER set_timestamp_users
+          BEFORE UPDATE ON users
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "users.updated_at" ensured.');
+     // Backward compatibility for users table (name, updated_at)
     try {
-      await client.query("ALTER TABLE users ALTER COLUMN role SET DEFAULT 'customer';");
-      // Attempt to add name and updated_at columns if they don't exist, for older setups
-      // These will fail gracefully if the columns already exist from the CREATE TABLE statement
-      try {
-        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255) NULL;');
-        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;');
-        // Update existing rows to have a valid updated_at if it was just added and is null
-        await client.query('UPDATE users SET updated_at = created_at WHERE updated_at IS NULL;');
-        console.log('Columns "name" and "updated_at" ensured in "users" table, and updated_at backfilled.');
-      } catch (addColError) {
-        console.warn('Warning during users table alteration for name/updated_at (may be benign):', addColError.message);
-      }
-      console.log('Default role set for users table and name/updated_at columns ensured.');
+      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255) NULL;');
+      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;');
+      await client.query('UPDATE users SET updated_at = created_at WHERE updated_at IS NULL;');
+      console.log('Backward compatibility for "users" (name, updated_at) applied.');
     } catch (alterError) {
-      if (!alterError.message.includes('already exists') && !alterError.message.includes('multiple default expressions')) {
-          console.warn('Warning during users table alteration for role default (may be benign if already set):', alterError.message);
-      }
+        // Ignore errors if columns already exist, etc.
     }
 
+
+    // --- Categories Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS categories (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL
+        name VARCHAR(255) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "categories" created successfully or already exists.');
+    console.log('Table "categories" created or already exists.');
+    await client.query('ALTER TABLE categories ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;');
+    await client.query('ALTER TABLE categories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_categories') THEN
+          CREATE TRIGGER set_timestamp_categories
+          BEFORE UPDATE ON categories
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "categories.updated_at" ensured.');
 
+    // --- Tags Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS tags (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL
+        name VARCHAR(255) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "tags" created successfully or already exists.');
+    console.log('Table "tags" created or already exists.');
+    await client.query('ALTER TABLE tags ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;');
+    await client.query('ALTER TABLE tags ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_tags') THEN
+          CREATE TRIGGER set_timestamp_tags
+          BEFORE UPDATE ON tags
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "tags.updated_at" ensured.');
 
+    // --- Suppliers Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS suppliers (
         id SERIAL PRIMARY KEY,
@@ -106,10 +147,24 @@ const createTables = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "suppliers" created successfully or already exists.');
+    console.log('Table "suppliers" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_suppliers') THEN
+          CREATE TRIGGER set_timestamp_suppliers
+          BEFORE UPDATE ON suppliers
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "suppliers.updated_at" ensured.');
     await client.query('CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_suppliers_email ON suppliers(email);');
 
+    // --- Products Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
@@ -122,13 +177,37 @@ const createTables = async () => {
         supplier_id INTEGER NULL REFERENCES suppliers(id) ON DELETE SET NULL,
         sku VARCHAR(100) NULL UNIQUE,
         reorder_threshold INTEGER NULL DEFAULT NULL,
+        has_variants BOOLEAN NOT NULL DEFAULT FALSE, -- Added has_variants
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "products" created successfully or already exists (altered for supplier_id, sku, updated_at, image_url, stock_quantity, reorder_threshold).');
+    console.log('Table "products" created or already exists.');
+    await client.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS has_variants BOOLEAN NOT NULL DEFAULT FALSE;');
+    console.log('Column "products.has_variants" ensured.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_products') THEN
+          CREATE TRIGGER set_timestamp_products
+          BEFORE UPDATE ON products
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "products.updated_at" ensured.');
+    // Indexes for products
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_supplier_id ON products(supplier_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_stock_reorder ON products(stock_quantity, reorder_threshold);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at);');
 
 
+    // --- Product Tags (Junction Table) ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_tags (
         product_id INT REFERENCES products(id) ON DELETE CASCADE,
@@ -136,8 +215,200 @@ const createTables = async () => {
         PRIMARY KEY (product_id, tag_id)
       );
     `);
-    console.log('Table "product_tags" created successfully or already exists.');
+    console.log('Table "product_tags" created or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_product_tags_tag_id ON product_tags(tag_id);');
 
+
+    // --- Product Options Table (as per existing schema: product-specific options) ---
+    // This table is being redefined for GLOBAL options as per subtask requirements.
+    // Previous version was product-specific.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_options (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "product_options" (global) ensured/redefined.');
+    // Attempt to drop old product_id specific index and constraint if they exist from a previous schema.
+    // These will fail gracefully if they don't exist.
+    try {
+      await client.query('ALTER TABLE product_options DROP CONSTRAINT IF EXISTS uk_product_option_name;');
+      await client.query('DROP INDEX IF EXISTS idx_option_product_id;');
+      await client.query('ALTER TABLE product_options DROP COLUMN IF EXISTS product_id;');
+      console.log('Cleaned up old product-specific fields/constraints from product_options if they existed.');
+    } catch (cleanupError) {
+      console.warn('Warning during product_options cleanup (may be benign if schema was already global):', cleanupError.message);
+    }
+    // Ensure the global unique constraint on name exists
+    try {
+        await client.query('ALTER TABLE product_options ADD CONSTRAINT product_options_name_key UNIQUE (name);');
+        console.log('Ensured global unique constraint on product_options.name.');
+    } catch (constraintError) {
+        if (!constraintError.message.includes("already exists")) {
+             console.warn('Warning ensuring unique constraint on product_options.name (may be benign):', constraintError.message);
+        }
+    }
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_product_options') THEN
+          CREATE TRIGGER set_timestamp_product_options
+          BEFORE UPDATE ON product_options
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "product_options.updated_at" ensured.');
+    // No index on product_id anymore. Index on name is implicitly created by UNIQUE constraint.
+
+    // --- Product Option Values Table ---
+    // This table's structure is largely fine, references product_options.id
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_option_values (
+        id SERIAL PRIMARY KEY,
+        product_option_id INTEGER NOT NULL REFERENCES product_options(id) ON DELETE CASCADE,
+        value VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uk_option_value UNIQUE (product_option_id, value)
+      );
+    `);
+    console.log('Table "product_option_values" ensured.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_product_option_values') THEN
+          CREATE TRIGGER set_timestamp_product_option_values
+          BEFORE UPDATE ON product_option_values
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "product_option_values.updated_at" ensured.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_option_value_product_option_id ON product_option_values(product_option_id);');
+
+    // --- Product Variants Table ---
+    // This table was found to already exist. Ensuring its definition and adding trigger.
+    // Sticking to existing `product_id` and `price_modifier`.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_variants (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE, -- Renamed from base_product_id for consistency with existing
+        sku VARCHAR(100) UNIQUE NULL, -- Existing schema was 100
+        price_modifier DECIMAL(10, 2) NOT NULL DEFAULT 0.00, -- Kept existing price_modifier logic
+        stock_quantity INTEGER NOT NULL DEFAULT 0,
+        image_url VARCHAR(255) NULL, -- Existing schema was 255
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "product_variants" ensured.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_product_variants') THEN
+          CREATE TRIGGER set_timestamp_product_variants
+          BEFORE UPDATE ON product_variants
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "product_variants.updated_at" ensured.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_variant_product_id ON product_variants(product_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_variant_sku ON product_variants(sku);');
+
+    // --- Product Assigned Options Table (Links a product to a global option type) ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_assigned_options (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        option_id INTEGER NOT NULL REFERENCES product_options(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uk_product_assigned_option UNIQUE (product_id, option_id)
+      );
+    `);
+    console.log('Table "product_assigned_options" created or ensured.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_product_assigned_options') THEN
+          CREATE TRIGGER set_timestamp_product_assigned_options
+          BEFORE UPDATE ON product_assigned_options
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "product_assigned_options.updated_at" ensured.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_pao_product_id ON product_assigned_options(product_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_pao_option_id ON product_assigned_options(option_id);');
+
+    // --- Product Assigned Option Values Table (Links specific global values to a product's assigned option) ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_assigned_option_values (
+        id SERIAL PRIMARY KEY,
+        product_assigned_option_id INTEGER NOT NULL REFERENCES product_assigned_options(id) ON DELETE CASCADE,
+        option_value_id INTEGER NOT NULL REFERENCES product_option_values(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uk_product_assigned_option_value UNIQUE (product_assigned_option_id, option_value_id)
+      );
+    `);
+    console.log('Table "product_assigned_option_values" created or ensured.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_product_assigned_option_values') THEN
+          CREATE TRIGGER set_timestamp_product_assigned_option_values
+          BEFORE UPDATE ON product_assigned_option_values
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "product_assigned_option_values.updated_at" ensured.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_paov_assigned_option_id ON product_assigned_option_values(product_assigned_option_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_paov_option_value_id ON product_assigned_option_values(option_value_id);');
+
+
+    // --- Product Variant Option Values (Junction Table) ---
+    // This table was found to already exist. Ensuring its definition.
+    // This links a specific variant to a specific global option value.
+    // It seems this table might be what `product_assigned_option_values` was intended to be by the subtask,
+    // or there's a subtle difference in modeling.
+    // The subtask's `product_assigned_option_values` links a *product's use of an option type* to a *global value*.
+    // The existing `product_variant_option_values` links a *specific variant instance* to a *global value*.
+    // These can coexist if the model is: Product -> AssignedOption (Color) -> AssignedOptionValue (Red), AssignedOptionValue (Blue)
+    // And then Variant -> VariantOptionValue (pointing to global "Red" OptionValue).
+    // For now, I will keep BOTH as per my interpretation of the subtask adding new tables.
+    // The existing product_variant_option_values links a product_variant to a product_option_value. This is correct for defining a variant.
+    // The new product_assigned_option_values links a product's *choice of available values for an option* to product_option_value.
+    // This could be used, for example, if a T-Shirt product is assigned the "Color" option, and is made available only in "Red" and "Blue",
+    // even if "Green" exists as a global value for "Color".
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_variant_option_values (
+        id SERIAL PRIMARY KEY,
+        product_variant_id INTEGER NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+        product_option_value_id INTEGER NOT NULL REFERENCES product_option_values(id) ON DELETE CASCADE,
+        CONSTRAINT uk_variant_option_value_combo UNIQUE (product_variant_id, product_option_value_id)
+      );
+    `);
+    console.log('Table "product_variant_option_values" ensured.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_variant_id ON product_variant_option_values(product_variant_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_option_value_id ON product_variant_option_values(product_option_value_id);');
+
+    // --- Discounts Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS discounts (
         id SERIAL PRIMARY KEY,
@@ -155,10 +426,24 @@ const createTables = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "discounts" created successfully or already exists.');
+    console.log('Table "discounts" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_discounts') THEN
+          CREATE TRIGGER set_timestamp_discounts
+          BEFORE UPDATE ON discounts
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "discounts.updated_at" ensured.');
     await client.query('CREATE INDEX IF NOT EXISTS idx_discounts_code ON discounts(code);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_discounts_validity ON discounts(is_active, valid_from, valid_until);');
 
+    // --- Orders Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
@@ -183,23 +468,44 @@ const createTables = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "orders" created successfully or already exists (and altered for discounts).');
+    console.log('Table "orders" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_orders') THEN
+          CREATE TRIGGER set_timestamp_orders
+          BEFORE UPDATE ON orders
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "orders.updated_at" ensured.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);');
 
+
+    // --- Order Items Table ---
+    // Note: product_variant_id FK needs product_variants table to exist.
     await client.query(`
       CREATE TABLE IF NOT EXISTS order_items (
         id SERIAL PRIMARY KEY,
         order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
         product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-        product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL, -- Added
+        product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL,
         quantity INTEGER NOT NULL CHECK (quantity > 0),
         price_at_purchase DECIMAL(10, 2) NOT NULL
-        -- sku_at_purchase VARCHAR(100) NULL -- Conceptual, not adding yet
       );
     `);
-    console.log('Table "order_items" created successfully or already exists (altered for product_variant_id).');
+    console.log('Table "order_items" created or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_variant_id ON order_items(product_variant_id);');
 
 
+    // --- Purchase Orders Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS purchase_orders (
         id SERIAL PRIMARY KEY,
@@ -213,11 +519,25 @@ const createTables = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "purchase_orders" created successfully or already exists.');
+    console.log('Table "purchase_orders" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_purchase_orders') THEN
+          CREATE TRIGGER set_timestamp_purchase_orders
+          BEFORE UPDATE ON purchase_orders
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "purchase_orders.updated_at" ensured.');
     await client.query('CREATE INDEX IF NOT EXISTS idx_po_supplier_id ON purchase_orders(supplier_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders(status);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_po_order_date ON purchase_orders(order_date);');
 
+    // --- Purchase Order Items Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS purchase_order_items (
         id SERIAL PRIMARY KEY,
@@ -226,87 +546,25 @@ const createTables = async () => {
         quantity_ordered INTEGER NOT NULL CHECK (quantity_ordered > 0),
         unit_cost_price DECIMAL(10, 2) NOT NULL,
         quantity_received INTEGER NOT NULL DEFAULT 0 CHECK (quantity_received >= 0 AND quantity_received <= quantity_ordered)
+        -- No created_at/updated_at on this table by design, changes are part of PO
       );
     `);
-    console.log('Table "purchase_order_items" created successfully or already exists.');
+    console.log('Table "purchase_order_items" created or already exists.');
     await client.query('CREATE INDEX IF NOT EXISTS idx_poi_purchase_order_id ON purchase_order_items(purchase_order_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_poi_product_id ON purchase_order_items(product_id);');
 
-    // --- New Product Variants Schema ---
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS product_options (
-        id SERIAL PRIMARY KEY,
-        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-        name VARCHAR(255) NOT NULL, -- e.g., "Color", "Size"
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT uk_product_option_name UNIQUE (product_id, name)
-      );
-    `);
-    console.log('Table "product_options" created successfully or already exists.');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_option_product_id ON product_options(product_id);'); // Renamed index
+    // Final check on users table role default (already present in original file, kept for safety)
+    try {
+      await client.query("ALTER TABLE users ALTER COLUMN role SET DEFAULT 'customer';");
+    } catch (alterError) {
+        // Benign if already set or other non-critical issues
+    }
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS product_option_values (
-        id SERIAL PRIMARY KEY,
-        product_option_id INTEGER NOT NULL REFERENCES product_options(id) ON DELETE CASCADE,
-        value VARCHAR(255) NOT NULL, -- e.g., "Red", "Large"
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT uk_option_value UNIQUE (product_option_id, value)
-      );
-    `);
-    console.log('Table "product_option_values" created successfully or already exists.');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_option_value_product_option_id ON product_option_values(product_option_id);'); // Renamed index
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS product_variants (
-        id SERIAL PRIMARY KEY,
-        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-        sku VARCHAR(100) UNIQUE NULL,
-        price_modifier DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-        stock_quantity INTEGER NOT NULL DEFAULT 0,
-        image_url VARCHAR(255) NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('Table "product_variants" created successfully or already exists.');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_variant_product_id ON product_variants(product_id);'); // Renamed index
-    await client.query('CREATE INDEX IF NOT EXISTS idx_variant_sku ON product_variants(sku);'); // Renamed index
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS product_variant_option_values (
-        id SERIAL PRIMARY KEY,
-        product_variant_id INTEGER NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
-        product_option_value_id INTEGER NOT NULL REFERENCES product_option_values(id) ON DELETE CASCADE,
-        CONSTRAINT uk_variant_option_value_combo UNIQUE (product_variant_id, product_option_value_id)
-      );
-    `);
-    console.log('Table "product_variant_option_values" created successfully or already exists.');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_variant_id ON product_variant_option_values(product_variant_id);'); // Renamed index
-    await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_option_value_id ON product_variant_option_values(product_option_value_id);'); // Renamed index
-
-    // Additional recommended indexes
-    console.log('Applying additional recommended indexes...');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_products_supplier_id ON products(supplier_id);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_products_stock_reorder ON products(stock_quantity, reorder_threshold);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_product_tags_tag_id ON product_tags(tag_id);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);');
-    console.log('Additional recommended indexes applied successfully or already exist.');
+    console.log('All tables and triggers ensured.');
 
   } catch (err) {
-    console.error('Error creating/altering tables:', err.stack);
+    console.error('Error creating/altering tables or setting up triggers:', err.stack);
+    // Consider re-throwing or handling more gracefully for startup
   } finally {
     client.release();
   }
