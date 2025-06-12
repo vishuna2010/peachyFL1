@@ -1,361 +1,354 @@
 <template>
-  <div class="variants-manager card">
-    <h3>Product Variants Management</h3>
+  <div class="p-4 border border-gray-200 rounded-lg shadow-sm mt-6 bg-white">
+    <h2 class="text-xl font-semibold text-gray-800 mb-4">Product Variants Manager (Product ID: {{ productId }})</h2>
 
-    <div v-if="isLoading" class="loading-state">Loading variants...</div>
-    <div v-if="fetchError" class="error-message">{{ fetchError }}</div>
-    <div v-if="actionFeedback.message" :class="['action-feedback', actionFeedback.isError ? 'error' : 'success']">
-      {{ actionFeedback.message }}
+    <div v-if="isLoadingConfiguredOptions || isLoadingVariants" class="text-center py-6">
+      <p class="text-gray-500">Loading variant configuration data...</p>
+      <div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-500 mt-2"></div>
     </div>
+    <div v-else-if="fetchError" class="my-4 p-3 bg-red-100 text-red-700 border border-red-200 rounded-lg shadow text-sm">
+      <p>Error loading data: {{ fetchError }}</p>
+      <button @click="loadAllData" class="mt-2 px-3 py-1.5 text-xs bg-indigo-500 text-white rounded hover:bg-indigo-600">Retry</button>
+    </div>
+    <div v-else>
+      <div>
+        <h3 class="text-lg font-medium text-gray-700 mb-2">Configured Options for Variant Creation:</h3>
+        <div v-if="configuredProductOptions.length === 0" class="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-md">
+          No options configured for this product to create variants from. Please assign options and their allowed values first.
+        </div>
+        <pre v-else class="text-xs bg-gray-100 p-3 rounded-md overflow-x-auto max-h-96">{{ configuredProductOptions }}</pre>
+      </div>
 
-    <!-- Add/Edit Variant Form -->
-    <div class="variant-form-section card">
-      <h4>{{ isEditing ? 'Edit Variant (ID: ' + editingVariantId + ')' : 'Add New Variant' }}</h4>
-      <form @submit.prevent="handleSaveVariant">
-        <div class="form-row" v-for="option in productOptions" :key="option.id">
-          <div class="form-group">
-            <label :for="`variant-option-${option.id}`">{{ option.name }}:</label>
-            <select :id="`variant-option-${option.id}`" v-model="newVariantForm.selected_option_values[option.id]" required>
-              <option :value="undefined" disabled>-- Select {{ option.name }} --</option>
-              <option v-for="value in option.option_values" :key="value.id" :value="value.id">
-                {{ value.value }}
-              </option>
-            </select>
-          </div>
+      <div class="mt-6">
+        <h3 class="text-lg font-medium text-gray-700 mb-2">Existing Product Variants</h3>
+        <div v-if="isLoadingVariants" class="text-sm text-gray-500 italic p-3">Loading variants list...</div>
+        <div v-else-if="!isLoadingVariants && existingVariants.length === 0 && !fetchError" class="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-md">
+          No variants have been created for this product yet.
         </div>
+        <div v-else-if="existingVariants.length > 0" class="overflow-x-auto border border-gray-200 rounded-md shadow-sm">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variant Details</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price Mod.</th>
+                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                <th scope="col" class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr v-for="variant in existingVariants" :key="variant.id" class="hover:bg-gray-50">
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <img v-if="variant.image_url" :src="variant.image_url" :alt="`Variant ${variant.sku || variant.id}`" class="w-10 h-10 object-cover rounded-md border">
+                  <span v-else class="text-xs text-gray-400 h-10 w-10 flex items-center justify-center bg-gray-100 rounded-md border">No Img</span>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                  <div v-if="variant.selected_options && variant.selected_options.length > 0">
+                    <span v-for="(opt, index) in variant.selected_options" :key="opt.option_value_id">
+                      <strong>{{ opt.option_name }}:</strong> {{ opt.value_name }}<span v-if="index < variant.selected_options.length - 1">, </span>
+                    </span>
+                  </div>
+                  <span v-else class="text-xs text-gray-400 italic">Base product or no options defined</span>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ variant.sku || 'N/A' }}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                  {{ variant.price_modifier >= 0 ? '+' : '' }}${{ parseFloat(variant.price_modifier || 0).toFixed(2) }}
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ variant.stock_quantity }}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                  <button class="text-indigo-600 hover:text-indigo-900 hover:underline">Edit</button>
+                  <button class="text-red-600 hover:text-red-900 hover:underline">Delete</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-        <div class="form-row">
-          <div class="form-group">
-            <label for="variant-sku">SKU (Optional):</label>
-            <input type="text" id="variant-sku" v-model.trim="newVariantForm.sku" />
+      <!-- Add New Variant Button -->
+      <div class="mt-6 mb-4 text-right">
+        <button
+          @click="openAddVariantModal"
+          class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150 shadow-sm"
+          :disabled="configuredProductOptions.length === 0"
+          title="Add a new product variant"
+        >
+          Add New Variant
+        </button>
+        <p v-if="configuredProductOptions.length === 0" class="text-xs text-gray-500 mt-1 text-right">
+          (Please configure product options before adding variants)
+        </p>
+      </div>
+
+      <!-- Add/Edit Variant Modal -->
+      <div v-if="showAddOrEditVariantModal" class="fixed inset-0 z-50 overflow-y-auto bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg transform transition-all">
+          <div class="p-5 border-b border-gray-200">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">
+              {{ isEditingVariant ? 'Edit Variant' : 'Add New Variant' }}
+            </h3>
+            <button @click="closeAddOrEditVariantModal" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
           </div>
-          <div class="form-group">
-            <label for="variant-price_modifier">Price Modifier ($):</label>
-            <input type="number" id="variant-price_modifier" v-model.number="newVariantForm.price_modifier" step="0.01" required />
-            <small>Relative to base product price. Can be negative.</small>
-          </div>
-        </div>
-        <div class="form-row">
-           <div class="form-group">
-            <label for="variant-stock_quantity">Stock Quantity:</label>
-            <input type="number" id="variant-stock_quantity" v-model.number="newVariantForm.stock_quantity" min="0" required />
-          </div>
-        </div>
-         <div class="form-group">
-            <label for="variant-image">Variant Image (Optional):</label>
-            <input type="file" id="variant-image" @change="handleImageFileChange" accept="image/*" />
-            <div v-if="newVariantForm.image_preview_url" class="image-preview">
-                <p>New Image Preview:</p>
-                <img :src="newVariantForm.image_preview_url" alt="New variant image preview" />
+
+          <form @submit.prevent="handleVariantFormSubmit" class="p-5 space-y-4">
+            <div v-if="configuredProductOptions.length > 0">
+              <div v-for="configOpt in configuredProductOptions" :key="configOpt.option_id" class="mb-4">
+                <label :for="'variant_opt_' + configOpt.option_id" class="block text-sm font-medium text-gray-700 mb-1">{{ configOpt.option_name }}</label>
+                <select
+                  :id="'variant_opt_' + configOpt.option_id"
+                  v-model="newVariantForm.selected_option_values[configOpt.option_id]"
+                  class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  required
+                >
+                  <option :value="undefined" disabled>Select {{ configOpt.option_name }}</option>
+                  <option v-for="valueObj in configOpt.allowed_values" :key="valueObj.value_id" :value="valueObj.value_id">{{ valueObj.value_name }}</option>
+                </select>
+              </div>
             </div>
-            <div v-else-if="isEditing && editingVariant && editingVariant.image_url" class="image-preview">
-                <p>Current Image:</p>
-                <img :src="editingVariant.image_url" alt="Current variant image" />
-                 <button type="button" @click="removeVariantImage" class="remove-image-button">Remove Image</button>
+            <div v-else class="text-sm text-gray-600 bg-yellow-50 p-3 rounded-md border border-yellow-200">
+              No options configured for this product. Please configure options first before adding variants.
             </div>
+
+            <div>
+              <label for="variant_sku" class="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+              <input type="text" id="variant_sku" v-model="newVariantForm.sku" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+            </div>
+
+            <div>
+              <label for="variant_price_modifier" class="block text-sm font-medium text-gray-700 mb-1">Price Modifier ($)</label>
+              <input type="number" step="0.01" id="variant_price_modifier" v-model.number="newVariantForm.price_modifier" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g., -2.50 or 5.00" />
+            </div>
+
+            <div>
+              <label for="variant_stock_quantity" class="block text-sm font-medium text-gray-700 mb-1">Stock Quantity</label>
+              <input type="number" step="1" min="0" id="variant_stock_quantity" v-model.number="newVariantForm.stock_quantity" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required />
+            </div>
+
+            <div>
+              <label for="variant_image_url" class="block text-sm font-medium text-gray-700 mb-1">Image URL (Optional)</label>
+              <input type="text" id="variant_image_url" v-model="newVariantForm.image_url" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="https://example.com/image.jpg" />
+            </div>
+
+            <div v-if="addVariantFormError" class="my-3 p-3 bg-red-100 text-red-700 border border-red-200 rounded-lg shadow text-sm">
+              {{ addVariantFormError }}
+            </div>
+
+            <div class="pt-4 border-t border-gray-200 sm:flex sm:flex-row-reverse">
+              <button
+                type="submit"
+                :disabled="isSubmittingNewVariant || configuredProductOptions.length === 0"
+                class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {{ isSubmittingNewVariant ? (isEditingVariant ? 'Saving...' : 'Adding...') : (isEditingVariant ? 'Save Changes' : 'Add Variant') }}
+              </button>
+              <button
+                type="button"
+                @click="closeAddOrEditVariantModal"
+                class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
-
-
-        <div class="form-actions">
-          <button type="submit" :disabled="isLoadingAction">
-            {{ isLoadingAction ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update Variant' : 'Save New Variant') }}
-          </button>
-          <button type="button" @click="cancelEdit" v-if="isEditing" :disabled="isLoadingAction">Cancel Edit</button>
-        </div>
-      </form>
-    </div>
-
-    <!-- Existing Variants Table -->
-    <div v-if="productVariants.length > 0" class="existing-variants-section section">
-      <h4>Existing Variants ({{ productVariants.length }})</h4>
-      <table class="variants-table">
-        <thead>
-          <tr>
-            <th>Variant Details</th>
-            <th>SKU</th>
-            <th>Price Mod.</th>
-            <th>Stock</th>
-            <th>Image</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="variant in productVariants" :key="variant.id">
-            <td>
-              <ul class="variant-options-display">
-                <li v-for="optVal in variant.options" :key="optVal.option_value_id">
-                  <strong>{{ optVal.option_name }}:</strong> {{ optVal.value_name || optVal.value }}
-                </li>
-              </ul>
-            </td>
-            <td>{{ variant.sku || 'N/A' }}</td>
-            <td>{{ variant.price_modifier >= 0 ? '+' : '' }}${{ parseFloat(variant.price_modifier).toFixed(2) }}</td>
-            <td>{{ variant.stock_quantity }}</td>
-            <td>
-              <img v-if="variant.image_url" :src="variant.image_url" :alt="`Variant ${variant.sku || variant.id}`" class="thumbnail" />
-              <span v-else>N/A</span>
-            </td>
-            <td class="actions-cell">
-              <button @click="startEditVariant(variant)" class="edit-link-button" :disabled="isLoadingAction">Edit</button>
-              <button @click="handleDeleteVariant(variant.id)" class="delete-link-button" :disabled="isLoadingAction">Delete</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-     <div v-else-if="!isLoading && !fetchError" class="empty-state">
-      No variants created for this product yet.
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, computed } from 'vue';
+import { ref, onMounted, watch, toRefs, reactive } from 'vue';
 import { useNuxtApp } from '#app';
+import { useToast } from 'vue-toastification';
 
 const props = defineProps({
   productId: {
     type: [String, Number],
-    required: true
-  },
-  productOptions: { // Expects array: [{ id, name, option_values: [{id, value}, ...] }, ...]
-    type: Array,
-    default: () => []
+    required: true,
   }
 });
 
+const { productId: propProductId } = toRefs(props);
+
+const configuredProductOptions = ref([]);
+const existingVariants = ref([]);
+const isLoadingConfiguredOptions = ref(false);
+const isLoadingVariants = ref(false);
+const fetchError = ref(null);
+
 const { $axios } = useNuxtApp();
+const toast = useToast();
 
-const productVariants = ref([]);
-const isLoading = ref(false); // For fetching list
-const fetchError = ref('');
-
-const initialNewVariantForm = () => ({
+// State for "Add Variant" Modal & Form
+const showAddOrEditVariantModal = ref(false);
+const isEditingVariant = ref(false);
+const editingVariantId = ref(null);
+const newVariantForm = reactive({
   sku: '',
   price_modifier: 0.00,
   stock_quantity: 0,
-  image_file: null,
-  image_preview_url: null,
-  image_removal_flag: false, // To signal image removal on update
-  selected_option_values: {} // { <optionId>: <optionValueId> }
+  image_url: '',
+  selected_option_values: {} // Object to store { <global_option_id>: <global_value_id> }
 });
-const newVariantForm = reactive(initialNewVariantForm());
+const isSubmittingNewVariant = ref(false);
+const addVariantFormError = ref(null);
 
-const isEditing = ref(false);
-const editingVariantId = ref(null);
-const editingVariant = ref(null); // To store full variant data being edited for image display
+// Modal Control Methods
+function openAddVariantModal() {
+  isEditingVariant.value = false;
+  editingVariantId.value = null;
 
-const isLoadingAction = ref(false); // For CUD actions
-const actionFeedback = reactive({ message: '', isError: false });
+  // Reset form fields
+  newVariantForm.sku = '';
+  newVariantForm.price_modifier = 0.00;
+  newVariantForm.stock_quantity = 0;
+  newVariantForm.image_url = '';
+  newVariantForm.selected_option_values = {};
+  // Ensure selected_option_values are initialized for configured options
+  configuredProductOptions.value.forEach(opt => {
+    newVariantForm.selected_option_values[opt.option_id] = undefined;
+  });
 
-function setActionFeedback(message, isError = false) {
-  actionFeedback.message = message;
-  actionFeedback.isError = isError;
-  setTimeout(() => { actionFeedback.message = ''; actionFeedback.isError = false; }, 4000);
+  addVariantFormError.value = null;
+  showAddOrEditVariantModal.value = true;
+}
+
+function closeAddOrEditVariantModal() {
+  showAddOrEditVariantModal.value = false;
+}
+
+// Placeholder for actual submission logic (to be implemented in a later step)
+async function handleVariantFormSubmit() {
+  addVariantFormError.value = null;
+  isSubmittingNewVariant.value = true;
+  console.log("Submitting variant form:", JSON.parse(JSON.stringify(newVariantForm)));
+  // Simulate API call
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  // Example:
+  // try {
+  //   if (isEditingVariant.value) {
+  //     // Call edit API
+  //   } else {
+  //     // Call add API: $axios.post(`/api/admin/products/${propProductId.value}/variants`, payload)
+  //   }
+  //   toast.success(`Variant ${isEditingVariant.value ? 'updated' : 'added'} successfully!`);
+  //   closeAddOrEditModal();
+  //   fetchProductVariants(); // Refresh list
+  // } catch (error) {
+  //   console.error("Error submitting variant:", error);
+  //   addVariantFormError.value = error.response?.data?.message || `Failed to ${isEditingVariant.value ? 'update' : 'add'} variant.`;
+  //   toast.error(addVariantFormError.value);
+  // } finally {
+  //   isSubmittingNewVariant.value = false;
+  // }
+
+  isSubmittingNewVariant.value = false; // Remove this line when actual logic is added
+  toast.info("Form submission simulated. Implement actual API call.");
+  // closeAddOrEditModal(); // Keep modal open for now to see data
+}
+
+
+async function fetchConfiguredProductOptions() {
+  if (!propProductId.value) return;
+  isLoadingConfiguredOptions.value = true;
+  try {
+    const assignedOptionsResponse = await $axios.get(`/api/admin/products/${propProductId.value}/assigned-options`);
+    const fetchedConfiguredOptions = [];
+
+    for (const assignedOpt of assignedOptionsResponse.data) {
+      const valuesResponse = await $axios.get(`/api/admin/assigned-options/${assignedOpt.id}/values`);
+      fetchedConfiguredOptions.push({
+        assigned_option_id: assignedOpt.id,
+        option_id: assignedOpt.option_id,
+        option_name: assignedOpt.option_name,
+        allowed_values: valuesResponse.data.map(val => ({
+          value_id: val.option_value_id,
+          value_name: val.option_value_string
+        }))
+      });
+    }
+    configuredProductOptions.value = fetchedConfiguredOptions;
+  } catch (err) {
+    console.error(`Error fetching configured options for product ${propProductId.value}:`, err);
+    if (!fetchError.value) fetchError.value = err.response?.data?.message || err.message || `Failed to load configured options.`;
+    throw err;
+  } finally {
+    isLoadingConfiguredOptions.value = false;
+  }
 }
 
 async function fetchProductVariants() {
-  if (!props.productId) return;
-  isLoading.value = true;
-  fetchError.value = '';
+  if (!propProductId.value) return;
+  isLoadingVariants.value = true;
   try {
-    const response = await $axios.get(`/admin/products/${props.productId}/variants`);
-    productVariants.value = response.data;
-  } catch (error) {
-    console.error('Error fetching product variants:', error);
-    fetchError.value = error.response?.data?.message || 'Failed to load product variants.';
+    const response = await $axios.get(`/api/admin/products/${propProductId.value}/variants`);
+    existingVariants.value = response.data;
+  } catch (err) {
+    console.error(`Error fetching variants for product ${propProductId.value}:`, err);
+    throw err;
   } finally {
-    isLoading.value = false;
+    isLoadingVariants.value = false;
   }
 }
 
-function handleImageFileChange(event) {
-  const file = event.target.files[0];
-  if (file) {
-    newVariantForm.image_file = file;
-    newVariantForm.image_preview_url = URL.createObjectURL(file);
-    newVariantForm.image_removal_flag = false;
-  } else {
-    newVariantForm.image_file = null;
-    newVariantForm.image_preview_url = null;
+async function loadAllData() {
+  fetchError.value = null;
+  isLoadingConfiguredOptions.value = true; // Ensure these are true at the start
+  isLoadingVariants.value = true;
+
+  const results = await Promise.allSettled([
+    fetchConfiguredProductOptions(),
+    fetchProductVariants()
+  ]);
+
+  let combinedErrorMessages = [];
+  if (results[0].status === 'rejected') {
+    console.error("loadAllData: Failed to load configured options:", results[0].reason);
+    combinedErrorMessages.push(results[0].reason?.response?.data?.message || results[0].reason?.message || 'Failed to load configured options.');
   }
-}
-function removeVariantImage() {
-    newVariantForm.image_file = null;
-    newVariantForm.image_preview_url = null;
-    newVariantForm.image_removal_flag = true; // Signal to backend to nullify image_url
-    if(isEditing.value && editingVariant.value) {
-        editingVariant.value.image_url = null; // Optimistic UI update
-    }
-}
-
-
-function resetForm() {
-  Object.assign(newVariantForm, initialNewVariantForm());
-  isEditing.value = false;
-  editingVariantId.value = null;
-  editingVariant.value = null;
-  // Clear file input visually (difficult to do programmatically reliably)
-  const fileInput = document.getElementById('variant-image');
-  if (fileInput) fileInput.value = '';
-}
-
-function startEditVariant(variant) {
-  isEditing.value = true;
-  editingVariantId.value = variant.id;
-  editingVariant.value = { ...variant }; // Store for image display
-
-  newVariantForm.sku = variant.sku || '';
-  newVariantForm.price_modifier = parseFloat(variant.price_modifier);
-  newVariantForm.stock_quantity = variant.stock_quantity;
-  newVariantForm.image_file = null; // Clear file input, user must re-select to change image
-  newVariantForm.image_preview_url = null;
-  newVariantForm.image_removal_flag = false;
-
-  const selected = {};
-  if (variant.options) { // variant.options comes from getVariantOptionDetails
-    variant.options.forEach(optVal => {
-      selected[optVal.option_id] = optVal.option_value_id;
-    });
-  }
-  newVariantForm.selected_option_values = selected;
-  window.scrollTo({ top: document.querySelector('.variant-form-section').offsetTop - 20, behavior: 'smooth' });
-}
-
-function cancelEdit() {
-  resetForm();
-}
-
-async function handleSaveVariant() {
-  // Validation: Ensure all product options are selected
-  if (props.productOptions.some(opt => newVariantForm.selected_option_values[opt.id] === undefined || newVariantForm.selected_option_values[opt.id] === null)) {
-    setActionFeedback('All options must be selected for a variant.', true);
-    return;
+  if (results[1].status === 'rejected') {
+     console.error("loadAllData: Failed to load existing variants:", results[1].reason);
+    combinedErrorMessages.push(results[1].reason?.response?.data?.message || results[1].reason?.message || 'Failed to load existing variants.');
   }
 
-  isLoadingAction.value = true;
-  const option_value_ids = Object.values(newVariantForm.selected_option_values).filter(id => id !== null && id !== undefined);
-
-  const formData = new FormData();
-  if (newVariantForm.sku) formData.append('sku', newVariantForm.sku);
-  formData.append('price_modifier', newVariantForm.price_modifier);
-  formData.append('stock_quantity', newVariantForm.stock_quantity);
-  option_value_ids.forEach(id => formData.append('option_value_ids[]', id));
-
-  if (newVariantForm.image_file) {
-    formData.append('productImage', newVariantForm.image_file); // Backend expects 'productImage' for variants too
-  } else if (newVariantForm.image_removal_flag && isEditing.value) {
-    formData.append('image_url', null); // Signal to remove image
+  if (combinedErrorMessages.length > 0) {
+    fetchError.value = combinedErrorMessages.join(' ');
   }
-  // If no new image and not removing, don't append image_url; backend PUT will keep existing if field not present.
-
-  try {
-    if (isEditing.value) {
-      await $axios.put(`/admin/variants/${editingVariantId.value}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setActionFeedback('Variant updated successfully.', false);
-    } else {
-      await $axios.post(`/admin/products/${props.productId}/variants`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setActionFeedback('Variant created successfully.', false);
-    }
-    resetForm();
-    await fetchProductVariants();
-  } catch (error) {
-    console.error('Error saving variant:', error);
-    setActionFeedback(error.response?.data?.message || `Failed to ${isEditing.value ? 'update' : 'create'} variant.`, true);
-  } finally {
-    isLoadingAction.value = false;
-  }
+  // Individual loading flags are set within their respective functions.
 }
 
-async function handleDeleteVariant(variantId) {
-  if (!confirm(`Are you sure you want to delete variant ID ${variantId}? This cannot be undone.`)) return;
-  isLoadingAction.value = true;
-  try {
-    await $axios.delete(`/admin/variants/${variantId}`);
-    setActionFeedback('Variant deleted successfully.', false);
-    await fetchProductVariants();
-  } catch (error) {
-    console.error('Error deleting variant:', error);
-    setActionFeedback(error.response?.data?.message || 'Failed to delete variant.', true);
-  } finally {
-    isLoadingAction.value = false;
+onMounted(() => {
+  if (propProductId.value) {
+    loadAllData();
   }
-}
-
-onMounted(fetchProductVariants);
-
-watch(() => props.productId, (newVal, oldVal) => {
-  if (newVal !== oldVal) fetchProductVariants();
 });
-// Initialize selected_option_values keys based on productOptions
-watch(() => props.productOptions, (newOptions) => {
-    const currentSelections = { ...newVariantForm.selected_option_values };
-    const defaultSelections = {};
-    if (newOptions && newOptions.length > 0) {
-        newOptions.forEach(opt => {
-            // Keep existing selection if option still exists, otherwise undefined
-            defaultSelections[opt.id] = currentSelections[opt.id] || undefined;
-        });
-        newVariantForm.selected_option_values = defaultSelections;
-    }
-}, { immediate: true, deep: true });
+
+watch(propProductId, (newProductId, oldProductId) => {
+  if (newProductId && newProductId !== oldProductId) {
+    configuredProductOptions.value = [];
+    existingVariants.value = [];
+    loadAllData();
+  } else if (!newProductId) {
+    configuredProductOptions.value = [];
+    existingVariants.value = [];
+    fetchError.value = null;
+  }
+}, { immediate: false });
 
 </script>
 
 <style scoped>
-.variants-manager { margin-top: 2rem; padding: 1.5rem; }
-.variants-manager h3, .variant-form-section h4, .existing-variants-section h4 {
-    margin-top:0; color: #333; border-bottom: 1px solid #eee; padding-bottom: 0.5rem; margin-bottom: 1rem;
+/* Tailwind placeholder classes used:
+  - For general buttons: px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150 shadow-sm
+  - For form inputs/selects: block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm
+  - For primary submit button: w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed
+  - For secondary/cancel button: mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm
+*/
+.max-h-96 {
+  max-height: 24rem; /* 384px, if not already defined by Tailwind */
 }
-.variant-form-section { margin-bottom: 2rem; padding:1.5rem; }
-.existing-variants-section { margin-top: 1rem; }
-
-.form-row { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.form-group { flex: 1; min-width: 180px; margin-bottom: 0.5rem; } /* Adjusted margin for tighter rows */
-.form-group label { display: block; margin-bottom: 0.3rem; font-weight: bold; font-size: 0.9em;}
-.form-group input, .form-group select {
-  width: 100%; padding: 0.6rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
-}
-.form-group small { font-size: 0.8em; color: #666; margin-top: 0.2rem; }
-
-.image-preview { margin-top: 0.5rem; }
-.image-preview img { max-width: 100px; max-height: 100px; border-radius: 4px; border: 1px solid #eee; }
-.remove-image-button { font-size: 0.8em; color: #dc3545; background: transparent; border: none; cursor: pointer; display: block; margin-top: 0.25rem; }
-
-
-.form-actions { margin-top: 1rem; display: flex; gap: 1rem; }
-.form-actions button { padding: 0.6rem 1.2rem; border: none; border-radius: 4px; cursor: pointer; }
-.form-actions button[type="submit"] { background-color: #28a745; color: white; }
-.form-actions button[type="submit"]:hover:not(:disabled) { background-color: #218838; }
-.form-actions button[type="button"] { background-color: #6c757d; color: white; }
-.form-actions button[type="button"]:hover:not(:disabled) { background-color: #5a6268; }
-.form-actions button:disabled { background-color: #aaa; }
-
-
-.variants-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
-.variants-table th, .variants-table td { border: 1px solid #ddd; padding: 0.6rem; text-align: left; vertical-align: middle; }
-.variants-table th { background-color: #f2f2f2; }
-.thumbnail { width: 40px; height: 40px; object-fit: cover; border-radius: 3px; }
-.variant-options-display { list-style: none; padding: 0; margin: 0; font-size:0.9em; }
-.variant-options-display li { white-space: nowrap; }
-
-.actions-cell { white-space: nowrap; }
-.actions-cell button { font-size: 0.9em; margin-right: 0.3rem; padding: 0.3rem 0.5rem; }
-.edit-link-button { background-color: #ffc107; color:#333; border:none; border-radius:3px; cursor:pointer; }
-.delete-link-button { background-color: #dc3545; color:white; border:none; border-radius:3px; cursor:pointer; }
-.edit-link-button:hover:not(:disabled) { background-color: #e0a800; }
-.delete-link-button:hover:not(:disabled) { background-color: #c82333; }
-
-
-.loading-state, .error-message, .empty-state, .action-feedback { text-align: center; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; }
-.loading-state { background-color: #eef; }
-.error-message, .action-feedback.error { background-color: #fdd; color: #900; }
-.action-feedback.success { background-color: #dfd; color: #070; }
-.empty-state { background-color: #f8f9fa; padding: 1rem; }
-
-.card { background-color: #fff; border: 1px solid #e0e0e0; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 </style>
