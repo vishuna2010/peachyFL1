@@ -21,7 +21,7 @@ This document consolidates future enhancements and pending tasks for the platfor
   - Implement click-to-zoom on main image. *(DONE)*
   - Improve thumbnail interactions (e.g., better scrolling for many images). *(DONE - basic scroll, active styling)*
 - **Variant Selector Refinement:**
-  - Display visual swatches for "Color" options. *(Partially DONE - basic color swatches in review form, need on PDP selector)*
+  - [X] Display visual swatches for "Color" options on PDP selector.
   - Ensure "Size" or other options are clear and possibly indicate stock per selection dynamically.
 - **Product Information Tabs:** *(DONE - Description, Specs (placeholder), Reviews (placeholder))*
   - Enhance "Specifications" tab with actual data if/when available from backend.
