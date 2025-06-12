@@ -176,6 +176,20 @@ async function getProductById(productId) {
     }
     const product = productResult.rows[0];
 
+    // Fetch product gallery images
+    const imagesQuery = `
+      SELECT id, image_url, alt_text, display_order
+      FROM product_images
+      WHERE product_id = $1
+      ORDER BY display_order ASC, id ASC;
+    `;
+    const imagesResult = await client.query(imagesQuery, [productId]);
+    product.images = imagesResult.rows; // Assign the array of images
+
+    // Calculate profit margin for the main product
+    // product.cost_price should be available if the DB schema is updated for products table
+    product.profit_margin_details = calculateProfitMargin(product.price, product.cost_price);
+
     if (product.has_variants) {
       // Fetch available options and their assigned values for this product
       const availableOptionsQuery = `
@@ -200,7 +214,7 @@ async function getProductById(productId) {
 
       // Fetch all variants for this product
       const variantsQuery = `
-        SELECT id, sku, price_modifier, stock_quantity, image_url
+        SELECT id, sku, price_modifier, stock_quantity, image_url, cost_price
         FROM product_variants
         WHERE product_id = $1
         ORDER BY id ASC;
@@ -211,6 +225,9 @@ async function getProductById(productId) {
       for (const variant of product.variants) {
         variant.option_value_ids = await getVariantOptionValueIds(variant.id, client);
         variant.final_price = (parseFloat(product.price) + parseFloat(variant.price_modifier)).toFixed(2);
+        // Calculate profit margin for the variant
+        // variant.cost_price is now fetched in variantsQuery
+        variant.profit_margin_details = calculateProfitMargin(variant.final_price, variant.cost_price);
         // Note: 'selected_options' (full details) can be constructed by frontend using available_options and option_value_ids
       }
     } else {
@@ -225,7 +242,41 @@ async function getProductById(productId) {
   }
 }
 
+function calculateProfitMargin(sellingPrice, costPrice) {
+    const sp = parseFloat(sellingPrice);
+    const cp = parseFloat(costPrice);
+
+    if (isNaN(sp)) {
+        return { profit_amount: null, profit_percentage: null };
+    }
+
+    if (isNaN(cp)) { // Cost price is unknown
+        return { profit_amount: null, profit_percentage: null };
+    }
+
+    const profitAmount = parseFloat((sp - cp).toFixed(2));
+    let profitPercentage = null;
+
+    if (cp > 0) {
+        profitPercentage = parseFloat((profitAmount / cp * 100).toFixed(2));
+    } else if (cp === 0 && sp > 0) { // Cost is zero, selling price is positive
+        profitPercentage = null; // Or a string like 'Infinite %', but null is better for data consistency
+                                 // Profit amount is simply the selling price.
+    } else if (cp === 0 && sp === 0) {
+        profitPercentage = 0; // No profit, no cost, no sale price
+    }
+    // If cp < 0, this formula would still work but negative cost is unusual.
+    // profitAmount will be correctly calculated (e.g. sp=10, cp=-5, profit=15)
+    // profitPercentage will be correctly calculated (e.g. (15/-5)*100 = -300%) which is mathematically correct if odd
+
+    return {
+        profit_amount: profitAmount,
+        profit_percentage: profitPercentage
+    };
+}
+
 module.exports = {
   getAllProducts,
-  getProductById
+  getProductById,
+  calculateProfitMargin
 };
