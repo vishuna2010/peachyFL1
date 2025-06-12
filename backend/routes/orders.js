@@ -213,11 +213,11 @@ router.get('/my-history', isAuthenticated, async (req, res, next) => {
     const offset = (page - 1) * limit;
 
     const ordersQuery = `
-      SELECT o.id, o.order_date, o.total_amount, o.status,
+      SELECT o.id, o.created_at as order_date, o.total_amount, o.status,
              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) as item_count
       FROM orders o
       WHERE o.user_id = $1
-      ORDER BY o.order_date DESC
+      ORDER BY o.created_at DESC
       LIMIT $2 OFFSET $3
     `;
     const ordersResult = await db.query(ordersQuery, [userId, limit, offset]);
@@ -257,13 +257,15 @@ router.get('/my-history/:orderId', isAuthenticated, async (req, res, next) => {
     }
 
     // Query for the specific order, ensuring it belongs to the user
-    const orderQuery = 'SELECT * FROM orders WHERE id = $1 AND user_id = $2';
+    // Query for the specific order, ensuring it belongs to the user
+    // Using created_at as order_date for consistency with the list view
+    const orderQuery = 'SELECT *, created_at as order_date FROM orders WHERE id = $1 AND user_id = $2';
     const orderResult = await db.query(orderQuery, [orderId, userId]);
 
     if (orderResult.rows.length === 0) {
       throw new NotFoundError(`Order with ID ${orderId} not found or does not belong to the current user.`);
     }
-    const orderData = orderResult.rows[0];
+    const orderData = orderResult.rows[0]; // This will now include order_date aliased from created_at
 
     // Query for associated order items
     const itemsQuery = `

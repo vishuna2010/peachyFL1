@@ -19,6 +19,27 @@
         </div>
       </div>
 
+      <!-- Update Profile Details Section -->
+      <div class="bg-white shadow-md rounded-lg p-6 sm:p-8 border border-neutral-medium">
+        <h2 class="text-xl font-semibold text-text-primary mb-6">Update Profile Details</h2>
+        <form @submit.prevent="handleUpdateProfile" class="space-y-4">
+          <div>
+            <label for="profileName" class="block text-sm font-medium text-text-primary mb-1">Name</label>
+            <input type="text" id="profileName" v-model="profileName" required
+                   class="w-full px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary placeholder:text-neutral-dark" />
+            <!-- Basic client-side validation message example (optional, toasts are primary) -->
+            <p v-if="profileName.length > 0 && profileName.length < 2" class="text-xs text-red-500 mt-1">Name is too short.</p>
+          </div>
+          <button
+            type="submit"
+            :disabled="isUpdatingProfile"
+            class="w-full sm:w-auto mt-2 px-6 py-2.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-brand-primary hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary disabled:opacity-60 transition-colors"
+          >
+            {{ isUpdatingProfile ? 'Updating...' : 'Update Profile' }}
+          </button>
+        </form>
+      </div>
+
       <!-- Change Password Section -->
       <div class="bg-white shadow-md rounded-lg p-6 sm:p-8 border border-neutral-medium">
         <h2 class="text-xl font-semibold text-text-primary mb-6">Change Password</h2>
@@ -85,18 +106,25 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue'; // Added computed
 import { useAuth } from '~/composables/useAuth';
-import { useRouter } from 'vue-router';
+import { useRouter } from 'vue-router'; // useRouter might not be needed if not navigating
 import { useToast } from 'vue-toastification';
+import { useNuxtApp } from '#app'; // To get $axios
 
-const { authUser, authToken, fetchUser } = useAuth();
-const router = useRouter();
+const { authUser, authToken, fetchUser, setUser } = useAuth(); // Added setUser
+// const router = useRouter(); // Not strictly needed if only staying on page
 const toast = useToast();
+const { $axios } = useNuxtApp(); // Get $axios instance
 
-const user = ref(authUser.value);
+const user = computed(() => authUser.value); // Use computed for reactivity from composable
 const isLoading = ref(false);
 
+// For Profile Update
+const profileName = ref('');
+const isUpdatingProfile = ref(false);
+
+// For Change Password
 const currentPassword = ref('');
 const newPassword = ref('');
 const confirmNewPassword = ref('');
@@ -118,40 +146,106 @@ const handleChangePassword = async () => {
     return;
   }
 
-  console.log('Attempting to change password with:', currentPassword.value, newPassword.value, confirmNewPassword.value);
+  console.log('Attempting to change password with current password (hidden) and new password (hidden)');
 
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  try {
+    const response = await $axios.post('/api/auth/change-password', {
+      currentPassword: currentPassword.value,
+      newPassword: newPassword.value,
+    });
 
-  // Example outcomes (replace with actual API call logic later):
-  const mockApiSuccess = true; // Simulate API response
-  if (mockApiSuccess) {
-    toast.success('Password changed successfully! (Mocked)');
-    currentPassword.value = '';
-    newPassword.value = '';
-    confirmNewPassword.value = '';
-  } else {
-    toast.error('Failed to change password. Incorrect current password. (Mocked)');
+    // Axios typically considers 2xx as success, others will throw error
+    if (response.status === 200 && response.data.message) {
+      toast.success(response.data.message);
+      currentPassword.value = '';
+      newPassword.value = '';
+      confirmNewPassword.value = '';
+    } else {
+      // Fallback, though usually errors are caught in catch block
+      toast.error(response.data.message || 'Failed to change password. Please try again.');
+    }
+  } catch (error) {
+    console.error('Change password error:', error);
+    if (error.response && error.response.data && error.response.data.message) {
+      toast.error(error.response.data.message);
+    } else if (error.message) {
+      toast.error(error.message);
+    } else {
+      toast.error('An unexpected error occurred while changing password.');
+    }
+  } finally {
+    isChangingPassword.value = false;
   }
-
-  isChangingPassword.value = false;
 };
 
+const handleUpdateProfile = async () => {
+  if (!profileName.value.trim()) {
+    toast.error('Name cannot be empty.');
+    return;
+  }
+  if (profileName.value.length < 2 || profileName.value.length > 255) {
+    toast.error('Name must be between 2 and 255 characters.');
+    return;
+  }
+
+  isUpdatingProfile.value = true;
+  try {
+    const response = await $axios.put('/api/users/me/profile', {
+      name: profileName.value,
+    });
+
+    if (response.status === 200 && response.data.user) {
+      setUser(response.data.user); // Update the user state in useAuth
+      toast.success(response.data.message || 'Profile updated successfully!');
+      // profileName.value will be updated via the watchEffect or if user re-navigates
+      // or directly: profileName.value = response.data.user.name; (already done by setUser)
+    } else {
+      toast.error(response.data.message || 'Failed to update profile.');
+    }
+  } catch (error) {
+    console.error('Profile update error:', error);
+    if (error.response?.data?.message) {
+      toast.error(error.response.data.message);
+    } else if (error.response?.data?.errors) { // Handle express-validator errors
+      toast.error(error.response.data.errors.map(e => e.msg).join(', '));
+    } else {
+      toast.error('An unexpected error occurred while updating profile.');
+    }
+  } finally {
+    isUpdatingProfile.value = false;
+  }
+};
 
 onMounted(async () => {
-  if (!user.value && authToken.value) {
-    isLoading.value = true;
-    await fetchUser();
-    user.value = authUser.value;
-    isLoading.value = false;
+  isLoading.value = true;
+  if (authToken.value && !authUser.value) {
+    await fetchUser(); // This might not fetch 'name' currently
   }
+  // Initialize profileName after user data is potentially available
+  // authUser.value might be populated directly from localStorage or by fetchUser
+  if (authUser.value) {
+    profileName.value = authUser.value.name || '';
+  }
+  isLoading.value = false;
 
-  if (!user.value && !authToken.value) {
+  if (!authToken.value) {
+    console.log("Profile page: No auth token found on mount. User will be shown 'not logged in' message.");
   }
+});
+
+watch(authUser, (newUser) => {
+  if (newUser) {
+    profileName.value = newUser.name || '';
+  } else {
+    profileName.value = '';
+  }
+}, { immediate: true }); // immediate: true to run on component mount as well
+
+useHead({
 });
 
 useHead({
   title: 'My Profile',
 });
 </script>
-<!-- <style scoped> block removed -->
+<!-- No style changes, structure is similar to Change Password -->
