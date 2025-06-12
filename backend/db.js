@@ -43,18 +43,30 @@ const createTables = async () => {
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NULL, -- Added name column
         role VARCHAR(50) NOT NULL DEFAULT 'customer',
         two_fa_secret VARCHAR(255) NULL,
         is_two_fa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        -- Note: Consider adding updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP here too for consistency
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- Added updated_at column
       );
     `);
-    console.log('Table "users" created successfully or already exists (and altered for role, 2FA).');
+    console.log('Table "users" created successfully or already exists (and altered for role, 2FA, name, updated_at).');
 
     try {
       await client.query("ALTER TABLE users ALTER COLUMN role SET DEFAULT 'customer';");
-      console.log('Default role set for users table.');
+      // Attempt to add name and updated_at columns if they don't exist, for older setups
+      // These will fail gracefully if the columns already exist from the CREATE TABLE statement
+      try {
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255) NULL;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;');
+        // Update existing rows to have a valid updated_at if it was just added and is null
+        await client.query('UPDATE users SET updated_at = created_at WHERE updated_at IS NULL;');
+        console.log('Columns "name" and "updated_at" ensured in "users" table, and updated_at backfilled.');
+      } catch (addColError) {
+        console.warn('Warning during users table alteration for name/updated_at (may be benign):', addColError.message);
+      }
+      console.log('Default role set for users table and name/updated_at columns ensured.');
     } catch (alterError) {
       if (!alterError.message.includes('already exists') && !alterError.message.includes('multiple default expressions')) {
           console.warn('Warning during users table alteration for role default (may be benign if already set):', alterError.message);

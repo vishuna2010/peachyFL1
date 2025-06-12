@@ -113,6 +113,34 @@ async function resetPassword(token, newPassword) {
   return { success: true, message: 'If the token was valid, the password would have been reset.' };
 }
 
+async function changeUserPassword(userId, currentPassword, newPassword) {
+  try {
+    // Fetch the current hashed password
+    const userQuery = await db.query('SELECT password FROM users WHERE id = $1', [userId]);
+    if (userQuery.rows.length === 0) {
+      return { success: false, message: 'User not found.' };
+    }
+    const storedPasswordHash = userQuery.rows[0].password;
+
+    // Compare currentPassword with the stored hash
+    const isMatch = await bcrypt.compare(currentPassword, storedPasswordHash);
+    if (!isMatch) {
+      return { success: false, message: 'Incorrect current password.' };
+    }
+
+    // Hash the newPassword (using saltRounds defined in this file)
+    const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update the user's password in the database
+    await db.query('UPDATE users SET password = $1 WHERE id = $2', [newPasswordHash, userId]);
+
+    return { success: true, message: 'Password changed successfully.' };
+  } catch (error) {
+    console.error('Error changing password in authService:', error);
+    return { success: false, message: 'Error changing password.' };
+  }
+}
+
 module.exports = {
   registerUser,
   loginUser, // Now returns user object on success
@@ -121,6 +149,7 @@ module.exports = {
   resetPassword,
   jwtSecret,
   isAuthenticated,
+  changeUserPassword, // Export the new function
 
   // isAdmin middleware - now checks role from DB
   isAdmin: async (req, res, next) => {

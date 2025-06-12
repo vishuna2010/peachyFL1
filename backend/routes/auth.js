@@ -32,6 +32,15 @@ const passwordResetLimiter = rateLimit({
   message: { message: 'Too many password reset attempts from this IP, please try again after 30 minutes.' }
 });
 
+// Rate limiter for change password attempts
+const changePasswordLimiter = rateLimit({
+  windowMs: 30 * 60 * 1000, // 30 minutes
+  max: 5, // Limit each IP to 5 change password requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many password change attempts from this IP, please try again after 30 minutes.' }
+});
+
 // Register
 router.post('/register', registerLimiter, async (req, res) => {
   const { email, password } = req.body;
@@ -271,5 +280,40 @@ router.post('/2fa/login-verify', loginLimiter, async (req, res) => {
   }
 });
 
+// Change Password
+router.post('/change-password', authService.isAuthenticated, changePasswordLimiter, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const userId = req.user.userId;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: 'Current password and new password are required.' });
+  }
+
+  if (newPassword.length < 8) { // Example: Enforce minimum password length
+    return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
+  }
+
+  try {
+    const result = await authService.changeUserPassword(userId, currentPassword, newPassword);
+
+    if (result.success) {
+      res.status(200).json({ message: result.message });
+    } else {
+      // Determine appropriate status code based on the message
+      if (result.message === 'User not found.') {
+        return res.status(404).json({ message: result.message });
+      } else if (result.message === 'Incorrect current password.') {
+        return res.status(401).json({ message: result.message });
+      }
+      // Generic error for other cases from authService.changeUserPassword
+      return res.status(400).json({ message: result.message });
+    }
+  } catch (error) {
+    // This catch block is for unexpected errors in the route handler itself,
+    // or if authService.changeUserPassword throws an unhandled exception (which it shouldn't based on its design).
+    console.error('Error in /change-password route:', error);
+    res.status(500).json({ message: 'An unexpected error occurred while changing password.' });
+  }
+});
 
 module.exports = router;
