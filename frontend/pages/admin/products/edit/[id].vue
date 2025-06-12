@@ -1,13 +1,22 @@
 <template>
-  <div class="admin-edit-product-page">
-    <h2>Edit Product</h2>
-    <div v-if="isLoadingInitialData || isLoadingProduct" class="loading-state">Loading product data...</div>
-    <div v-else-if="fetchError && !productData" class="error-message">
-      {{ fetchError }}
-      <p><NuxtLink :to="adminProductListPath">Back to Product List</NuxtLink></p>
+  <div class="p-4 sm:p-6 lg:p-8">
+    <h2 class="text-2xl font-semibold text-gray-800 mb-6">Edit Product (ID: {{ productId }})</h2>
+
+    <div v-if="isLoadingInitialData || isLoadingProduct" class="text-center py-10">
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+      <p class="mt-2 text-sm text-gray-500">Loading product data...</p>
+    </div>
+
+    <div v-else-if="fetchError && !productData" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+      <p class="font-bold">Error Loading Product</p>
+      <p>{{ fetchError }}</p>
+      <p class="mt-2">
+        <NuxtLink :to="adminProductListPath" class="text-red-700 hover:text-red-900 underline font-medium">Back to Product List</NuxtLink>
+      </p>
     </div>
 
     <template v-if="productData">
+      <!-- ProductForm is assumed to be styled with Tailwind internally -->
       <ProductForm
         :initial-data="productData"
         :categories="categories"
@@ -16,45 +25,54 @@
         :is-submitting="isSubmitting"
         :api-error="apiError"
         @submit="handleUpdateProduct"
+        class="mb-8"
       />
+
       <!-- Product Options Management Section -->
-      <section class="options-manager-section" v-if="productData && !isLoadingProduct">
+      <section class="bg-white shadow-lg rounded-lg p-6 mt-8" v-if="productData && !isLoadingProduct">
+        <h3 class="text-xl font-semibold text-gray-700 mb-4">Product Options & Configurations</h3>
         <ProductOptionsManager :product-id="productId" />
       </section>
 
       <!-- Product Variants Management Section -->
-      <section class="variants-manager-section" v-if="productData && !isLoadingProduct && productData.options && productData.options.length > 0">
-        <ProductVariantsManager :product-id="productId" :product-options="productData.options" />
-      </section>
-      <div v-else-if="productData && !isLoadingProduct && (!productData.options || productData.options.length === 0)" class="info-message card">
-        <p>This product currently has no options defined. Add options above to start creating variants.</p>
+      <div v-if="productData && !isLoadingProduct">
+        <section class="bg-white shadow-lg rounded-lg p-6 mt-8" v-if="productData.has_variants || (productData.options && productData.options.length > 0)">
+          <h3 class="text-xl font-semibold text-gray-700 mb-4">Product Variants</h3>
+          <ProductVariantsManager :product-id="productId" :product-options="productData.options" />
+        </section>
+        <div v-else class="mt-8 p-4 bg-blue-50 border-l-4 border-blue-400 text-blue-700 rounded-md shadow">
+          <p class="font-medium">Manage Variants</p>
+          <p>This product currently has no options defined. To create variants, first assign some options in the "Product Options & Configurations" section above.</p>
+        </div>
       </div>
     </template>
 
-    <div v-else-if="!isLoadingInitialData && !isLoadingProduct && !fetchError" class="error-message">
-        Product not found or failed to load.
-        <NuxtLink :to="adminProductListPath">Back to Product List</NuxtLink>
+    <div v-else-if="!isLoadingInitialData && !isLoadingProduct && !fetchError"
+         class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
+      <p class="font-bold">Product Not Found</p>
+      <p>The product with ID {{ productId }} could not be found or failed to load.</p>
+      <NuxtLink :to="adminProductListPath" class="mt-2 inline-block text-red-700 hover:text-red-900 underline font-medium">Back to Product List</NuxtLink>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useNuxtApp, useRoute, useRouter } from '#app';
+import { useNuxtApp, useRoute, useRouter, useHead } from '#app'; // Added useHead
 import ProductForm from '~/components/admin/ProductForm.vue';
 import ProductOptionsManager from '~/components/admin/ProductOptionsManager.vue';
-import ProductVariantsManager from '~/components/admin/ProductVariantsManager.vue'; // Import the new component
+import ProductVariantsManager from '~/components/admin/ProductVariantsManager.vue';
 
 definePageMeta({
   layout: 'admin',
-  title: 'Edit Product'
+  // title: 'Edit Product' // Title managed by useHead
 });
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
 const router = useRouter();
 
-const productData = ref(null); // This will contain product.options and product.variants after fetch
+const productData = ref(null);
 const categories = ref([]);
 const suppliers = ref([]);
 
@@ -73,29 +91,28 @@ async function fetchProductAndRelatedData() {
   isLoadingInitialData.value = true;
   fetchError.value = '';
   try {
-    // Product endpoint now returns options and variants
     const [productResponse, catResponse, supResponse] = await Promise.all([
-      $axios.get(`/products/${productId}`),
+      $axios.get(`/products/${productId}`), // Public product endpoint includes variants and options
       $axios.get('/categories'),
-      $axios.get('/admin/suppliers?limit=1000')
+      $axios.get('/admin/suppliers?limit=1000') // Assuming suppliers list is not excessively large
     ]);
 
-    productData.value = productResponse.data; // This includes product.options and product.variants
+    productData.value = productResponse.data;
     categories.value = catResponse.data;
-    suppliers.value = supResponse.data.data || supResponse.data;
+    suppliers.value = supResponse.data.data || supResponse.data; // Handle paginated or direct array
 
     isLoadingProduct.value = false;
   } catch (error) {
     console.error('Error fetching product details or related data:', error);
     if (error.response?.status === 404 && error.config.url.includes(`/products/${productId}`)) {
-        productData.value = null;
+        productData.value = null; // Ensure productData is null on 404
         fetchError.value = `Product with ID ${productId} not found.`;
     } else {
-        fetchError.value = error.response?.data?.message || 'Failed to load necessary data.';
+        fetchError.value = error.response?.data?.message || 'Failed to load necessary data for product editing.';
     }
-    isLoadingProduct.value = false;
+    isLoadingProduct.value = false; // Also set to false on error
   } finally {
-    isLoadingInitialData.value = false;
+    isLoadingInitialData.value = false; // Always set this to false
   }
 }
 
@@ -108,15 +125,13 @@ async function handleUpdateProduct(formDataPayload) {
         'Content-Type': 'multipart/form-data'
       }
     });
-    // Re-fetch to get all updated data, including potentially changed base product details
-    // that might affect variant display (though variants manager fetches its own list)
-    // The ProductOptionsManager also re-fetches its own data.
+    // Consider a more targeted re-fetch or optimistic update if performance is an issue.
+    // For now, re-fetching ensures all data (including options/variants if base product change affects them) is current.
     await fetchProductAndRelatedData();
-    // router.push(`${adminProductListPath}?updated=success&id=${productId}`); // Or stay on page with success message
-    // For better UX when managing options/variants, stay on the page.
-    apiError.value = ''; // Clear previous errors
-    // Show a success message locally instead of full redirect for minor product updates
-    alert('Base product details updated successfully!'); // Replace with a proper toast/notification
+
+    // Using Nuxt's useToast (if globally available or imported here) is better than alert
+    // For example: const toast = useToast(); toast.success('Product updated successfully!');
+    alert('Base product details updated successfully!');
   } catch (error) {
     console.error('Error updating product:', error);
     apiError.value = error.response?.data?.message || 'Failed to update product.';
@@ -128,57 +143,8 @@ async function handleUpdateProduct(formDataPayload) {
 onMounted(fetchProductAndRelatedData);
 
 useHead({
-  title: 'Admin - Edit Product',
+  title: `Admin - Edit Product ${productId}`,
 });
 </script>
 
-<style scoped>
-.admin-edit-product-page {
-  max-width: 900px;
-  margin: 1.5rem auto;
-  padding: 1rem;
-}
-h2 {
-  text-align: center;
-  margin-bottom: 1.5rem;
-}
-.loading-state {
-  text-align: center;
-  padding: 2rem;
-  font-size: 1.1em;
-  color: #555;
-}
-.error-message, .info-message {
-  color: #721c24;
-  background-color: #f8d7da;
-  border: 1px solid #f5c6cb;
-  padding: 1rem;
-  border-radius: 4px;
-  text-align: center;
-  margin-bottom: 1rem;
-}
-.info-message { /* For non-error informational messages */
-    background-color: #e7f3ff;
-    color: #004085;
-    border-color: #b8daff;
-}
-.error-message a, .info-message a {
-  color: #007bff;
-  text-decoration: underline;
-  margin-top: 0.5rem;
-  display: inline-block;
-}
-
-.options-manager-section, .variants-manager-section {
-  margin-top: 2.5rem;
-  padding-top: 1.5rem;
-  border-top: 2px solid #007bff;
-}
-.card { /* General card style if needed by child components implicitly */
-  background-color: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  margin-bottom: 1rem; /* Spacing for cards */
-}
-</style>
+<!-- <style scoped> removed -->

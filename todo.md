@@ -60,7 +60,7 @@ This document consolidates future enhancements and pending tasks for the platfor
 - **Refactor Key Admin Pages with Tailwind CSS:**
   - [X] `admin/users/index.vue`
   - `admin/products/index.vue` *(DONE)*
-  - `admin/products/new.vue` / `edit/[id].vue` (assuming these exist or will be created for product management)
+  - [X] `admin/products/new.vue / edit/[id].vue`
   - `admin/orders/index.vue` / `[id].vue`
   - (Other admin pages as they are developed).
 - Create reusable admin-specific form components if beneficial.

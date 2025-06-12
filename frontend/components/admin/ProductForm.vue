@@ -1,39 +1,39 @@
 <template>
-  <form @submit.prevent="handleSubmit" class="product-form">
-    <div class="form-group">
-      <label for="name">Product Name:</label>
-      <input type="text" id="name" v-model="formData.name" required />
+  <form @submit.prevent="handleSubmit" class="space-y-6 bg-white shadow sm:rounded-lg p-6">
+    <div>
+      <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Product Name:</label>
+      <input type="text" id="name" v-model="formData.name" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
     </div>
 
-    <div class="form-group">
-      <label for="description">Description:</label>
-      <textarea id="description" v-model="formData.description"></textarea>
+    <div>
+      <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Description:</label>
+      <textarea id="description" v-model="formData.description" rows="4" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></textarea>
     </div>
 
-    <div class="form-row">
-      <div class="form-group">
-        <label for="price">Price:</label>
-        <input type="number" id="price" v-model.number="formData.price" required min="0" step="0.01" />
+    <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+      <div>
+        <label for="price" class="block text-sm font-medium text-gray-700 mb-1">Price:</label>
+        <input type="number" id="price" v-model.number="formData.price" required min="0" step="0.01" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
       </div>
-      <div class="form-group">
-        <label for="stock_quantity">Stock Quantity:</label>
-        <input type="number" id="stock_quantity" v-model.number="formData.stock_quantity" required min="0" />
+      <div>
+        <label for="stock_quantity" class="block text-sm font-medium text-gray-700 mb-1">Stock Quantity:</label>
+        <input type="number" id="stock_quantity" v-model.number="formData.stock_quantity" required min="0" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
       </div>
     </div>
 
-    <div class="form-row">
-      <div class="form-group">
-        <label for="category_id">Category:</label>
-        <select id="category_id" v-model="formData.category_id">
+    <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+      <div>
+        <label for="category_id" class="block text-sm font-medium text-gray-700 mb-1">Category:</label>
+        <select id="category_id" v-model="formData.category_id" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
           <option :value="null">-- Select Category --</option>
           <option v-for="category in categories" :key="category.id" :value="category.id">
             {{ category.name }}
           </option>
         </select>
       </div>
-      <div class="form-group">
-        <label for="supplier_id">Supplier:</label>
-        <select id="supplier_id" v-model="formData.supplier_id">
+      <div>
+        <label for="supplier_id" class="block text-sm font-medium text-gray-700 mb-1">Supplier:</label>
+        <select id="supplier_id" v-model="formData.supplier_id" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
           <option :value="null">-- No Supplier --</option>
           <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">
             {{ supplier.name }}
@@ -42,42 +42,59 @@
       </div>
     </div>
 
-    <div class="form-row">
-        <div class="form-group">
-            <label for="sku">SKU (Stock Keeping Unit):</label>
-            <input type="text" id="sku" v-model="formData.sku" />
+    <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+        <div>
+            <label for="sku" class="block text-sm font-medium text-gray-700 mb-1">SKU (Stock Keeping Unit):</label>
+            <input type="text" id="sku" v-model="formData.sku" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
         </div>
-        <div class="form-group">
-            <label for="reorder_threshold">Reorder Threshold (Optional):</label>
-            <input type="number" id="reorder_threshold" v-model.number="formData.reorder_threshold" min="0" placeholder="Leave empty for no threshold" />
+        <div>
+            <label for="reorder_threshold" class="block text-sm font-medium text-gray-700 mb-1">Reorder Threshold (Optional):</label>
+            <input type="number" id="reorder_threshold" v-model.number="formData.reorder_threshold" min="0" placeholder="Leave empty for no threshold" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
         </div>
     </div>
 
-    <div class="form-group">
-        <label for="tags">Tags (comma-separated):</label>
-        <input type="text" id="tags" v-model="tagsInput" placeholder="e.g., electronics, new, popular" />
-        <small>Product tags will be created if they don't exist.</small>
+    <div>
+        <label for="tags" class="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated):</label>
+        <input type="text" id="tags" v-model="tagsInput" placeholder="e.g., electronics, new, popular" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        <p class="mt-2 text-xs text-gray-500">Product tags will be created if they don't exist.</p>
     </div>
 
-    <div class="form-group">
-      <label for="productImage">Product Image:</label>
-      <input type="file" id="productImage" @change="handleFileChange" accept="image/*" />
-      <div v-if="isEditMode && formData.image_url && !newImagePreview" class="image-preview">
-        <p>Current Image:</p>
-        <img :src="formData.image_url.startsWith('http') ? formData.image_url : `${backendUrl}${formData.image_url}`" alt="Current product image" />
-        <button type="button" @click="removeCurrentImage" class="remove-image-button">Remove Image</button>
+    <div>
+      <label for="productImage" class="block text-sm font-medium text-gray-700 mb-1">Product Image:</label>
+      <input type="file" id="productImage" @change="handleFileChange" accept="image/*" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+      <div v-if="isEditMode && formData.image_url && !newImagePreview" class="mt-3">
+        <p class="text-sm text-gray-700 mb-1">Current Image:</p>
+        <img :src="formData.image_url.startsWith('http') ? formData.image_url : `${backendUrl}${formData.image_url}`" alt="Current product image" class="max-h-48 rounded border border-gray-200 shadow-sm" />
+        <button type="button" @click="removeCurrentImage" class="mt-2 px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-300 rounded-md hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Remove Image</button>
       </div>
-      <div v-if="newImagePreview" class="image-preview">
-        <p>New Image Preview:</p>
-        <img :src="newImagePreview" alt="New image preview" />
+      <div v-if="newImagePreview" class="mt-3">
+        <p class="text-sm text-gray-700 mb-1">New Image Preview:</p>
+        <img :src="newImagePreview" alt="New image preview" class="max-h-48 rounded border border-gray-200 shadow-sm" />
       </div>
     </div>
 
-    <div v-if="apiError" class="error-message">{{ apiError }}</div>
+    <div v-if="apiError" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+      <span class="block sm:inline">{{ apiError }}</span>
+    </div>
 
-    <button type="submit" :disabled="isSubmitting" class="submit-button">
-      {{ isSubmitting ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Product' : 'Create Product') }}
-    </button>
+    <div class="pt-5">
+      <div class="flex justify-end space-x-3">
+         <!-- Placeholder for a cancel button/link if needed in future -->
+         <!-- <button type="button" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">Cancel</button> -->
+        <button type="submit" :disabled="isSubmitting" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
+          <span v-if="isSubmitting" class="flex items-center">
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ isEditMode ? 'Updating...' : 'Creating...' }}
+          </span>
+          <span v-else>
+            {{ isEditMode ? 'Update Product' : 'Create Product' }}
+          </span>
+        </button>
+      </div>
+    </div>
   </form>
 </template>
 
@@ -197,7 +214,7 @@ function removeCurrentImage() {
 
 const handleSubmit = () => {
   if (!formData.name.trim()) {
-    alert('Product name is required.');
+    alert('Product name is required.'); // Consider replacing alert with a more integrated error display
     return;
   }
 
@@ -221,16 +238,8 @@ const handleSubmit = () => {
     if (processedFormData[key] !== null && processedFormData[key] !== undefined) {
       submissionData.append(key, processedFormData[key]);
     } else if (key === 'image_url' && imageRemovalFlag.value) {
-        // If imageRemovalFlag is true, it means formData.image_url was already set to null.
-        // We want to tell the backend to set image_url to null.
-        // Sending an empty string for 'image_url' can be interpreted by backend as nullification.
-        submissionData.append('image_url', ''); // Or explicit 'null' string if backend handles that
+        submissionData.append('image_url', '');
     }
-    // If a field in processedFormData is null (e.g. category_id after processing) and it's not image_url removal case,
-    // it simply won't be appended if the condition is `!== null && !== undefined`.
-    // This is generally fine for optional fields.
-    // If backend expects null for empty optional fields, ensure they are appended as empty string or explicit null.
-    // Example: For supplier_id, if it's null, it won't be appended. Backend should treat missing field as no change or null for new.
   }
 
   // Handle tags
@@ -239,28 +248,18 @@ const handleSubmit = () => {
     if (tagsArray.length > 0) {
         tagsArray.forEach(tag => submissionData.append('tags[]', tag));
     } else {
-        submissionData.append('tags[]', ''); // Send empty array signal if all tags removed
+        submissionData.append('tags[]', '');
     }
   } else {
-     submissionData.append('tags[]', ''); // Send empty array signal if field was cleared
+     submissionData.append('tags[]', '');
   }
 
   if (selectedFile.value) {
     submissionData.append('productImage', selectedFile.value);
   }
-  // Note: if `imageRemovalFlag.value` is true, `formData.image_url` was already set to null.
-  // The loop for `processedFormData` will skip appending `image_url` if it's null,
-  // unless we explicitly handle it like `submissionData.append('image_url', '')` as above.
-  // The PUT logic in backend `routes/products.js` for `image_url` checks:
-  // `else if (newImageUrlFromRequest === null && currentImageUrl)`
-  // `newImageUrlFromRequest` comes from `req.body.image_url`.
-  // FormData does not directly send `null`. If `image_url` is `null` in `formData`, it might not be sent.
-  // To signal removal, `image_url` should be sent as an empty string or a specific keyword if needed.
-  // The current `removeCurrentImage` sets `formData.image_url = null`.
-  // The loop for `submissionData.append` might skip it.
-  // Let's ensure explicit removal signal:
+
   if (imageRemovalFlag.value && !selectedFile.value && props.isEditMode) {
-      submissionData.set('image_url', ''); // Use .set to ensure it's there, or make it 'null_flag'
+      submissionData.set('image_url', '');
   }
 
 
@@ -268,95 +267,4 @@ const handleSubmit = () => {
 };
 </script>
 
-<style scoped>
-.product-form {
-  background-color: #fff;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.form-group {
-  margin-bottom: 1rem;
-}
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-}
-.form-group input[type="text"],
-.form-group input[type="number"],
-.form-group input[type="file"],
-.form-group select,
-.form-group textarea {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-sizing: border-box;
-}
-.form-group textarea {
-  min-height: 100px;
-}
-.form-row {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-.form-row .form-group {
-    flex: 1;
-    min-width: 200px;
-}
-.image-preview {
-  margin-top: 0.5rem;
-}
-.image-preview img {
-  max-width: 200px;
-  max-height: 200px;
-  border-radius: 4px;
-  border: 1px solid #eee;
-}
-.remove-image-button {
-    display: block;
-    margin-top: 0.5rem;
-    padding: 0.3rem 0.6rem;
-    font-size: 0.8em;
-    color: #dc3545;
-    background-color: transparent;
-    border: 1px solid #dc3545;
-    border-radius: 4px;
-    cursor: pointer;
-}
-.remove-image-button:hover {
-    background-color: #dc3545;
-    color: white;
-}
-.submit-button {
-  padding: 0.75rem 1.5rem;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-}
-.submit-button:disabled {
-  background-color: #aaa;
-}
-.submit-button:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-.error-message {
-  color: red;
-  background-color: #ffe0e0;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
-  text-align: center;
-}
-small {
-  display: block;
-  margin-top: 0.25rem;
-  font-size: 0.85em;
-  color: #6c757d;
-}
-</style>
+<!-- <style scoped> removed -->
