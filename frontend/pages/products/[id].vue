@@ -57,30 +57,48 @@
           </span>
         </div>
 
-        <!-- Product Options Selection -->
-        <div v-if="product.options && product.options.length > 0" class="space-y-4 mb-6">
-          <div v-for="option in product.options" :key="option.id">
-            <label :for="`option-${option.id}`" class="block text-sm font-medium text-text-primary mb-1">{{ option.name }}:</label>
+        <!-- Product Options Selection (New Structure) -->
+        <div v-if="product.has_variants && product.available_options && product.available_options.length > 0" class="space-y-4 mb-6">
+          <div v-for="option_type in product.available_options" :key="option_type.option_id">
+            <label :for="`option-${option_type.option_id}`" class="block text-sm font-medium text-gray-700 mb-1">
+              {{ option_type.option_name }}:
+              <span v-if="selectedOptions[option_type.option_id]" class="text-sm text-gray-500 ml-1">
+                ({{ getSelectedValueName(option_type, selectedOptions[option_type.option_id]) }})
+              </span>
+            </label>
             <div class="flex flex-wrap gap-2">
               <button
-                v-for="value in option.values"
-                :key="value.id"
-                @click="selectOption(option.id, value.id)"
+                v-for="value_obj in option_type.values"
+                :key="value_obj.value_id"
+                @click="selectOption(option_type.option_id, value_obj.value_id)"
+                type="button"
                 :class="[
-                  'px-4 py-2 border rounded-md text-sm transition-colors duration-150',
-                  selectedOptions[option.id] === value.id
-                    ? 'bg-brand-primary text-white border-brand-primary ring-2 ring-brand-accent'
-                    : 'bg-white hover:bg-neutral-light border-neutral-medium text-text-primary'
+                  'px-3 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 transition-colors duration-150',
+                  selectedOptions[option_type.option_id] === value_obj.value_id
+                    ? 'bg-indigo-600 text-white border-indigo-600 ring-indigo-500'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400'
                 ]"
               >
-                {{ value.value }}
+                <span v-if="option_type.option_name.toLowerCase() === 'color'" class="flex items-center">
+                  <span
+                    class="w-4 h-4 rounded-full inline-block mr-2 border border-gray-400"
+                    :style="{ backgroundColor: value_obj.value_name.toLowerCase() }"
+                    :title="value_obj.value_name"
+                  ></span>
+                  {{ value_obj.value_name }}
+                </span>
+                <span v-else>
+                  {{ value_obj.value_name }}
+                </span>
               </button>
             </div>
           </div>
         </div>
-        <div v-if="product.options && product.options.length > 0 && !currentVariant && Object.keys(selectedOptions).length > 0"
+
+        <!-- Message for variant availability based on selection -->
+        <div v-if="product.has_variants && product.available_options && product.available_options.length > 0 && !currentVariant && Object.keys(selectedOptions).length === product.available_options.length"
              class="my-4 p-3 rounded-md bg-red-100 text-red-700 border border-red-200 text-sm">
-          Selected combination is unavailable.
+          Selected combination is unavailable. Please try different options.
         </div>
 
         <div
@@ -241,12 +259,62 @@ const stockStatusMessage = computed(() => {
 // stockStatusClass computed property remains the same
 
 // --- Functions ---
+
+// Helper to get selected value name for display next to option label
+const getSelectedValueName = (optionType, selectedValueId) => {
+  if (!optionType || !optionType.values || !selectedValueId) return '';
+  const selectedValue = optionType.values.find(v => v.value_id === selectedValueId);
+  return selectedValue ? selectedValue.value_name : '';
+};
+
 function initializeSelections() {
-  if (product.value && product.value.options) {
-    for (const option of product.value.options) {
-      if (option.values && option.values.length > 0) {
-        selectedOptions[option.id] = option.values[0].id;
+  if (!product.value || !product.value.has_variants || !product.value.available_options || product.value.available_options.length === 0) {
+    // Clear any selections if product has no variants or no options to select from
+    for (const key in selectedOptions) {
+        delete selectedOptions[key];
+    }
+    updateCurrentVariant();
+    return;
+  }
+
+  const tempSelectedOptions = {};
+  let allOptionsHaveDefault = true;
+  for (const optionType of product.value.available_options) {
+    if (optionType.values && optionType.values.length > 0) {
+      tempSelectedOptions[optionType.option_id] = optionType.values[0].value_id;
+    } else {
+      allOptionsHaveDefault = false; // This option type has no values to pick a default from
+      break;
+    }
+  }
+
+  if (allOptionsHaveDefault && Object.keys(tempSelectedOptions).length === product.value.available_options.length) {
+    const selectedValuesArray = Object.values(tempSelectedOptions).sort((a, b) => a - b);
+    const defaultMatchedVariant = product.value.variants.find(variant => {
+      if (!variant.option_value_ids || variant.option_value_ids.length !== selectedValuesArray.length) {
+        return false;
       }
+      const sortedVariantValues = [...variant.option_value_ids].sort((a, b) => a - b);
+      return JSON.stringify(sortedVariantValues) === JSON.stringify(selectedValuesArray);
+    });
+
+    if (defaultMatchedVariant && defaultMatchedVariant.stock_quantity > 0) {
+      // A valid, in-stock default variant is found. Apply these selections.
+      for (const key in tempSelectedOptions) {
+        selectedOptions[key] = tempSelectedOptions[key];
+      }
+    } else {
+      // No valid, in-stock default variant found with the "all first" strategy.
+      // Clear any selections to force user interaction.
+      for (const key in selectedOptions) {
+          delete selectedOptions[key];
+      }
+    }
+  } else {
+    // Not all options could be defaulted (e.g., an option type had no values)
+    // Clear any selections to force user interaction.
+     for (const key in selectedOptions) {
+        delete selectedOptions[key];
     }
   }
   updateCurrentVariant();
@@ -260,48 +328,63 @@ function selectOption(optionId, valueId) {
 function updateCurrentVariant() {
   if (!product.value) return;
 
-  if (!product.value.variants || product.value.variants.length === 0) {
+  // If product has no variants, display base product info
+  if (!product.value.has_variants || !product.value.variants || product.value.variants.length === 0) {
     currentVariant.value = null;
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = product.value.stock_quantity;
-    selectedImageUrl.value = product.value.image_url || '';
+    selectedImageUrl.value = product.value.image_url || galleryImages.value[0]?.url || '';
     addToCartDisabled.value = product.value.stock_quantity <= 0;
     quantity.value = 1;
     return;
   }
 
+  // If not all options are selected, variant cannot be determined.
+  // Reset to base product price/image, indicate out of stock or prompt selection.
+  const numAvailableOptionTypes = product.value.available_options?.length || 0;
   const numSelectedOptions = Object.keys(selectedOptions).length;
-  if (product.value.options && numSelectedOptions < product.value.options.length) {
-    currentVariant.value = null;
-    displayPrice.value = parseFloat(product.value.price);
-    displaySku.value = product.value.sku || '';
-    displayStock.value = 0;
-    selectedImageUrl.value = product.value.image_url || '';
-    addToCartDisabled.value = true;
+
+  if (numSelectedOptions < numAvailableOptionTypes) {
+    currentVariant.value = null; // No specific variant is fully selected
+    displayPrice.value = parseFloat(product.value.price); // Show base price or a range, or nothing
+    displaySku.value = product.value.sku || ''; // Show base SKU or nothing
+    // Keep selectedImageUrl as is, or reset to base product image.
+    // For now, let it be what the user last clicked or the default.
+    // selectedImageUrl.value = product.value.image_url || galleryImages.value[0]?.url || '';
+    displayStock.value = 0; // Indicate that a specific variant's stock is not determined
+    addToCartDisabled.value = true; // Cannot add to cart until a full variant is selected
     return;
   }
 
+  // All option types have a selection, try to find a matching variant
+  const selectedValuesArray = Object.values(selectedOptions).sort((a, b) => a - b);
+
   const matchedVariant = product.value.variants.find(variant => {
-    if (variant.selected_options.length !== numSelectedOptions) return false;
-    return variant.selected_options.every(optVal =>
-      selectedOptions[optVal.option_id] === optVal.value_id
-    );
+    if (!variant.option_value_ids || variant.option_value_ids.length !== selectedValuesArray.length) {
+      return false;
+    }
+    // Ensure variant.option_value_ids is also sorted for consistent comparison
+    const sortedVariantValues = [...variant.option_value_ids].sort((a, b) => a - b);
+    return JSON.stringify(sortedVariantValues) === JSON.stringify(selectedValuesArray);
   });
 
   if (matchedVariant) {
     currentVariant.value = matchedVariant;
+    // final_price is already calculated and attached to variant object from backend/service
     displayPrice.value = parseFloat(matchedVariant.final_price);
-    displaySku.value = matchedVariant.sku || product.value.sku || '';
+    displaySku.value = matchedVariant.sku || product.value.sku || ''; // Prefer variant SKU
     displayStock.value = matchedVariant.stock_quantity;
-    selectedImageUrl.value = matchedVariant.image_url || product.value.image_url || '';
+    // Update main image to variant image if available, else fallback to base product image or first gallery
+    selectedImageUrl.value = matchedVariant.image_url || product.value.image_url || galleryImages.value[0]?.url || '';
     addToCartDisabled.value = matchedVariant.stock_quantity <= 0;
   } else {
+    // A full combination is selected, but no variant matches
     currentVariant.value = null;
-    displayPrice.value = parseFloat(product.value.price);
+    displayPrice.value = parseFloat(product.value.price); // Or indicate "Unavailable"
     displaySku.value = product.value.sku || '';
-    displayStock.value = 0;
-    selectedImageUrl.value = product.value.image_url || '';
+    displayStock.value = 0; // Indicate this combination is not available/out of stock
+    // selectedImageUrl.value = product.value.image_url || galleryImages.value[0]?.url || ''; // Revert to base image
     addToCartDisabled.value = true;
   }
   quantity.value = 1;
@@ -353,15 +436,14 @@ async function fetchProduct() {
 }
 
 const handleAddToCart = () => {
-  const productToAdd = currentVariant.value || product.value;
   const stockAvailable = displayStock.value;
 
-  if (!productToAdd) {
-    toast.error("Product or variant not selected/available.");
+  if (product.value.has_variants && !currentVariant.value) {
+    toast.error("Please select all product options to choose a variant.");
     return;
   }
-  if (stockAvailable <= 0) {
-    toast.error("This item is out of stock.");
+  if (addToCartDisabled.value || stockAvailable <= 0) { // Check against addToCartDisabled or explicit stock
+    toast.error("This item is out of stock or unavailable.");
     return;
   }
   if (quantity.value <= 0) {
@@ -373,17 +455,59 @@ const handleAddToCart = () => {
     return;
   }
 
-  const itemForCart = {
-    id: product.value.id,
-    productVariantId: currentVariant.value ? currentVariant.value.id : null,
-    name: currentVariant.value ? `${product.value.name} (${currentVariant.value.selected_options.map(opt => opt.value_name).join(', ')})` : product.value.name,
-    price: displayPrice.value,
-    image_url: selectedImageUrl.value,
-    sku: displaySku.value,
-  };
+  let cartItemData;
 
-  addToCart(itemForCart, quantity.value);
-  // Toast notification for successful add is now handled by useCart.js
+  if (currentVariant.value) {
+    // Construct name from selected options for the variant
+    // currentVariant.value.selected_options should be available from the backend response for variants
+    // If not, we reconstruct it from selectedOptions and available_options
+    let variantOptionString = "";
+    if (currentVariant.value.selected_options && currentVariant.value.selected_options.length > 0) {
+         variantOptionString = currentVariant.value.selected_options
+            .map(opt => `${opt.option_name}: ${opt.value_name}`) // Assuming this structure from backend
+            .join(', ');
+    } else { // Fallback if selected_options not directly on variant, reconstruct
+        const parts = [];
+        if (product.value.available_options) {
+            for (const optionType of product.value.available_options) {
+                const selectedValueId = selectedOptions[optionType.option_id];
+                if (selectedValueId) {
+                    const valueObj = optionType.values.find(v => v.value_id === selectedValueId);
+                    if (valueObj) {
+                        parts.push(valueObj.value_name); // Simpler: "Red, Large"
+                    }
+                }
+            }
+        }
+        variantOptionString = parts.join(', ');
+    }
+
+    cartItemData = {
+      id: currentVariant.value.id, // Use variant_id as the unique ID for this cart line item
+      product_id: product.value.id, // Base product ID
+      variant_id: currentVariant.value.id, // Explicit variant ID
+      name: `${product.value.name}${variantOptionString ? ` - ${variantOptionString}` : ''}`,
+      price: parseFloat(currentVariant.value.final_price),
+      sku: currentVariant.value.sku || product.value.sku, // Prefer variant SKU
+      image_url: selectedImageUrl.value, // This should reflect the variant image
+      type: 'variant',
+    };
+  } else {
+    // Base product without variants, or product where variants exist but none are selected (should be prevented by addToCartDisabled)
+    cartItemData = {
+      id: product.value.id, // Use product_id as the unique ID
+      product_id: product.value.id,
+      variant_id: null,
+      name: product.value.name,
+      price: parseFloat(product.value.price),
+      sku: product.value.sku,
+      image_url: selectedImageUrl.value, // Base product image
+      type: 'product',
+    };
+  }
+
+  addToCart(cartItemData, quantity.value);
+  // Toast for successful add is handled by useCart.js
 };
 
 onMounted(fetchProduct);

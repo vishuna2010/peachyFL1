@@ -69,9 +69,9 @@ export const useCart = () => {
     }
   };
 
-  const addToCart = (productDetails, quantity = 1) => {
-    if (!productDetails || !productDetails.id) {
-      console.error('Invalid productDetails passed to addToCart');
+  const addToCart = (itemDetails, quantityToAdd = 1) => {
+    if (!itemDetails || !itemDetails.id) { // itemDetails.id is now variant_id or product_id
+      console.error('Invalid itemDetails passed to addToCart', itemDetails);
       toast.error("Could not add item to cart due to invalid product data.");
       return;
     }
@@ -79,34 +79,34 @@ export const useCart = () => {
         initCart();
     }
 
-    const cartItemId = productDetails.id + '-' + (productDetails.productVariantId || 'base');
+    // Generate a unique cartItemId: 'variant-VID' or 'product-PID'
+    const cartItemId = itemDetails.type === 'variant'
+      ? `variant-${itemDetails.variant_id}`
+      : `product-${itemDetails.product_id}`;
+
     const existingItem = cartItems.value.find(item => item.cartItemId === cartItemId);
 
-    let itemName = productDetails.name; // Default to base product name
     if (existingItem) {
-      existingItem.quantity += quantity;
-      itemName = existingItem.name; // Use name already in cart for consistency in toast
-      toast.info(`Quantity of "${itemName}" updated to ${existingItem.quantity} in cart.`);
+      existingItem.quantity += quantityToAdd;
+      toast.info(`Quantity of "${existingItem.name}" updated to ${existingItem.quantity} in cart.`);
     } else {
-      const selectedVariantDesc = productDetails.selectedOptionsDescriptionArray
-                                  ? productDetails.selectedOptionsDescriptionArray.join(', ')
-                                  : '';
       const newItem = {
-        cartItemId: cartItemId,
-        productId: productDetails.id,
-        productVariantId: productDetails.productVariantId || null,
-        name: productDetails.name,
-        price: parseFloat(productDetails.price),
-        image_url: productDetails.image_url || null,
-        sku: productDetails.sku || null,
-        selectedVariantDescription: selectedVariantDesc,
-        quantity: quantity,
+        cartItemId: cartItemId, // Unique ID for the cart line item
+        id: itemDetails.id, // Original product or variant ID
+        productId: itemDetails.product_id, // Base product ID
+        variantId: itemDetails.variant_id || null, // Actual variant ID, if applicable
+        name: itemDetails.name, // Descriptive name (e.g., "Product - Red, Large")
+        price: parseFloat(itemDetails.price),
+        image_url: itemDetails.image_url || null,
+        sku: itemDetails.sku || null,
+        type: itemDetails.type, // 'product' or 'variant'
+        // selectedVariantDescription could be derived from name or passed if needed explicitly
+        quantity: quantityToAdd,
       };
       cartItems.value.push(newItem);
-      itemName = newItem.name; // Use name from newly created item
-      toast.success(`"${itemName}" (Qty: ${quantity}) added to cart!`);
+      toast.success(`"${newItem.name}" (Qty: ${quantityToAdd}) added to cart!`);
     }
-    console.log('Cart operation:', productDetails.name, 'Variant:', productDetails.productVariantId, 'Quantity after op:', existingItem ? existingItem.quantity : quantity);
+    // console.log('Cart operation:', itemDetails.name, 'Type:', itemDetails.type, 'ID:', itemDetails.id, 'Quantity after op:', existingItem ? existingItem.quantity : quantityToAdd);
   };
 
   const removeFromCart = (cartItemIdToRemove) => {
