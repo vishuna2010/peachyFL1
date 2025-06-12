@@ -102,27 +102,27 @@ This document consolidates future enhancements and pending tasks for the platfor
 This section outlines the primary driver for future backend development, based on user-specified core modules.
 
 1.  **Product Catalog Management**
-    - Product ID (auto-generated)
-    - Product Name
-    - SKU
-    - Category
-    - Description
-    - Brand / Manufacturer
-    - Supplier Reference
+    - [X] Product ID (auto-generated)
+    - [X] Product Name
+    - [X] SKU
+    - [X] Category
+    - [X] Description
+    - [~] Brand / Manufacturer
+    - [~] Supplier Reference
     - Image Gallery
-    - Status (Active / Inactive / Archived)
+    - [~] Status (Active / Inactive / Archived)
 2.  **Pricing Engine**
-    - Buying Price
+    - [~] Buying Price
         - Historical tracking per supplier
         - Supports multi-currency
-    - Selling Price
+    - [X] Selling Price
         - Retail and wholesale options
         - Bulk discounts and dynamic pricing
     - Profit Margin Calculator
 3.  **Stock Control & Movement**
-    - Real-time inventory levels (Admin UI: Stock Levels View - filterable, searchable, committed vs. available)
-    - Stock Movement Logs (Inbound/Outbound) (Admin UI: Recent Inventory Activity Log, Manual Stock Adjustments with reason codes, history)
-    - Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
+    - [X] Real-time inventory levels (Admin UI: Stock Levels View - filterable, searchable, committed vs. available)
+    - [~] Stock Movement Logs (Inbound/Outbound) (Admin UI: Recent Inventory Activity Log, Manual Stock Adjustments with reason codes, history)
+    - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
     - Batch and expiry tracking
     - (Consider: Stock Takes / Cycle Counting - Admin UI)
     - (Consider: Stock Movement Tracking (Advanced - for multi-location) - Admin UI)
