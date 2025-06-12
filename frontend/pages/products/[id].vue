@@ -41,10 +41,33 @@
       <!-- Details Column -->
       <div class="md:col-span-2 lg:col-span-1 py-4 md:py-0">
         <h1 class="text-3xl font-bold text-text-primary mb-2">{{ product.name }}</h1>
+
+        <!-- Average Rating and Review Count -->
+        <div v-if="product && product.review_count !== undefined" class="flex items-center mb-3">
+          <div v-if="product.review_count > 0" class="flex items-center">
+            <div class="flex items-center">
+              <span v-for="i in 5" :key="`star-${i}`" class="h-5 w-5" :class="i <= Math.round(product.average_rating) ? 'text-yellow-400' : 'text-gray-300'">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+              </span>
+            </div>
+            <button @click="scrollToReviewsAndOpenTab()" class="ml-2 text-sm text-gray-600 hover:text-indigo-500 hover:underline">
+              ({{ product.review_count }} {{ product.review_count === 1 ? 'review' : 'reviews' }})
+            </button>
+          </div>
+          <div v-else class="text-sm text-gray-500">
+            <button @click="scrollToReviewsAndOpenTab(true)" class="hover:text-indigo-500 hover:underline">
+              Be the first to review!
+            </button>
+          </div>
+        </div>
+
         <p v-if="currentVariant && currentVariant.sku" class="text-sm text-text-secondary mb-4">SKU: {{ currentVariant.sku }}</p>
         <p v-else-if="!currentVariant && product.sku" class="text-sm text-text-secondary mb-4">SKU: {{ product.sku }}</p>
 
-        <p class="text-text-secondary leading-relaxed mb-6">{{ product.description }}</p>
+        <!-- Description is now in tabs, this can be removed or kept as a short snippet -->
+        <!-- <p class="text-text-secondary leading-relaxed mb-6">{{ product.description }}</p> -->
+        <p class="text-text-secondary leading-relaxed mb-6">{{ product.description?.substring(0, 150) + (product.description?.length > 150 ? '...' : '') }}</p>
+
 
         <p class="text-3xl font-bold text-brand-primary mb-6">${{ displayPrice.toFixed(2) }}</p>
 
@@ -156,14 +179,13 @@
           </button>
         </nav>
       </div>
-      <div class="mt-8">
+      <div class="mt-8" id="product-tabs-content">
         <div v-if="activeTab === 'description'">
-          <h3 class="text-xl font-semibold text-gray-800 mb-4">Product Description</h3>
+          <h3 class="sr-only">Product Description</h3>
           <div class="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none text-gray-700 leading-relaxed" v-html="product.description"></div>
         </div>
         <div v-if="activeTab === 'specifications'">
-          <h3 class="text-xl font-semibold text-gray-800 mb-4">Specifications</h3>
-          <!-- Example: Displaying category and SKU as specs -->
+          <h3 class="sr-only">Specifications</h3>
           <dl class="space-y-4">
             <div v-if="product.category_name">
               <dt class="text-sm font-medium text-gray-500">Category</dt>
@@ -173,14 +195,13 @@
               <dt class="text-sm font-medium text-gray-500">SKU</dt>
               <dd class="mt-1 text-sm text-gray-900">{{ displaySku }}</dd>
             </div>
-            <!-- Add more structured specs here if available from product data -->
             <div v-if="!product.category_name && !displaySku">
                  <p class="text-gray-600">Detailed specifications are not available for this product. Please refer to the product description.</p>
             </div>
           </dl>
         </div>
         <div v-if="activeTab === 'reviews'">
-          <h3 class="text-xl font-semibold text-gray-800 mb-4">Customer Reviews</h3>
+          <h3 class="sr-only">Customer Reviews</h3>
 
           <!-- Review Submission Section -->
           <div class="mb-8 p-4 border border-gray-200 rounded-lg bg-gray-50">
@@ -208,7 +229,7 @@
               </div>
               <div v-else-if="!showReviewForm" class="text-center">
                 <button
-                  @click="showReviewForm = true"
+                  @click="openReviewForm"
                   class="px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition-colors"
                 >
                   Write a Review
@@ -226,9 +247,62 @@
             </div>
           </div>
 
-          <!-- Existing Public Reviews List (Placeholder) -->
-          <p class="text-gray-600 mt-6">No public customer reviews yet for this product. Be the first to review if you've purchased it!</p>
-          <!-- Placeholder for review list (to be implemented in Step 4) -->
+          <!-- Public Reviews List -->
+          <div class="mt-10 pt-6 border-t border-gray-200">
+            <h4 class="text-lg font-medium text-gray-800 mb-4">Customer Feedback</h4>
+            <div v-if="isLoadingPublicReviews" class="text-center py-6">
+              <p class="text-gray-500">Loading reviews...</p>
+              <div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-500 mt-2"></div>
+            </div>
+            <div v-else-if="publicReviewsError" class="p-4 bg-red-50 text-red-600 border border-red-200 rounded-md text-sm">
+              <p>Could not load reviews: {{ publicReviewsError }}</p>
+            </div>
+            <div v-else-if="!productPublicReviews || productPublicReviews.length === 0" class="text-center py-6">
+              <p class="text-gray-500">This product has no approved reviews yet.</p>
+            </div>
+            <ul v-else class="space-y-6">
+              <li v-for="review in productPublicReviews" :key="review.id" class="pb-6 border-b border-gray-100 last:border-b-0">
+                <div class="flex items-start space-x-3">
+                  <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-semibold">
+                    {{ review.user_name ? review.user_name.charAt(0).toUpperCase() : 'U' }}
+                  </div>
+                  <div class="flex-1">
+                    <div class="flex items-center justify-between">
+                      <p class="text-sm font-medium text-gray-900">{{ review.user_name || 'Anonymous User' }}</p>
+                      <p class="text-xs text-gray-500">{{ new Date(review.created_at).toLocaleDateString() }}</p>
+                    </div>
+                    <div class="flex items-center mt-1">
+                      <span v-for="i in 5" :key="`pub-star-${review.id}-${i}`" class="h-4 w-4" :class="getPublicReviewStarClass(review.rating, i)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                      </span>
+                    </div>
+                    <h5 v-if="review.title" class="mt-2 text-sm font-semibold text-gray-800">{{ review.title }}</h5>
+                    <p class="mt-1 text-sm text-gray-600 whitespace-pre-wrap">{{ review.comment }}</p>
+                  </div>
+                </div>
+              </li>
+            </ul>
+            <!-- Pagination for Public Reviews -->
+            <div class="mt-8 flex justify-center items-center space-x-3" v-if="reviewPaginationData && reviewPaginationData.totalPages > 1">
+              <button
+                @click="currentPublicReviewsPage = reviewPaginationData.currentPage - 1"
+                :disabled="reviewPaginationData.currentPage <= 1"
+                class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span class="text-sm text-gray-700">
+                Page {{ reviewPaginationData.currentPage }} of {{ reviewPaginationData.totalPages }}
+              </span>
+              <button
+                @click="currentPublicReviewsPage = reviewPaginationData.currentPage + 1"
+                :disabled="reviewPaginationData.currentPage >= reviewPaginationData.totalPages"
+                class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          </div>
 
         </div>
       </div>
@@ -301,6 +375,14 @@ const addToCartDisabled = ref(true);
 const quantity = ref(1);
 // itemAdded ref removed
 // addToCartError ref removed
+
+// Public Reviews State
+const productPublicReviews = ref([]);
+const reviewPaginationData = ref({ currentPage: 1, totalPages: 1, totalItems: 0, pageSize: 5 });
+const isLoadingPublicReviews = ref(false);
+const publicReviewsError = ref(null);
+const currentPublicReviewsPage = ref(1);
+
 
 // --- Computed properties for dynamic display based on selection ---
 const stockStatusMessage = computed(() => {
@@ -628,14 +710,95 @@ function handleReviewSubmittedSuccessfully() {
 
 watch(product, (newProduct) => {
   if (newProduct && newProduct.id) {
-    initializeSelections(); // Existing function
-    checkUserReviewStatus(); // Check review status when product loads/changes
+    // initializeSelections(); // Called within fetchProduct
+    checkUserReviewStatus();
+    // Reset and fetch reviews for the new product if reviews tab is already active or becomes active
+    productPublicReviews.value = [];
+    currentPublicReviewsPage.value = 1; // Reset page for new product
+    if (activeTab.value === 'reviews') {
+      fetchPublicProductReviews(1);
+    }
   }
-}, { deep: true, immediate: true }); // immediate might be too soon if product not fetched. fetchProduct calls initialize.
+}, { deep: true });
 
-watch(isLoggedIn, (newValue) => {
-  checkUserReviewStatus(); // Re-check when login status changes
+watch(isLoggedIn, (newValue, oldValue) => {
+  if (newValue !== oldValue) {
+    checkUserReviewStatus();
+    // If user logs in and reviews tab is active, might want to refresh public reviews or user's review status
+    if (activeTab.value === 'reviews') {
+        // checkUserReviewStatus already called, public reviews might not need immediate refresh unless they change based on auth
+    }
+  }
 });
+
+watch(activeTab, (newTab) => {
+  if (newTab === 'reviews' && product.value?.id && productPublicReviews.value.length === 0 && !isLoadingPublicReviews.value && !publicReviewsError.value) {
+    // Fetch reviews only if tab is opened, product is loaded, and reviews haven't been fetched yet for the current page
+    fetchPublicProductReviews(currentPublicReviewsPage.value);
+  }
+});
+
+watch(currentPublicReviewsPage, (newPage) => {
+    if (activeTab.value === 'reviews' && product.value?.id) {
+        fetchPublicProductReviews(newPage);
+    }
+});
+
+
+async function fetchPublicProductReviews(page = 1) {
+  if (!product.value?.id) return;
+  isLoadingPublicReviews.value = true;
+  publicReviewsError.value = null;
+  try {
+    const response = await $axios.get(`/api/products/${product.value.id}/reviews`, {
+      params: {
+        page: page,
+        limit: reviewPaginationData.value.pageSize,
+      },
+    });
+    productPublicReviews.value = response.data.reviews;
+    reviewPaginationData.value = response.data.pagination;
+    currentPublicReviewsPage.value = response.data.pagination.currentPage; // Ensure current page is synced
+  } catch (err) {
+    console.error('Error fetching public product reviews:', err);
+    publicReviewsError.value = err.response?.data?.message || 'Could not load reviews for this product.';
+    toast.error(publicReviewsError.value);
+    productPublicReviews.value = [];
+  } finally {
+    isLoadingPublicReviews.value = false;
+  }
+}
+
+// Function to scroll to reviews and open tab/form
+const scrollToReviewsAndOpenTab = async (openForm = false) => {
+  activeTab.value = 'reviews'; // This will trigger the watch(activeTab, ...) to load reviews if needed
+  if (openForm && isLoggedIn.value && !userHasReviewed.value && !isLoadingUserReview.value) {
+    showReviewForm.value = true;
+  }
+  await nextTick(); // Wait for DOM update
+  const el = document.getElementById('product-tabs-content');
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth' });
+  }
+};
+
+const openReviewForm = () => {
+    if(isLoggedIn.value && !userHasReviewed.value) {
+        activeTab.value = 'reviews'; // Switch to tab first
+        showReviewForm.value = true; // Then show form
+        nextTick(() => { // Then scroll
+            const el = document.getElementById('product-tabs-content');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+        });
+    } else if (!isLoggedIn.value) {
+        toast.info("Please login to write a review.");
+    }
+};
+
+// Star display helper for public reviews
+const getPublicReviewStarClass = (rating, starIndex) => {
+  return starIndex <= rating ? 'text-yellow-400' : 'text-gray-300';
+};
 
 </script>
 
