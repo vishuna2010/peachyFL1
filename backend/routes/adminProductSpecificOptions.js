@@ -81,6 +81,37 @@ router.get(
   }
 );
 
+// GET /assigned-options/:assignedOptionId - Get a specific product_assigned_options record
+router.get(
+  '/assigned-options/:assignedOptionId',
+  [
+    param('assignedOptionId').isInt({ gt: 0 }).withMessage('Assigned Option ID must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { assignedOptionId } = req.params;
+    try {
+      const result = await db.query(
+        `SELECT pao.id, pao.product_id, pao.option_id, po.name as option_name, pao.created_at, pao.updated_at
+         FROM product_assigned_options pao
+         JOIN product_options po ON pao.option_id = po.id
+         WHERE pao.id = $1`,
+        [assignedOptionId]
+      );
+      if (result.rows.length === 0) {
+        return next(new NotFoundError(`Product assigned option with ID ${assignedOptionId} not found.`));
+      }
+      res.json(result.rows[0]);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+
 // DELETE /assigned-options/:assignedOptionId
 // (where assignedOptionId is the ID from product_assigned_options table)
 router.delete(
