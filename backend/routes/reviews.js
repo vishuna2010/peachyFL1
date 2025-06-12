@@ -69,6 +69,42 @@ router.post(
   }
 );
 
+// GET /api/products/:productId/reviews/my-review - Get the current user's review for a product
+router.get(
+  '/products/:productId/reviews/my-review',
+  isAuthenticated,
+  [
+    param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt()
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const simplifiedErrors = errors.array().map(err => ({ field: err.param, message: err.msg }));
+      return res.status(400).json({ errors: simplifiedErrors });
+    }
+
+    const { productId } = req.params;
+    const userId = req.user.userId;
+
+    try {
+      const result = await db.query(
+        'SELECT * FROM product_reviews WHERE product_id = $1 AND user_id = $2',
+        [productId, userId]
+      );
+
+      if (result.rows.length > 0) {
+        res.json(result.rows[0]); // Send the review object directly, frontend expects { review: data } or just data. Let's send data.
+      } else {
+        res.json(null); // Send null if no review found, frontend will check for this.
+      }
+    } catch (error) {
+      console.error(`Error fetching user's review for product ${productId} by user ${userId}:`, error);
+      next(error);
+    }
+  }
+);
+
+
 // GET /api/products/:productId/reviews - List approved reviews for a product
 router.get(
   '/products/:productId/reviews',

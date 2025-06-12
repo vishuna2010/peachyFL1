@@ -181,8 +181,55 @@
         </div>
         <div v-if="activeTab === 'reviews'">
           <h3 class="text-xl font-semibold text-gray-800 mb-4">Customer Reviews</h3>
-          <p class="text-gray-600">No customer reviews yet. Be the first to review this product!</p>
-          <!-- Placeholder for review submission form or list -->
+
+          <!-- Review Submission Section -->
+          <div class="mb-8 p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <div v-if="!isLoggedIn" class="text-center">
+              <p class="text-gray-700">Please <NuxtLink to="/login" class="text-indigo-600 hover:underline font-medium">login</NuxtLink> to write a review.</p>
+            </div>
+            <div v-else>
+              <div v-if="isLoadingUserReview" class="text-center text-gray-600">
+                <p>Loading your review status...</p>
+                <div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-500 mt-2"></div>
+              </div>
+              <div v-else-if="userHasReviewed && userReview">
+                <h4 class="text-md font-semibold text-gray-800 mb-2">Your Review:</h4>
+                <div class="p-3 bg-white border border-gray-200 rounded-md">
+                  <div class="flex items-center mb-1">
+                    <span v-for="i in 5" :key="`user-review-star-${i}`" class="h-5 w-5" :class="i <= userReview.rating ? 'text-yellow-400' : 'text-gray-300'">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                    </span>
+                  </div>
+                  <h5 v-if="userReview.title" class="text-md font-medium text-gray-700">{{ userReview.title }}</h5>
+                  <p class="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{{ userReview.comment }}</p>
+                  <p class="text-xs text-gray-400 mt-2">Status: <span class="font-medium" :class="{'text-yellow-500': userReview.status === 'pending', 'text-green-500': userReview.status === 'approved', 'text-red-500': userReview.status === 'rejected'}">{{ userReview.status }}</span></p>
+                  <!-- TODO: Add "Edit your review" button if status is pending or if editing is allowed -->
+                </div>
+              </div>
+              <div v-else-if="!showReviewForm" class="text-center">
+                <button
+                  @click="showReviewForm = true"
+                  class="px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition-colors"
+                >
+                  Write a Review
+                </button>
+              </div>
+              <div v-if="showReviewForm && !userHasReviewed">
+                <ReviewForm :product-id="product.id" @review-submitted-successfully="handleReviewSubmittedSuccessfully" />
+                <button
+                  @click="showReviewForm = false"
+                  class="mt-2 w-full text-center px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Existing Public Reviews List (Placeholder) -->
+          <p class="text-gray-600 mt-6">No public customer reviews yet for this product. Be the first to review if you've purchased it!</p>
+          <!-- Placeholder for review list (to be implemented in Step 4) -->
+
         </div>
       </div>
     </div>
@@ -191,12 +238,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch, reactive, useHead } from 'vue';
 import { useRoute, useNuxtApp } from '#app';
 import { useCart } from '~/composables/useCart';
+import { useAuth } from '~/composables/useAuth'; // Import useAuth
 import { useToast } from 'vue-toastification';
 import ProductDetailSkeleton from '~/components/ProductDetailSkeleton.vue';
-import ImageZoomModal from '~/components/ImageZoomModal.vue'; // Import the modal
+import ImageZoomModal from '~/components/ImageZoomModal.vue';
+import ReviewForm from '~/components/reviews/ReviewForm.vue'; // Import ReviewForm
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
@@ -206,6 +254,13 @@ const fetchError = ref(null);
 const toast = useToast();
 
 const { addToCart } = useCart();
+const { isLoggedIn, user } = useAuth(); // Auth state
+
+// Review specific state
+const showReviewForm = ref(false);
+const userHasReviewed = ref(false);
+const userReview = ref(null); // To store the user's existing review
+const isLoadingUserReview = ref(false);
 
 // Image Zoom Modal State
 const isZoomModalOpen = ref(false);
@@ -521,6 +576,66 @@ watch(product, (newProductData) => {
 
 useHead({
   title: computed(() => product.value ? product.value.name : 'Product Details'),
+});
+
+async function checkUserReviewStatus() {
+  if (!isLoggedIn.value || !product.value?.id) {
+    userHasReviewed.value = false;
+    userReview.value = null;
+    // Decide initial state of showReviewForm based on if user can write one
+    showReviewForm.value = isLoggedIn.value && !userHasReviewed.value;
+    return;
+  }
+  isLoadingUserReview.value = true;
+  try {
+    // This API endpoint GET /api/products/:productId/reviews/my-review needs to be created in Step 3
+    // For now, we simulate its behavior or handle expected errors.
+    const response = await $axios.get(`/api/products/${product.value.id}/reviews/my-review`);
+    if (response.data && response.data.id) { // Assuming review object has an id
+      userReview.value = response.data;
+      userHasReviewed.value = true;
+      showReviewForm.value = false; // User has reviewed, so don't show form initially
+    } else { // No review found for this user and product (e.g. API returns 200 with empty or specific structure)
+      userReview.value = null;
+      userHasReviewed.value = false;
+      showReviewForm.value = false; // Keep form hidden, user can click "Write a review"
+    }
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      // 404 means user hasn't reviewed this product yet
+      userReview.value = null;
+      userHasReviewed.value = false;
+      showReviewForm.value = false; // Keep form hidden
+    } else {
+      console.error('Error checking user review status:', error);
+      // Don't show form if there was an error checking status, could be misleading
+      showReviewForm.value = false;
+      // Optionally, inform user about the error checking review status
+      // toast.error("Could not check your review status for this product.");
+    }
+  } finally {
+    isLoadingUserReview.value = false;
+  }
+}
+
+function handleReviewSubmittedSuccessfully() {
+  toast.info("Your review has been submitted and is pending approval."); // General info, form itself gives detailed success
+  userHasReviewed.value = true; // Assume it will be approved, or API for my-review should return pending one
+  showReviewForm.value = false;
+  checkUserReviewStatus(); // Re-fetch the user's review to display it (if it's returned immediately even if pending)
+  // Potentially, also refresh the main list of reviews if displayed in another tab:
+  // For example, if a composable manages public reviews: fetchPublicReviews(product.value.id);
+}
+
+watch(product, (newProduct) => {
+  if (newProduct && newProduct.id) {
+    initializeSelections(); // Existing function
+    checkUserReviewStatus(); // Check review status when product loads/changes
+  }
+}, { deep: true, immediate: true }); // immediate might be too soon if product not fetched. fetchProduct calls initialize.
+
+watch(isLoggedIn, (newValue) => {
+  checkUserReviewStatus(); // Re-check when login status changes
 });
 
 </script>
