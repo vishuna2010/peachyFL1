@@ -35,16 +35,34 @@
         </select>
       </div>
 
-      <!-- Price Range (Placeholder for now) -->
+      <!-- Price Range -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Price Range</label>
-        <div class="flex space-x-2">
-            <input type="number" :value="localMinPrice" @input="localMinPrice = $event.target.value ? parseFloat($event.target.value) : null" placeholder="Min" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
-            <input type="number" :value="localMaxPrice" @input="localMaxPrice = $event.target.value ? parseFloat($event.target.value) : null" placeholder="Max" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+        <div class="flex items-center space-x-2">
+            <input
+              type="number"
+              :value="localMinPrice"
+              @input="localMinPrice = $event.target.value === '' ? null : parseFloat($event.target.value)"
+              placeholder="Min"
+              min="0"
+              step="0.01"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <span class="text-gray-500">-</span>
+            <input
+              type="number"
+              :value="localMaxPrice"
+              @input="localMaxPrice = $event.target.value === '' ? null : parseFloat($event.target.value)"
+              placeholder="Max"
+              min="0"
+              step="0.01"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            />
         </div>
+        <p v-if="priceError" class="text-xs text-red-500 mt-1">{{ priceError }}</p>
       </div>
 
-      <!-- Sort By (Placeholder for now) -->
+      <!-- Sort By -->
       <div>
         <label for="filter-sortby" class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
         <select
@@ -81,6 +99,10 @@
 
 <script setup>
 import { ref, watch } from 'vue';
+import { useToast } from 'vue-toastification';
+
+const toast = useToast();
+const priceError = ref(null); // For displaying price range validation error
 
 const props = defineProps({
   categories: {
@@ -137,8 +159,32 @@ watch(() => props.initialSortBy, (newVal) => {
   localSortBy.value = newVal;
 });
 
+const validatePriceRange = () => {
+  priceError.value = null; // Reset error
+  const min = localMinPrice.value;
+  const max = localMaxPrice.value;
+
+  if (min !== null && (isNaN(min) || min < 0)) {
+    priceError.value = 'Min price must be a positive number.';
+    return false;
+  }
+  if (max !== null && (isNaN(max) || max < 0)) {
+    priceError.value = 'Max price must be a positive number.';
+    return false;
+  }
+  if (min !== null && max !== null && min > max) {
+    priceError.value = 'Min price cannot be greater than max price.';
+    return false;
+  }
+  return true;
+};
 
 const handleApplyFilters = () => {
+  if (!validatePriceRange()) {
+    // Toast error can also be used, but inline error is often better for forms
+    // toast.error(priceError.value);
+    return;
+  }
   emit('applyFilters', {
     selectedCategoryId: localSelectedCategoryId.value,
     searchTerm: localSearchTerm.value,
