@@ -207,4 +207,5 @@ useHead({
   title: 'Login',
 });
 </script>
-<!-- No <style scoped> block needed with Tailwind CSS -->
+
+// No <style scoped> block needed with Tailwind CSS

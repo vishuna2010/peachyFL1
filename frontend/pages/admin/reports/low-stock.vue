@@ -152,10 +152,11 @@ h2 {
   text-align: center;
 }
 tr.urgent td {
-  background-color: #ffebee; /* Light red */
+  /* background-color: #ffebee; /* Light red */
+  /* Consider more subtle highlighting if needed */
 }
 tr.warning td {
-  background-color: #fff9c4; /* Light yellow */
+  /* background-color: #fff9c4; /* Light yellow */
 }
 .action-link {
   padding: 0.3rem 0.6rem;
