@@ -117,6 +117,7 @@ This section outlines the primary driver for future backend development, based o
     - [X] Buying Price
         - [~] Historical tracking per supplier
           - [X] Phase 1: Schema created (`product_cost_history`) and PO receipts log entries.
+          - [X] Phase 2: API endpoint to view product cost history (paginated & filterable).
         - Supports multi-currency
     - [X] Selling Price
         - Retail and wholesale options
@@ -129,6 +130,7 @@ This section outlines the primary driver for future backend development, based o
       - [X] Manual stock adjustments logged to database (Phase 1)
       - [X] Logging for Initial Stock setup (products & variants).
       - [X] Logging for Stock Write-offs/Damage (via new admin endpoint).
+      - [X] Logging for Customer Returns (restock).
     - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
     - Batch and expiry tracking
     - (Consider: Stock Takes / Cycle Counting - Admin UI)
@@ -137,7 +139,8 @@ This section outlines the primary driver for future backend development, based o
 4.  **Label Generation & QR Code Printing**
     - [~] Printable product labels (Avery/Thermal formats)
       - [X] Phase 1: Backend API endpoint (/api/admin/products/:productId/label-data) provides structured JSON data for labels.
-    - QR codes linking to product page, order form, or promotion
+    - [~] QR codes linking to product page, order form, or promotion
+      - [X] Product page URL data included in /label-data API response for QR code generation.
     - Integration with Zebra/Brother printers
 5.  **Supplier & Purchase Management**
     - [X] Supplier profiles with contact and currency info (Admin UI: Manage Suppliers - CRUD for details including currency_code exists, ensure UI is styled)
@@ -147,7 +150,8 @@ This section outlines the primary driver for future backend development, based o
 6.  **Sales Order & Fulfillment**
     - Integration with e-commerce platforms
     - FIFO or batch-aware stock deduction
-    - PDF invoice generation
+    - [~] PDF invoice generation
+      - [X] Phase 1: Basic PDF invoice generated via admin API endpoint (/api/admin/orders/:orderId/invoice/pdf).
     - Order packing label printing
 7.  **Barcode / QR Scanning Support**
     - Mobile or USB scanner support
