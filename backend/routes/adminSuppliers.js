@@ -10,7 +10,8 @@ router.use(isAuthenticated, isAdmin);
 router.post('/', async (req, res) => {
   const {
     name, contact_person, email, phone,
-    address_line1, address_line2, city, postal_code, country, notes
+    address_line1, address_line2, city, postal_code, country, notes,
+    currency_code // New field
   } = req.body;
 
   // Validation
@@ -22,18 +23,27 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ message: 'Invalid email format.' });
   }
 
+  let final_currency_code = null;
+  if (currency_code !== undefined && currency_code !== null) {
+    if (typeof currency_code !== 'string' || !/^[A-Z]{3}$/.test(currency_code.toUpperCase())) {
+      return res.status(400).json({ message: 'Currency code must be 3 uppercase letters.' });
+    }
+    final_currency_code = currency_code.toUpperCase();
+  }
+
   const client = await db.pool.connect();
   try {
     const insertQuery = `
       INSERT INTO suppliers
-        (name, contact_person, email, phone, address_line1, address_line2, city, postal_code, country, notes, updated_at)
+        (name, contact_person, email, phone, address_line1, address_line2, city, postal_code, country, notes, currency_code, updated_at)
       VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
       RETURNING *;
     `;
     const values = [
       name.trim(), contact_person || null, email ? email.trim() : null, phone || null,
-      address_line1 || null, address_line2 || null, city || null, postal_code || null, country || null, notes || null
+      address_line1 || null, address_line2 || null, city || null, postal_code || null, country || null, notes || null,
+      final_currency_code // New
     ];
 
     const result = await client.query(insertQuery, values);
@@ -108,7 +118,8 @@ router.put('/:id', async (req, res) => {
 
   const {
     name, contact_person, email, phone,
-    address_line1, address_line2, city, postal_code, country, notes
+    address_line1, address_line2, city, postal_code, country, notes,
+    currency_code // New field
   } = req.body;
 
   const client = await db.pool.connect();
@@ -146,6 +157,16 @@ router.put('/:id', async (req, res) => {
     if (country !== undefined) { setClauses.push(`country = $${paramIndex++}`); values.push(country); }
     if (notes !== undefined) { setClauses.push(`notes = $${paramIndex++}`); values.push(notes); }
 
+    if (currency_code !== undefined) {
+      if (currency_code === null) {
+        setClauses.push(`currency_code = $${paramIndex++}`); values.push(null);
+      } else if (typeof currency_code === 'string' && /^[A-Z]{3}$/.test(currency_code.toUpperCase())) {
+        setClauses.push(`currency_code = $${paramIndex++}`); values.push(currency_code.toUpperCase());
+      } else {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Currency code must be 3 uppercase letters or null.' });
+      }
+    }
 
     if (setClauses.length === 0) {
       await client.query('ROLLBACK');

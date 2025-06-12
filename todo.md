@@ -109,7 +109,8 @@ This section outlines the primary driver for future backend development, based o
     - [X] Description
     - [X] Brand / Manufacturer
     - [X] Supplier Reference
-    - Image Gallery
+    - [~] Image Gallery
+      - [X] Phase 1: Backend CRUD for multiple images, images included in product detail API.
     - [X] Status (Active / Inactive / Archived)
 2.  **Pricing Engine**
     - [X] Buying Price
@@ -118,7 +119,8 @@ This section outlines the primary driver for future backend development, based o
     - [X] Selling Price
         - Retail and wholesale options
         - Bulk discounts and dynamic pricing
-    - Profit Margin Calculator
+    - [~] Profit Margin Calculator
+      - [X] Profit margin details (amount & percentage) included in product/variant API responses.
 3.  **Stock Control & Movement**
     - [X] Real-time inventory levels (Admin UI: Stock Levels View - filterable, searchable, committed vs. available)
     - [~] Stock Movement Logs (Inbound/Outbound) (Admin UI: Recent Inventory Activity Log, Manual Stock Adjustments with reason codes, history)
@@ -133,7 +135,7 @@ This section outlines the primary driver for future backend development, based o
     - QR codes linking to product page, order form, or promotion
     - Integration with Zebra/Brother printers
 5.  **Supplier & Purchase Management**
-    - Supplier profiles with contact and currency info (Admin UI: Manage Suppliers - CRUD already exists, ensure UI is styled)
+    - [X] Supplier profiles with contact and currency info (Admin UI: Manage Suppliers - CRUD for details including currency_code exists, ensure UI is styled)
     - Purchase orders and invoice matching (Admin UI: Manage Purchase Orders, Receiving Stock against POs, PO History & Reporting)
     - Delivery tracking and status updates
 6.  **Sales Order & Fulfillment**

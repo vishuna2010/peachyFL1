@@ -7,7 +7,7 @@ const { isAuthenticated, isAdmin } = require('../auth');
 const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload');
 const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../services/s3Service');
 const path = require('path');
-const { query, validationResult } = require('express-validator'); // Import express-validator
+const { query, param, validationResult } = require('express-validator'); // Import express-validator
 
 // Helper function to get or create tag IDs
 async function getOrCreateTagIds(tagNames, client) {
@@ -403,5 +403,43 @@ router.delete('/:id', isAuthenticated, isAdmin, async (req, res) => {
     res.status(500).json({ message: 'Error deleting product.' });
   } finally { client.release(); }
 });
+
+// GET /products/:productId/images - List images for a product
+router.get(
+  '/:productId/images',
+  [
+    param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { productId } = req.params;
+
+    try {
+      // Optional: Check if product exists first.
+      // const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+      // if (productCheck.rows.length === 0) {
+      //   return res.status(404).json({ message: `Product with ID ${productId} not found (and thus has no images).` });
+      // }
+
+      const queryCmd = `
+        SELECT id, product_id, image_url, alt_text, display_order, created_at
+        FROM product_images
+        WHERE product_id = $1
+        ORDER BY display_order ASC, id ASC;
+      `;
+      const result = await db.query(queryCmd, [productId]); // Uses db.query for direct pool usage, safe for read-only
+
+      res.status(200).json(result.rows);
+
+    } catch (error) {
+      console.error(`Error fetching images for product ID ${productId}:`, error);
+      next(error);
+    }
+  }
+);
 
 module.exports = router;
