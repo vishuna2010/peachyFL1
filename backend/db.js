@@ -177,14 +177,18 @@ const createTables = async () => {
         supplier_id INTEGER NULL REFERENCES suppliers(id) ON DELETE SET NULL,
         sku VARCHAR(100) NULL UNIQUE,
         reorder_threshold INTEGER NULL DEFAULT NULL,
-        has_variants BOOLEAN NOT NULL DEFAULT FALSE, -- Added has_variants
+        has_variants BOOLEAN NOT NULL DEFAULT FALSE,
+        average_rating DECIMAL(3, 2) NOT NULL DEFAULT 0.00,
+        review_count INTEGER NOT NULL DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "products" created or already exists.');
+    console.log('Table "products" created or already exists (with review fields).');
     await client.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS has_variants BOOLEAN NOT NULL DEFAULT FALSE;');
-    console.log('Column "products.has_variants" ensured.');
+    await client.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS average_rating DECIMAL(3, 2) NOT NULL DEFAULT 0.00;');
+    await client.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS review_count INTEGER NOT NULL DEFAULT 0;');
+    console.log('Columns "products.has_variants", "average_rating", "review_count" ensured.');
     await client.query(`
       DO $$
       BEGIN
@@ -552,6 +556,41 @@ const createTables = async () => {
     console.log('Table "purchase_order_items" created or already exists.');
     await client.query('CREATE INDEX IF NOT EXISTS idx_poi_purchase_order_id ON purchase_order_items(purchase_order_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_poi_product_id ON purchase_order_items(product_id);');
+
+    // --- Product Reviews Table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_reviews (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+        title VARCHAR(255) NULL,
+        comment TEXT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT uk_product_user_review UNIQUE (product_id, user_id)
+      );
+    `);
+    console.log('Table "product_reviews" created or ensured.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_product_reviews') THEN
+          CREATE TRIGGER set_timestamp_product_reviews
+          BEFORE UPDATE ON product_reviews
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "product_reviews.updated_at" ensured.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_review_product_id ON product_reviews(product_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_review_user_id ON product_reviews(user_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_review_status ON product_reviews(status);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_review_rating ON product_reviews(rating);');
+
 
     // Final check on users table role default (already present in original file, kept for safety)
     try {
