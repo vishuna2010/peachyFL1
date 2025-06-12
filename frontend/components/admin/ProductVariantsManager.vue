@@ -57,8 +57,23 @@
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ variant.stock_quantity }}</td>
                 <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                  <button @click="openEditVariantModal(variant)" class="text-indigo-600 hover:text-indigo-900 hover:underline focus:outline-none focus:underline">Edit</button>
-                  <button class="text-red-600 hover:text-red-900 hover:underline focus:outline-none focus:underline">Delete</button>
+                  <button
+                    @click="openEditVariantModal(variant)"
+                    :disabled="actionLoading.id === variant.id"
+                    class="text-indigo-600 hover:text-indigo-900 hover:underline focus:outline-none focus:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    @click="handleDeleteVariant(variant.id)"
+                    :disabled="actionLoading.id === variant.id"
+                    class="text-red-600 hover:text-red-900 hover:underline focus:outline-none focus:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span v-if="actionLoading.type === 'delete' && actionLoading.id === variant.id">
+                      <div class="inline-block animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-red-600 mr-1"></div>Deleting...
+                    </span>
+                    <span v-else>Delete</span>
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -193,8 +208,9 @@ const newVariantForm = reactive({
   image_url: '',
   selected_option_values: {} // Object to store { <global_option_id>: <global_value_id> }
 });
-const isSubmittingNewVariant = ref(false);
+const isSubmittingNewVariant = ref(false); // Used for Add/Edit form submission
 const addVariantFormError = ref(null);
+const actionLoading = ref({ type: null, id: null }); // For row-specific actions like delete
 
 // Modal Control Methods
 function openAddVariantModal() {
@@ -367,6 +383,29 @@ async function handleVariantFormSubmit() {
   }
 }
 
+async function handleDeleteVariant(variantId) {
+  if (!window.confirm('Are you sure you want to delete this variant? This action cannot be undone.')) {
+    return;
+  }
+
+  actionLoading.value = { type: 'delete', id: variantId };
+  addVariantFormError.value = null; // Clear form error if any, though not directly related
+
+  try {
+    await $axios.delete(`/api/admin/variants/${variantId}`);
+    toast.success('Variant deleted successfully!');
+    fetchProductVariants(); // Refresh the list
+  } catch (error) {
+    console.error("Error deleting variant:", error.response || error);
+    if (error.response && error.response.data && error.response.data.message) {
+      toast.error(error.response.data.message);
+    } else {
+      toast.error('An error occurred while deleting the variant.');
+    }
+  } finally {
+    actionLoading.value = { type: null, id: null };
+  }
+}
 
 async function fetchConfiguredProductOptions() {
   if (!propProductId.value) return;
