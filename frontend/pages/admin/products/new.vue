@@ -1,8 +1,14 @@
 <template>
-  <div class="admin-new-product-page">
-    <h2>Create New Product</h2>
-    <div v-if="isLoadingInitialData" class="loading-state">Loading necessary data...</div>
-    <div v-else-if="fetchError" class="error-message">{{ fetchError }}</div>
+  <div class="p-4 sm:p-6 lg:p-8">
+    <h2 class="text-2xl font-semibold text-gray-800 mb-6">Create New Product</h2>
+    <div v-if="isLoadingInitialData" class="text-center py-10">
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+      <p class="mt-2 text-sm text-gray-500">Loading necessary data...</p>
+    </div>
+    <div v-else-if="fetchError" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+      <strong class="font-bold">Error!</strong>
+      <span class="block sm:inline"> {{ fetchError }}</span>
+    </div>
     <ProductForm
       v-else
       :categories="categories"
@@ -16,12 +22,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useNuxtApp, useRouter } from '#app';
+import { useNuxtApp, useRouter, useHead } from '#app'; // Added useHead
 import ProductForm from '~/components/admin/ProductForm.vue';
 
 definePageMeta({
   layout: 'admin',
-  title: 'New Product'
+  // title: 'New Product' // Title managed by useHead
 });
 
 const { $axios } = useNuxtApp();
@@ -80,21 +86,4 @@ useHead({
 });
 </script>
 
-<style scoped>
-.admin-new-product-page {
-  max-width: 900px;
-  margin: 1.5rem auto;
-  padding: 1rem;
-}
-h2 {
-  text-align: center;
-  margin-bottom: 1.5rem;
-}
-.loading-state, .error-message {
-  text-align: center;
-  padding: 1rem;
-  border-radius: 4px;
-}
-.loading-state { background-color: #eef; }
-.error-message { background-color: #fdd; color: #900; }
-</style>
+<!-- <style scoped> removed -->
