@@ -1,38 +1,20 @@
 <template>
   <div class="space-y-6">
     <!-- Stat Cards Section -->
+    <div v-if="statsError" class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg" role="alert">
+      <span class="font-medium">Error fetching statistics:</span> {{ statsError.message || statsError }}
+    </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 mb-6">
       <StatCard
-        title="Total Revenue"
-        value="$45,231.89"
-        iconName="TR"
-        trend="+20.1% from last month"
-        trendDirection="up"
-        iconBackgroundClass="bg-green-100 text-green-700"
-      />
-      <StatCard
-        title="New Customers"
-        value="380"
-        iconName="NC"
-        trend="+5.4% from last week"
-        trendDirection="up"
-        iconBackgroundClass="bg-blue-100 text-blue-700"
-      />
-      <StatCard
-        title="Pending Orders"
-        value="23"
-        iconName="PO"
-        trend="-3 since yesterday"
-        trendDirection="down"
-        iconBackgroundClass="bg-yellow-100 text-yellow-700"
-      />
-      <StatCard
-        title="Products Out of Stock"
-        value="7"
-        iconName="OS"
-        trend="Check inventory"
-        trendDirection="neutral"
-        iconBackgroundClass="bg-red-100 text-red-700"
+        v-for="card in statCardsData"
+        :key="card.title"
+        :title="card.title"
+        :value="card.value"
+        :iconName="card.iconName"
+        :trend="card.trend"
+        :trendDirection="card.trendDirection"
+        :iconBackgroundClass="card.iconBackgroundClass"
+        :isLoading="isLoadingStats"
       />
     </div>
 
@@ -59,7 +41,8 @@
 </template>
 
 <script setup>
-import { useHead } from '#app';
+import { ref, onMounted } from 'vue';
+import { useHead, useNuxtApp } from '#app';
 import StatCard from '~/components/admin/StatCard.vue';
 
 definePageMeta({
@@ -73,8 +56,101 @@ useHead({
 
 // Add any specific script setup logic for the dashboard here later,
 // e.g., fetching dashboard data.
+
+const { $axios } = useNuxtApp();
+
+const isLoadingStats = ref(true);
+const statsError = ref(null);
+
+const statCardsData = ref([
+  {
+    title: "Total Revenue",
+    value: "...",
+    iconName: "TR",
+    trend: "", // Trends can be added later if specific APIs exist
+    trendDirection: "neutral",
+    iconBackgroundClass: "bg-green-100 text-green-700"
+  },
+  {
+    title: "Total Users", // Changed from New Customers
+    value: "...",
+    iconName: "TU", // Changed iconName
+    trend: "",
+    trendDirection: "neutral",
+    iconBackgroundClass: "bg-blue-100 text-blue-700"
+  },
+  {
+    title: "Total Orders", // Changed from Pending Orders
+    value: "...",
+    iconName: "TO", // Changed iconName
+    trend: "",
+    trendDirection: "neutral",
+    iconBackgroundClass: "bg-yellow-100 text-yellow-700"
+  },
+  {
+    title: "Total Products", // Changed from Products Out of Stock
+    value: "...",
+    iconName: "TP", // Changed iconName
+    trend: "",
+    trendDirection: "neutral",
+    iconBackgroundClass: "bg-purple-100 text-purple-700" // Changed color
+  }
+]);
+
+async function fetchDashboardStats() {
+  isLoadingStats.value = true;
+  statsError.value = null;
+  try {
+    const [
+      revenueRes,
+      usersRes,
+      ordersRes,
+      productsRes
+    ] = await Promise.all([
+      $axios.get('/api/admin/stats/total-revenue'),
+      $axios.get('/api/admin/stats/users-count'),
+      $axios.get('/api/admin/stats/orders-count'),
+      $axios.get('/api/admin/stats/products-count')
+    ]);
+
+    // Update Total Revenue
+    const revenueCard = statCardsData.value.find(card => card.title === "Total Revenue");
+    if (revenueCard && revenueRes.data.total_revenue !== undefined) {
+      revenueCard.value = revenueRes.data.total_revenue.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+    }
+
+    // Update Total Users
+    const usersCard = statCardsData.value.find(card => card.title === "Total Users");
+    if (usersCard && usersRes.data.count !== undefined) {
+      usersCard.value = usersRes.data.count.toString();
+    }
+
+    // Update Total Orders
+    const ordersCard = statCardsData.value.find(card => card.title === "Total Orders");
+    if (ordersCard && ordersRes.data.count !== undefined) {
+      ordersCard.value = ordersRes.data.count.toString();
+    }
+
+    // Update Total Products
+    const productsCard = statCardsData.value.find(card => card.title === "Total Products");
+    if (productsCard && productsRes.data.count !== undefined) {
+      productsCard.value = productsRes.data.count.toString();
+    }
+
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error);
+    statsError.value = error.response?.data || error;
+    // Optionally set card values to 'Error' or keep '...'
+    statCardsData.value.forEach(card => card.value = "Error");
+  } finally {
+    isLoadingStats.value = false;
+  }
+}
+
+onMounted(() => {
+  fetchDashboardStats();
+});
+
 </script>
 
-<style scoped>
-/* Add any page-specific styles here if needed, though prefer Tailwind utilities */
-</style>
+<!-- <style scoped> block removed -->

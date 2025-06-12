@@ -44,7 +44,14 @@ router.get('/', async (req, res, next) => {
   const offset = (page - 1) * limit;
 
   try {
-    const categoriesQuery = 'SELECT id, name FROM categories ORDER BY name ASC LIMIT $1 OFFSET $2';
+    const categoriesQuery = `
+      SELECT c.id, c.name, COUNT(p.id) AS product_count
+      FROM categories c
+      LEFT JOIN products p ON c.id = p.category_id
+      GROUP BY c.id, c.name
+      ORDER BY c.name ASC
+      LIMIT $1 OFFSET $2;
+    `;
     const categoriesResult = await db.query(categoriesQuery, [limit, offset]);
 
     const totalCategoriesQuery = 'SELECT COUNT(*) FROM categories';
@@ -75,13 +82,23 @@ router.get('/:id', async (req, res, next) => {
   }
 
   try {
-    const result = await db.query('SELECT id, name FROM categories WHERE id = $1', [categoryId]);
+    const categoryQuery = `
+      SELECT c.id, c.name, COUNT(p.id) AS product_count
+      FROM categories c
+      LEFT JOIN products p ON c.id = p.category_id
+      WHERE c.id = $1
+      GROUP BY c.id, c.name;
+    `;
+    const result = await db.query(categoryQuery, [categoryId]);
 
     if (result.rows.length === 0) {
       return next(new NotFoundError(`Category with ID ${categoryId} not found.`));
     }
+    // Ensure product_count is an integer
+    const category = result.rows[0];
+    category.product_count = parseInt(category.product_count, 10);
 
-    res.status(200).json(result.rows[0]);
+    res.status(200).json(category);
   } catch (error) {
     return next(error); // Pass errors to the global error handler
   }
@@ -129,14 +146,22 @@ router.delete('/:id', async (req, res, next) => {
   }
 
   try {
-    const result = await db.query('DELETE FROM categories WHERE id = $1 RETURNING *', [categoryId]);
+    // Check if any products are associated with this category
+    const productCountResult = await db.query('SELECT COUNT(*) AS count FROM products WHERE category_id = $1', [categoryId]);
+    const productCount = parseInt(productCountResult.rows[0].count, 10);
 
-    if (result.rows.length === 0) {
+    if (productCount > 0) {
+      return next(new BadRequestError(`Category is in use by ${productCount} product(s) and cannot be deleted. Please reassign products or delete them before deleting this category.`));
+    }
+
+    // If not in use, delete the category
+    const result = await db.query('DELETE FROM categories WHERE id = $1 RETURNING id', [categoryId]); // Only need to return id or check rowCount
+
+    if (result.rowCount === 0) { // For DELETE, rowCount is more reliable if not returning full row
       return next(new NotFoundError(`Category with ID ${categoryId} not found.`));
     }
 
-    // The ON DELETE SET NULL constraint on products.category_id will handle associated products.
-    res.status(200).json({ message: `Category with ID ${categoryId} deleted successfully.` });
+    res.status(204).send(); // Successfully deleted, no content to return
   } catch (error) {
     // Foreign key violations from other tables (if any direct FKs without ON DELETE CASCADE/SET NULL existed)
     // would typically be caught by a specific error code if not handled by schema.
