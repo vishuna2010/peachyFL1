@@ -17,9 +17,11 @@ const adminProductSpecificOptionsRoutes = require('./routes/adminProductSpecific
 const adminOptionManagementRoutes = require('./routes/adminOptionManagement'); // Import admin option management routes
 const adminProductVariantsRoutes = require('./routes/adminProductVariants.js'); // Import admin product variants routes
 const adminVariantDetailRoutes = require('./routes/adminVariantDetails.js');   // For variant-specific GET/PUT/DELETE by variant ID - Note: adminProductVariantsRoutes now includes /variants/:variantId
+const adminReviewRoutes = require('./routes/adminReviews'); // Import admin review routes
 const adminCategoryRoutes = require('./routes/adminCategories'); // Import admin category routes
 const adminStatsRoutes = require('./routes/adminStats'); // Import admin statistics routes
 // Duplicate imports for adminOptionManagementRoutes and adminProductSpecificOptionsRoutes were removed by only keeping the first ones.
+const reviewRoutes = require('./routes/reviews'); // Import review routes
 const userRoutes = require('./routes/users'); // Import user profile routes
 const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
@@ -59,8 +61,16 @@ app.use('/api/admin/options', adminOptionManagementRoutes.optionsRouter); // Mou
 app.use('/api/admin/option-values', adminOptionManagementRoutes.optionValuesRouter); // Mount global option values API
 app.use('/api/admin', adminProductSpecificOptionsRoutes); // Mount product-specific option config routes
 app.use('/api/admin', adminProductVariantsRoutes); // Mount product variants routes (e.g., /products/:productId/variants and /variants/:variantId)
+app.use('/api/admin/reviews', adminReviewRoutes); // Mount admin review management routes
 // Consider if adminVariantDetailRoutes is still needed or if its functionality is covered by adminProductVariantsRoutes. For now, keeping it if it serves other specific details.
 app.use('/api/admin', adminVariantDetailRoutes); // If it has distinct routes like /variant-details/:id for other purposes.
+
+// --- Public and User-Specific Review Routes ---
+// (e.g. POST /api/products/:productId/reviews, GET /api/products/:productId/reviews)
+// These routes are defined in reviews.js starting with /products/:productId/reviews
+// So, if reviewsRouter is mounted at /api, the paths will be correct.
+app.use('/api', reviewRoutes);
+
 
 // Mount order management specific admin routes
 // Note: adminOrderRoutes might contain routes starting with just '/orders', '/products' etc.
