@@ -124,6 +124,15 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // Fetch supplier_id from the purchase order header for cost history logging
+    const poHeaderResult = await client.query('SELECT supplier_id FROM purchase_orders WHERE id = $1', [poId]);
+    if (poHeaderResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        // Consider using next(new NotFoundError(...)) if AppError is globally handled
+        return res.status(404).json({ message: `Purchase Order with ID ${poId} not found when fetching supplier for cost history.` });
+    }
+    const supplierIdForCostHistory = poHeaderResult.rows[0].supplier_id;
+
     // 2. Fetch Purchase Order Item (and lock)
     const poItemResult = await client.query(
       'SELECT * FROM purchase_order_items WHERE id = $1 AND purchase_order_id = $2 FOR UPDATE',
@@ -246,6 +255,26 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
         poItemId.toString()
     ];
     await client.query(logMovementQuery, logMovementValues);
+
+    // Log to product_cost_history
+    const costHistoryQuery = `
+        INSERT INTO product_cost_history
+            (product_id, variant_id, supplier_id, currency_code, cost_price,
+             quantity_received, purchase_order_item_id, effective_date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+    `;
+    // poItem is expected to have currency_code and unit_cost_price from its creation
+    // poItemId is already an integer from parseInt at the start of the route
+    const costHistoryValues = [
+        poItem.product_id,
+        poItem.product_variant_id || null,
+        supplierIdForCostHistory,
+        poItem.currency_code || null,
+        poItem.unit_cost_price,
+        qtyReceivedNow,
+        poItemId
+    ];
+    await client.query(costHistoryQuery, costHistoryValues);
 
     // 8. Update purchase_orders.status and updated_at
     const allItemsForPOResult = await client.query(
