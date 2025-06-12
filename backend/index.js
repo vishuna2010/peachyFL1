@@ -18,6 +18,7 @@ const adminOptionManagementRoutes = require('./routes/adminOptionManagement'); /
 const adminProductVariantsRoutes = require('./routes/adminProductVariants.js'); // For product-scoped variant actions
 const adminVariantDetailRoutes = require('./routes/adminVariantDetails.js');   // For variant-specific GET/PUT/DELETE by variant ID
 const adminCategoryRoutes = require('./routes/adminCategories'); // Import admin category routes
+const adminStatsRoutes = require('./routes/adminStats'); // Import admin statistics routes
 const userRoutes = require('./routes/users'); // Import user profile routes
 const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
@@ -52,8 +53,17 @@ app.use('/api/products', productRoutes); // Mount product routes under /api/prod
 // Mount user management specific admin routes
 app.use('/api/admin/users', adminUserRoutes);
 app.use('/api/admin/categories', adminCategoryRoutes); // Mount admin category routes
+app.use('/api/admin/stats', adminStatsRoutes); // Mount admin statistics routes
 // Mount order management specific admin routes
-app.use('/api/admin', adminOrderRoutes); // This will make routes like /api/admin/orders available
+// Note: adminOrderRoutes might contain routes starting with just '/orders', '/products' etc.
+// Ensure its routes are specific enough or consider prefixing them within adminOrders.js if they are too generic.
+// For now, assuming adminOrderRoutes are like /api/admin/orders etc.
+// If adminOrderRoutes contains a root '/' GET or similar, it might conflict if not ordered carefully
+// or if paths are not specific enough.
+// The current setup seems to imply adminOrderRoutes paths start like /orders, /products etc.
+// which are then prefixed by /api/admin by app.use('/api/admin', adminOrderRoutes);
+app.use('/api/admin', adminOrderRoutes);
+
 
 // --- User Profile Routes ---
 app.use('/api/users', userRoutes); // Mount user profile routes under /api/users
