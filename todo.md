@@ -11,7 +11,7 @@ This document consolidates future enhancements and pending tasks for the platfor
   - Implement collapsible sidebar for filters on desktop. *(DONE - Basic structure implemented)*
   - Implement modal/drawer for filters on mobile. *(DONE - Basic structure implemented)*
   - Add visual filters (e.g., color swatches for applicable options).
-  - Implement a more visual price range slider UI (currently number inputs).
+  - [X] Enhance price range filter with improved number inputs, validation, and styling (deferred more visual slider).
 - **General UI/UX:**
   - Further review and refine global typography (Poppins font, scale, line heights, spacing).
   - Design more engaging and helpful empty state components (e.g., "No products match your filters").
