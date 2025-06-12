@@ -38,6 +38,18 @@ router.put('/:id/stock', async (req, res) => {
       return res.status(404).json({ message: `Product with ID ${id} not found.` });
     }
 
+    // Fetch product details to check has_variants
+    const productDetailsResult = await client.query('SELECT id, has_variants FROM products WHERE id = $1', [id]);
+    // This check is technically redundant due to productExistsResult, but good for clarity
+    if (productDetailsResult.rows.length === 0) {
+      return res.status(404).json({ message: `Product with ID ${id} not found (unexpected after initial check).` });
+    }
+    const product = productDetailsResult.rows[0];
+
+    if (product.has_variants) {
+      return res.status(400).json({ message: `Stock for product ID ${id} is managed at the variant level. Please update variant stock instead.` });
+    }
+
     // Update the product's stock quantity and updated_at timestamp
     // Note: The products table does not have an updated_at column currently.
     // If it's needed, it should be added to the products table schema.
