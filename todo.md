@@ -89,53 +89,72 @@ This document consolidates future enhancements and pending tasks for the platfor
 ### F. Review Moderation
 - Create Admin Page for Review Moderation (`/admin/reviews/index.vue`). *(DONE)*
 
-### G. Inventory Control (Menu Structure from previous `todo.md`)
-
-  - **I. Dashboard / Overview**
-    - A. Inventory Summary (key metrics, quick links).
-    - B. Recent Inventory Activity Log.
-  - **II. Products / Stock Management**
-    - A. Stock Levels View (filterable, searchable, committed vs. available).
-    - B. Manual Stock Adjustments (with reason codes, history).
-    - C. Stock Takes / Cycle Counting.
-    - D. Product Reorder Thresholds Management (UI for existing DB fields).
-    - E. Stock Movement Tracking (Advanced - for multi-location).
-  - **III. Purchase Orders (POs)**
-    - A. Manage Purchase Orders (CRUD, send to supplier).
-    - B. Receiving Stock (Goods In) against POs.
-    - C. PO History & Reporting.
-  - **IV. Suppliers**
-    - A. Manage Suppliers (CRUD already exists, ensure UI is styled).
-    - B. Supplier Performance (Advanced).
-  - **V. Inventory Reporting**
-    - A. Low Stock Report (UI for existing backend endpoint).
-    - B. Stock Valuation Report.
-    - C. Inventory History/Audit Trail Report.
-    - D. Sales Velocity Report (Advanced).
-    - E. Dead Stock Report (Advanced).
-  - **VI. Settings (Inventory Specific)**
-    - A. Default Units of Measure.
-    - B. Reason Codes for Stock Adjustments.
-    - C. Warehouse/Location Management (Advanced - for multi-location).
-
-### H. Reporting
+### H. Reporting (Admin UI)
 - Create `frontend/pages/admin/reports/index.vue` (as a dashboard for various reports).
+  - Consider UI for Low Stock Report (linked to "Reorder threshold alerts" in Core Modules).
+  - Consider UI for Stock Valuation Report.
+  - Consider UI for Inventory History/Audit Trail Report.
 
 ---
 
-## III. Backend Features & Enhancements
+## III. Backend Development Roadmap & Core Modules
 
-### A. Core User Features
-- API endpoint for "Change Password". *(DONE)*
-- Define updatable "Profile Details" and create corresponding API endpoint(s). *(DONE - for user name)*
+This section outlines the primary driver for future backend development, based on user-specified core modules.
 
-### B. Product Variants & Options
+1.  **Product Catalog Management**
+    - [X] Product ID (auto-generated)
+    - [X] Product Name
+    - [X] SKU
+    - [X] Category
+    - [X] Description
+    - [~] Brand / Manufacturer
+    - [~] Supplier Reference
+    - Image Gallery
+    - [~] Status (Active / Inactive / Archived)
+2.  **Pricing Engine**
+    - [~] Buying Price
+        - Historical tracking per supplier
+        - Supports multi-currency
+    - [X] Selling Price
+        - Retail and wholesale options
+        - Bulk discounts and dynamic pricing
+    - Profit Margin Calculator
+3.  **Stock Control & Movement**
+    - [X] Real-time inventory levels (Admin UI: Stock Levels View - filterable, searchable, committed vs. available)
+    - [~] Stock Movement Logs (Inbound/Outbound) (Admin UI: Recent Inventory Activity Log, Manual Stock Adjustments with reason codes, history)
+    - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
+    - Batch and expiry tracking
+    - (Consider: Stock Takes / Cycle Counting - Admin UI)
+    - (Consider: Stock Movement Tracking (Advanced - for multi-location) - Admin UI)
+    - (Consider: Settings - Default Units of Measure, Reason Codes for Stock Adjustments, Warehouse/Location Management - Admin UI)
+4.  **Label Generation & QR Code Printing**
+    - Printable product labels (Avery/Thermal formats)
+    - QR codes linking to product page, order form, or promotion
+    - Integration with Zebra/Brother printers
+5.  **Supplier & Purchase Management**
+    - Supplier profiles with contact and currency info (Admin UI: Manage Suppliers - CRUD already exists, ensure UI is styled)
+    - Purchase orders and invoice matching (Admin UI: Manage Purchase Orders, Receiving Stock against POs, PO History & Reporting)
+    - Delivery tracking and status updates
+6.  **Sales Order & Fulfillment**
+    - Integration with e-commerce platforms
+    - FIFO or batch-aware stock deduction
+    - PDF invoice generation
+    - Order packing label printing
+7.  **Barcode / QR Scanning Support**
+    - Mobile or USB scanner support
+    - Use QR codes for fast lookups or reorders
+
+### A. Foundational: Product Variants & Options (Existing)
 - Full backend logic for product variants (options, values, variants, specific configurations). *(DONE - Phase 1: DB Schema, Global Options API, Product-Specific Options API, Variants API)*
 - Ensure variants correctly impact SKU, price, and stock quantity. *(DONE - `price_modifier` used, stock on variant)*
 - API endpoints for managing options and variants associated with products. *(DONE)*
 - Update public product API (`GET /api/products/:id`) to return variant info. *(DONE)*
 
-### C. Customer Reviews & Ratings
+### B. Foundational: Core User Features (Existing)
+- API endpoint for "Change Password". *(DONE)*
+- Define updatable "Profile Details" and create corresponding API endpoint(s). *(DONE - for user name)*
+
+### C. Foundational: Customer Reviews & Ratings (Existing)
 - Database schema for reviews. *(DONE)*
 - API endpoints for submitting reviews. *(DONE)*
 - API endpoints for retrieving (paginated) approved reviews for a product. *(DONE)*
@@ -143,7 +162,7 @@ This document consolidates future enhancements and pending tasks for the platfor
 - Logic for calculating and storing average ratings / review counts on products table. *(DONE)*
 - API endpoint for user to get their own review for a product. *(DONE)*
 
-### D. Advanced Features (New or To Be Detailed)
+### D. Other Backend Enhancements (Existing & Future)
 - **Advanced Shipping & Tax Calculation:**
   - Develop or integrate modules for complex shipping cost calculations.
   - Implement tax calculation logic.
@@ -156,7 +175,7 @@ This document consolidates future enhancements and pending tasks for the platfor
 - **Input Validation Review:**
   - Systematically review and enhance input validation for all API endpoints using a library like `joi` or `express-validator` (already started using `express-validator`).
 
-### E. Data Seeding
+### E. Development Utilities: Data Seeding (Existing)
 - [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
 
 ---

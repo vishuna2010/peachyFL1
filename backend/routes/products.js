@@ -45,7 +45,9 @@ function getS3KeyFromUrl(url) {
 router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleMulterError, async (req, res) => {
   const {
     name, description, price, category_id, tags: tagNames,
-    stock_quantity = 0, supplier_id, sku, reorder_threshold
+    stock_quantity = 0, supplier_id, sku, reorder_threshold,
+    brand_manufacturer, supplier_reference, product_status, // Existing new fields
+    cost_price // ADDING cost_price
   } = req.body;
 
   if (!name || price === undefined) { return res.status(400).json({ message: 'Name and price are required.' }); }
@@ -56,6 +58,23 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   if (reorder_threshold !== undefined && reorder_threshold !== null) {
     const rt = parseInt(reorder_threshold);
     if (isNaN(rt) || rt < 0) { return res.status(400).json({ message: 'Reorder threshold must be a non-negative integer if provided.' }); }
+  }
+
+  const validStatuses = ['active', 'inactive', 'archived'];
+  let final_product_status = 'active'; // Default
+  if (product_status !== undefined) {
+    if (typeof product_status !== 'string' || !validStatuses.includes(product_status.toLowerCase())) {
+      return res.status(400).json({ message: `Invalid product_status. Must be one of: ${validStatuses.join(', ')}.` });
+    }
+    final_product_status = product_status.toLowerCase();
+  }
+
+  let parsed_cost_price = null;
+  if (cost_price !== undefined && cost_price !== null && cost_price !== '') {
+    parsed_cost_price = parseFloat(cost_price);
+    if (isNaN(parsed_cost_price) || parsed_cost_price < 0) {
+      return res.status(400).json({ message: 'Cost price must be a non-negative number.' });
+    }
   }
 
   let imageUrl = null; let s3FileKey = null;
@@ -76,13 +95,17 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   try {
     await client.query('BEGIN');
     const productQuery = `
-      INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, reorder_threshold, updated_at, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, reorder_threshold, brand_manufacturer, supplier_reference, product_status, cost_price, updated_at, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING * `;
     const productResult = await client.query(productQuery, [
       name, description, parseFloat(price), category_id ? parseInt(category_id) : null, imageUrl, stock,
       supplier_id ? parseInt(supplier_id) : null, sku || null,
-      reorder_threshold !== undefined && reorder_threshold !== null ? parseInt(reorder_threshold) : null
+      reorder_threshold !== undefined && reorder_threshold !== null ? parseInt(reorder_threshold) : null,
+      brand_manufacturer || null,
+      supplier_reference || null,
+      final_product_status,
+      parsed_cost_price // New
     ]);
     const newProduct = productResult.rows[0];
 
@@ -189,7 +212,9 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
   const { id } = req.params;
   const {
     name, description, price, category_id, tags: tagNames,
-    stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold
+    stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold,
+    brand_manufacturer, supplier_reference, product_status, // Existing new fields
+    cost_price // ADDING cost_price
   } = req.body;
 
   if (isNaN(parseInt(id))) { return res.status(400).json({ message: 'Invalid product ID.' }); }
@@ -205,6 +230,27 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
     if (currentProductResult.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Product not found.' }); }
     const currentProduct = currentProductResult.rows[0];
     finalImageUrlToStoreInDb = currentProduct.image_url;
+
+    if (product_status !== undefined) {
+      const validStatuses = ['active', 'inactive', 'archived'];
+      if (typeof product_status !== 'string' || !validStatuses.includes(product_status.toLowerCase())) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: `Invalid product_status. Must be one of: ${validStatuses.join(', ')}.` });
+      }
+    }
+
+    let parsed_cost_price_update = undefined; // Important: undefined means not provided
+    if (cost_price !== undefined) {
+      if (cost_price === null || cost_price === '') { // Allow explicitly setting to null
+        parsed_cost_price_update = null;
+      } else {
+        parsed_cost_price_update = parseFloat(cost_price);
+        if (isNaN(parsed_cost_price_update) || parsed_cost_price_update < 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'Cost price must be a non-negative number or null.' });
+        }
+      }
+    }
 
     if (req.file) {
       if (isS3Configured()) {
@@ -233,6 +279,15 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
 
     addClause('name', name); addClause('description', description); addClause('price', price, true);
     addClause('category_id', category_id, false, true);
+    addClause('brand_manufacturer', brand_manufacturer);
+    addClause('supplier_reference', supplier_reference);
+    if (product_status !== undefined) { // Ensure validated status is used
+        addClause('product_status', product_status.toLowerCase());
+    }
+    // Use parsed_cost_price_update which can be number or null
+    if (parsed_cost_price_update !== undefined) {
+        addClause('cost_price', parsed_cost_price_update, true); // isNumeric = true
+    }
     if (stock_quantity !== undefined) {
       if (currentProduct.has_variants) {
         // Optionally, log a warning or add a message to the response if desired,
@@ -274,7 +329,7 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
         for (const tagId of tagIds) { await client.query('INSERT INTO product_tags (product_id, tag_id) VALUES ($1, $2)', [id, tagId]); }
       }
        // If setClauses was empty but tags changed, we still need to update updated_at
-       if (setClauses.length === 0) {
+       if (setClauses.length === 0 && tagNames !== undefined) { // ensure tags were actually processed
            await client.query('UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [id]);
        }
     }
