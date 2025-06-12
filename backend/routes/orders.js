@@ -65,7 +65,13 @@ router.post('/', isAuthenticated, async (req, res) => {
           await client.query('ROLLBACK');
           return res.status(400).json({ message: `Not enough stock for variant "${productName}". Available: ${currentStock}, Requested: ${item.quantity}.` });
         }
-        stockUpdates.push({ type: 'variant', id: item.productVariantId, quantityToDecrement: item.quantity });
+        stockUpdates.push({
+          type: 'variant',
+          id: item.productVariantId,
+          productId: item.productId, // Added
+          quantityToDecrement: item.quantity,
+          old_stock_quantity: currentStock // Added (currentStock was variant.stock_quantity)
+        });
       } else {
         const productResult = await client.query(
           'SELECT name, price, stock_quantity, sku FROM products WHERE id = $1 FOR UPDATE',
@@ -85,7 +91,13 @@ router.post('/', isAuthenticated, async (req, res) => {
           await client.query('ROLLBACK');
           return res.status(400).json({ message: `Not enough stock for product "${productName}". Available: ${currentStock}, Requested: ${item.quantity}.` });
         }
-        stockUpdates.push({ type: 'base', id: item.productId, quantityToDecrement: item.quantity });
+        stockUpdates.push({
+          type: 'base',
+          id: item.productId,
+          productId: item.productId, // Added (can be item.productId)
+          quantityToDecrement: item.quantity,
+          old_stock_quantity: currentStock // Added (currentStock was product.stock_quantity)
+        });
       }
 
       subtotalForItems += priceAtPurchase * item.quantity;
@@ -156,8 +168,45 @@ router.post('/', isAuthenticated, async (req, res) => {
     for (const stockUpdate of stockUpdates) {
       if (stockUpdate.type === 'variant') {
         await client.query('UPDATE product_variants SET stock_quantity = stock_quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2;', [stockUpdate.quantityToDecrement, stockUpdate.id]);
-      } else {
+
+        // Log movement for variant
+        const logMovementQueryVariant = `
+          INSERT INTO stock_movement_logs
+              (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `;
+        const logMovementValuesVariant = [
+            stockUpdate.productId,
+            stockUpdate.id, // This is variant_id
+            userId,
+            'sale_deduction',
+            -stockUpdate.quantityToDecrement,
+            stockUpdate.old_stock_quantity - stockUpdate.quantityToDecrement,
+            `Sale - Order #${newOrder.id}`,
+            newOrder.id.toString()
+        ];
+        await client.query(logMovementQueryVariant, logMovementValuesVariant);
+
+      } else { // type === 'base'
         await client.query('UPDATE products SET stock_quantity = stock_quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2;', [stockUpdate.quantityToDecrement, stockUpdate.id]);
+
+        // Log movement for base product
+        const logMovementQueryBase = `
+          INSERT INTO stock_movement_logs
+              (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `;
+        const logMovementValuesBase = [
+            stockUpdate.productId, // This is product_id
+            null, // No variant_id for base product
+            userId,
+            'sale_deduction',
+            -stockUpdate.quantityToDecrement,
+            stockUpdate.old_stock_quantity - stockUpdate.quantityToDecrement,
+            `Sale - Order #${newOrder.id}`,
+            newOrder.id.toString()
+        ];
+        await client.query(logMovementQueryBase, logMovementValuesBase);
       }
     }
 

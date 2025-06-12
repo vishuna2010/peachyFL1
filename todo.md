@@ -107,12 +107,12 @@ This section outlines the primary driver for future backend development, based o
     - [X] SKU
     - [X] Category
     - [X] Description
-    - [~] Brand / Manufacturer
-    - [~] Supplier Reference
+    - [X] Brand / Manufacturer
+    - [X] Supplier Reference
     - Image Gallery
-    - [~] Status (Active / Inactive / Archived)
+    - [X] Status (Active / Inactive / Archived)
 2.  **Pricing Engine**
-    - [~] Buying Price
+    - [X] Buying Price
         - Historical tracking per supplier
         - Supports multi-currency
     - [X] Selling Price
@@ -122,6 +122,7 @@ This section outlines the primary driver for future backend development, based o
 3.  **Stock Control & Movement**
     - [X] Real-time inventory levels (Admin UI: Stock Levels View - filterable, searchable, committed vs. available)
     - [~] Stock Movement Logs (Inbound/Outbound) (Admin UI: Recent Inventory Activity Log, Manual Stock Adjustments with reason codes, history)
+      - [X] Manual stock adjustments logged to database (Phase 1)
     - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
     - Batch and expiry tracking
     - (Consider: Stock Takes / Cycle Counting - Admin UI)

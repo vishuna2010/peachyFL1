@@ -179,6 +179,35 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
       return res.status(400).json({ message: `Quantity received now (${qtyReceivedNow}) exceeds remaining receivable quantity (${totalReceivable}).` });
     }
 
+    // Fetch current stock *before* update to calculate new_quantity_on_hand later
+    let old_stock_quantity = 0;
+    if (poItem.product_variant_id) {
+        const variantStockResult = await client.query(
+            'SELECT stock_quantity FROM product_variants WHERE id = $1 FOR UPDATE',
+            [poItem.product_variant_id]
+        );
+        if (variantStockResult.rows.length > 0) { // Should always find if previous checks passed
+            old_stock_quantity = variantStockResult.rows[0].stock_quantity;
+        } else {
+            // This case should ideally be prevented by earlier checks ensuring variant exists
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: `Product Variant with ID ${poItem.product_variant_id} not found unexpectedly during stock fetch.` });
+        }
+    } else {
+        const productStockResult = await client.query(
+            'SELECT stock_quantity FROM products WHERE id = $1 FOR UPDATE',
+            [poItem.product_id]
+        );
+        if (productStockResult.rows.length > 0) { // Should always find
+            old_stock_quantity = productStockResult.rows[0].stock_quantity;
+        } else {
+            // This case should ideally be prevented by earlier checks ensuring product exists
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: `Product with ID ${poItem.product_id} not found unexpectedly during stock fetch.` });
+        }
+    }
+    const new_stock_quantity_on_hand = old_stock_quantity + qtyReceivedNow;
+
     // 6. Update purchase_order_items
     const updatedPoItemResult = await client.query(
       'UPDATE purchase_order_items SET quantity_received = quantity_received + $1 WHERE id = $2 RETURNING *',
@@ -197,6 +226,24 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
             [qtyReceivedNow, poItem.product_id]
         );
     }
+
+    // Log the stock movement
+    const logMovementQuery = `
+        INSERT INTO stock_movement_logs
+            (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `;
+    const logMovementValues = [
+        poItem.product_id,
+        poItem.product_variant_id || null,
+        req.user.userId, // Assumes isAuthenticated middleware populates req.user
+        'po_receipt',
+        qtyReceivedNow,
+        new_stock_quantity_on_hand,
+        `Received against PO #${poId}, Item #${poItemId}`,
+        poItemId.toString()
+    ];
+    await client.query(logMovementQuery, logMovementValues);
 
     // 8. Update purchase_orders.status and updated_at
     const allItemsForPOResult = await client.query(

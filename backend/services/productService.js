@@ -225,7 +225,41 @@ async function getProductById(productId) {
   }
 }
 
+function calculateProfitMargin(sellingPrice, costPrice) {
+    const sp = parseFloat(sellingPrice);
+    const cp = parseFloat(costPrice);
+
+    if (isNaN(sp)) {
+        return { profit_amount: null, profit_percentage: null };
+    }
+
+    if (isNaN(cp)) { // Cost price is unknown
+        return { profit_amount: null, profit_percentage: null };
+    }
+
+    const profitAmount = parseFloat((sp - cp).toFixed(2));
+    let profitPercentage = null;
+
+    if (cp > 0) {
+        profitPercentage = parseFloat((profitAmount / cp * 100).toFixed(2));
+    } else if (cp === 0 && sp > 0) { // Cost is zero, selling price is positive
+        profitPercentage = null; // Or a string like 'Infinite %', but null is better for data consistency
+                                 // Profit amount is simply the selling price.
+    } else if (cp === 0 && sp === 0) {
+        profitPercentage = 0; // No profit, no cost, no sale price
+    }
+    // If cp < 0, this formula would still work but negative cost is unusual.
+    // profitAmount will be correctly calculated (e.g. sp=10, cp=-5, profit=15)
+    // profitPercentage will be correctly calculated (e.g. (15/-5)*100 = -300%) which is mathematically correct if odd
+
+    return {
+        profit_amount: profitAmount,
+        profit_percentage: profitPercentage
+    };
+}
+
 module.exports = {
   getAllProducts,
-  getProductById
+  getProductById,
+  calculateProfitMargin
 };
