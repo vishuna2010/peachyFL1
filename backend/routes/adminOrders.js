@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
+const { generateOrderInvoicePdf } = require('../services/pdfService');
+const { param, validationResult } = require('express-validator');
+const { NotFoundError } = require('../utils/AppError');
 
 // Apply auth middleware to all routes in this router
 router.use(isAuthenticated, isAdmin);
@@ -155,5 +158,77 @@ router.put('/orders/:id/status', async (req, res) => {
   }
 });
 
+// GET /admin/orders/:orderId/invoice/pdf - Generate PDF invoice for an order
+router.get(
+  '/orders/:orderId/invoice/pdf',
+  [
+    param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { orderId } = req.params;
+
+    try {
+      // Fetch comprehensive order details
+      const orderQuery = `
+        SELECT
+          o.*,
+          u.email as user_email
+        FROM orders o
+        JOIN users u ON o.user_id = u.id
+        WHERE o.id = $1;
+      `;
+      const orderResult = await db.query(orderQuery, [orderId]);
+
+      if (orderResult.rows.length === 0) {
+        throw new NotFoundError(`Order with ID ${orderId} not found.`);
+      }
+      const orderDataFromDb = orderResult.rows[0];
+
+      const itemsQuery = `
+        SELECT
+          oi.quantity, oi.price_at_purchase,
+          p.name as product_name
+          /* Add other item details if needed by invoice, e.g., SKU */
+        FROM order_items oi
+        JOIN products p ON oi.product_id = p.id
+        WHERE oi.order_id = $1
+        ORDER BY oi.id ASC;
+      `;
+      const itemsResult = await db.query(itemsQuery, [orderId]);
+      orderDataFromDb.items = itemsResult.rows;
+
+      // Prepare orderDetails for PDF generation
+      const orderDetailsForPdf = {
+        ...orderDataFromDb,
+        // Company details can be from env or config
+        company_name: process.env.COMPANY_NAME || "My Awesome Store",
+        company_address: process.env.COMPANY_ADDRESS || "123 Store Street, Shopsville, ST 12345",
+        company_logo_url: process.env.COMPANY_LOGO_URL || null, // e.g. "https://example.com/logo.png"
+        company_phone: process.env.COMPANY_PHONE || "1-800-SHOP-NOW",
+        company_email: process.env.COMPANY_EMAIL || "contact@myawesomestore.com",
+        company_website: process.env.COMPANY_WEBSITE || "www.myawesomestore.com"
+      };
+
+      const pdfBuffer = await generateOrderInvoicePdf(orderDetailsForPdf);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="invoice_order_${orderId}.pdf"`);
+      // Use 'attachment' to force download: `attachment; filename="invoice_order_${orderId}.pdf"`
+      res.send(pdfBuffer);
+
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      // Pass other errors to the global error handler
+      next(error);
+    }
+  }
+);
 
 module.exports = router;

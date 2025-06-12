@@ -115,4 +115,197 @@ async function generateProductLabelPdf(product) {
 
 module.exports = {
   generateProductLabelPdf,
+  generateOrderInvoicePdf,
 };
+
+function getInvoiceHtml(orderDetails) {
+  // --- Company Details (Placeholders or from orderDetails if available) ---
+  const companyName = orderDetails.company_name || 'Your Awesome Store';
+  const companyAddress = orderDetails.company_address || '123 Commerce St, Business City, BC 12345';
+  const companyLogoUrl = orderDetails.company_logo_url || null; // e.g., 'https://yourstore.com/logo.png'
+
+  // --- Format Dates ---
+  const orderDate = new Date(orderDetails.created_at).toLocaleDateString();
+
+  // --- Helper to format address ---
+  const formatAddress = (addr, type) => {
+    if (!addr) return `<p>No ${type} address provided.</p>`;
+    return `
+      <p>
+        ${addr.line1 || ''}<br>
+        ${addr.line2 || ''}${addr.line2 ? '<br>' : ''}
+        ${addr.city || ''}, ${addr.state_province_region || ''} ${addr.postal_code || ''}<br>
+        ${addr.country || ''}
+      </p>
+    `;
+  };
+
+  // --- Items Table ---
+  let itemsHtml = '';
+  let calculatedSubtotal = 0;
+  if (orderDetails.items && orderDetails.items.length > 0) {
+    orderDetails.items.forEach(item => {
+      const unitPrice = parseFloat(item.price_at_purchase);
+      const quantity = parseInt(item.quantity);
+      const lineTotal = unitPrice * quantity;
+      calculatedSubtotal += lineTotal;
+      itemsHtml += `
+        <tr>
+          <td>${item.product_name || 'N/A'}</td>
+          <td>${quantity}</td>
+          <td>${unitPrice.toFixed(2)}</td>
+          <td>${lineTotal.toFixed(2)}</td>
+        </tr>
+      `;
+    });
+  }
+  calculatedSubtotal = parseFloat(calculatedSubtotal.toFixed(2));
+
+  // --- Totals ---
+  // Use original_total_amount if available (pre-discount subtotal), else use calculated or total_amount
+  const subtotal = orderDetails.original_total_amount
+    ? parseFloat(orderDetails.original_total_amount)
+    : (orderDetails.discount_amount_applied ? parseFloat(orderDetails.total_amount) + parseFloat(orderDetails.discount_amount_applied) : parseFloat(orderDetails.total_amount));
+
+  const discountHtml = orderDetails.discount_amount_applied && parseFloat(orderDetails.discount_amount_applied) > 0
+    ? `<tr><td colspan="3" class="text-right">Discount ${orderDetails.discount_code_applied ? `(${orderDetails.discount_code_applied})` : ''}:</td><td>-${parseFloat(orderDetails.discount_amount_applied).toFixed(2)}</td></tr>`
+    : '';
+
+  const grandTotal = parseFloat(orderDetails.total_amount).toFixed(2);
+
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Invoice #${orderDetails.id}</title>
+      <style>
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #333; }
+        .container { width: 90%; margin: 0 auto; padding: 20px; }
+        header { border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 30px; text-align: center; }
+        header img.logo { max-height: 80px; max-width: 200px; margin-bottom: 10px; }
+        header h1 { margin: 0; font-size: 24px; }
+        header p { margin: 2px 0; font-size: 12px; }
+        .invoice-details { margin-bottom: 30px; overflow: hidden; }
+        .invoice-details .invoice-id { float: left; font-size: 20px; font-weight: bold; }
+        .invoice-details .invoice-date { float: right; text-align: right; }
+        .addresses { margin-bottom: 30px; overflow: hidden; }
+        .addresses .address-block { width: 48%; float: left; }
+        .addresses .address-block.shipping { float: right; }
+        .addresses h3 { margin-top: 0; margin-bottom: 5px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px;}
+        table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        table.items-table th, table.items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        table.items-table th { background-color: #f9f9f9; font-weight: bold; }
+        table.items-table td.text-right, table.items-table th.text-right { text-align: right; }
+        .totals-section { float: right; width: 40%; margin-top: 20px; }
+        .totals-section table { width: 100%; }
+        .totals-section td { padding: 5px 0; }
+        .totals-section td.text-right { text-align: right; }
+        .totals-section .grand-total td { font-weight: bold; font-size: 16px; border-top: 2px solid #333; }
+        footer { text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #eee; font-size: 10px; color: #777; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <header>
+          ${companyLogoUrl ? `<img src="${companyLogoUrl}" alt="${companyName} Logo" class="logo"><br>` : ''}
+          <h1>${companyName}</h1>
+          <p>${companyAddress}</p>
+          ${orderDetails.company_phone ? `<p>Phone: ${orderDetails.company_phone}</p>` : ''}
+          ${orderDetails.company_email ? `<p>Email: ${orderDetails.company_email}</p>` : ''}
+          ${orderDetails.company_website ? `<p>Website: ${orderDetails.company_website}</p>` : ''}
+        </header>
+
+        <section class="invoice-details">
+          <div class="invoice-id">INVOICE</div>
+          <div class="invoice-date">
+            <p><strong>Invoice #:</strong> ${orderDetails.id}</p>
+            <p><strong>Order Date:</strong> ${orderDate}</p>
+            <p><strong>Status:</strong> ${orderDetails.status || 'N/A'}</p>
+          </div>
+        </section>
+
+        <section class="addresses">
+          <div class="address-block billing">
+            <h3>Bill To:</h3>
+            ${formatAddress(orderDetails.billing_address || orderDetails.shipping_address, 'Billing')}
+            ${orderDetails.user_email ? `<p>Email: ${orderDetails.user_email}</p>` : ''}
+          </div>
+          <div class="address-block shipping">
+            <h3>Ship To:</h3>
+            ${formatAddress(orderDetails.shipping_address, 'Shipping')}
+          </div>
+        </section>
+
+        <h3>Order Items:</h3>
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Qty</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">Line Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <section class="totals-section">
+          <table>
+            <tr>
+              <td>Subtotal:</td>
+              <td class="text-right">${subtotal.toFixed(2)}</td>
+            </tr>
+            ${discountHtml}
+            <tr class="grand-total">
+              <td>Grand Total:</td>
+              <td class="text-right">${grandTotal}</td>
+            </tr>
+          </table>
+        </section>
+
+        <footer>
+          <p>Thank you for your business!</p>
+          <p>${companyName} - ${new Date().getFullYear()}</p>
+        </footer>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+async function generateOrderInvoicePdf(orderDetails) {
+  let browser = null;
+  try {
+    const htmlContent = getInvoiceHtml(orderDetails);
+
+    browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+    const pdfBuffer = await page.pdf({
+      format: 'A4', // Standard page format
+      printBackground: true,
+      margin: {
+        top: '0.75in',
+        right: '0.5in',
+        bottom: '0.75in',
+        left: '0.5in',
+      }
+    });
+    return pdfBuffer;
+  } catch (error) {
+    console.error('Error generating order invoice PDF with Puppeteer:', error);
+    throw error; // Re-throw to be handled by the caller
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}

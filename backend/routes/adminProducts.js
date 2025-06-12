@@ -169,6 +169,7 @@ router.get(
     }
 
     const { productId } = req.params;
+    const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com';
 
     try {
       const product = await productService.getProductById(parseInt(productId));
@@ -207,7 +208,8 @@ router.get(
             barcode_value: variant.sku || product.sku || `${product.id}${variant.id ? '-' + variant.id : ''}`,
             selling_price: parseFloat(variant.final_price).toFixed(2), // final_price is already calculated in getProductById
             currency_code: STORE_CURRENCY_CODE, // Assuming product/variant prices are in store's base currency
-            currency_symbol: STORE_CURRENCY_SYMBOL
+            currency_symbol: STORE_CURRENCY_SYMBOL,
+            qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`
           });
         }
       } else {
@@ -221,7 +223,8 @@ router.get(
           barcode_value: product.sku || product.id.toString(),
           selling_price: parseFloat(product.price).toFixed(2),
           currency_code: STORE_CURRENCY_CODE,
-          currency_symbol: STORE_CURRENCY_SYMBOL
+            currency_symbol: STORE_CURRENCY_SYMBOL,
+            qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`
         });
       }
       res.status(200).json(labelsData);
