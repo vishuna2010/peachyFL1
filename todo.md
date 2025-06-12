@@ -58,7 +58,7 @@ This document consolidates future enhancements and pending tasks for the platfor
 
 ### B. Core Page Styling & Structure
 - **Refactor Key Admin Pages with Tailwind CSS:**
-  - `admin/users/index.vue`
+  - [X] `admin/users/index.vue`
   - `admin/products/index.vue` *(DONE)*
   - `admin/products/new.vue` / `edit/[id].vue` (assuming these exist or will be created for product management)
   - `admin/orders/index.vue` / `[id].vue`

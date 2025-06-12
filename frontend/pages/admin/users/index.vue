@@ -1,73 +1,91 @@
 <template>
-  <div class="admin-users-page">
-    <h2>User Management</h2>
+  <div class="p-4 sm:p-6 lg:p-8">
+    <h2 class="text-2xl font-semibold text-gray-800 mb-6">User Management</h2>
 
-    <div v-if="isLoading" class="loading-state">Loading users...</div>
-    <div v-if="fetchError" class="error-state">
-      Error fetching users: {{ fetchError.message || fetchError }}
-    </div>
-
-    <table v-if="users.length > 0 && !isLoading" class="users-table">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Email</th>
-          <th>Role</th>
-          <th>Registered At</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="user in users" :key="user.id">
-          <td>{{ user.id }}</td>
-          <td>{{ user.email }}</td>
-          <td>
-            <select
-              v-model="user.role"
-              @change="promptRoleChange(user, $event.target.value)"
-              :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id"
-              class="role-select"
-            >
-              <option value="customer">Customer</option>
-              <option value="admin">Admin</option>
-            </select>
-          </td>
-          <td>{{ new Date(user.created_at).toLocaleDateString() }}</td>
-          <td class="actions-cell">
-            <button
-              @click="confirmDeleteUser(user)"
-              :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id"
-              class="delete-button"
-            >
-              <span v-if="actionLoading.type === 'delete' && actionLoading.userId === user.id">Deleting...</span>
-              <span v-else>Delete</span>
-            </button>
-            <span v-if="actionLoading.type === 'role' && actionLoading.userId === user.id" class="action-loading-spinner">Updating role...</span>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-     <div v-if="users.length === 0 && !isLoading && !fetchError">
-      <p>No users found.</p>
+    <div v-if="isLoading" class="text-center py-10">
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+      <p class="mt-2 text-sm text-gray-500">Loading users...</p>
     </div>
 
-    <div v-if="actionError" class="action-error-message">
-      {{ actionError }}
+    <div v-if="fetchError" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+      <strong class="font-bold">Error!</strong>
+      <span class="block sm:inline"> Error fetching users: {{ fetchError.message || fetchError }}</span>
     </div>
-    <div v-if="actionSuccessMessage" class="action-success-message">
-      {{ actionSuccessMessage }}
+
+    <div v-if="actionError" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 mt-4" role="alert">
+      <span class="block sm:inline">{{ actionError }}</span>
     </div>
+    <div v-if="actionSuccessMessage" class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4 mt-4" role="alert">
+      <span class="block sm:inline">{{ actionSuccessMessage }}</span>
+    </div>
+
+    <div v-if="users.length > 0 && !isLoading" class="overflow-x-auto border border-gray-200 rounded-md shadow-sm">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registered At</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50">
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.id }}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.email }}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+              <select
+                v-model="user.role"
+                @change="promptRoleChange(user, $event.target.value)"
+                :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id"
+                class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md disabled:opacity-50 disabled:bg-gray-100"
+              >
+                <option value="customer">Customer</option>
+                <option value="admin">Admin</option>
+              </select>
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ new Date(user.created_at).toLocaleDateString() }}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm font-medium space-x-2">
+              <button
+                @click="confirmDeleteUser(user)"
+                :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id"
+                class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span v-if="actionLoading.type === 'delete' && actionLoading.userId === user.id">
+                  <div class="inline-block animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-white mr-1"></div>Deleting...
+                </span>
+                <span v-else>Delete</span>
+              </button>
+              <span v-if="actionLoading.type === 'role' && actionLoading.userId === user.id" class="text-xs text-indigo-600 italic">
+                <div class="inline-block animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-indigo-500 mr-1"></div>Updating role...
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+     <div v-if="users.length === 0 && !isLoading && !fetchError" class="text-center py-10">
+      <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+        <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2zm3-12V3m0 18v-2" />
+      </svg>
+      <h3 class="mt-2 text-sm font-medium text-gray-900">No users found</h3>
+      <p class="mt-1 text-sm text-gray-500">There are currently no users registered in the system.</p>
+    </div>
+    <!-- Pagination controls would go here if implemented -->
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useAuth } from '~/composables/useAuth';
+import { useNuxtApp } from '#app'; // Import useNuxtApp for $axios
+import { useHead } from '#imports'; // Import useHead
 
 // This is crucial for Nuxt 3 to assign the layout
 definePageMeta({
   layout: 'admin',
-  title: 'User Management'
+  // title: 'User Management' // Title is set via useHead now
 });
 
 const { $axios } = useNuxtApp();
@@ -119,15 +137,16 @@ async function updateUserRole(user, newRole) {
     await $axios.put(`/admin/users/${user.id}/role`, { role: newRole });
     actionSuccessMessage.value = `Successfully updated role for ${user.email} to ${newRole}.`;
     user.originalRole = newRole; // Update original role on success
-    // Optionally re-fetch users or update locally:
-    // For now, local update is handled by v-model and originalRole update
   } catch (err) {
     console.error('Failed to update user role:', err);
     actionError.value = `Failed to update role for ${user.email}: ${err.response?.data?.message || err.message}`;
     user.role = user.originalRole; // Revert UI on error
   } finally {
     actionLoading.value = { userId: null, type: null };
-    setTimeout(() => { actionError.value = ''; actionSuccessMessage.value = ''; }, 5000);
+    setTimeout(() => {
+      actionError.value = '';
+      actionSuccessMessage.value = '';
+    }, 5000);
   }
 }
 
@@ -150,7 +169,10 @@ async function deleteUser(userId) {
     actionError.value = `Failed to delete user ID ${userId}: ${err.response?.data?.message || err.message}`;
   } finally {
     actionLoading.value = { userId: null, type: null };
-    setTimeout(() => { actionError.value = ''; actionSuccessMessage.value = ''; }, 5000);
+    setTimeout(() => {
+      actionError.value = '';
+      actionSuccessMessage.value = '';
+    }, 5000);
   }
 }
 
@@ -161,89 +183,4 @@ useHead({
 });
 </script>
 
-<style scoped>
-.admin-users-page {
-  padding: 1rem;
-}
-
-h2 {
-  margin-bottom: 1.5rem;
-  color: #333;
-}
-
-.loading-state, .error-state, .action-error-message, .action-success-message {
-  padding: 1rem;
-  margin-bottom: 1rem;
-  border-radius: 5px;
-}
-.loading-state { background-color: #eef; }
-.error-state { background-color: #fdd; color: #900; border: 1px solid #900; }
-.action-error-message { background-color: #fdd; color: #900; border: 1px solid #900; margin-top:1rem; }
-.action-success-message { background-color: #dfd; color: #070; border: 1px solid #070; margin-top:1rem; }
-
-
-.users-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.users-table th, .users-table td {
-  border: 1px solid #ddd;
-  padding: 0.75rem;
-  text-align: left;
-}
-
-.users-table th {
-  background-color: #f2f2f2;
-  color: #333;
-  font-weight: bold;
-}
-
-.users-table tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-.users-table tr:hover {
-  background-color: #f1f1f1;
-}
-
-.role-select {
-  padding: 0.3rem;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-}
-.role-select:disabled {
-  background-color: #eee;
-  opacity: 0.7;
-}
-
-.actions-cell {
-  white-space: nowrap;
-}
-.actions-cell button {
-  padding: 0.3rem 0.6rem;
-  margin-right: 0.5rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9em;
-}
-.actions-cell button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.delete-button {
-  background-color: #dc3545;
-  color: white;
-  border: none;
-}
-.delete-button:hover:not(:disabled) {
-  background-color: #c82333;
-}
-.action-loading-spinner {
-  font-size: 0.8em;
-  color: #555;
-}
-</style>
+<!-- Removed <style scoped> section -->
