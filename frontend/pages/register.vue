@@ -111,5 +111,4 @@ useHead({
   title: 'Register',
 });
 </script>
-
-// No <style scoped> block needed with Tailwind CSS
+<!-- No <style scoped> block needed with Tailwind CSS -->
