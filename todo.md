@@ -245,7 +245,8 @@ This section outlines the primary driver for future backend development, based o
     - [~] Taxable vs tax-exempt customers
         - [X] Phase 1: Schema fields for user tax exemption (`is_tax_exempt`, `tax_exemption_certificate_id`, `tax_exemption_notes`) added to `users` table and seed.js.
         - [X] Phase 2: Admin APIs for Users (GET list, GET ID, PUT ID) updated to include/manage tax exemption fields.
-    - [ ] Apply based on billing address
+    - [~] Apply based on billing address
+        - [X] Phase 1: Use order billing address (country/state) for jurisdiction matching in tax calculation. (Note: Relies on per-order billing address; centralized user address book is a future enhancement).
 3.  **Product-Based Tax Classes**
     - [~] Standard Rate, Reduced Rate, Zero Rate
         - [X] Phase 1: Schema for `tax_classes` table designed and added to seed.js.
