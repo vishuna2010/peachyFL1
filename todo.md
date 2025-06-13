@@ -236,7 +236,8 @@ This section outlines the primary driver for future backend development, based o
 
 ### Tax Engine
 1.  **Configurable Tax Rules**
-    - [ ] Multiple tax types (VAT, Sales Tax, Customs)
+    - [~] Multiple tax types (VAT, Sales Tax, Customs)
+        - [X] Phase 1: Implement sequential/compounding tax calculation if different tax types apply (e.g., PST on subtotal+GST).
     - [~] Define name, rate %, jurisdiction, code, and validity dates
         - [X] Phase 1: Schema for `tax_rates` table designed and added to seed.js (includes name, rate, jurisdiction, type, code, active status, validity dates).
         - [X] Phase 2: CRUD API endpoints for managing `tax_rates` implemented.
