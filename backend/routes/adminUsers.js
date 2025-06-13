@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
+const { body, param, validationResult } = require('express-validator');
+const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppError');
 
 // All routes in this file are protected by isAuthenticated and isAdmin
 router.use(isAuthenticated, isAdmin);
@@ -9,8 +11,7 @@ router.use(isAuthenticated, isAdmin);
 // GET /api/admin/users - List all users
 router.get('/', async (req, res) => {
   try {
-    // Exclude password hashes from the output
-    const result = await db.query('SELECT id, email, role, created_at FROM users ORDER BY id ASC');
+    const result = await db.query('SELECT id, name, email, role, is_tax_exempt, tax_exemption_certificate_id, tax_exemption_notes, created_at, updated_at FROM users ORDER BY id ASC');
     res.status(200).json(result.rows);
   } catch (error) {
     console.error('Error listing users:', error);
@@ -25,7 +26,7 @@ router.get('/:id', async (req, res) => {
     return res.status(400).json({ message: 'Invalid user ID format.' });
   }
   try {
-    const result = await db.query('SELECT id, email, role, created_at FROM users WHERE id = $1', [id]);
+    const result = await db.query('SELECT id, name, email, role, is_tax_exempt, tax_exemption_certificate_id, tax_exemption_notes, created_at, updated_at FROM users WHERE id = $1', [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'User not found.' });
     }
@@ -74,6 +75,97 @@ router.put('/:id/role', async (req, res) => {
     res.status(500).json({ message: 'Error updating user role.' });
   }
 });
+
+// PUT /api/admin/users/:id - Update user details
+router.put(
+  '/:id',
+  [
+    param('id').isInt({ gt: 0 }).toInt(),
+    body('name').optional().isString().trim().isLength({ min: 1, max: 255 }).withMessage('Name must be between 1 and 255 chars.'),
+    body('email').optional().isEmail().withMessage('Must be a valid email.').normalizeEmail(),
+    body('role').optional().isIn(['user', 'admin']).withMessage("Role must be 'user' or 'admin'."),
+    body('is_tax_exempt').optional().isBoolean().toBoolean(),
+    body('tax_exemption_certificate_id').optional({ nullable: true }).isString().trim()
+      .isLength({ max: 100 }).withMessage('Tax exemption certificate ID cannot exceed 100 characters.'),
+    body('tax_exemption_notes').optional({ nullable: true }).isString().trim()
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const updates = req.body;
+
+    if (Object.keys(updates).length === 0) {
+      return next(new BadRequestError('No fields provided for update.'));
+    }
+
+    // Prevent admin from changing their own role to non-admin if this route also handles role
+    if (updates.role && parseInt(id) === req.user.userId && updates.role !== 'admin') {
+        return next(new BadRequestError("Administrators cannot change their own role to non-admin."));
+    }
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const currentUserResult = await client.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [id]);
+      if (currentUserResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        throw new NotFoundError(`User with ID ${id} not found.`);
+      }
+      const currentUser = currentUserResult.rows[0];
+
+      if (updates.email && updates.email.toLowerCase() !== currentUser.email.toLowerCase()) {
+        const existingUser = await client.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND id != $2', [updates.email, id]);
+        if (existingUser.rows.length > 0) {
+          await client.query('ROLLBACK');
+          throw new ConflictError('This email address is already in use by another account.');
+        }
+      }
+
+      const setClauses = [];
+      const values = [];
+      let paramIndex = 1;
+
+      const fieldsToUpdate = ['name', 'email', 'role', 'is_tax_exempt', 'tax_exemption_certificate_id', 'tax_exemption_notes'];
+      for (const field of fieldsToUpdate) {
+        if (updates[field] !== undefined) {
+          if (field === 'tax_exemption_certificate_id' && updates[field] === '') updates[field] = null;
+          if (field === 'tax_exemption_notes' && updates[field] === '') updates[field] = null;
+
+          setClauses.push(`${field} = $${paramIndex++}`);
+          values.push(updates[field]);
+        }
+      }
+
+      if (setClauses.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(200).json(currentUser); // No actual data change, return current.
+      }
+
+      setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(id);
+
+      const updateQuery = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING id, name, email, role, is_tax_exempt, tax_exemption_certificate_id, tax_exemption_notes, created_at, updated_at;`;
+      const result = await client.query(updateQuery, values);
+
+      await client.query('COMMIT');
+      res.status(200).json(result.rows[0]);
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (error.code === '23505' && error.constraint === 'users_email_key') {
+        return next(new ConflictError('This email address is already in use by another account (database constraint).'));
+      }
+      next(error);
+    } finally {
+      client.release();
+    }
+  }
+);
 
 // DELETE /api/admin/users/:id - Delete a user
 router.delete('/:id', async (req, res) => {

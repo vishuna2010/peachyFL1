@@ -262,5 +262,3 @@ useHead({
   title: 'Admin - Product Management',
 });
 </script>
-
-// Removed <style scoped> block

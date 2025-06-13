@@ -7,6 +7,7 @@ const { isAuthenticated, isAdmin } = require('../auth');
 const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload');
 const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../services/s3Service');
 const path = require('path');
+const { query, validationResult } = require('express-validator'); // Import express-validator
 
 // Helper function to get or create tag IDs
 async function getOrCreateTagIds(tagNames, client) {
@@ -44,7 +45,9 @@ function getS3KeyFromUrl(url) {
 router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleMulterError, async (req, res) => {
   const {
     name, description, price, category_id, tags: tagNames,
-    stock_quantity = 0, supplier_id, sku, reorder_threshold
+    stock_quantity = 0, supplier_id, sku, reorder_threshold,
+    brand_manufacturer, supplier_reference, product_status,
+    cost_price, wholesale_price, tax_class_id // Added tax_class_id
   } = req.body;
 
   if (!name || price === undefined) { return res.status(400).json({ message: 'Name and price are required.' }); }
@@ -55,6 +58,31 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   if (reorder_threshold !== undefined && reorder_threshold !== null) {
     const rt = parseInt(reorder_threshold);
     if (isNaN(rt) || rt < 0) { return res.status(400).json({ message: 'Reorder threshold must be a non-negative integer if provided.' }); }
+  }
+
+  const validStatuses = ['active', 'inactive', 'archived'];
+  let final_product_status = 'active'; // Default
+  if (product_status !== undefined) {
+    if (typeof product_status !== 'string' || !validStatuses.includes(product_status.toLowerCase())) {
+      return res.status(400).json({ message: `Invalid product_status. Must be one of: ${validStatuses.join(', ')}.` });
+    }
+    final_product_status = product_status.toLowerCase();
+  }
+
+  let parsed_cost_price = null;
+  if (cost_price !== undefined && cost_price !== null && cost_price !== '') {
+    parsed_cost_price = parseFloat(cost_price);
+    if (isNaN(parsed_cost_price) || parsed_cost_price < 0) {
+      return res.status(400).json({ message: 'Cost price must be a non-negative number.' });
+    }
+  }
+
+  let parsed_wholesale_price = null;
+  if (wholesale_price !== undefined && wholesale_price !== null && wholesale_price !== '') {
+    parsed_wholesale_price = parseFloat(wholesale_price);
+    if (isNaN(parsed_wholesale_price) || parsed_wholesale_price < 0) {
+      return res.status(400).json({ message: 'Wholesale price must be a non-negative number.' });
+    }
   }
 
   let imageUrl = null; let s3FileKey = null;
@@ -74,14 +102,38 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
+
+    let validated_tax_class_id = null;
+    if (tax_class_id !== undefined && tax_class_id !== null && tax_class_id !== '') {
+        const tcId = parseInt(tax_class_id);
+        if (isNaN(tcId) || tcId <= 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'Invalid tax_class_id format. Must be a positive integer.' });
+        }
+        const taxClassCheck = await client.query('SELECT id FROM tax_classes WHERE id = $1', [tcId]);
+        if (taxClassCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: `Invalid tax_class_id: Tax class with ID ${tcId} not found.` });
+        }
+        validated_tax_class_id = tcId;
+    }
+
     const productQuery = `
-      INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, reorder_threshold, updated_at, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, reorder_threshold,
+                            brand_manufacturer, supplier_reference, product_status, cost_price, wholesale_price, tax_class_id,
+                            updated_at, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING * `;
     const productResult = await client.query(productQuery, [
       name, description, parseFloat(price), category_id ? parseInt(category_id) : null, imageUrl, stock,
       supplier_id ? parseInt(supplier_id) : null, sku || null,
-      reorder_threshold !== undefined && reorder_threshold !== null ? parseInt(reorder_threshold) : null
+      reorder_threshold !== undefined && reorder_threshold !== null ? parseInt(reorder_threshold) : null,
+      brand_manufacturer || null,
+      supplier_reference || null,
+      final_product_status,
+      parsed_cost_price,
+      parsed_wholesale_price,
+      validated_tax_class_id
     ]);
     const newProduct = productResult.rows[0];
 
@@ -93,9 +145,33 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
     } else { newProduct.tags = []; }
 
     await client.query('COMMIT');
-    res.status(201).json(newProduct);
+    res.status(201).json(newProduct); // Send response to client
+
+    // Log initial stock after successful commit and response
+    if (newProduct.stock_quantity > 0) {
+      try {
+        const logMovementQuery = `
+          INSERT INTO stock_movement_logs
+            (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `;
+        const userIdForLog = req.user ? req.user.userId : null;
+        const logMovementValues = [
+          newProduct.id, null, userIdForLog, 'initial_stock_setup',
+          newProduct.stock_quantity, newProduct.stock_quantity,
+          'Initial stock for new product', newProduct.id.toString()
+        ];
+        await db.query(logMovementQuery, logMovementValues);
+        console.log(`Initial stock logged for product ID ${newProduct.id}`);
+      } catch (logError) {
+        console.error(`Error logging initial stock for product ID ${newProduct.id}:`, logError);
+      }
+    }
+
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client && !client._hadError && client._queryable) {
+        try { await client.query('ROLLBACK'); } catch (rbError) { console.error("Rollback error:", rbError); }
+    }
     if (s3FileKey && isS3Configured()) {
       try { await deleteFileFromS3(s3FileKey); console.log(`Rolled back S3 upload for key: ${s3FileKey} due to DB error.`); }
       catch (s3DeleteError) { console.error(`Failed to rollback S3 upload for key ${s3FileKey}:`, s3DeleteError); }
@@ -188,7 +264,9 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
   const { id } = req.params;
   const {
     name, description, price, category_id, tags: tagNames,
-    stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold
+    stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold,
+    brand_manufacturer, supplier_reference, product_status,
+    cost_price, wholesale_price, tax_class_id // Added tax_class_id
   } = req.body;
 
   if (isNaN(parseInt(id))) { return res.status(400).json({ message: 'Invalid product ID.' }); }
@@ -200,10 +278,44 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
 
   try {
     await client.query('BEGIN');
-    const currentProductResult = await client.query('SELECT image_url, sku FROM products WHERE id = $1 FOR UPDATE', [id]);
+    const currentProductResult = await client.query('SELECT image_url, sku, has_variants, tax_class_id FROM products WHERE id = $1 FOR UPDATE', [id]);
     if (currentProductResult.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Product not found.' }); }
     const currentProduct = currentProductResult.rows[0];
     finalImageUrlToStoreInDb = currentProduct.image_url;
+
+    if (product_status !== undefined) {
+      const validStatuses = ['active', 'inactive', 'archived'];
+      if (typeof product_status !== 'string' || !validStatuses.includes(product_status.toLowerCase())) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: `Invalid product_status. Must be one of: ${validStatuses.join(', ')}.` });
+      }
+    }
+
+    let parsed_cost_price_update = undefined;
+    if (cost_price !== undefined) {
+      if (cost_price === null || cost_price === '') {
+        parsed_cost_price_update = null;
+      } else {
+        parsed_cost_price_update = parseFloat(cost_price);
+        if (isNaN(parsed_cost_price_update) || parsed_cost_price_update < 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'Cost price must be a non-negative number or null.' });
+        }
+      }
+    }
+
+    let parsed_wholesale_price_update = undefined;
+    if (wholesale_price !== undefined) {
+      if (wholesale_price === null || wholesale_price === '') {
+        parsed_wholesale_price_update = null;
+      } else {
+        parsed_wholesale_price_update = parseFloat(wholesale_price);
+        if (isNaN(parsed_wholesale_price_update) || parsed_wholesale_price_update < 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'Wholesale price must be a non-negative number or null.' });
+        }
+      }
+    }
 
     if (req.file) {
       if (isS3Configured()) {
@@ -232,10 +344,43 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
 
     addClause('name', name); addClause('description', description); addClause('price', price, true);
     addClause('category_id', category_id, false, true);
+    // tax_class_id validation and clause addition
+    if (tax_class_id !== undefined) {
+        if (tax_class_id === null || tax_class_id === '') {
+            addClause('tax_class_id', null);
+        } else {
+            const tcId = parseInt(tax_class_id);
+            if (isNaN(tcId) || tcId <= 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ message: 'Invalid tax_class_id format. Must be a positive integer or null/empty to clear.' });
+            }
+            const taxClassCheck = await client.query('SELECT id FROM tax_classes WHERE id = $1', [tcId]);
+            if (taxClassCheck.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ message: `Invalid tax_class_id: Tax class with ID ${tcId} not found.` });
+            }
+            addClause('tax_class_id', tcId, false, true);
+        }
+    }
+    addClause('brand_manufacturer', brand_manufacturer);
+    addClause('supplier_reference', supplier_reference);
+    if (product_status !== undefined) {
+        addClause('product_status', product_status.toLowerCase());
+    }
+    if (parsed_cost_price_update !== undefined) {
+        addClause('cost_price', parsed_cost_price_update, true);
+    }
+    if (parsed_wholesale_price_update !== undefined) {
+        addClause('wholesale_price', parsed_wholesale_price_update, true);
+    }
     if (stock_quantity !== undefined) {
-      const stock = parseInt(stock_quantity);
-      if (isNaN(stock) || stock < 0) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Stock quantity must be a non-negative integer.'}); }
-      addClause('stock_quantity', stock, false, true);
+      if (currentProduct.has_variants) {
+        console.warn(`Attempted to update base stock for product ${id} which has variants. Base stock update ignored.`);
+      } else {
+        const stock = parseInt(stock_quantity);
+        if (isNaN(stock) || stock < 0) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Stock quantity must be a non-negative integer.'}); }
+        addClause('stock_quantity', stock, false, true);
+      }
     }
     addClause('supplier_id', supplier_id, false, true);
     const finalSku = sku === '' ? null : sku; // Allow unsetting SKU with empty string

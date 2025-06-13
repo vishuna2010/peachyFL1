@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer');
 const JsBarcode = require('jsbarcode');
 const { createCanvas } = require('canvas'); // Node canvas for jsbarcode
+const qrcode = require('qrcode');
 
 /**
  * Generates a barcode as a data URL.
@@ -23,33 +24,34 @@ function generateBarcodeDataURL(text, options = {}) {
 /**
  * Generates an HTML string for the product label.
  * @param {object} product - Product object containing name, sku, price.
+ * @param {object} labelData - Object with label data (full_display_name, sku, selling_price, currency_symbol).
  * @param {string} barcodeDataUrl - The data URL of the generated barcode.
+ * @param {string} qrCodeDataUrl - The data URL of the generated QR code.
  * @returns {string} HTML string for the label.
  */
-function getProductLabelHtml(product, barcodeDataUrl) {
-  const price = parseFloat(product.price).toFixed(2);
-  const sku = product.sku || `ID: ${product.id}`; // Fallback to ID if SKU is not available
+function getProductLabelHtml(labelData, barcodeDataUrl, qrCodeDataUrl) {
+  const sellingPrice = parseFloat(labelData.selling_price).toFixed(2);
+  const sku = labelData.sku || 'N/A';
+  const displayName = labelData.full_display_name || 'N/A';
+  const currencySymbol = labelData.currency_symbol || '$';
 
   return `
     <!DOCTYPE html>
     <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Product Label</title>
-      <style>
-        body { font-family: Arial, sans-serif; width: 300px; /* Approx label width */ padding: 10px; text-align: center; border: 1px solid #ccc; }
-        h1 { font-size: 20px; margin: 5px 0; }
-        p { font-size: 14px; margin: 3px 0; }
-        .sku { font-size: 12px; margin-bottom: 5px; }
-        .price { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
-        img.barcode { display: block; margin: 0 auto; max-width: 90%; height: auto; }
-      </style>
-    </head>
+    <head><title>Product Label</title><style>
+      body { font-family: Arial, sans-serif; width: 300px; padding: 10px; text-align: center; border: 1px solid #ccc; box-sizing: border-box; }
+      h1 { font-size: 18px; margin: 5px 0; word-wrap: break-word; }
+      .sku { font-size: 12px; margin-bottom: 5px; }
+      .price { font-size: 16px; font-weight: bold; margin-bottom: 8px; }
+      img.barcode { display: block; margin: 0 auto 5px auto; max-width: 90%; height: auto; }
+      img.qrcode { display: block; margin: 5px auto 0 auto; max-width: 35%; height: auto; } /* Adjusted QR code size */
+    </style></head>
     <body>
-      <h1>${product.name}</h1>
+      <h1>${displayName}</h1>
       <p class="sku">SKU: ${sku}</p>
-      <p class="price">$${price}</p>
-      ${barcodeDataUrl ? `<img src="${barcodeDataUrl}" alt="Barcode for ${sku}" class="barcode" />` : '<p>No barcode generated.</p>'}
+      <p class="price">${currencySymbol}${sellingPrice}</p>
+      ${barcodeDataUrl ? `<img src="${barcodeDataUrl}" alt="Barcode for ${sku}" class="barcode" />` : '<p>No barcode.</p>'}
+      ${qrCodeDataUrl ? `<img src="${qrCodeDataUrl}" alt="QR Code" class="qrcode" />` : ''}
     </body>
     </html>
   `;
@@ -57,19 +59,24 @@ function getProductLabelHtml(product, barcodeDataUrl) {
 
 /**
  * Generates a product label PDF.
- * @param {object} product - Product object (id, name, sku, price).
+ * @param {object} productLabelData - Object containing data for the label.
  * @returns {Promise<Buffer>} A Promise that resolves with the PDF buffer.
  */
-async function generateProductLabelPdf(product) {
+async function generateProductLabelPdf(productLabelData) {
   let browser = null;
   try {
-    const barcodeText = product.sku || product.id.toString(); // Use SKU or ID for barcode
+    const barcodeText = productLabelData.barcode_value;
     if (!barcodeText) {
-        console.warn(`No SKU or ID available for product ${product.name} to generate barcode.`);
-        // Decide if barcode is optional or required. For now, proceed without if no text.
+        console.warn(`No barcode_value available for product ${productLabelData.full_display_name} to generate barcode.`);
     }
     const barcodeDataUrl = barcodeText ? generateBarcodeDataURL(barcodeText) : null;
-    const htmlContent = getProductLabelHtml(product, barcodeDataUrl);
+
+    // Generate QR Code
+    const qrCodeDataUrl = productLabelData.qr_code_data_product_url
+      ? await generateQrCodeDataURL(productLabelData.qr_code_data_product_url)
+      : null;
+
+    const htmlContent = getProductLabelHtml(productLabelData, barcodeDataUrl, qrCodeDataUrl);
 
     // Launch Puppeteer
     // Note: In some environments (like certain Lambdas or containers), you might need
@@ -115,4 +122,355 @@ async function generateProductLabelPdf(product) {
 
 module.exports = {
   generateProductLabelPdf,
+  generateOrderInvoicePdf,
+  generateQrCodeDataURL,
+  generatePackingSlipPdf, // Added new function
 };
+
+async function generateQrCodeDataURL(text) {
+  if (!text) return null;
+  try {
+    // Options can be customized, e.g., errorCorrectionLevel, margin, scale
+    const options = {
+      errorCorrectionLevel: 'H', // High
+      type: 'image/png',
+      margin: 2,
+      scale: 4 // Adjust scale for size/resolution (pixels per module)
+    };
+    return await qrcode.toDataURL(text, options);
+  } catch (err) {
+    console.error('Failed to generate QR code data URL:', err);
+    return null; // Or throw err to be caught by caller
+  }
+}
+
+function getInvoiceHtml(orderDetails) {
+  // --- Company Details (Placeholders or from orderDetails if available) ---
+  const companyName = orderDetails.company_name || 'Your Awesome Store';
+  const companyAddress = orderDetails.company_address || '123 Commerce St, Business City, BC 12345';
+  const companyLogoUrl = orderDetails.company_logo_url || null; // e.g., 'https://yourstore.com/logo.png'
+
+  // --- Format Dates ---
+  const orderDate = new Date(orderDetails.created_at).toLocaleDateString();
+
+  // --- Helper to format address ---
+  const formatAddress = (addr, type) => {
+    if (!addr) return `<p>No ${type} address provided.</p>`;
+    return `
+      <p>
+        ${addr.line1 || ''}<br>
+        ${addr.line2 || ''}${addr.line2 ? '<br>' : ''}
+        ${addr.city || ''}, ${addr.state_province_region || ''} ${addr.postal_code || ''}<br>
+        ${addr.country || ''}
+      </p>
+    `;
+  };
+
+  // --- Items Table ---
+  let itemsHtml = '';
+  let calculatedSubtotal = 0;
+  if (orderDetails.items && orderDetails.items.length > 0) {
+    orderDetails.items.forEach(item => {
+      const unitPrice = parseFloat(item.price_at_purchase);
+      const quantity = parseInt(item.quantity);
+      const lineTotal = unitPrice * quantity;
+      calculatedSubtotal += lineTotal;
+      itemsHtml += `
+        <tr>
+          <td>${item.product_name || 'N/A'}</td>
+          <td>${quantity}</td>
+          <td>${unitPrice.toFixed(2)}</td>
+          <td>${lineTotal.toFixed(2)}</td>
+        </tr>
+      `;
+    });
+  }
+  calculatedSubtotal = parseFloat(calculatedSubtotal.toFixed(2));
+
+  // --- Totals ---
+  // Use original_total_amount if available (pre-discount subtotal), else use calculated or total_amount
+  const subtotal = orderDetails.original_total_amount
+    ? parseFloat(orderDetails.original_total_amount)
+    : (orderDetails.discount_amount_applied ? parseFloat(orderDetails.total_amount) + parseFloat(orderDetails.discount_amount_applied) : parseFloat(orderDetails.total_amount));
+
+  const discountHtml = orderDetails.discount_amount_applied && parseFloat(orderDetails.discount_amount_applied) > 0
+    ? `<tr><td colspan="3" class="text-right">Discount ${orderDetails.discount_code_applied ? `(${orderDetails.discount_code_applied})` : ''}:</td><td>-${parseFloat(orderDetails.discount_amount_applied).toFixed(2)}</td></tr>`
+    : '';
+
+  const grandTotal = parseFloat(orderDetails.total_amount).toFixed(2);
+
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Invoice #${orderDetails.id}</title>
+      <style>
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #333; }
+        .container { width: 90%; margin: 0 auto; padding: 20px; }
+        header { border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 30px; text-align: center; }
+        header img.logo { max-height: 80px; max-width: 200px; margin-bottom: 10px; }
+        header h1 { margin: 0; font-size: 24px; }
+        header p { margin: 2px 0; font-size: 12px; }
+        .invoice-details { margin-bottom: 30px; overflow: hidden; }
+        .invoice-details .invoice-id { float: left; font-size: 20px; font-weight: bold; }
+        .invoice-details .invoice-date { float: right; text-align: right; }
+        .addresses { margin-bottom: 30px; overflow: hidden; }
+        .addresses .address-block { width: 48%; float: left; }
+        .addresses .address-block.shipping { float: right; }
+        .addresses h3 { margin-top: 0; margin-bottom: 5px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px;}
+        table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        table.items-table th, table.items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        table.items-table th { background-color: #f9f9f9; font-weight: bold; }
+        table.items-table td.text-right, table.items-table th.text-right { text-align: right; }
+        .totals-section { float: right; width: 40%; margin-top: 20px; }
+        .totals-section table { width: 100%; }
+        .totals-section td { padding: 5px 0; }
+        .totals-section td.text-right { text-align: right; }
+        .totals-section .grand-total td { font-weight: bold; font-size: 16px; border-top: 2px solid #333; }
+        footer { text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #eee; font-size: 10px; color: #777; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <header>
+          ${companyLogoUrl ? `<img src="${companyLogoUrl}" alt="${companyName} Logo" class="logo"><br>` : ''}
+          <h1>${companyName}</h1>
+          <p>${companyAddress}</p>
+          ${orderDetails.company_phone ? `<p>Phone: ${orderDetails.company_phone}</p>` : ''}
+          ${orderDetails.company_email ? `<p>Email: ${orderDetails.company_email}</p>` : ''}
+          ${orderDetails.company_website ? `<p>Website: ${orderDetails.company_website}</p>` : ''}
+        </header>
+
+        <section class="invoice-details">
+          <div class="invoice-id">INVOICE</div>
+          <div class="invoice-date">
+            <p><strong>Invoice #:</strong> ${orderDetails.id}</p>
+            <p><strong>Order Date:</strong> ${orderDate}</p>
+            <p><strong>Status:</strong> ${orderDetails.status || 'N/A'}</p>
+          </div>
+        </section>
+
+        <section class="addresses">
+          <div class="address-block billing">
+            <h3>Bill To:</h3>
+            ${formatAddress(orderDetails.billing_address || orderDetails.shipping_address, 'Billing')}
+            ${orderDetails.user_email ? `<p>Email: ${orderDetails.user_email}</p>` : ''}
+          </div>
+          <div class="address-block shipping">
+            <h3>Ship To:</h3>
+            ${formatAddress(orderDetails.shipping_address, 'Shipping')}
+          </div>
+        </section>
+
+        <h3>Order Items:</h3>
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Qty</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">Line Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <section class="totals-section">
+          <table>
+            <tr>
+              <td>Subtotal:</td>
+              <td class="text-right">${subtotal.toFixed(2)}</td>
+            </tr>
+            ${discountHtml}
+            <tr class="grand-total">
+              <td>Grand Total:</td>
+              <td class="text-right">${grandTotal}</td>
+            </tr>
+          </table>
+        </section>
+
+        <footer>
+          <p>Thank you for your business!</p>
+          <p>${companyName} - ${new Date().getFullYear()}</p>
+        </footer>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+async function generateOrderInvoicePdf(orderDetails) {
+  let browser = null;
+  try {
+    const htmlContent = getInvoiceHtml(orderDetails);
+
+    browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+    const pdfBuffer = await page.pdf({
+      format: 'A4', // Standard page format
+      printBackground: true,
+      margin: {
+        top: '0.75in',
+        right: '0.5in',
+        bottom: '0.75in',
+        left: '0.5in',
+      }
+    });
+    return pdfBuffer;
+  } catch (error) {
+    console.error('Error generating order invoice PDF with Puppeteer:', error);
+    throw error; // Re-throw to be handled by the caller
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
+// --- Packing Slip Generation ---
+
+function getPackingSlipHtml(packingSlipData) {
+  const companyName = packingSlipData.company_name || 'Your Awesome Store';
+  const companyLogoUrl = packingSlipData.company_logo_url || null;
+  const orderDate = new Date(packingSlipData.order_date).toLocaleDateString();
+
+  const formatAddress = (addr, type) => {
+    if (!addr) return `<p>No ${type} address provided.</p>`;
+    return `
+      <p>
+        ${addr.line1 || ''}<br>
+        ${addr.line2 || ''}${addr.line2 ? '<br>' : ''}
+        ${addr.city || ''}, ${addr.state_province_region || ''} ${addr.postal_code || ''}<br>
+        ${addr.country || ''}
+      </p>
+    `;
+  };
+
+  let itemsHtml = '';
+  if (packingSlipData.items && packingSlipData.items.length > 0) {
+    packingSlipData.items.forEach(item => {
+      itemsHtml += `
+        <tr>
+          <td>${item.sku || 'N/A'}</td>
+          <td>
+            ${item.product_name || 'N/A'}
+            ${item.variant_description ? `<br><small>(${item.variant_description})</small>` : ''}
+          </td>
+          <td>${item.quantity_ordered}</td>
+          ${packingSlipData.show_images ? `<td>${item.image_url ? `<img src="${item.image_url}" alt="${item.product_name}" style="width: 50px; height: auto;"/>` : ''}</td>` : ''}
+        </tr>
+      `;
+    });
+  }
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Packing Slip - Order #${packingSlipData.order_id}</title>
+      <style>
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #333; }
+        .container { width: 90%; margin: 0 auto; padding: 20px; }
+        header { text-align: center; margin-bottom: 20px; }
+        header img.logo { max-height: 70px; max-width: 180px; margin-bottom: 10px; }
+        header h1 { margin: 0; font-size: 22px; }
+        .slip-details { margin-bottom: 20px; overflow: hidden; }
+        .slip-details .slip-id { float: left; font-size: 18px; font-weight: bold; }
+        .slip-details .slip-date { float: right; text-align: right; }
+        .shipping-address h3 { margin-top: 0; margin-bottom: 5px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px;}
+        table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        table.items-table th, table.items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
+        table.items-table th { background-color: #f9f9f9; font-weight: bold; }
+        footer { text-align: center; margin-top: 40px; padding-top: 15px; border-top: 1px solid #eee; font-size: 10px; color: #777; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <header>
+          ${companyLogoUrl ? `<img src="${companyLogoUrl}" alt="${companyName} Logo" class="logo"><br>` : ''}
+          <h1>${companyName}</h1>
+        </header>
+
+        <section class="slip-details">
+          <div class="slip-id">PACKING SLIP</div>
+          <div class="slip-date">
+            <p><strong>Order #:</strong> ${packingSlipData.order_id}</p>
+            <p><strong>Order Date:</strong> ${orderDate}</p>
+          </div>
+        </section>
+
+        <section class="shipping-address">
+          <h3>Ship To:</h3>
+          ${formatAddress(packingSlipData.shipping_address, 'Shipping')}
+          ${packingSlipData.customer_name ? `<p><strong>Attn:</strong> ${packingSlipData.customer_name}</p>` : ''}
+          ${packingSlipData.customer_email ? `<p>Email: ${packingSlipData.customer_email}</p>` : ''}
+        </section>
+
+        <h3>Order Items:</h3>
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Product</th>
+              <th>Qty Ordered</th>
+              ${packingSlipData.show_images ? '<th>Image</th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <footer>
+          <p>Thank you for your order!</p>
+        </footer>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+async function generatePackingSlipPdf(packingSlipData) {
+  let browser = null;
+  try {
+    // Optionally add show_images to packingSlipData if not already present
+    const dataForHtml = { ...packingSlipData, show_images: packingSlipData.show_images !== undefined ? packingSlipData.show_images : true };
+    const htmlContent = getPackingSlipHtml(dataForHtml);
+
+    browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '0.5in',
+        right: '0.5in',
+        bottom: '0.5in',
+        left: '0.5in',
+      }
+    });
+    return pdfBuffer;
+  } catch (error) {
+    console.error('Error generating packing slip PDF with Puppeteer:', error);
+    throw error;
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}

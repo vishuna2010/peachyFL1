@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Confirmation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f4f4; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+        .header { background-color: #007bff; color: white; padding: 10px; text-align: center; border-radius: 8px 8px 0 0; }
+        .header h1 { margin: 0; }
+        .order-details, .customer-details, .items-table { margin-bottom: 20px; }
+        .order-details p, .customer-details p { margin: 5px 0; }
+        .items-table table { width: 100%; border-collapse: collapse; }
+        .items-table th, .items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .items-table th { background-color: #f0f0f0; }
+        .footer { text-align: center; margin-top: 20px; font-size: 0.9em; color: #777; }
+        .total-row td { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Order Confirmation</h1>
+        </div>
+
+        <div class="customer-details">
+            <p>Dear <%= customer.name %>,</p>
+            <p>Thank you for your order! We've received your order and will process it shortly.</p>
+        </div>
+
+        <div class="order-details">
+            <p><strong>Order ID:</strong> <%= order.id %></p>
+            <p><strong>Order Date:</strong> <%= new Date(order.order_date).toLocaleDateString() %></p>
+            <% if (order.payment_status) { %>
+                <p><strong>Payment Status:</strong> <%= order.payment_status %></p>
+            <% } %>
+        </div>
+
+        <div class="items-table">
+            <h3>Order Summary</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Quantity</th>
+                        <th>Price</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% order.items.forEach(item => { %>
+                        <tr>
+                            <td><%= item.name || item.product_name %></td>
+                            <td><%= item.quantity %></td>
+                            <td>$<%= parseFloat(item.price_at_purchase || item.price).toFixed(2) %></td>
+                            <td>$<%= (item.quantity * parseFloat(item.price_at_purchase || item.price)).toFixed(2) %></td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+                <tfoot>
+                    <% if (order.subtotal !== undefined) { %>
+                    <tr class="total-row">
+                        <td colspan="3">Subtotal</td>
+                        <td>$<%= parseFloat(order.subtotal).toFixed(2) %></td>
+                    </tr>
+                    <% } %>
+                    <% if (order.discount_applied && order.discount_applied.amount_deducted) { %>
+                    <tr class="total-row">
+                        <td colspan="3">Discount (<%= order.discount_applied.code %>)</td>
+                        <td>-$<%= parseFloat(order.discount_applied.amount_deducted).toFixed(2) %></td>
+                    </tr>
+                    <% } %>
+                    <% if (order.total_tax_amount !== undefined && order.total_tax_amount > 0) { %>
+                    <tr class="total-row">
+                        <td colspan="3">Tax</td>
+                        <td>$<%= parseFloat(order.total_tax_amount).toFixed(2) %></td>
+                    </tr>
+                    <% } %>
+                    <tr class="total-row">
+                        <td colspan="3">Grand Total</td>
+                        <td>$<%= parseFloat(order.total_amount).toFixed(2) %></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <% if (order.shipping_address) { %>
+        <div class="address-details">
+            <h3>Shipping Address</h3>
+            <p>
+                <%= order.shipping_address.line1 %><br>
+                <% if (order.shipping_address.line2) { %><%= order.shipping_address.line2 %><br><% } %>
+                <%= order.shipping_address.city %>, <%= order.shipping_address.postalCode %><br>
+                <%= order.shipping_address.country %>
+            </p>
+        </div>
+        <% } %>
+
+        <% if (order.billing_address && (order.billing_address.line1 !== order.shipping_address.line1 || order.billing_address.city !== order.shipping_address.city) ) { %>
+        <div class="address-details">
+            <h3>Billing Address</h3>
+            <p>
+                <%= order.billing_address.line1 %><br>
+                <% if (order.billing_address.line2) { %><%= order.billing_address.line2 %><br><% } %>
+                <%= order.billing_address.city %>, <%= order.billing_address.postalCode %><br>
+                <%= order.billing_address.country %>
+            </p>
+        </div>
+        <% } %>
+
+        <div class="footer">
+            <p>If you have any questions, please contact our support team.</p>
+            <p>&copy; <%= new Date().getFullYear() %> Your Company Name</p>
+        </div>
+    </div>
+</body>
+</html>
