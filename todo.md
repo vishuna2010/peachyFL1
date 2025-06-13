@@ -213,10 +213,12 @@ This section outlines the primary driver for future backend development, based o
 ## IV. Tax Engine & Invoicing Module (New Specification)
 
 ### Invoice Structure
-- [ ] Unique Invoice Number
+- [~] Unique Invoice Number
+    - [X] Phase 1: Schema field added to `orders`; API logic to generate/store on status change (e.g., to 'shipped'/'completed').
 - [~] Customer Information
     - [X] Phase 1: Schema fields for user tax exemption status added to `users` table.
-- [ ] Date/Time of Issue
+- [~] Date/Time of Issue
+    - [X] Phase 1: Schema field added to `orders`; API logic to store on status change.
 - [~] Itemized Line Items
     - [ ] Product Name, SKU, Quantity
     - [~] Unit Price (Excl. Tax)
@@ -240,6 +242,7 @@ This section outlines the primary driver for future backend development, based o
 2.  **Customer-Based Logic**
     - [~] Taxable vs tax-exempt customers
         - [X] Phase 1: Schema fields for user tax exemption (`is_tax_exempt`, `tax_exemption_certificate_id`, `tax_exemption_notes`) added to `users` table and seed.js.
+        - [X] Phase 2: Admin APIs for Users (GET list, GET ID, PUT ID) updated to include/manage tax exemption fields.
     - [ ] Apply based on billing address
 3.  **Product-Based Tax Classes**
     - [~] Standard Rate, Reduced Rate, Zero Rate

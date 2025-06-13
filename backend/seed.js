@@ -299,6 +299,8 @@ async function createSchema(client) {
         discount_amount_applied NUMERIC(10,2),
         total_tax_amount NUMERIC(10, 2) DEFAULT 0.00 NOT NULL,
         tax_summary_details JSONB NULL,
+        invoice_number VARCHAR(50) UNIQUE NULL,
+        invoice_issue_date TIMESTAMPTZ NULL,
         shipping_address_line1 TEXT NOT NULL,
         shipping_address_line2 TEXT,
         shipping_city VARCHAR(100) NOT NULL,
