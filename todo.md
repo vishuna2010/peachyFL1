@@ -180,7 +180,8 @@ This section outlines the primary driver for future backend development, based o
     - [ ] Monthly/quarterly returns
     - [~] Summary by region
         - [X] Phase 1: Created admin API endpoint (`/api/admin/reports/tax-summary-by-region`) to provide total tax collected and order count, grouped by billing country and region/state. Supports optional date filtering.
-    - [ ] Export invoice-level data
+    - [~] Export invoice-level data
+        - [X] Phase 1: Created admin API endpoint (`/api/admin/reports/invoice-export`) providing detailed order and line item data (including product, customer, addresses, pricing, and tax details) suitable for export. Supports date filtering.
 
 ### Optional: QR Invoice Label
 - [ ] Link to online invoice or validation portal
