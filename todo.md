@@ -123,7 +123,8 @@ This section outlines the primary driver for future backend development, based o
           - [X] Phase 1: PO Items & Cost History store costs in supplier's currency and attempt to store in base currency (1:1 if matches, NULL otherwise).
           - [X] Phase 2: Allow manual input of exchange_rate_to_base during PO receiving to calculate and store base_currency_cost_price.
     - [X] Selling Price
-        - Retail and wholesale options
+        - [~] Retail and wholesale options
+          - [X] Phase 1: Schema and APIs support `wholesale_price` on products and `wholesale_price_modifier` on variants; `getProductById` includes calculated `final_wholesale_price` for variants.
         - Bulk discounts and dynamic pricing
     - [~] Profit Margin Calculator
       - [X] Profit margin details (amount & percentage) included in product/variant API responses.
@@ -159,6 +160,7 @@ This section outlines the primary driver for future backend development, based o
       - [X] Phase 1: Basic PDF invoice generated via admin API endpoint (/api/admin/orders/:orderId/invoice/pdf).
     - [~] Order packing label printing
       - [X] Phase 1: Backend API endpoint (`/api/admin/orders/:orderId/packing-slip-data`) provides structured JSON data for packing slips.
+      - [X] Phase 1 PDF: Basic PDF packing slip generated via admin API endpoint (/api/admin/orders/:orderId/packing-slip/pdf).
 7.  **Barcode / QR Scanning Support**
     - Mobile or USB scanner support
     - Use QR codes for fast lookups or reorders

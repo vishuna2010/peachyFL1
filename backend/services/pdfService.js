@@ -124,6 +124,7 @@ module.exports = {
   generateProductLabelPdf,
   generateOrderInvoicePdf,
   generateQrCodeDataURL,
+  generatePackingSlipPdf, // Added new function
 };
 
 async function generateQrCodeDataURL(text) {
@@ -328,6 +329,145 @@ async function generateOrderInvoicePdf(orderDetails) {
   } catch (error) {
     console.error('Error generating order invoice PDF with Puppeteer:', error);
     throw error; // Re-throw to be handled by the caller
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
+// --- Packing Slip Generation ---
+
+function getPackingSlipHtml(packingSlipData) {
+  const companyName = packingSlipData.company_name || 'Your Awesome Store';
+  const companyLogoUrl = packingSlipData.company_logo_url || null;
+  const orderDate = new Date(packingSlipData.order_date).toLocaleDateString();
+
+  const formatAddress = (addr, type) => {
+    if (!addr) return `<p>No ${type} address provided.</p>`;
+    return `
+      <p>
+        ${addr.line1 || ''}<br>
+        ${addr.line2 || ''}${addr.line2 ? '<br>' : ''}
+        ${addr.city || ''}, ${addr.state_province_region || ''} ${addr.postal_code || ''}<br>
+        ${addr.country || ''}
+      </p>
+    `;
+  };
+
+  let itemsHtml = '';
+  if (packingSlipData.items && packingSlipData.items.length > 0) {
+    packingSlipData.items.forEach(item => {
+      itemsHtml += `
+        <tr>
+          <td>${item.sku || 'N/A'}</td>
+          <td>
+            ${item.product_name || 'N/A'}
+            ${item.variant_description ? `<br><small>(${item.variant_description})</small>` : ''}
+          </td>
+          <td>${item.quantity_ordered}</td>
+          ${packingSlipData.show_images ? `<td>${item.image_url ? `<img src="${item.image_url}" alt="${item.product_name}" style="width: 50px; height: auto;"/>` : ''}</td>` : ''}
+        </tr>
+      `;
+    });
+  }
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Packing Slip - Order #${packingSlipData.order_id}</title>
+      <style>
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #333; }
+        .container { width: 90%; margin: 0 auto; padding: 20px; }
+        header { text-align: center; margin-bottom: 20px; }
+        header img.logo { max-height: 70px; max-width: 180px; margin-bottom: 10px; }
+        header h1 { margin: 0; font-size: 22px; }
+        .slip-details { margin-bottom: 20px; overflow: hidden; }
+        .slip-details .slip-id { float: left; font-size: 18px; font-weight: bold; }
+        .slip-details .slip-date { float: right; text-align: right; }
+        .shipping-address h3 { margin-top: 0; margin-bottom: 5px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px;}
+        table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        table.items-table th, table.items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
+        table.items-table th { background-color: #f9f9f9; font-weight: bold; }
+        footer { text-align: center; margin-top: 40px; padding-top: 15px; border-top: 1px solid #eee; font-size: 10px; color: #777; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <header>
+          ${companyLogoUrl ? `<img src="${companyLogoUrl}" alt="${companyName} Logo" class="logo"><br>` : ''}
+          <h1>${companyName}</h1>
+        </header>
+
+        <section class="slip-details">
+          <div class="slip-id">PACKING SLIP</div>
+          <div class="slip-date">
+            <p><strong>Order #:</strong> ${packingSlipData.order_id}</p>
+            <p><strong>Order Date:</strong> ${orderDate}</p>
+          </div>
+        </section>
+
+        <section class="shipping-address">
+          <h3>Ship To:</h3>
+          ${formatAddress(packingSlipData.shipping_address, 'Shipping')}
+          ${packingSlipData.customer_name ? `<p><strong>Attn:</strong> ${packingSlipData.customer_name}</p>` : ''}
+          ${packingSlipData.customer_email ? `<p>Email: ${packingSlipData.customer_email}</p>` : ''}
+        </section>
+
+        <h3>Order Items:</h3>
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Product</th>
+              <th>Qty Ordered</th>
+              ${packingSlipData.show_images ? '<th>Image</th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <footer>
+          <p>Thank you for your order!</p>
+        </footer>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+async function generatePackingSlipPdf(packingSlipData) {
+  let browser = null;
+  try {
+    // Optionally add show_images to packingSlipData if not already present
+    const dataForHtml = { ...packingSlipData, show_images: packingSlipData.show_images !== undefined ? packingSlipData.show_images : true };
+    const htmlContent = getPackingSlipHtml(dataForHtml);
+
+    browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '0.5in',
+        right: '0.5in',
+        bottom: '0.5in',
+        left: '0.5in',
+      }
+    });
+    return pdfBuffer;
+  } catch (error) {
+    console.error('Error generating packing slip PDF with Puppeteer:', error);
+    throw error;
   } finally {
     if (browser) {
       await browser.close();
