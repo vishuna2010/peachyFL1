@@ -1,4 +1,7 @@
 const nodemailer = require('nodemailer');
+const ejs = require('ejs');
+const fs = require('fs');
+const path = require('path');
 
 // --- Transporter Setup ---
 // This is an async function because createTestAccount is async
@@ -78,95 +81,113 @@ async function sendEmail({ to, subject, text, html }) {
   }
 }
 
-// --- HTML Email Template for Order Confirmation ---
-function getOrderConfirmationHtml(order, customerEmail) {
-  // order object should contain id, total_amount, and an items array
-  // items array: { product_name (or similar), quantity, price_at_purchase }
+// --- HTML Email Template for Order Confirmation (Refactored) ---
+async function getOrderConfirmationHtml(orderData, customerEmail) {
+    try {
+        // The 'order' object in the template will expect fields like:
+        // id, order_date, items (array), total_amount, shipping_address, billing_address,
+        // subtotal, discount_applied { code, amount_deducted }, total_tax_amount, payment_status.
+        // The 'customer' object will expect 'name'.
 
-  let itemsHtml = '<table style="width:100%; border-collapse: collapse;"><tr><th style="border: 1px solid #ddd; padding: 8px; text-align:left;">Product</th><th style="border: 1px solid #ddd; padding: 8px; text-align:left;">Quantity</th><th style="border: 1px solid #ddd; padding: 8px; text-align:left;">Price</th><th style="border: 1px solid #ddd; padding: 8px; text-align:left;">Total</th></tr>';
-  if (order.items && order.items.length > 0) {
-    order.items.forEach(item => {
-      itemsHtml += `
-        <tr>
-          <td style="border: 1px solid #ddd; padding: 8px;">${item.product_name || item.name || `Product ID: ${item.productId}`}</td>
-          <td style="border: 1px solid #ddd; padding: 8px;">${item.quantity}</td>
-          <td style="border: 1px solid #ddd; padding: 8px;">$${parseFloat(item.priceAtPurchase || item.price_at_purchase).toFixed(2)}</td>
-          <td style="border: 1px solid #ddd; padding: 8px;">$${(parseFloat(item.priceAtPurchase || item.price_at_purchase) * item.quantity).toFixed(2)}</td>
-        </tr>
-      `;
-    });
-  } else {
-    itemsHtml += '<tr><td colspan="4" style="border: 1px solid #ddd; padding: 8px; text-align:center;">No items found in order details.</td></tr>';
-  }
-  itemsHtml += '</table>';
+        let customerName = "Valued Customer";
+        if (orderData.user && orderData.user.name) { // Assuming orderData might contain a nested user object
+            customerName = orderData.user.name;
+        } else if (typeof customerEmail === 'object' && customerEmail !== null && customerEmail.name) {
+             // This case is less likely given current usage but kept for robustness
+            customerName = customerEmail.name;
+        } else if (typeof customerEmail === 'string' && customerEmail.includes('@')) {
+            customerName = customerEmail.split('@')[0]; // Basic name from email
+        } else if (typeof customerEmail === 'string' && customerEmail.length > 0) {
+             customerName = customerEmail; // If customerEmail is already the name
+        }
 
-  return `
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-      <h1 style="color: #007bff;">Thank You for Your Order!</h1>
-      <p>Hello ${customerEmail || 'Valued Customer'},</p>
-      <p>We're excited to let you know that we've received your order and it's now being processed. Your order ID is: <strong>#${order.id}</strong>.</p>
 
-      <h2 style="color: #0056b3; border-bottom: 1px solid #eee; padding-bottom: 5px;">Order Summary</h2>
-      ${itemsHtml}
+        const templateData = {
+            order: {
+                ...orderData,
+                order_date: orderData.created_at || orderData.order_date,
+                items: orderData.items.map(item => ({
+                    ...item,
+                    name: item.product_name || item.name,
+                    price_at_purchase: item.priceAtPurchase || item.price_at_purchase
+                })),
+                // shipping_address and billing_address are assumed to be structured correctly in orderData
+            },
+            customer: {
+                name: customerName
+            }
+        };
 
-      <p style="font-size: 1.2em; margin-top: 20px;">
-        <strong>Total Amount: $${parseFloat(order.total_amount).toFixed(2)}</strong>
-      </p>
+        // Ensure subtotal, discount, tax are available and correctly formatted for the template
+        // The template itself handles parseFloat and toFixed for display, but ensure values exist
+        templateData.order.subtotal = orderData.original_total_amount !== undefined ? orderData.original_total_amount : (orderData.total_amount - (orderData.total_tax_amount || 0) + (orderData.discount_applied ? orderData.discount_applied.amount_deducted : 0));
+        if (orderData.discount_code_applied && orderData.discount_amount_applied !== undefined) {
+            templateData.order.discount_applied = {
+                code: orderData.discount_code_applied,
+                amount_deducted: orderData.discount_amount_applied
+            };
+        }
 
-      <h3 style="color: #0056b3; margin-top: 30px;">Shipping Address:</h3>
-      <p>
-        ${order.shippingAddress?.line1 || order.shipping_address_line1}<br>
-        ${order.shippingAddress?.line2 || order.shipping_address_line2 || ''}<br>
-        ${order.shippingAddress?.city || order.shipping_city}, ${order.shippingAddress?.postalCode || order.shipping_postal_code}<br>
-        ${order.shippingAddress?.country || order.shipping_country}
-      </p>
 
-      <p style="margin-top: 30px;">We'll send you another email once your order has shipped.</p>
-      <p>Thank you for shopping with My E-commerce Store!</p>
-
-      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-      <p style="font-size: 0.9em; color: #777;">
-        If you have any questions, please reply to this email or contact our support team.
-      </p>
-    </div>
-  `;
+        const templatePath = path.join(__dirname, '..', 'email_templates', 'order_confirmation.ejs');
+        const templateContent = fs.readFileSync(templatePath, 'utf-8');
+        const html = ejs.render(templateContent, templateData);
+        return html;
+    } catch (error) {
+        console.error("Error rendering HTML email template:", error);
+        return "<p>There was an error generating the order confirmation email. Please contact support.</p>";
+    }
 }
 
-function getOrderConfirmationText(order, customerEmail) {
-    let itemsText = "Items:\n";
-    if (order.items && order.items.length > 0) {
-        order.items.forEach(item => {
-            itemsText += `- ${item.product_name || item.name || `Product ID: ${item.productId}`}: ${item.quantity} x $${parseFloat(item.priceAtPurchase || item.price_at_purchase).toFixed(2)} = $${(parseFloat(item.priceAtPurchase || item.price_at_purchase) * item.quantity).toFixed(2)}\n`;
-        });
-    } else {
-        itemsText += "- No items found in order details.\n";
+// --- Plain Text Email Template for Order Confirmation (Refactored) ---
+function getOrderConfirmationText(orderData, customerEmail) {
+    let customerName = "Valued Customer";
+    if (orderData.user && orderData.user.name) {
+        customerName = orderData.user.name;
+    } else if (typeof customerEmail === 'string' && customerEmail.includes('@')) {
+        customerName = customerEmail.split('@')[0];
+    } else if (typeof customerEmail === 'string' && customerEmail.length > 0) {
+        customerName = customerEmail;
     }
 
-    return `
-Thank You for Your Order!
+    let itemsSummary = "";
+    if (orderData.items && orderData.items.length > 0) {
+        orderData.items.forEach(item => {
+            const price = parseFloat(item.priceAtPurchase || item.price_at_purchase || item.price || 0).toFixed(2);
+            const lineTotal = (parseFloat(price) * item.quantity).toFixed(2);
+            itemsSummary += `- ${item.product_name || item.name}: ${item.quantity} x $${price} = $${lineTotal}\n`;
+        });
+    }
 
-Hello ${customerEmail || 'Valued Customer'},
+    const subtotal = parseFloat(orderData.original_total_amount !== undefined ? orderData.original_total_amount : (orderData.total_amount - (orderData.total_tax_amount || 0) + (orderData.discount_applied ? orderData.discount_applied.amount_deducted : 0))).toFixed(2);
+    const discountInfo = orderData.discount_applied && orderData.discount_applied.amount_deducted ? `Discount (${orderData.discount_applied.code}): -$${parseFloat(orderData.discount_applied.amount_deducted).toFixed(2)}\n` : "";
+    const taxInfo = orderData.total_tax_amount !== undefined && orderData.total_tax_amount > 0 ? `Tax: $${parseFloat(orderData.total_tax_amount).toFixed(2)}\n` : "";
 
-We're excited to let you know that we've received your order and it's now being processed.
-Your Order ID is: #${order.id}.
+    const text = `
+Dear ${customerName},
+
+Thank you for your order!
+We've received your order and will process it shortly.
+
+Order ID: ${orderData.id}
+Order Date: ${new Date(orderData.created_at || orderData.order_date).toLocaleDateString()}
+Payment Status: ${orderData.payment_status || 'N/A'}
 
 Order Summary:
-${itemsText}
-
-Total Amount: $${parseFloat(order.total_amount).toFixed(2)}
+${itemsSummary}
+Subtotal: $${subtotal}
+${discountInfo}${taxInfo}Grand Total: $${parseFloat(orderData.total_amount).toFixed(2)}
 
 Shipping Address:
-${order.shippingAddress?.line1 || order.shipping_address_line1}
-${order.shippingAddress?.line2 ? (order.shippingAddress.line2 + '\n') : ''}${order.shippingAddress?.city || order.shipping_city}, ${order.shippingAddress?.postalCode || order.shipping_postal_code}
-${order.shippingAddress?.country || order.shipping_country}
+${orderData.shippingAddress?.line1 || orderData.shipping_address?.line1 || ''}
+${orderData.shippingAddress?.line2 ? (orderData.shippingAddress.line2 + '\n') : ''}${orderData.shippingAddress?.city || orderData.shipping_address?.city || ''}, ${orderData.shippingAddress?.postalCode || orderData.shipping_address?.postalCode || ''}
+${orderData.shippingAddress?.country || orderData.shipping_address?.country || ''}
 
-We'll send you another email once your order has shipped.
-Thank you for shopping with My E-commerce Store!
-
-If you have any questions, please reply to this email or contact our support team.
-    `;
+If you have any questions, please contact our support team.
+&copy; ${new Date().getFullYear()} Your Company Name
+    `.trim();
+    return text;
 }
-
 
 module.exports = {
   sendEmail,
