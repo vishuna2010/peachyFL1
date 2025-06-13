@@ -240,23 +240,30 @@ This section outlines the primary driver for future backend development, based o
     - [~] Define name, rate %, jurisdiction, code, and validity dates
         - [X] Phase 1: Schema for `tax_rates` table designed and added to seed.js (includes name, rate, jurisdiction, type, code, active status, validity dates).
         - [X] Phase 2: CRUD API endpoints for managing `tax_rates` implemented.
+        - [X] Phase 3: Sample `tax_rates` data seeded.
 2.  **Customer-Based Logic**
     - [~] Taxable vs tax-exempt customers
         - [X] Phase 1: Schema fields for user tax exemption (`is_tax_exempt`, `tax_exemption_certificate_id`, `tax_exemption_notes`) added to `users` table and seed.js.
         - [X] Phase 2: Admin APIs for Users (GET list, GET ID, PUT ID) updated to include/manage tax exemption fields.
-    - [ ] Apply based on billing address
+    - [~] Apply based on billing address
+        - [X] Phase 1: Use order billing address (country/state) for jurisdiction matching in tax calculation. (Note: Relies on per-order billing address; centralized user address book is a future enhancement).
 3.  **Product-Based Tax Classes**
     - [~] Standard Rate, Reduced Rate, Zero Rate
         - [X] Phase 1: Schema for `tax_classes` table designed and added to seed.js.
         - [X] Phase 2: CRUD API endpoints for managing `tax_classes` implemented.
+        - [X] Phase 3: Sample `tax_classes` data seeded.
     - [~] Tag products by tax class
         - [X] Phase 1: `tax_class_id` FK column added to `products` table schema (and in seed.js).
         - [X] Phase 2: Product CRUD APIs updated to support assigning/unsetting `tax_class_id` on products.
+        - [X] Phase 3: Seeded products are now assigned a `tax_class_id`.
     - [~] Link Tax Classes to Specific Tax Rates
         - [X] Phase 1: Schema for join table `tax_class_rates` designed and added to seed.js.
+        - [X] Phase 2: CRUD API endpoints for managing links between tax classes and tax rates implemented.
+        - [X] Phase 3: Sample `tax_class_rates` data seeded.
 4.  **Dynamic Calculation**
     - [~] Auto-calculate tax on invoice/checkout
         - [X] Phase 1: Basic tax calculation service (`calculateTaxForCartItems`) created for cart items (handles user exemption, simplified jurisdiction, single rate per item from product's tax class).
+        - [X] Phase 2: Integrated tax calculation service into order creation process (`POST /api/orders`); tax amounts stored on orders and order items.
     - [ ] Support inclusive and exclusive pricing
 5.  **Tax Reporting**
     - [ ] Monthly/quarterly returns

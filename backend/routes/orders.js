@@ -4,6 +4,7 @@ const db = require('../db');
 const { isAuthenticated } = require('../auth');
 const { sendEmail, getOrderConfirmationHtml, getOrderConfirmationText } = require('../services/emailService');
 const { NotFoundError, BadRequestError } = require('../utils/AppError');
+const taxService = require('../services/taxService'); // Import taxService
 
 // POST /api/orders - Create a new order
 router.post('/', isAuthenticated, async (req, res) => {
@@ -163,8 +164,38 @@ router.post('/', isAuthenticated, async (req, res) => {
 
     subtotalForItems = parseFloat(subtotalForItems.toFixed(2));
 
-    let finalTotalAmount = subtotalForItems;
-    let originalTotalAmountBeforeDiscount = subtotalForItems;
+    // --- Tax Calculation ---
+    // finalBillingAddress is already defined earlier and is either billingAddress or shippingAddress
+    const addressForTaxCalculation = {
+        country: finalBillingAddress.country,
+        state_province_region: finalBillingAddress.state_province_region,
+        // postal_code: finalBillingAddress.postalCode // or finalBillingAddress.postal_code, depending on structure
+    };
+
+    // Map orderItemsToInsert to the structure expected by calculateTaxForCartItems
+    // It expects: { product_id, variant_id, quantity, unit_price }
+    const cartItemsForTaxCalc = orderItemsToInsert.map(item => ({
+        productId: item.productId, // Keep original key for now if service can adapt, or map to product_id
+        product_id: item.productId,
+        variant_id: item.productVariantId,
+        quantity: item.quantity,
+        unit_price: item.priceAtPurchase // Assuming this is pre-tax unit price
+    }));
+
+    const taxCalculationResult = await taxService.calculateTaxForCartItems(
+        cartItemsForTaxCalc,
+        userId,
+        addressForTaxCalculation, // Pass the correct address object
+        client
+    );
+
+    const orderTotalTaxAmount = taxCalculationResult.total_tax_amount;
+    const itemsWithTaxDetails = taxCalculationResult.line_items_with_tax_details; // This now contains tax info per line item
+    const orderTaxSummaryDetails = taxCalculationResult.tax_summary_details;
+    // --- End Tax Calculation ---
+
+    let finalTotalAmount = subtotalForItems; // Start with subtotal (pre-tax, pre-discount)
+    let originalTotalAmountBeforeDiscount = subtotalForItems; // Subtotal before any cart-level discount
     let appliedDiscountId = null;
     let appliedDiscountCode = null;
     let appliedDiscountAmount = null;
@@ -181,24 +212,31 @@ router.post('/', isAuthenticated, async (req, res) => {
         if (discount.type === 'percentage') { appliedDiscountAmount = subtotalForItems * (parseFloat(discount.value) / 100.0); }
         else if (discount.type === 'fixed_amount') { appliedDiscountAmount = parseFloat(discount.value); }
         appliedDiscountAmount = parseFloat(Math.min(subtotalForItems, appliedDiscountAmount).toFixed(2));
+        // finalTotalAmount is subtotal - discount at this point
         finalTotalAmount = parseFloat((subtotalForItems - appliedDiscountAmount).toFixed(2));
         appliedDiscountId = discount.id; appliedDiscountCode = discount.code;
         await client.query('UPDATE discounts SET times_used = times_used + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [discount.id]);
     }
+    // Else, finalTotalAmount remains subtotalForItems (if no discount code)
+
+    // Now add tax to the (potentially discounted) subtotal
+    finalTotalAmount = parseFloat((finalTotalAmount + orderTotalTaxAmount).toFixed(2));
 
     const orderInsertQuery = `
       INSERT INTO orders (
-        user_id, status, total_amount, original_total_amount,
+        user_id, status, payment_status, total_amount, original_total_amount,
         discount_id, discount_code_applied, discount_amount_applied,
+        total_tax_amount, tax_summary_details, -- Added tax fields
         shipping_address_line1, shipping_address_line2, shipping_city, shipping_postal_code, shipping_country,
         billing_address_line1, billing_address_line2, billing_city, billing_postal_code, billing_country,
         updated_at, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      RETURNING id, status, total_amount, original_total_amount, discount_code_applied, discount_amount_applied, created_at;
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      RETURNING id, status, payment_status, total_amount, original_total_amount, total_tax_amount, discount_code_applied, discount_amount_applied, created_at;
     `;
     const orderValues = [
-      userId, 'pending', finalTotalAmount, originalTotalAmountBeforeDiscount,
+      userId, 'pending', 'pending', finalTotalAmount, originalTotalAmountBeforeDiscount, // Added 'pending' for payment_status
       appliedDiscountId, appliedDiscountCode, appliedDiscountAmount,
+      orderTotalTaxAmount, orderTaxSummaryDetails ? JSON.stringify(orderTaxSummaryDetails) : null, // Added tax values
       shippingAddress.line1, shippingAddress.line2 || null, shippingAddress.city, shippingAddress.postalCode, shippingAddress.country,
       finalBillingAddress.line1, finalBillingAddress.line2 || null, finalBillingAddress.city, finalBillingAddress.postalCode, finalBillingAddress.country
     ];
@@ -206,14 +244,26 @@ router.post('/', isAuthenticated, async (req, res) => {
     const newOrder = orderResult.rows[0];
 
     const orderItemInsertQuery = `
-      INSERT INTO order_items (order_id, product_id, product_variant_id, quantity, price_at_purchase)
-      VALUES ($1, $2, $3, $4, $5);
+      INSERT INTO order_items (
+        order_id, product_id, product_variant_id, quantity, price_at_purchase,
+        line_item_tax_amount, applied_tax_rate_percentage, tax_class_id_at_purchase
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
     `;
-    for (const itemToInsert of orderItemsToInsert) {
-      await client.query(orderItemInsertQuery, [
-          newOrder.id, itemToInsert.productId, itemToInsert.productVariantId,
-          itemToInsert.quantity, itemToInsert.priceAtPurchase
-        ]);
+    // Use itemsWithTaxDetails for inserting order items as it contains the tax calculations
+    for (let i = 0; i < itemsWithTaxDetails.length; i++) {
+        const processedItem = itemsWithTaxDetails[i];
+        // priceAtPurchase for the DB should be the original unit price used for tax calculation.
+        // orderItemsToInsert[i].priceAtPurchase holds this.
+        await client.query(orderItemInsertQuery, [
+            newOrder.id,
+            processedItem.product_id,
+            processedItem.variant_id || null,
+            processedItem.quantity,
+            orderItemsToInsert[i].priceAtPurchase, // Original unit price before tax
+            processedItem.line_item_tax_amount || 0,
+            processedItem.applied_tax_rate_percentage || null,
+            processedItem.tax_class_id_at_purchase || null
+          ]);
     }
 
     for (const stockUpdate of stockUpdates) {
