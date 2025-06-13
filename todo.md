@@ -231,7 +231,8 @@ This section outlines the primary driver for future backend development, based o
     - [X] Phase 1: Schema field `total_tax_amount` (and `tax_summary_details`) added to `orders` table. (Shipping fee is pre-existing or separate).
 - [~] Grand Total (Incl. Tax)
     - [X] Existing `orders.total_amount` will eventually include tax. Schema fields in place.
-- [ ] Payment Status (Pending, Paid, Refunded)
+- [~] Payment Status (Pending, Paid, Refunded)
+    - [X] Phase 1: Schema field (`payment_status`) added to `orders` table (in seed.js); Admin API for orders updated to manage this status.
 
 ### Tax Engine
 1.  **Configurable Tax Rules**

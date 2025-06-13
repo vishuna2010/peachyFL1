@@ -302,6 +302,7 @@ async function createSchema(client) {
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT, -- Or SET NULL depending on policy
         status VARCHAR(50) NOT NULL,
+        payment_status VARCHAR(50) DEFAULT 'pending' NOT NULL CHECK (payment_status IN ('pending', 'paid', 'partially_paid', 'refunded', 'partially_refunded', 'failed', 'cancelled', 'voided')),
         total_amount NUMERIC(10, 2) NOT NULL,
         original_total_amount NUMERIC(10,2) NULL,
         discount_id INTEGER REFERENCES discounts(id) ON DELETE SET NULL,

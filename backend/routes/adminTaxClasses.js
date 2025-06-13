@@ -48,6 +48,108 @@ router.post(
   }
 );
 
+// POST /:classId/rates - Link a tax rate to a tax class
+router.post(
+  '/:classId/rates',
+  [
+    param('classId').isInt({ gt: 0 }).toInt(),
+    body('tax_rate_id').isInt({ gt: 0 }).toInt().withMessage('A valid tax_rate_id is required.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { classId } = req.params;
+    const { tax_rate_id } = req.body;
+
+    try {
+      // Check if tax class exists
+      const classCheck = await db.query('SELECT id FROM tax_classes WHERE id = $1', [classId]);
+      if (classCheck.rows.length === 0) {
+        throw new NotFoundError(`Tax class with ID ${classId} not found.`);
+      }
+      // Check if tax rate exists
+      const rateCheck = await db.query('SELECT id FROM tax_rates WHERE id = $1', [tax_rate_id]);
+      if (rateCheck.rows.length === 0) {
+        throw new BadRequestError(`Tax rate with ID ${tax_rate_id} not found.`);
+      }
+
+      const result = await db.query(
+        'INSERT INTO tax_class_rates (tax_class_id, tax_rate_id) VALUES ($1, $2) RETURNING *',
+        [classId, tax_rate_id]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      if (error.code === '23505') { // unique_violation
+        return next(new ConflictError('This tax rate is already linked to this tax class.'));
+      }
+      next(error);
+    }
+  }
+);
+
+// GET /:classId/rates - List tax rates for a tax class
+router.get(
+  '/:classId/rates',
+  [param('classId').isInt({ gt: 0 }).toInt()],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { classId } = req.params;
+    try {
+      const classCheck = await db.query('SELECT id FROM tax_classes WHERE id = $1', [classId]);
+      if (classCheck.rows.length === 0) {
+        throw new NotFoundError(`Tax class with ID ${classId} not found.`);
+      }
+
+      const result = await db.query(
+        `SELECT tr.*
+         FROM tax_rates tr
+         JOIN tax_class_rates tcr ON tr.id = tcr.tax_rate_id
+         WHERE tcr.tax_class_id = $1
+         ORDER BY tr.name ASC;`,
+        [classId]
+      );
+      res.status(200).json(result.rows);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// DELETE /:classId/rates/:rateId - Unlink a tax rate from a tax class
+router.delete(
+  '/:classId/rates/:rateId',
+  [
+    param('classId').isInt({ gt: 0 }).toInt(),
+    param('rateId').isInt({ gt: 0 }).toInt()
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { classId, rateId } = req.params;
+    try {
+      const result = await db.query(
+        'DELETE FROM tax_class_rates WHERE tax_class_id = $1 AND tax_rate_id = $2 RETURNING *',
+        [classId, rateId]
+      );
+      if (result.rowCount === 0) {
+        throw new NotFoundError(`Link between tax class ID ${classId} and tax rate ID ${rateId} not found.`);
+      }
+      res.status(200).json({ message: 'Tax rate unlinked from tax class successfully.', unlinked_relation: result.rows[0] });
+      // Or res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // GET /:id - Get a specific tax class
 router.get(
   '/:id',
