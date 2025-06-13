@@ -208,7 +208,45 @@ This section outlines the primary driver for future backend development, based o
 
 ---
 
-## IV. Testing
+## IV. Tax Engine & Invoicing Module (New Specification)
+
+### Invoice Structure
+- [ ] Unique Invoice Number
+- [ ] Customer Information
+- [ ] Date/Time of Issue
+- [ ] Itemized Line Items
+    - [ ] Product Name, SKU, Quantity
+    - [ ] Unit Price (Excl. Tax)
+    - [ ] Discount, Tax Rate, Tax Amount
+    - [ ] Line Total (Incl. Tax)
+- [ ] Subtotal, Total Tax, Shipping Fee
+- [ ] Grand Total (Incl. Tax)
+- [ ] Payment Status (Pending, Paid, Refunded)
+
+### Tax Engine
+1.  **Configurable Tax Rules**
+    - [ ] Multiple tax types (VAT, Sales Tax, Customs)
+    - [ ] Define name, rate %, jurisdiction, code, and validity dates
+2.  **Customer-Based Logic**
+    - [ ] Taxable vs tax-exempt customers
+    - [ ] Apply based on billing address
+3.  **Product-Based Tax Classes**
+    - [ ] Standard Rate, Reduced Rate, Zero Rate
+    - [ ] Tag products by tax class
+4.  **Dynamic Calculation**
+    - [ ] Auto-calculate tax on invoice/checkout
+    - [ ] Support inclusive and exclusive pricing
+5.  **Tax Reporting**
+    - [ ] Monthly/quarterly returns
+    - [ ] Summary by region
+    - [ ] Export invoice-level data
+
+### Optional: QR Invoice Label
+- [ ] Link to online invoice or validation portal
+
+---
+
+## V. Testing
 
 ### A. Backend
 - Develop unit tests for services and utility functions.
@@ -220,7 +258,7 @@ This section outlines the primary driver for future backend development, based o
 
 ---
 
-## V. Deployment & Operations
+## VI. Deployment & Operations
 
 - Finalize and document the AWS Amplify deployment strategy.
 - Implement database backup and restore procedures.
