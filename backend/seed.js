@@ -30,6 +30,9 @@ async function createSchema(client) {
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         role VARCHAR(50) DEFAULT 'user' NOT NULL,
+        is_tax_exempt BOOLEAN DEFAULT FALSE NOT NULL,
+        tax_exemption_certificate_id VARCHAR(100) NULL,
+        tax_exemption_notes TEXT NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
@@ -294,6 +297,8 @@ async function createSchema(client) {
         discount_id INTEGER REFERENCES discounts(id) ON DELETE SET NULL,
         discount_code_applied VARCHAR(255),
         discount_amount_applied NUMERIC(10,2),
+        total_tax_amount NUMERIC(10, 2) DEFAULT 0.00 NOT NULL,
+        tax_summary_details JSONB NULL,
         shipping_address_line1 TEXT NOT NULL,
         shipping_address_line2 TEXT,
         shipping_city VARCHAR(100) NOT NULL,
@@ -321,10 +326,15 @@ async function createSchema(client) {
         product_variant_id INTEGER REFERENCES product_variants(id) ON DELETE RESTRICT, -- Prevent variant deletion
         quantity INTEGER NOT NULL,
         price_at_purchase NUMERIC(10, 2) NOT NULL,
+        line_item_tax_amount NUMERIC(10, 2) DEFAULT 0.00 NOT NULL,
+        applied_tax_rate_percentage NUMERIC(6, 4) NULL,
+        tax_class_id_at_purchase INTEGER NULL REFERENCES tax_classes(id) ON DELETE SET NULL,
         CHECK (product_variant_id IS NOT NULL OR product_id IS NOT NULL) -- Ensure one is present
       );
     `);
     console.log('Table "order_items" checked/created.');
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_order_items_tax_class_id_at_purchase ON order_items(tax_class_id_at_purchase);`);
+    console.log('Index "idx_order_items_tax_class_id_at_purchase" on "order_items" checked/created.');
 
     // Purchase Orders Table
     await client.query(`
