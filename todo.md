@@ -118,6 +118,7 @@ This section outlines the primary driver for future backend development, based o
         - [~] Historical tracking per supplier
           - [X] Phase 1: Schema created (`product_cost_history`) and PO receipts log entries.
           - [X] Phase 2: API endpoint to view product cost history (paginated & filterable).
+          - [X] Product/Variant `cost_price` field is updated from latest PO receipt (in base currency).
         - [~] Supports multi-currency
           - [X] Phase 1: PO Items & Cost History store costs in supplier's currency and attempt to store in base currency (1:1 if matches, NULL otherwise).
           - [X] Phase 2: Allow manual input of exchange_rate_to_base during PO receiving to calculate and store base_currency_cost_price.
@@ -156,7 +157,8 @@ This section outlines the primary driver for future backend development, based o
     - FIFO or batch-aware stock deduction
     - [~] PDF invoice generation
       - [X] Phase 1: Basic PDF invoice generated via admin API endpoint (/api/admin/orders/:orderId/invoice/pdf).
-    - Order packing label printing
+    - [~] Order packing label printing
+      - [X] Phase 1: Backend API endpoint (`/api/admin/orders/:orderId/packing-slip-data`) provides structured JSON data for packing slips.
 7.  **Barcode / QR Scanning Support**
     - Mobile or USB scanner support
     - Use QR codes for fast lookups or reorders

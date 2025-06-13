@@ -266,6 +266,23 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
         );
     }
 
+    // Update cost_price on product/variant if baseCostPrice is valid
+    if (baseCostPrice !== null && !isNaN(parseFloat(baseCostPrice)) && parseFloat(baseCostPrice) >= 0) {
+      if (poItem.product_variant_id) {
+        await client.query(
+          'UPDATE product_variants SET cost_price = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [baseCostPrice, poItem.product_variant_id]
+        );
+        // console.log(`Updated cost_price for variant ${poItem.product_variant_id} to ${baseCostPrice}`);
+      } else {
+        await client.query(
+          'UPDATE products SET cost_price = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [baseCostPrice, poItem.product_id]
+        );
+        // console.log(`Updated cost_price for product ${poItem.product_id} to ${baseCostPrice}`);
+      }
+    }
+
     // Log the stock movement
     const logMovementQuery = `
         INSERT INTO stock_movement_logs
