@@ -140,6 +140,7 @@ This section outlines the primary driver for future backend development, based o
       - [X] Phase 1: Schema designed for `inventory_batches` table (includes batch_number, expiry_date, quantities, cost at receipt).
       - [X] Phase 2a: PO Receipt API optionally accepts batch details & creates records in `inventory_batches`.
       - [X] Phase 2b: Admin API endpoint to view inventory batches for a product/variant (paginated & sortable).
+      - [X] Phase 2c: Admin API endpoint (`PUT /api/admin/inventory-batches/:batchId`) to update batch details (qty, expiry, number) and log qty changes.
     - [~] Stock Takes / Cycle Counting
       - [X] Phase 1: Backend API endpoint (`/api/admin/stock-adjustments/physical-count`) to update stock to counted quantity and log adjustment.
     - (Consider: Stock Movement Tracking (Advanced - for multi-location) - Admin UI)
@@ -149,7 +150,7 @@ This section outlines the primary driver for future backend development, based o
       - [X] Phase 1: Backend API endpoint (/api/admin/products/:productId/label-data) provides structured JSON data for labels.
       - [X] Phase 2: Enhanced PDF label generation (`/api/admin/products/:id/label`) with barcode from label-data and QR code.
     - [~] QR codes linking to product page, order form, or promotion
-      - [X] Product page URL data included in /label-data API response for QR code generation.
+      - [X] Product page, reorder, and promotion URL data included in /label-data API response for QR code generation.
     - Integration with Zebra/Brother printers
 5.  **Supplier & Purchase Management**
     - [X] Supplier profiles with contact and currency info (Admin UI: Manage Suppliers - CRUD for details including currency_code exists, ensure UI is styled)

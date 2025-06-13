@@ -390,8 +390,8 @@ router.get(
             currency_code: STORE_CURRENCY_CODE, // Assuming product/variant prices are in store's base currency
             currency_symbol: STORE_CURRENCY_SYMBOL,
             qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`,
-            qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/reorder?productId=${product.id}&variantId=${variant.id}&qty=1`,
-            qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?productId=${product.id}&variantId=${variant.id}`
+            qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&variantId=${variant.id}&quantity=1`,
+            qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}&ref_variant=${variant.id}`
           });
         }
       } else {
@@ -407,8 +407,8 @@ router.get(
           currency_code: STORE_CURRENCY_CODE,
             currency_symbol: STORE_CURRENCY_SYMBOL,
             qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`,
-            qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/reorder?productId=${product.id}&qty=1`,
-            qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?productId=${product.id}`
+            qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&quantity=1`,
+            qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}`
         });
       }
       res.status(200).json(labelsData);
