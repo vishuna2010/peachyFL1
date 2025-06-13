@@ -11,6 +11,7 @@ router.use(isAuthenticated, isAdmin);
 
 const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
 const BILLABLE_ORDER_STATUSES = ['shipped', 'completed', 'delivered']; // 'completed' can be an alias for delivered or a separate final step
+const ALLOWED_PAYMENT_STATUSES = ['pending', 'paid', 'partially_paid', 'refunded', 'partially_refunded', 'failed', 'cancelled', 'voided'];
 
 // GET /admin/orders - List all orders
 router.get('/orders', async (req, res) => {
@@ -26,8 +27,8 @@ router.get('/orders', async (req, res) => {
     const ordersQuery = `
       SELECT
         o.id, o.user_id, u.email as user_email,
-        o.status, o.total_amount,
-        o.invoice_number, o.invoice_issue_date, -- Added new fields
+        o.status, o.payment_status, o.total_amount, -- Added payment_status
+        o.invoice_number, o.invoice_issue_date,
         o.shipping_address_line1, o.shipping_city, o.shipping_postal_code, o.shipping_country,
         o.created_at, o.updated_at
       FROM orders o
@@ -101,22 +102,28 @@ router.get('/orders/:id', async (req, res) => {
   }
 });
 
-// PUT /admin/orders/:id/status - Update an order's status
-router.put('/orders/:id/status', async (req, res) => {
+// PUT /admin/orders/:id/status - Update an order's status and optionally payment_status
+router.put('/orders/:id/status', async (req, res, next) => { // Added next for error handling
   const { id } = req.params;
-  const { status: newStatus } = req.body;
+  const { status: newStatus, payment_status: newPaymentStatus } = req.body;
 
   if (isNaN(parseInt(id))) {
     return res.status(400).json({ message: 'Invalid order ID format.' });
   }
 
-  if (!newStatus) {
-    return res.status(400).json({ message: 'Status is required in the request body.' });
+  if (!newStatus && !newPaymentStatus) {
+    return res.status(400).json({ message: 'At least one of status or payment_status is required.' });
   }
 
-  if (!ALLOWED_ORDER_STATUSES.includes(newStatus.toLowerCase())) {
+  if (newStatus && !ALLOWED_ORDER_STATUSES.includes(newStatus.toLowerCase())) {
     return res.status(400).json({
       message: `Invalid status. Allowed statuses are: ${ALLOWED_ORDER_STATUSES.join(', ')}`
+    });
+  }
+
+  if (newPaymentStatus && !ALLOWED_PAYMENT_STATUSES.includes(newPaymentStatus.toLowerCase())) {
+    return res.status(400).json({
+      message: `Invalid payment_status. Allowed statuses are: ${ALLOWED_PAYMENT_STATUSES.join(', ')}`
     });
   }
 
@@ -124,58 +131,57 @@ router.put('/orders/:id/status', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Fetch current order details including invoice_number and status
-    const orderCheckResult = await client.query('SELECT id, status, invoice_number FROM orders WHERE id = $1 FOR UPDATE', [id]);
+    const orderCheckResult = await client.query('SELECT id, status, invoice_number, payment_status FROM orders WHERE id = $1 FOR UPDATE', [id]);
     if (orderCheckResult.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ message: `Order with ID ${id} not found.` });
+      throw new NotFoundError(`Order with ID ${id} not found.`);
     }
     const currentOrder = orderCheckResult.rows[0];
 
-    let newInvoiceNumber = currentOrder.invoice_number; // Preserve existing if any
-    let generateInvoice = false;
+    const setClauses = [];
+    const queryParams = [];
+    let paramIndex = 1;
 
-    if (currentOrder.invoice_number === null && BILLABLE_ORDER_STATUSES.includes(newStatus.toLowerCase())) {
-      generateInvoice = true;
+    if (newStatus && newStatus.toLowerCase() !== currentOrder.status) {
+      setClauses.push(`status = $${paramIndex++}`);
+      queryParams.push(newStatus.toLowerCase());
+    }
+
+    if (newPaymentStatus && newPaymentStatus.toLowerCase() !== currentOrder.payment_status) {
+      setClauses.push(`payment_status = $${paramIndex++}`);
+      queryParams.push(newPaymentStatus.toLowerCase());
+    }
+
+    const statusForInvoiceCheck = newStatus ? newStatus.toLowerCase() : currentOrder.status;
+    if (currentOrder.invoice_number === null && BILLABLE_ORDER_STATUSES.includes(statusForInvoiceCheck)) {
       const today = new Date();
       const year = today.getFullYear();
       const month = (today.getMonth() + 1).toString().padStart(2, '0');
       const day = today.getDate().toString().padStart(2, '0');
-      newInvoiceNumber = `INV-${year}${month}${day}-${id}`;
+      const generatedInvoiceNumber = `INV-${year}${month}${day}-${id}`;
+
+      setClauses.push(`invoice_number = $${paramIndex++}`);
+      queryParams.push(generatedInvoiceNumber);
+      setClauses.push(`invoice_issue_date = CURRENT_TIMESTAMP`);
     }
 
-    let updateQuery;
-    const queryParams = [];
-
-    if (generateInvoice) {
-      updateQuery = `
-        UPDATE orders
-        SET status = $1,
-            invoice_number = $2,
-            invoice_issue_date = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $3
-        RETURNING *;
-      `;
-      queryParams.push(newStatus.toLowerCase(), newInvoiceNumber, id);
-    } else {
-      updateQuery = `
-        UPDATE orders
-        SET status = $1, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2
-        RETURNING *;
-      `;
-      queryParams.push(newStatus.toLowerCase(), id);
+    if (setClauses.length === 0) {
+      await client.query('ROLLBACK'); // No actual changes to make
+      // Return current order data as no update was performed or needed
+      const currentOrderData = await db.query('SELECT * FROM orders WHERE id = $1', [id]); // Re-fetch or use currentOrder
+      return res.status(200).json({ message: 'No changes detected for order status or payment status.', order: currentOrderData.rows[0] });
     }
 
+    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+    queryParams.push(id); // For WHERE id = $N
+
+    const updateQuery = `UPDATE orders SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *;`;
     const updatedOrderResult = await client.query(updateQuery, queryParams);
 
     await client.query('COMMIT');
 
-    // For a more complete response, you could re-fetch the order with joins like in GET /orders/:id
-    // For now, returning the directly updated row is sufficient.
     res.status(200).json({
-      message: `Order #${id} status updated to '${newStatus}'.`,
+      message: `Order #${id} updated successfully.`,
       order: updatedOrderResult.rows[0]
     });
 
