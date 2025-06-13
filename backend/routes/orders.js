@@ -165,10 +165,11 @@ router.post('/', isAuthenticated, async (req, res) => {
     subtotalForItems = parseFloat(subtotalForItems.toFixed(2));
 
     // --- Tax Calculation ---
-    const shippingAddressForTax = {
-        country: shippingAddress.country,
-        state_province_region: shippingAddress.state_province_region,
-        // postal_code: shippingAddress.postalCode // Could be used for more granular tax rules later
+    // finalBillingAddress is already defined earlier and is either billingAddress or shippingAddress
+    const addressForTaxCalculation = {
+        country: finalBillingAddress.country,
+        state_province_region: finalBillingAddress.state_province_region,
+        // postal_code: finalBillingAddress.postalCode // or finalBillingAddress.postal_code, depending on structure
     };
 
     // Map orderItemsToInsert to the structure expected by calculateTaxForCartItems
@@ -184,8 +185,8 @@ router.post('/', isAuthenticated, async (req, res) => {
     const taxCalculationResult = await taxService.calculateTaxForCartItems(
         cartItemsForTaxCalc,
         userId,
-        shippingAddressForTax,
-        client // Pass the active transaction client
+        addressForTaxCalculation, // Pass the correct address object
+        client
     );
 
     const orderTotalTaxAmount = taxCalculationResult.total_tax_amount;

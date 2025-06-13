@@ -7,12 +7,12 @@ const { NotFoundError, BadRequestError } = require('../utils/AppError'); // Impo
  *
  * @param {Array<Object>} cartItems - Array of items in the cart. Each item should have productId, quantity, unit_price.
  * @param {number} customerId - The ID of the customer placing the order.
- * @param {Object} shippingAddressDetails - Details of the shipping address.
- *        Expected to have `country` and `state_province_region`.
+ * @param {Object} billingAddressForTax - Details of the billing address for tax jurisdiction.
+ *        Expected to have `country` and `state_province_region`. (Note: Prompt used shippingAddressDetails.country_code, this uses .country)
  * @param {Object} dbClient - An active database client (e.g., from a transaction pool).
  * @returns {Promise<Object>} An object containing total_tax_amount, line_items_with_tax_details, and tax_summary_details.
  */
-async function calculateTaxForCartItems(cartItems, customerId, shippingAddressDetails, dbClient) {
+async function calculateTaxForCartItems(cartItems, customerId, billingAddressForTax, dbClient) {
     // 1. Fetch User & Check Exemption
     let isUserTaxExempt = false;
     if (customerId) {
@@ -36,12 +36,22 @@ async function calculateTaxForCartItems(cartItems, customerId, shippingAddressDe
         };
     }
 
-    // 2. Determine Jurisdiction (Simplified for Phase 1)
-    // Using country and state/province. Ensure these are consistently available.
-    const country = shippingAddressDetails.country ? String(shippingAddressDetails.country).toUpperCase() : 'UNKNOWN_COUNTRY';
-    const stateProvince = shippingAddressDetails.state_province_region ? String(shippingAddressDetails.state_province_region).toUpperCase() : 'UNKNOWN_STATE';
-    const jurisdiction = `${country}-${stateProvince}`;
-    // A more robust system would use country_code and state_code if available and validated.
+    // 2. Determine Jurisdictions to Try (Enhanced for Phase 2)
+    // Using .country and .state_province_region as per the original working version rather than .country_code
+    const countryCode = billingAddressForTax.country ? String(billingAddressForTax.country).toUpperCase() : null;
+    const stateCode = billingAddressForTax.state_province_region ? String(billingAddressForTax.state_province_region).toUpperCase() : null;
+
+    const potentialJurisdictions = [];
+    const queryParamsForJurisdictions = [];
+
+    if (countryCode && stateCode) {
+        potentialJurisdictions.push(String(`${countryCode}-${stateCode}`).toLowerCase());
+    }
+    if (countryCode) {
+        potentialJurisdictions.push(String(countryCode).toLowerCase());
+    }
+    // Add a global fallback like '*' if you have global tax rates defined with '*' jurisdiction
+    // potentialJurisdictions.push('*');
 
     let overall_total_tax = 0;
     const line_items_with_tax_details = []; // This will be the new array with tax details
@@ -73,49 +83,65 @@ async function calculateTaxForCartItems(cartItems, customerId, shippingAddressDe
             continue;
         }
 
-        // Query for applicable tax rate
-        // Phase 1: Assumes only one applicable rate per item. A more complex system might sum multiple rates (e.g., state + county tax).
-        const taxRateQuery = `
-            SELECT tr.id as tax_rate_id, tr.name, tr.rate_percentage
+        itemWithTax.tax_class_id_at_purchase = productTaxClassId;
+
+        if (productTaxClassId === null || potentialJurisdictions.length === 0) {
+            // Product is not assigned to any tax class, or no jurisdiction to check
+            line_items_with_tax_details.push(itemWithTax);
+            continue;
+        }
+
+        // Build IN clause for jurisdictions dynamically for SQL query
+        const jurisdictionPlaceholders = potentialJurisdictions.map((_, i) => `LOWER($${i + 2})`).join(',');
+
+        const allApplicableRatesQuery = `
+            SELECT tr.id as tax_rate_id, tr.name, tr.rate_percentage, tr.jurisdiction
             FROM tax_rates tr
             JOIN tax_class_rates tcr ON tr.id = tcr.tax_rate_id
             WHERE tcr.tax_class_id = $1
-              AND LOWER(tr.jurisdiction) = LOWER($2)
+              AND LOWER(tr.jurisdiction) IN (${jurisdictionPlaceholders})
               AND tr.is_active = TRUE
               AND (tr.valid_from IS NULL OR tr.valid_from <= CURRENT_DATE)
               AND (tr.valid_until IS NULL OR tr.valid_until >= CURRENT_DATE)
-            ORDER BY tr.id -- Consistent ordering if somehow multiple match, though LIMIT 1 picks one
-            LIMIT 1;
+            ORDER BY LENGTH(tr.jurisdiction) DESC, tr.id; -- Prioritize more specific matches if needed, though we sum them
         `;
-        const taxRateResult = await dbClient.query(taxRateQuery, [productTaxClassId, jurisdiction]);
 
-        if (taxRateResult.rows.length > 0) {
-            const matched_tax_rate = taxRateResult.rows[0];
-            const item_price_before_tax = parseFloat(itemWithTax.unit_price); // Assuming unit_price is pre-tax
-            const rate = parseFloat(matched_tax_rate.rate_percentage);
+        const queryValues = [productTaxClassId, ...potentialJurisdictions];
+        const taxRateResults = await dbClient.query(allApplicableRatesQuery, queryValues);
 
-            // Calculate tax for the entire line item (unit price * quantity * rate)
-            const tax_for_item_line = item_price_before_tax * itemWithTax.quantity * rate;
+        let itemLineTaxTotal = 0;
+        let itemAppliedRatePercentageSum = 0; // This will be a sum of rates
+        const appliedRateIdsToItem = new Set();
 
-            itemWithTax.line_item_tax_amount = parseFloat(tax_for_item_line.toFixed(2));
-            itemWithTax.applied_tax_rate_percentage = rate;
+        if (taxRateResults.rows.length > 0) {
+            for (const rateRecord of taxRateResults.rows) {
+                if (appliedRateIdsToItem.has(rateRecord.tax_rate_id)) continue; // Avoid double-applying the exact same rate
 
-            overall_total_tax += itemWithTax.line_item_tax_amount;
+                const item_price_before_tax = parseFloat(itemWithTax.unit_price); // unit_price from cartItem
+                const rate = parseFloat(rateRecord.rate_percentage);
+                const tax_for_this_specific_rate = item_price_before_tax * itemWithTax.quantity * rate;
 
-            // Update applied_taxes_summary
-            const summaryKey = matched_tax_rate.tax_rate_id.toString(); // Use ID as a robust key
-            if (!applied_taxes_summary[summaryKey]) {
-                applied_taxes_summary[summaryKey] = {
-                    tax_rate_id: matched_tax_rate.tax_rate_id,
-                    name: matched_tax_rate.name,
-                    rate_percentage: rate,
-                    total_tax_for_this_rate: 0,
-                };
+                itemLineTaxTotal += tax_for_this_specific_rate;
+                itemAppliedRatePercentageSum += rate; // Summing rates might be complex if they overlap vs stack.
+                                                      // For now, sum is fine, but this might need refinement based on tax rules (e.g., are rates independent?)
+
+                const summaryKey = rateRecord.tax_rate_id.toString();
+                if (!applied_taxes_summary[summaryKey]) {
+                    applied_taxes_summary[summaryKey] = {
+                        tax_rate_id: rateRecord.tax_rate_id, name: rateRecord.name,
+                        rate_percentage: rate, // Store individual rate here
+                        total_tax_for_this_rate: 0,
+                    };
+                }
+                applied_taxes_summary[summaryKey].total_tax_for_this_rate += tax_for_this_specific_rate;
+                // Ensure two decimal places for summary totals too
+                applied_taxes_summary[summaryKey].total_tax_for_this_rate = parseFloat(applied_taxes_summary[summaryKey].total_tax_for_this_rate.toFixed(2));
+
+                appliedRateIdsToItem.add(rateRecord.tax_rate_id);
             }
-            applied_taxes_summary[summaryKey].total_tax_for_this_rate += itemWithTax.line_item_tax_amount;
-            // Ensure two decimal places for summary totals too
-            applied_taxes_summary[summaryKey].total_tax_for_this_rate = parseFloat(applied_taxes_summary[summaryKey].total_tax_for_this_rate.toFixed(2));
-
+            itemWithTax.line_item_tax_amount = parseFloat(itemLineTaxTotal.toFixed(2));
+            itemWithTax.applied_tax_rate_percentage = parseFloat(itemAppliedRatePercentageSum.toFixed(4)); // Sum of all applicable rates
+            overall_total_tax += itemWithTax.line_item_tax_amount;
         }
         line_items_with_tax_details.push(itemWithTax);
     }
