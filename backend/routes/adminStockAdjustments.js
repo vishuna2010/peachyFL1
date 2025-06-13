@@ -146,10 +146,10 @@ router.post(
       if (item_type === 'product') {
         const productResult = await client.query('SELECT name, stock_quantity, has_variants FROM products WHERE id = $1 FOR UPDATE', [item_id]);
         if (productResult.rows.length === 0) throw new NotFoundError(`Product with ID ${item_id} not found.`);
-        // Optional: Disallow if product has variants and user should adjust variants instead.
-        // if (productResult.rows[0].has_variants) {
-        //   throw new BadRequestError('This product has variants. Physical counts should adjust variant stock levels.');
-        // }
+        // Disallow if product has variants and user should adjust variants instead.
+        if (productResult.rows[0].has_variants) {
+          throw new BadRequestError('This product has variants. Physical counts should be performed at the variant level.');
+        }
         current_stock = productResult.rows[0].stock_quantity;
         item_name_for_response = productResult.rows[0].name;
         product_id_for_log = item_id;
