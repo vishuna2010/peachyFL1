@@ -251,8 +251,11 @@ This section outlines the primary driver for future backend development, based o
     - [~] Tag products by tax class
         - [X] Phase 1: `tax_class_id` FK column added to `products` table schema (and in seed.js).
         - [X] Phase 2: Product CRUD APIs updated to support assigning/unsetting `tax_class_id` on products.
+    - [~] Link Tax Classes to Specific Tax Rates
+        - [X] Phase 1: Schema for join table `tax_class_rates` designed and added to seed.js.
 4.  **Dynamic Calculation**
-    - [ ] Auto-calculate tax on invoice/checkout
+    - [~] Auto-calculate tax on invoice/checkout
+        - [X] Phase 1: Basic tax calculation service (`calculateTaxForCartItems`) created for cart items (handles user exemption, simplified jurisdiction, single rate per item from product's tax class).
     - [ ] Support inclusive and exclusive pricing
 5.  **Tax Reporting**
     - [ ] Monthly/quarterly returns

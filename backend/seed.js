@@ -109,6 +109,16 @@ async function createSchema(client) {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_tax_rates_is_active ON tax_rates(is_active);`);
     console.log('Indexes for "tax_rates" checked/created.');
 
+    // Tax Class Rates Table (Many-to-Many linking tax_classes and tax_rates)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tax_class_rates (
+          tax_class_id INTEGER NOT NULL REFERENCES tax_classes(id) ON DELETE CASCADE,
+          tax_rate_id INTEGER NOT NULL REFERENCES tax_rates(id) ON DELETE CASCADE,
+          PRIMARY KEY (tax_class_id, tax_rate_id)
+      );
+    `);
+    console.log('Table "tax_class_rates" checked/created.');
+
     // Products Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS products (
