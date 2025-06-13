@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer');
 const JsBarcode = require('jsbarcode');
 const { createCanvas } = require('canvas'); // Node canvas for jsbarcode
+const qrcode = require('qrcode');
 
 /**
  * Generates a barcode as a data URL.
@@ -23,33 +24,34 @@ function generateBarcodeDataURL(text, options = {}) {
 /**
  * Generates an HTML string for the product label.
  * @param {object} product - Product object containing name, sku, price.
+ * @param {object} labelData - Object with label data (full_display_name, sku, selling_price, currency_symbol).
  * @param {string} barcodeDataUrl - The data URL of the generated barcode.
+ * @param {string} qrCodeDataUrl - The data URL of the generated QR code.
  * @returns {string} HTML string for the label.
  */
-function getProductLabelHtml(product, barcodeDataUrl) {
-  const price = parseFloat(product.price).toFixed(2);
-  const sku = product.sku || `ID: ${product.id}`; // Fallback to ID if SKU is not available
+function getProductLabelHtml(labelData, barcodeDataUrl, qrCodeDataUrl) {
+  const sellingPrice = parseFloat(labelData.selling_price).toFixed(2);
+  const sku = labelData.sku || 'N/A';
+  const displayName = labelData.full_display_name || 'N/A';
+  const currencySymbol = labelData.currency_symbol || '$';
 
   return `
     <!DOCTYPE html>
     <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Product Label</title>
-      <style>
-        body { font-family: Arial, sans-serif; width: 300px; /* Approx label width */ padding: 10px; text-align: center; border: 1px solid #ccc; }
-        h1 { font-size: 20px; margin: 5px 0; }
-        p { font-size: 14px; margin: 3px 0; }
-        .sku { font-size: 12px; margin-bottom: 5px; }
-        .price { font-size: 18px; font-weight: bold; margin-bottom: 10px; }
-        img.barcode { display: block; margin: 0 auto; max-width: 90%; height: auto; }
-      </style>
-    </head>
+    <head><title>Product Label</title><style>
+      body { font-family: Arial, sans-serif; width: 300px; padding: 10px; text-align: center; border: 1px solid #ccc; box-sizing: border-box; }
+      h1 { font-size: 18px; margin: 5px 0; word-wrap: break-word; }
+      .sku { font-size: 12px; margin-bottom: 5px; }
+      .price { font-size: 16px; font-weight: bold; margin-bottom: 8px; }
+      img.barcode { display: block; margin: 0 auto 5px auto; max-width: 90%; height: auto; }
+      img.qrcode { display: block; margin: 5px auto 0 auto; max-width: 35%; height: auto; } /* Adjusted QR code size */
+    </style></head>
     <body>
-      <h1>${product.name}</h1>
+      <h1>${displayName}</h1>
       <p class="sku">SKU: ${sku}</p>
-      <p class="price">$${price}</p>
-      ${barcodeDataUrl ? `<img src="${barcodeDataUrl}" alt="Barcode for ${sku}" class="barcode" />` : '<p>No barcode generated.</p>'}
+      <p class="price">${currencySymbol}${sellingPrice}</p>
+      ${barcodeDataUrl ? `<img src="${barcodeDataUrl}" alt="Barcode for ${sku}" class="barcode" />` : '<p>No barcode.</p>'}
+      ${qrCodeDataUrl ? `<img src="${qrCodeDataUrl}" alt="QR Code" class="qrcode" />` : ''}
     </body>
     </html>
   `;
@@ -57,19 +59,24 @@ function getProductLabelHtml(product, barcodeDataUrl) {
 
 /**
  * Generates a product label PDF.
- * @param {object} product - Product object (id, name, sku, price).
+ * @param {object} productLabelData - Object containing data for the label.
  * @returns {Promise<Buffer>} A Promise that resolves with the PDF buffer.
  */
-async function generateProductLabelPdf(product) {
+async function generateProductLabelPdf(productLabelData) {
   let browser = null;
   try {
-    const barcodeText = product.sku || product.id.toString(); // Use SKU or ID for barcode
+    const barcodeText = productLabelData.barcode_value;
     if (!barcodeText) {
-        console.warn(`No SKU or ID available for product ${product.name} to generate barcode.`);
-        // Decide if barcode is optional or required. For now, proceed without if no text.
+        console.warn(`No barcode_value available for product ${productLabelData.full_display_name} to generate barcode.`);
     }
     const barcodeDataUrl = barcodeText ? generateBarcodeDataURL(barcodeText) : null;
-    const htmlContent = getProductLabelHtml(product, barcodeDataUrl);
+
+    // Generate QR Code
+    const qrCodeDataUrl = productLabelData.qr_code_data_product_url
+      ? await generateQrCodeDataURL(productLabelData.qr_code_data_product_url)
+      : null;
+
+    const htmlContent = getProductLabelHtml(productLabelData, barcodeDataUrl, qrCodeDataUrl);
 
     // Launch Puppeteer
     // Note: In some environments (like certain Lambdas or containers), you might need
@@ -116,7 +123,25 @@ async function generateProductLabelPdf(product) {
 module.exports = {
   generateProductLabelPdf,
   generateOrderInvoicePdf,
+  generateQrCodeDataURL,
 };
+
+async function generateQrCodeDataURL(text) {
+  if (!text) return null;
+  try {
+    // Options can be customized, e.g., errorCorrectionLevel, margin, scale
+    const options = {
+      errorCorrectionLevel: 'H', // High
+      type: 'image/png',
+      margin: 2,
+      scale: 4 // Adjust scale for size/resolution (pixels per module)
+    };
+    return await qrcode.toDataURL(text, options);
+  } catch (err) {
+    console.error('Failed to generate QR code data URL:', err);
+    return null; // Or throw err to be caught by caller
+  }
+}
 
 function getInvoiceHtml(orderDetails) {
   // --- Company Details (Placeholders or from orderDetails if available) ---

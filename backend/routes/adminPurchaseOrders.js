@@ -108,6 +108,7 @@ router.post('/', async (req, res) => {
 
 // POST /api/admin/purchase-orders/:poId/items/:poItemId/receive - Receive stock for a PO item
 router.post('/:poId/items/:poItemId/receive', async (req, res) => {
+  const BASE_CURRENCY_CODE = process.env.BASE_CURRENCY_CODE || 'USD'; // Define base currency
   const { poId, poItemId } = req.params;
   const { quantity_received_now } = req.body;
 
@@ -143,6 +144,15 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
       return res.status(404).json({ message: `Purchase order item with ID ${poItemId} not found on PO #${poId}.` });
     }
     const poItem = poItemResult.rows[0];
+
+    let baseCostPrice = null;
+    let exchangeRate = null;
+    if (poItem.currency_code && poItem.currency_code.toUpperCase() === BASE_CURRENCY_CODE) {
+        baseCostPrice = poItem.unit_cost_price;
+        exchangeRate = 1;
+    }
+    // If currencies differ, actual conversion would be needed here in a more advanced version.
+    // For now, baseCostPrice and exchangeRate remain null if not the base currency.
 
     // 3. Fetch Product or Variant (and lock)
     // The poItem now has product_id and potentially product_variant_id
@@ -221,8 +231,14 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
 
     // 6. Update purchase_order_items
     const updatedPoItemResult = await client.query(
-      'UPDATE purchase_order_items SET quantity_received = quantity_received + $1 WHERE id = $2 RETURNING *',
-      [qtyReceivedNow, poItemId]
+      `UPDATE purchase_order_items
+       SET quantity_received = quantity_received + $1,
+           base_currency_cost_price = $3,
+           exchange_rate_at_receipt = $4,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *;`,
+      [qtyReceivedNow, poItemId, baseCostPrice, exchangeRate]
     );
 
     // 7. Update products or product_variants stock
@@ -260,8 +276,9 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
     const costHistoryQuery = `
         INSERT INTO product_cost_history
             (product_id, variant_id, supplier_id, currency_code, cost_price,
-             quantity_received, purchase_order_item_id, effective_date)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+             quantity_received, purchase_order_item_id, effective_date,
+             base_currency_cost_price, exchange_rate_at_receipt)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8, $9)
     `;
     // poItem is expected to have currency_code and unit_cost_price from its creation
     // poItemId is already an integer from parseInt at the start of the route
@@ -272,7 +289,9 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
         poItem.currency_code || null,
         poItem.unit_cost_price,
         qtyReceivedNow,
-        poItemId
+        poItemId,
+        baseCostPrice,    // New
+        exchangeRate      // New
     ];
     await client.query(costHistoryQuery, costHistoryValues);
 

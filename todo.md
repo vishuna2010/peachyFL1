@@ -118,7 +118,8 @@ This section outlines the primary driver for future backend development, based o
         - [~] Historical tracking per supplier
           - [X] Phase 1: Schema created (`product_cost_history`) and PO receipts log entries.
           - [X] Phase 2: API endpoint to view product cost history (paginated & filterable).
-        - Supports multi-currency
+        - [~] Supports multi-currency
+          - [X] Phase 1: PO Items & Cost History store costs in supplier's currency and attempt to store in base currency (1:1 if matches, NULL otherwise).
     - [X] Selling Price
         - Retail and wholesale options
         - Bulk discounts and dynamic pricing
@@ -139,6 +140,7 @@ This section outlines the primary driver for future backend development, based o
 4.  **Label Generation & QR Code Printing**
     - [~] Printable product labels (Avery/Thermal formats)
       - [X] Phase 1: Backend API endpoint (/api/admin/products/:productId/label-data) provides structured JSON data for labels.
+      - [X] Phase 2: Enhanced PDF label generation (`/api/admin/products/:id/label`) with barcode from label-data and QR code.
     - [~] QR codes linking to product page, order form, or promotion
       - [X] Product page URL data included in /label-data API response for QR code generation.
     - Integration with Zebra/Brother printers
