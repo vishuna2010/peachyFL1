@@ -296,6 +296,9 @@ async function createSchema(client) {
         expected_delivery_date TIMESTAMPTZ,
         status VARCHAR(50) NOT NULL, -- e.g., pending, ordered, partially_received, received, cancelled
         notes TEXT,
+        shipping_carrier VARCHAR(100) NULL,
+        tracking_number VARCHAR(100) NULL,
+        delivery_status VARCHAR(50) NULL,
         created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -322,6 +325,36 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "purchase_order_items" checked/created.');
+
+    // Inventory Batches Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS inventory_batches (
+          id SERIAL PRIMARY KEY,
+          product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+          batch_number VARCHAR(100) NOT NULL,
+          expiry_date DATE NULL,
+          received_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+          initial_quantity INTEGER NOT NULL CHECK (initial_quantity > 0),
+          current_quantity INTEGER NOT NULL CHECK (current_quantity >= 0),
+          cost_price_at_receipt NUMERIC(12, 2) NULL,
+          currency_code_at_receipt VARCHAR(3) NULL,
+          base_currency_cost_price_at_receipt NUMERIC(12, 2) NULL,
+          exchange_rate_used NUMERIC(12, 6) NULL,
+          purchase_order_item_id INTEGER NULL REFERENCES purchase_order_items(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+          CONSTRAINT unique_batch_per_item UNIQUE (product_id, variant_id, batch_number),
+          CONSTRAINT check_current_qty_not_exceeds_initial CHECK (current_quantity <= initial_quantity)
+      );
+    `);
+    console.log('Table "inventory_batches" checked/created.');
+
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_inventory_batches_product_id ON inventory_batches(product_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_inventory_batches_variant_id ON inventory_batches(variant_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_inventory_batches_batch_number ON inventory_batches(batch_number);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_inventory_batches_expiry_date ON inventory_batches(expiry_date);`);
+    console.log('Indexes for "inventory_batches" checked/created.');
 
     // Stock Movement Logs Table
     await client.query(`
@@ -1010,6 +1043,7 @@ async function seedDatabase() {
     await seedProductImages(client, seededDataIds);
     await seedProductReviews(client, seededDataIds);
     // Seed new tables after products/variants and users are created
+    await seedInventoryBatches(client, seededDataIds); // Added call
     await seedCostHistory(client, seededDataIds);
     await seedStockMovements(client, seededDataIds);
 
@@ -1195,6 +1229,94 @@ async function seedCostHistory(client, seededDataIds) {
     console.log(`${historyEntries.length} product cost history entries seeded.`);
   } catch (error) {
     console.error('Error seeding product cost history:', error);
+  }
+}
+
+async function seedInventoryBatches(client, seededDataIds) {
+  console.log('Seeding inventory batches...');
+  if (!seededDataIds.products || Object.keys(seededDataIds.products).length === 0) {
+    console.warn("Product IDs not available for inventory batch seeding. Skipping.");
+    return;
+  }
+
+  const productSku1 = 'HDPHN-WL-BT-001'; // Headphones
+  const variantSku1 = 'HDPHN-GRN';       // Green Headphones variant
+
+  const productId1 = seededDataIds.products[productSku1];
+  const variantId1 = seededDataIds.variants && seededDataIds.variants[variantSku1] ? seededDataIds.variants[variantSku1] : null;
+
+  const productSku2 = 'TSHRT-MEN-COT-005'; // T-Shirt
+  const productId2 = seededDataIds.products[productSku2];
+
+  const batchesToSeed = [];
+
+  if (productId1 && variantId1) {
+    batchesToSeed.push({
+      product_id: productId1,
+      variant_id: variantId1,
+      batch_number: 'BATCH_V001_202305',
+      expiry_date: '2026-05-31',
+      initial_quantity: 50,
+      current_quantity: 45, // some sold
+      cost_price_at_receipt: 92.00, // from variant seed
+      currency_code_at_receipt: 'USD', // Assuming from supplier or PO
+      base_currency_cost_price_at_receipt: 92.00,
+      exchange_rate_used: 1.0,
+      purchase_order_item_id: null // No PO seeding yet
+    });
+  }
+
+  if (productId2) {
+    batchesToSeed.push({
+      product_id: productId2,
+      variant_id: null, // Base product
+      batch_number: 'BATCH_P002_202304',
+      expiry_date: null, // No expiry
+      initial_quantity: 100,
+      current_quantity: 80,
+      cost_price_at_receipt: 12.00,
+      currency_code_at_receipt: 'EUR', // Example
+      base_currency_cost_price_at_receipt: null, // Needs conversion if not base
+      exchange_rate_used: null,
+      purchase_order_item_id: null
+    });
+     batchesToSeed.push({ // Another batch for the same base product
+      product_id: productId2,
+      variant_id: null,
+      batch_number: 'BATCH_P003_202306',
+      expiry_date: null,
+      initial_quantity: 100,
+      current_quantity: 100,
+      cost_price_at_receipt: 12.50,
+      currency_code_at_receipt: 'EUR',
+      purchase_order_item_id: null
+    });
+  }
+
+  if (batchesToSeed.length === 0) {
+    console.log('No suitable products/variants found for inventory batch seeding.');
+    return;
+  }
+
+  try {
+    for (const batch of batchesToSeed) {
+      await client.query(
+        `INSERT INTO inventory_batches
+          (product_id, variant_id, batch_number, expiry_date, initial_quantity, current_quantity,
+           cost_price_at_receipt, currency_code_at_receipt, base_currency_cost_price_at_receipt, exchange_rate_used, purchase_order_item_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (product_id, variant_id, batch_number) DO NOTHING;`,
+        [
+          batch.product_id, batch.variant_id, batch.batch_number, batch.expiry_date, batch.initial_quantity, batch.current_quantity,
+          batch.cost_price_at_receipt, batch.currency_code_at_receipt, batch.base_currency_cost_price_at_receipt,
+          batch.exchange_rate_used, batch.purchase_order_item_id
+        ]
+      );
+    }
+    console.log(`${batchesToSeed.length} inventory batch(es) seeded or already existed.`);
+  } catch (error) {
+    console.error('Error seeding inventory batches:', error);
+    // Do not re-throw, allow other seeding operations to continue
   }
 }
 
