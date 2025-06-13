@@ -136,7 +136,8 @@ This section outlines the primary driver for future backend development, based o
       - [X] Logging for Stock Write-offs/Damage (via new admin endpoint).
       - [X] Logging for Customer Returns (restock).
     - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
-    - Batch and expiry tracking
+    - [~] Batch and expiry tracking
+      - [X] Phase 1: Schema designed for `inventory_batches` table (includes batch_number, expiry_date, quantities, cost at receipt).
     - [~] Stock Takes / Cycle Counting
       - [X] Phase 1: Backend API endpoint (`/api/admin/stock-adjustments/physical-count`) to update stock to counted quantity and log adjustment.
     - (Consider: Stock Movement Tracking (Advanced - for multi-location) - Admin UI)
@@ -152,7 +153,8 @@ This section outlines the primary driver for future backend development, based o
     - [X] Supplier profiles with contact and currency info (Admin UI: Manage Suppliers - CRUD for details including currency_code exists, ensure UI is styled)
     - [~] Purchase orders and invoice matching (Admin UI: Manage Purchase Orders, Receiving Stock against POs, PO History & Reporting)
       - [X] PO items store supplier's currency code for unit_cost_price.
-    - Delivery tracking and status updates
+    - [~] Delivery tracking and status updates (for POs)
+      - [X] Phase 1: Schema fields added to `purchase_orders` table; Admin API (`PUT /api/admin/purchase-orders/:id`) updated to set these fields. GET routes return fields.
 6.  **Sales Order & Fulfillment**
     - Integration with e-commerce platforms
     - FIFO or batch-aware stock deduction

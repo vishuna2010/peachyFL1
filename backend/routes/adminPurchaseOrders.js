@@ -474,7 +474,10 @@ router.put('/:id', async (req, res) => {
     return res.status(400).json({ message: 'Invalid Purchase Order ID format.' });
   }
 
-  const { status, expected_delivery_date, notes, supplier_id, order_date } = req.body;
+  const {
+      status, expected_delivery_date, notes, supplier_id, order_date,
+      shipping_carrier, tracking_number, delivery_status // New fields
+  } = req.body;
   // Item updates are not handled in this endpoint.
 
   const client = await db.pool.connect();
@@ -515,6 +518,44 @@ router.put('/:id', async (req, res) => {
         setClauses.push(`order_date = $${paramIndex++}`); values.push(new Date(order_date));
     }
 
+    // Add new delivery tracking fields
+    if (shipping_carrier !== undefined) {
+      if (typeof shipping_carrier === 'string' && shipping_carrier.trim() === '') {
+        setClauses.push(`shipping_carrier = $${paramIndex++}`); values.push(null);
+      } else if (shipping_carrier === null) {
+        setClauses.push(`shipping_carrier = $${paramIndex++}`); values.push(null);
+      } else if (typeof shipping_carrier === 'string') {
+        setClauses.push(`shipping_carrier = $${paramIndex++}`); values.push(shipping_carrier.trim());
+      }
+      // Optional: else { client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid shipping_carrier format.' }); }
+    }
+
+    if (tracking_number !== undefined) {
+      if (typeof tracking_number === 'string' && tracking_number.trim() === '') {
+        setClauses.push(`tracking_number = $${paramIndex++}`); values.push(null);
+      } else if (tracking_number === null) {
+        setClauses.push(`tracking_number = $${paramIndex++}`); values.push(null);
+      } else if (typeof tracking_number === 'string') {
+        setClauses.push(`tracking_number = $${paramIndex++}`); values.push(tracking_number.trim());
+      }
+      // Optional: else { client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid tracking_number format.' }); }
+    }
+
+    if (delivery_status !== undefined) {
+      // Optional: Add validation against a list of allowed statuses here
+      // const ALLOWED_DELIVERY_STATUSES = ['pending_shipment', 'shipped', 'in_transit', 'delivered', 'exception'];
+      // if (delivery_status === null || (typeof delivery_status === 'string' && delivery_status.trim() === '')) { ... }
+      // else if (typeof delivery_status === 'string' && ALLOWED_DELIVERY_STATUSES.includes(delivery_status.toLowerCase())) { ... }
+      // else { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid delivery_status.' }); }
+      if (typeof delivery_status === 'string' && delivery_status.trim() === '') {
+        setClauses.push(`delivery_status = $${paramIndex++}`); values.push(null);
+      } else if (delivery_status === null) {
+        setClauses.push(`delivery_status = $${paramIndex++}`); values.push(null);
+      } else if (typeof delivery_status === 'string') {
+        setClauses.push(`delivery_status = $${paramIndex++}`); values.push(delivery_status.trim());
+      }
+      // Optional: else { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid delivery_status format.' }); }
+    }
 
     if (setClauses.length === 0) {
       await client.query('ROLLBACK');
