@@ -42,6 +42,72 @@ router.get('/low-stock-products', async (req, res) => {
   }
 });
 
+// GET /api/admin/reports/tax-summary-by-region - Fetch total tax collected grouped by region
+router.get('/tax-summary-by-region', async (req, res) => {
+  const { start_date, end_date } = req.query;
+  const queryParams = [];
+  let dateConditions = "";
+  let paramIndex = 1;
+
+  // Validate and build date conditions
+  if (start_date) {
+    const startDateObj = new Date(start_date);
+    if (isNaN(startDateObj.getTime())) {
+      return res.status(400).json({ message: 'Invalid start_date format. Please use YYYY-MM-DD.' });
+    }
+    queryParams.push(startDateObj);
+    dateConditions += ` AND o.created_at >= $${paramIndex++}`;
+  }
+
+  if (end_date) {
+    const endDateObj = new Date(end_date);
+    if (isNaN(endDateObj.getTime())) {
+      return res.status(400).json({ message: 'Invalid end_date format. Please use YYYY-MM-DD.' });
+    }
+    endDateObj.setHours(23, 59, 59, 999); // Include whole end day
+    queryParams.push(endDateObj);
+    dateConditions += ` AND o.created_at <= $${paramIndex++}`;
+  }
+
+  if (start_date && end_date && new Date(start_date) > new Date(end_date)) {
+     return res.status(400).json({ message: 'start_date cannot be after end_date.' });
+  }
+
+  // Define valid statuses for orders to be included in tax summary
+  const VALID_TAXED_ORDER_STATUSES = ['processing', 'shipped', 'delivered', 'completed'];
+  queryParams.push(VALID_TAXED_ORDER_STATUSES);
+  const statusCondition = `o.status = ANY($${paramIndex++}::varchar[])`;
+
+  try {
+    const query = `
+      SELECT
+        o.billing_country,
+        o.billing_state_province_region,
+        COALESCE(SUM(o.total_tax_amount), 0) as total_tax_collected,
+        COUNT(DISTINCT o.id) as total_orders_contributing_tax
+      FROM orders o
+      WHERE o.total_tax_amount > 0 AND ${statusCondition} ${dateConditions}
+      GROUP BY o.billing_country, o.billing_state_province_region
+      ORDER BY o.billing_country, o.billing_state_province_region;
+    `;
+
+    const result = await db.query(query, queryParams);
+
+    const reportData = result.rows.map(row => ({
+        country: row.billing_country,
+        region: row.billing_state_province_region || 'N/A', // Handle null regions
+        total_tax_collected: parseFloat(row.total_tax_collected).toFixed(2),
+        total_orders_contributing_tax: parseInt(row.total_orders_contributing_tax)
+    }));
+
+    res.status(200).json(reportData);
+
+  } catch (error) {
+    console.error('Error generating tax summary by region report:', error);
+    res.status(500).json({ message: 'Failed to generate tax summary by region report.' });
+  }
+});
+
 
 // --- Best Sellers Report ---
 // VALID_SALE_STATUSES is already defined above for the Sales Report

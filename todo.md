@@ -178,7 +178,8 @@ This section outlines the primary driver for future backend development, based o
         - [X] Phase 1: Implemented logic in taxService and orders route to handle a global setting (simulated via const/env var) for inclusive/exclusive prices. Tax calculations are based on derived exclusive price, and `order_items.price_at_purchase` stores this exclusive price. Subtotals for discounts also use exclusive prices.
 5.  **Tax Reporting**
     - [ ] Monthly/quarterly returns
-    - [ ] Summary by region
+    - [~] Summary by region
+        - [X] Phase 1: Created admin API endpoint (`/api/admin/reports/tax-summary-by-region`) to provide total tax collected and order count, grouped by billing country and region/state. Supports optional date filtering.
     - [ ] Export invoice-level data
 
 ### Optional: QR Invoice Label
