@@ -108,8 +108,9 @@ router.post('/', async (req, res) => {
 
 // POST /api/admin/purchase-orders/:poId/items/:poItemId/receive - Receive stock for a PO item
 router.post('/:poId/items/:poItemId/receive', async (req, res) => {
+  const BASE_CURRENCY_CODE = process.env.BASE_CURRENCY_CODE || 'USD'; // Define base currency
   const { poId, poItemId } = req.params;
-  const { quantity_received_now } = req.body;
+  const { quantity_received_now, exchange_rate_to_base, batch_number, expiry_date } = req.body;
 
   // 1. Validate Inputs
   if (isNaN(parseInt(poId)) || isNaN(parseInt(poItemId))) {
@@ -119,6 +120,23 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
     return res.status(400).json({ message: 'quantity_received_now must be a positive integer.' });
   }
   const qtyReceivedNow = parseInt(quantity_received_now);
+
+  // Validate batch_number: If provided, must be a non-empty string.
+  if (batch_number !== undefined && (typeof batch_number !== 'string' || batch_number.trim() === '')) {
+    return res.status(400).json({ message: 'batch_number, if provided, must be a non-empty string.' });
+  }
+
+  // Validate expiry_date: If provided, must be a valid date string or null.
+  let finalExpiryDate = null;
+  if (expiry_date !== undefined && expiry_date !== null && expiry_date !== '') {
+    const parsedExpiry = new Date(expiry_date);
+    if (!isNaN(parsedExpiry.getTime())) {
+      finalExpiryDate = parsedExpiry.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+    } else {
+      return res.status(400).json({ message: 'Invalid expiry_date format. Please use YYYY-MM-DD, or provide null or an empty string.' });
+    }
+  }
+
 
   const client = await db.pool.connect();
   try {
@@ -143,6 +161,27 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
       return res.status(404).json({ message: `Purchase order item with ID ${poItemId} not found on PO #${poId}.` });
     }
     const poItem = poItemResult.rows[0];
+
+    let baseCostPrice = null;
+    let exchangeRateForStorage = null; // Renamed to avoid conflict
+    const poItemCurrency = poItem.currency_code ? poItem.currency_code.toUpperCase() : null;
+
+    if (poItemCurrency === BASE_CURRENCY_CODE) {
+        baseCostPrice = poItem.unit_cost_price;
+        exchangeRateForStorage = 1;
+    } else if (poItemCurrency && exchange_rate_to_base !== undefined) {
+        const parsedExchangeRate = parseFloat(exchange_rate_to_base);
+        if (!isNaN(parsedExchangeRate) && parsedExchangeRate > 0) {
+            // Assuming exchange_rate_to_base is the rate to multiply by foreign currency to get base currency
+            baseCostPrice = parseFloat((poItem.unit_cost_price * parsedExchangeRate).toFixed(2));
+            exchangeRateForStorage = parsedExchangeRate;
+        } else {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'Invalid exchange_rate_to_base provided. Must be a positive number.' });
+        }
+    }
+    // If currencies differ and no valid exchange_rate_to_base is provided,
+    // baseCostPrice and exchangeRateForStorage remain null.
 
     // 3. Fetch Product or Variant (and lock)
     // The poItem now has product_id and potentially product_variant_id
@@ -221,8 +260,14 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
 
     // 6. Update purchase_order_items
     const updatedPoItemResult = await client.query(
-      'UPDATE purchase_order_items SET quantity_received = quantity_received + $1 WHERE id = $2 RETURNING *',
-      [qtyReceivedNow, poItemId]
+      `UPDATE purchase_order_items
+       SET quantity_received = quantity_received + $1,
+           base_currency_cost_price = $3,
+           exchange_rate_at_receipt = $4,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING *;`,
+      [qtyReceivedNow, poItemId, baseCostPrice, exchangeRateForStorage]
     );
 
     // 7. Update products or product_variants stock
@@ -236,6 +281,23 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
             'UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             [qtyReceivedNow, poItem.product_id]
         );
+    }
+
+    // Update cost_price on product/variant if baseCostPrice is valid
+    if (baseCostPrice !== null && !isNaN(parseFloat(baseCostPrice)) && parseFloat(baseCostPrice) >= 0) {
+      if (poItem.product_variant_id) {
+        await client.query(
+          'UPDATE product_variants SET cost_price = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [baseCostPrice, poItem.product_variant_id]
+        );
+        // console.log(`Updated cost_price for variant ${poItem.product_variant_id} to ${baseCostPrice}`);
+      } else {
+        await client.query(
+          'UPDATE products SET cost_price = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [baseCostPrice, poItem.product_id]
+        );
+        // console.log(`Updated cost_price for product ${poItem.product_id} to ${baseCostPrice}`);
+      }
     }
 
     // Log the stock movement
@@ -260,8 +322,9 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
     const costHistoryQuery = `
         INSERT INTO product_cost_history
             (product_id, variant_id, supplier_id, currency_code, cost_price,
-             quantity_received, purchase_order_item_id, effective_date)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+             quantity_received, purchase_order_item_id, effective_date,
+             base_currency_cost_price, exchange_rate_at_receipt)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8, $9)
     `;
     // poItem is expected to have currency_code and unit_cost_price from its creation
     // poItemId is already an integer from parseInt at the start of the route
@@ -272,9 +335,52 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
         poItem.currency_code || null,
         poItem.unit_cost_price,
         qtyReceivedNow,
-        poItemId
+        poItemId,
+        baseCostPrice,    // Value from new logic
+        exchangeRateForStorage      // Value from new logic
     ];
     await client.query(costHistoryQuery, costHistoryValues);
+
+    // Insert into inventory_batches if batch_number is provided
+    let newBatchId = null;
+    const finalBatchNumber = batch_number ? batch_number.trim() : null;
+
+    if (finalBatchNumber) {
+      const batchInsertQuery = `
+        INSERT INTO inventory_batches
+          (product_id, variant_id, batch_number, expiry_date, initial_quantity, current_quantity,
+           cost_price_at_receipt, currency_code_at_receipt, base_currency_cost_price_at_receipt,
+           exchange_rate_used, purchase_order_item_id, received_date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+        RETURNING id;
+      `;
+      const batchInsertValues = [
+        poItem.product_id,
+        poItem.product_variant_id || null,
+        finalBatchNumber,
+        finalExpiryDate, // Already parsed and validated
+        qtyReceivedNow, // initial_quantity
+        qtyReceivedNow, // current_quantity
+        poItem.unit_cost_price,
+        poItem.currency_code || null,
+        baseCostPrice,       // from earlier logic
+        exchangeRateForStorage, // from earlier logic
+        poItemId
+      ];
+      try {
+        const batchResult = await client.query(batchInsertQuery, batchInsertValues);
+        newBatchId = batchResult.rows[0].id;
+        console.log(`Created inventory batch ID ${newBatchId} for PO Item ${poItemId}`);
+      } catch (batchError) {
+        if (batchError.code === '23505') { // unique_violation for unique_batch_per_item
+            await client.query('ROLLBACK');
+            return res.status(409).json({ message: `Batch number "${finalBatchNumber}" already exists for this product/variant. Please use a unique batch number.` });
+        }
+        // For other errors, re-throw to rollback the main transaction
+        console.error('Error inserting into inventory_batches:', batchError);
+        throw batchError;
+      }
+    }
 
     // 8. Update purchase_orders.status and updated_at
     const allItemsForPOResult = await client.query(
@@ -333,11 +439,17 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
     const finalItemsResult = await db.query(finalItemsQuery, [poId]);
     updatedPurchaseOrder.items = finalItemsResult.rows;
 
-    res.status(200).json({
+    const responsePayload = {
         message: `Successfully received ${qtyReceivedNow} unit(s) for item ${poItemId} on PO #${poId}.`,
         purchaseOrder: updatedPurchaseOrder,
         updatedItem: updatedPoItemResult.rows[0]
-    });
+    };
+
+    if (newBatchId) {
+        responsePayload.new_batch_id = newBatchId;
+    }
+
+    res.status(200).json(responsePayload);
 
   } catch (error) {
     await client.query('ROLLBACK');
@@ -426,7 +538,10 @@ router.put('/:id', async (req, res) => {
     return res.status(400).json({ message: 'Invalid Purchase Order ID format.' });
   }
 
-  const { status, expected_delivery_date, notes, supplier_id, order_date } = req.body;
+  const {
+      status, expected_delivery_date, notes, supplier_id, order_date,
+      shipping_carrier, tracking_number, delivery_status // New fields
+  } = req.body;
   // Item updates are not handled in this endpoint.
 
   const client = await db.pool.connect();
@@ -467,6 +582,44 @@ router.put('/:id', async (req, res) => {
         setClauses.push(`order_date = $${paramIndex++}`); values.push(new Date(order_date));
     }
 
+    // Add new delivery tracking fields
+    if (shipping_carrier !== undefined) {
+      if (typeof shipping_carrier === 'string' && shipping_carrier.trim() === '') {
+        setClauses.push(`shipping_carrier = $${paramIndex++}`); values.push(null);
+      } else if (shipping_carrier === null) {
+        setClauses.push(`shipping_carrier = $${paramIndex++}`); values.push(null);
+      } else if (typeof shipping_carrier === 'string') {
+        setClauses.push(`shipping_carrier = $${paramIndex++}`); values.push(shipping_carrier.trim());
+      }
+      // Optional: else { client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid shipping_carrier format.' }); }
+    }
+
+    if (tracking_number !== undefined) {
+      if (typeof tracking_number === 'string' && tracking_number.trim() === '') {
+        setClauses.push(`tracking_number = $${paramIndex++}`); values.push(null);
+      } else if (tracking_number === null) {
+        setClauses.push(`tracking_number = $${paramIndex++}`); values.push(null);
+      } else if (typeof tracking_number === 'string') {
+        setClauses.push(`tracking_number = $${paramIndex++}`); values.push(tracking_number.trim());
+      }
+      // Optional: else { client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid tracking_number format.' }); }
+    }
+
+    if (delivery_status !== undefined) {
+      // Optional: Add validation against a list of allowed statuses here
+      // const ALLOWED_DELIVERY_STATUSES = ['pending_shipment', 'shipped', 'in_transit', 'delivered', 'exception'];
+      // if (delivery_status === null || (typeof delivery_status === 'string' && delivery_status.trim() === '')) { ... }
+      // else if (typeof delivery_status === 'string' && ALLOWED_DELIVERY_STATUSES.includes(delivery_status.toLowerCase())) { ... }
+      // else { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid delivery_status.' }); }
+      if (typeof delivery_status === 'string' && delivery_status.trim() === '') {
+        setClauses.push(`delivery_status = $${paramIndex++}`); values.push(null);
+      } else if (delivery_status === null) {
+        setClauses.push(`delivery_status = $${paramIndex++}`); values.push(null);
+      } else if (typeof delivery_status === 'string') {
+        setClauses.push(`delivery_status = $${paramIndex++}`); values.push(delivery_status.trim());
+      }
+      // Optional: else { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid delivery_status format.' }); }
+    }
 
     if (setClauses.length === 0) {
       await client.query('ROLLBACK');

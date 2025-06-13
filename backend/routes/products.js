@@ -7,7 +7,7 @@ const { isAuthenticated, isAdmin } = require('../auth');
 const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload');
 const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../services/s3Service');
 const path = require('path');
-const { query, param, validationResult } = require('express-validator'); // Import express-validator
+const { query, validationResult } = require('express-validator'); // Import express-validator
 
 // Helper function to get or create tag IDs
 async function getOrCreateTagIds(tagNames, client) {
@@ -46,8 +46,8 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   const {
     name, description, price, category_id, tags: tagNames,
     stock_quantity = 0, supplier_id, sku, reorder_threshold,
-    brand_manufacturer, supplier_reference, product_status, // Existing new fields
-    cost_price // ADDING cost_price
+    brand_manufacturer, supplier_reference, product_status,
+    cost_price, wholesale_price
   } = req.body;
 
   if (!name || price === undefined) { return res.status(400).json({ message: 'Name and price are required.' }); }
@@ -77,6 +77,14 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
     }
   }
 
+  let parsed_wholesale_price = null;
+  if (wholesale_price !== undefined && wholesale_price !== null && wholesale_price !== '') {
+    parsed_wholesale_price = parseFloat(wholesale_price);
+    if (isNaN(parsed_wholesale_price) || parsed_wholesale_price < 0) {
+      return res.status(400).json({ message: 'Wholesale price must be a non-negative number.' });
+    }
+  }
+
   let imageUrl = null; let s3FileKey = null;
   if (req.file) {
     if (isS3Configured()) {
@@ -95,8 +103,10 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   try {
     await client.query('BEGIN');
     const productQuery = `
-      INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, reorder_threshold, brand_manufacturer, supplier_reference, product_status, cost_price, updated_at, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, reorder_threshold,
+                            brand_manufacturer, supplier_reference, product_status, cost_price, wholesale_price,
+                            updated_at, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING * `;
     const productResult = await client.query(productQuery, [
       name, description, parseFloat(price), category_id ? parseInt(category_id) : null, imageUrl, stock,
@@ -105,7 +115,8 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
       brand_manufacturer || null,
       supplier_reference || null,
       final_product_status,
-      parsed_cost_price // New
+      parsed_cost_price,
+      parsed_wholesale_price
     ]);
     const newProduct = productResult.rows[0];
 
@@ -127,30 +138,21 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
             (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `;
-        // req.user should be available due to isAuthenticated middleware
         const userIdForLog = req.user ? req.user.userId : null;
         const logMovementValues = [
-          newProduct.id,
-          null, // No variant_id for base product initial stock
-          userIdForLog,
-          'initial_stock_setup',
-          newProduct.stock_quantity, // quantity_changed is the full initial stock
-          newProduct.stock_quantity, // new_quantity_on_hand is the initial stock
-          'Initial stock for new product',
-          newProduct.id.toString() // Reference could be the product ID itself
+          newProduct.id, null, userIdForLog, 'initial_stock_setup',
+          newProduct.stock_quantity, newProduct.stock_quantity,
+          'Initial stock for new product', newProduct.id.toString()
         ];
-        // Use db.query for a new client from the pool, as original client related to the transaction is now released.
         await db.query(logMovementQuery, logMovementValues);
         console.log(`Initial stock logged for product ID ${newProduct.id}`);
       } catch (logError) {
         console.error(`Error logging initial stock for product ID ${newProduct.id}:`, logError);
-        // Non-critical error, so don't fail the main request if it already succeeded.
       }
     }
 
   } catch (error) {
-    // Ensure client.query('ROLLBACK') is only called if transaction was actually started and client is valid
-    if (client && !client._hadError && client._queryable) { // Check if client is still valid for rollback
+    if (client && !client._hadError && client._queryable) {
         try { await client.query('ROLLBACK'); } catch (rbError) { console.error("Rollback error:", rbError); }
     }
     if (s3FileKey && isS3Configured()) {
@@ -246,8 +248,8 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
   const {
     name, description, price, category_id, tags: tagNames,
     stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold,
-    brand_manufacturer, supplier_reference, product_status, // Existing new fields
-    cost_price // ADDING cost_price
+    brand_manufacturer, supplier_reference, product_status,
+    cost_price, wholesale_price
   } = req.body;
 
   if (isNaN(parseInt(id))) { return res.status(400).json({ message: 'Invalid product ID.' }); }
@@ -272,15 +274,28 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
       }
     }
 
-    let parsed_cost_price_update = undefined; // Important: undefined means not provided
+    let parsed_cost_price_update = undefined;
     if (cost_price !== undefined) {
-      if (cost_price === null || cost_price === '') { // Allow explicitly setting to null
+      if (cost_price === null || cost_price === '') {
         parsed_cost_price_update = null;
       } else {
         parsed_cost_price_update = parseFloat(cost_price);
         if (isNaN(parsed_cost_price_update) || parsed_cost_price_update < 0) {
           await client.query('ROLLBACK');
           return res.status(400).json({ message: 'Cost price must be a non-negative number or null.' });
+        }
+      }
+    }
+
+    let parsed_wholesale_price_update = undefined;
+    if (wholesale_price !== undefined) {
+      if (wholesale_price === null || wholesale_price === '') {
+        parsed_wholesale_price_update = null;
+      } else {
+        parsed_wholesale_price_update = parseFloat(wholesale_price);
+        if (isNaN(parsed_wholesale_price_update) || parsed_wholesale_price_update < 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ message: 'Wholesale price must be a non-negative number or null.' });
         }
       }
     }
@@ -314,17 +329,17 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
     addClause('category_id', category_id, false, true);
     addClause('brand_manufacturer', brand_manufacturer);
     addClause('supplier_reference', supplier_reference);
-    if (product_status !== undefined) { // Ensure validated status is used
+    if (product_status !== undefined) {
         addClause('product_status', product_status.toLowerCase());
     }
-    // Use parsed_cost_price_update which can be number or null
     if (parsed_cost_price_update !== undefined) {
-        addClause('cost_price', parsed_cost_price_update, true); // isNumeric = true
+        addClause('cost_price', parsed_cost_price_update, true);
+    }
+    if (parsed_wholesale_price_update !== undefined) {
+        addClause('wholesale_price', parsed_wholesale_price_update, true);
     }
     if (stock_quantity !== undefined) {
       if (currentProduct.has_variants) {
-        // Optionally, log a warning or add a message to the response if desired,
-        // but for now, we will just silently ignore it to prevent breaking updates of other fields.
         console.warn(`Attempted to update base stock for product ${id} which has variants. Base stock update ignored.`);
       } else {
         const stock = parseInt(stock_quantity);
@@ -362,7 +377,7 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
         for (const tagId of tagIds) { await client.query('INSERT INTO product_tags (product_id, tag_id) VALUES ($1, $2)', [id, tagId]); }
       }
        // If setClauses was empty but tags changed, we still need to update updated_at
-       if (setClauses.length === 0 && tagNames !== undefined) { // ensure tags were actually processed
+       if (setClauses.length === 0) {
            await client.query('UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [id]);
        }
     }
@@ -436,43 +451,5 @@ router.delete('/:id', isAuthenticated, isAdmin, async (req, res) => {
     res.status(500).json({ message: 'Error deleting product.' });
   } finally { client.release(); }
 });
-
-// GET /products/:productId/images - List images for a product
-router.get(
-  '/:productId/images',
-  [
-    param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.')
-  ],
-  async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { productId } = req.params;
-
-    try {
-      // Optional: Check if product exists first.
-      // const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
-      // if (productCheck.rows.length === 0) {
-      //   return res.status(404).json({ message: `Product with ID ${productId} not found (and thus has no images).` });
-      // }
-
-      const queryCmd = `
-        SELECT id, product_id, image_url, alt_text, display_order, created_at
-        FROM product_images
-        WHERE product_id = $1
-        ORDER BY display_order ASC, id ASC;
-      `;
-      const result = await db.query(queryCmd, [productId]); // Uses db.query for direct pool usage, safe for read-only
-
-      res.status(200).json(result.rows);
-
-    } catch (error) {
-      console.error(`Error fetching images for product ID ${productId}:`, error);
-      next(error);
-    }
-  }
-);
 
 module.exports = router;

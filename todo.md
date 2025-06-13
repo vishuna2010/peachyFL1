@@ -118,9 +118,13 @@ This section outlines the primary driver for future backend development, based o
         - [~] Historical tracking per supplier
           - [X] Phase 1: Schema created (`product_cost_history`) and PO receipts log entries.
           - [X] Phase 2: API endpoint to view product cost history (paginated & filterable).
-        - Supports multi-currency
+          - [X] Product/Variant `cost_price` field is updated from latest PO receipt (in base currency).
+        - [~] Supports multi-currency
+          - [X] Phase 1: PO Items & Cost History store costs in supplier's currency and attempt to store in base currency (1:1 if matches, NULL otherwise).
+          - [X] Phase 2: Allow manual input of exchange_rate_to_base during PO receiving to calculate and store base_currency_cost_price.
     - [X] Selling Price
-        - Retail and wholesale options
+        - [~] Retail and wholesale options
+          - [X] Phase 1: Schema and APIs support `wholesale_price` on products and `wholesale_price_modifier` on variants; `getProductById` includes calculated `final_wholesale_price` for variants.
         - Bulk discounts and dynamic pricing
     - [~] Profit Margin Calculator
       - [X] Profit margin details (amount & percentage) included in product/variant API responses.
@@ -132,27 +136,36 @@ This section outlines the primary driver for future backend development, based o
       - [X] Logging for Stock Write-offs/Damage (via new admin endpoint).
       - [X] Logging for Customer Returns (restock).
     - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
-    - Batch and expiry tracking
-    - (Consider: Stock Takes / Cycle Counting - Admin UI)
+    - [~] Batch and expiry tracking
+      - [X] Phase 1: Schema designed for `inventory_batches` table (includes batch_number, expiry_date, quantities, cost at receipt).
+      - [X] Phase 2a: PO Receipt API optionally accepts batch details & creates records in `inventory_batches`.
+      - [X] Phase 2b: Admin API endpoint to view inventory batches for a product/variant (paginated & sortable).
+      - [X] Phase 2c: Admin API endpoint (`PUT /api/admin/inventory-batches/:batchId`) to update batch details (qty, expiry, number) and log qty changes.
+    - [~] Stock Takes / Cycle Counting
+      - [X] Phase 1: Backend API endpoint (`/api/admin/stock-adjustments/physical-count`) to update stock to counted quantity and log adjustment.
     - (Consider: Stock Movement Tracking (Advanced - for multi-location) - Admin UI)
     - (Consider: Settings - Default Units of Measure, Reason Codes for Stock Adjustments, Warehouse/Location Management - Admin UI)
 4.  **Label Generation & QR Code Printing**
     - [~] Printable product labels (Avery/Thermal formats)
       - [X] Phase 1: Backend API endpoint (/api/admin/products/:productId/label-data) provides structured JSON data for labels.
+      - [X] Phase 2: Enhanced PDF label generation (`/api/admin/products/:id/label`) with barcode from label-data and QR code.
     - [~] QR codes linking to product page, order form, or promotion
-      - [X] Product page URL data included in /label-data API response for QR code generation.
+      - [X] Product page, reorder, and promotion URL data included in /label-data API response for QR code generation.
     - Integration with Zebra/Brother printers
 5.  **Supplier & Purchase Management**
     - [X] Supplier profiles with contact and currency info (Admin UI: Manage Suppliers - CRUD for details including currency_code exists, ensure UI is styled)
     - [~] Purchase orders and invoice matching (Admin UI: Manage Purchase Orders, Receiving Stock against POs, PO History & Reporting)
       - [X] PO items store supplier's currency code for unit_cost_price.
-    - Delivery tracking and status updates
+    - [~] Delivery tracking and status updates (for POs)
+      - [X] Phase 1: Schema fields added to `purchase_orders` table; Admin API (`PUT /api/admin/purchase-orders/:id`) updated to set these fields. GET routes return fields.
 6.  **Sales Order & Fulfillment**
     - Integration with e-commerce platforms
     - FIFO or batch-aware stock deduction
     - [~] PDF invoice generation
       - [X] Phase 1: Basic PDF invoice generated via admin API endpoint (/api/admin/orders/:orderId/invoice/pdf).
-    - Order packing label printing
+    - [~] Order packing label printing
+      - [X] Phase 1: Backend API endpoint (`/api/admin/orders/:orderId/packing-slip-data`) provides structured JSON data for packing slips.
+      - [X] Phase 1 PDF: Basic PDF packing slip generated via admin API endpoint (/api/admin/orders/:orderId/packing-slip/pdf).
 7.  **Barcode / QR Scanning Support**
     - Mobile or USB scanner support
     - Use QR codes for fast lookups or reorders
@@ -190,6 +203,8 @@ This section outlines the primary driver for future backend development, based o
 
 ### E. Development Utilities: Data Seeding (Existing)
 - [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
+- [X] Major `seed.js` overhaul: Implemented full schema creation (`CREATE TABLE IF NOT EXISTS` for all tables including all new columns/features) and added comprehensive sample data for new entities (product images, stock logs, cost history) and new fields in existing entities.
+- [X] Updated `seed.js` `createSchema` to include PO delivery tracking fields and the new `inventory_batches` table; added sample data for `inventory_batches`.
 
 ---
 

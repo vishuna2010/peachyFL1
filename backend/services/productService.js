@@ -214,7 +214,7 @@ async function getProductById(productId) {
 
       // Fetch all variants for this product
       const variantsQuery = `
-        SELECT id, sku, price_modifier, stock_quantity, image_url, cost_price
+        SELECT id, sku, price_modifier, stock_quantity, image_url, cost_price, wholesale_price_modifier
         FROM product_variants
         WHERE product_id = $1
         ORDER BY id ASC;
@@ -228,6 +228,16 @@ async function getProductById(productId) {
         // Calculate profit margin for the variant
         // variant.cost_price is now fetched in variantsQuery
         variant.profit_margin_details = calculateProfitMargin(variant.final_price, variant.cost_price);
+
+        // Calculate final_wholesale_price for variant
+        const baseProductWholesalePrice = product.wholesale_price !== null ? parseFloat(product.wholesale_price) : null;
+        const variantWholesaleModifier = variant.wholesale_price_modifier !== null ? parseFloat(variant.wholesale_price_modifier) : 0; // Default modifier to 0 if null
+
+        if (baseProductWholesalePrice !== null) {
+          variant.final_wholesale_price = parseFloat((baseProductWholesalePrice + variantWholesaleModifier).toFixed(2));
+        } else {
+          variant.final_wholesale_price = null;
+        }
         // Note: 'selected_options' (full details) can be constructed by frontend using available_options and option_value_ids
       }
     } else {

@@ -20,6 +20,9 @@ const adminVariantDetailRoutes = require('./routes/adminVariantDetails.js');   /
 const adminReviewRoutes = require('./routes/adminReviews'); // Import admin review routes
 const adminCategoryRoutes = require('./routes/adminCategories'); // Import admin category routes
 const adminStatsRoutes = require('./routes/adminStats'); // Import admin statistics routes
+const adminProductImagesRoutes = require('./routes/adminProductImages');
+const adminStockAdjustmentsRoutes = require('./routes/adminStockAdjustments');
+const adminReturnsRoutes = require('./routes/adminReturns');
 // Duplicate imports for adminOptionManagementRoutes and adminProductSpecificOptionsRoutes were removed by only keeping the first ones.
 const reviewRoutes = require('./routes/reviews'); // Import review routes
 const userRoutes = require('./routes/users'); // Import user profile routes
@@ -80,7 +83,15 @@ app.use('/api', reviewRoutes);
 // or if paths are not specific enough.
 // The current setup seems to imply adminOrderRoutes paths start like /orders, /products etc.
 // which are then prefixed by /api/admin by app.use('/api/admin', adminOrderRoutes);
-app.use('/api/admin', adminOrderRoutes);
+app.use('/api/admin', adminOrderRoutes); // Routes like /orders, /orders/:id/status
+app.use('/api/admin/products', adminProductRoutes); // Existing: general product admin like stock updates
+app.use('/api/admin/products', adminProductImagesRoutes); // Mounts /:productId/images and /images/:imageId under /api/admin/products
+app.use('/api/admin/discounts', adminDiscountRoutes);
+app.use('/api/admin/suppliers', adminSupplierRoutes);
+app.use('/api/admin/purchase-orders', adminPurchaseOrderRoutes);
+app.use('/api/admin/reports', adminReportRoutes);
+app.use('/api/admin/stock-adjustments', adminStockAdjustmentsRoutes);
+app.use('/api/admin/returns', adminReturnsRoutes);
 
 
 // --- User Profile Routes ---

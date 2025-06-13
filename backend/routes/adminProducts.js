@@ -3,8 +3,9 @@ const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
 const productService = require('../services/productService');
-const { query, param, validationResult } = require('express-validator'); // Added query
+const { query, param, validationResult } = require('express-validator');
 const { NotFoundError } = require('../utils/AppError');
+const { generateProductLabelPdf } = require('../services/pdfService'); // Ensured at top
 
 
 // Apply auth middleware to all routes in this router
@@ -114,47 +115,226 @@ router.put('/:id/stock', async (req, res) => {
 });
 
 // GET /api/admin/products/:id/label - Generate a PDF label for a product
-router.get('/:id/label', async (req, res) => {
-  const { id } = req.params;
-  if (isNaN(parseInt(id))) {
-    return res.status(400).json({ message: 'Invalid product ID format.' });
-  }
-
-  try {
-    // Fetch minimal product details needed for the label
-    // Ensure SKU is fetched if it's preferred for barcode over ID.
-    const productResult = await db.query(
-      'SELECT id, name, sku, price FROM products WHERE id = $1',
-      [id]
-    );
-
-    if (productResult.rows.length === 0) {
-      return res.status(404).json({ message: `Product with ID ${id} not found.` });
+router.get(
+  '/:id/label',
+  [
+    param('id').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt(),
+    query('variant_id').optional().isInt({ gt: 0 }).toInt().withMessage('Variant ID must be a positive integer if provided.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    const product = productResult.rows[0];
 
-    // Generate the PDF
-    const { generateProductLabelPdf } = require('../services/pdfService'); // Import here or at top
-    const pdfBuffer = await generateProductLabelPdf(product);
+    const { id: productId } = req.params; // productId is now an integer
+    const { variant_id: requestedVariantId } = req.query; // requestedVariantId is int or undefined
 
-    // Set response headers for PDF
-    res.setHeader('Content-Type', 'application/pdf');
-    const fileNameSku = product.sku || product.id;
-    res.setHeader('Content-Disposition', `inline; filename="product_label_${fileNameSku}.pdf"`);
-    // Use 'attachment' instead of 'inline' to force download
+    // Placeholders for currency and base URL - ensure consistency with /label-data or use a config service
+    const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD';
+    const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$';
+    const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com';
 
-    res.send(pdfBuffer);
+    try {
+      const product = await productService.getProductById(productId);
 
-  } catch (error) {
-    console.error(`Error generating label for product ID ${id}:`, error);
-    if (!res.headersSent) { // Avoid setting headers if already sent (e.g. by an earlier error)
-        res.status(500).json({ message: 'Failed to generate product label PDF.' });
-    } else {
-        // If headers already sent, express will handle closing connection on error
-        console.error("Headers already sent, could not send JSON error response for PDF generation.");
+      let labelDataItem = null;
+
+      if (product.has_variants && product.variants && product.variants.length > 0) {
+        if (!requestedVariantId) {
+          return res.status(400).json({ message: 'This product has multiple variants. Please specify a variant_id query parameter to generate a label for a specific variant.' });
+        }
+        const variant = product.variants.find(v => v.id === requestedVariantId);
+        if (!variant) {
+          return res.status(404).json({ message: `Variant with ID ${requestedVariantId} not found for product ${productId}.` });
+        }
+
+        let suffixParts = [];
+        if (product.available_options && variant.option_value_ids) {
+          for (const valId of variant.option_value_ids) {
+            for (const opt of product.available_options) {
+              const foundValue = opt.values.find(v => v.value_id === valId);
+              if (foundValue) { suffixParts.push(`${opt.option_name}: ${foundValue.value_name}`); break; }
+            }
+          }
+        }
+        const constructed_suffix = suffixParts.length > 0 ? ` - ${suffixParts.join(', ')}` : '';
+
+        labelDataItem = {
+          product_id: product.id,
+          variant_id: variant.id,
+          product_name: product.name, // Base product name
+          variant_name_suffix: constructed_suffix,
+          full_display_name: `${product.name}${constructed_suffix}`,
+          sku: variant.sku || product.sku, // Prioritize variant SKU
+          barcode_value: variant.sku || product.sku || `${product.id}-${variant.id}`, // Unique barcode value
+          selling_price: parseFloat(variant.final_price).toFixed(2), // Already calculated in getProductById
+          currency_code: STORE_CURRENCY_CODE,
+          currency_symbol: STORE_CURRENCY_SYMBOL,
+          qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`
+        };
+
+      } else { // Base product or product treated as having no distinct variants for labeling
+        if (requestedVariantId) {
+            return res.status(400).json({ message: `Product ID ${productId} does not have variants, variant_id parameter is not applicable.` });
+        }
+        labelDataItem = {
+          product_id: product.id,
+          variant_id: null,
+          product_name: product.name,
+          variant_name_suffix: null,
+          full_display_name: product.name,
+          sku: product.sku,
+          barcode_value: product.sku || product.id.toString(),
+          selling_price: parseFloat(product.price).toFixed(2),
+          currency_code: STORE_CURRENCY_CODE,
+          currency_symbol: STORE_CURRENCY_SYMBOL,
+          qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`
+        };
+      }
+
+      if (!labelDataItem) { // Should be caught by logic above, but as a safeguard
+          // This path should ideally not be reached if logic is correct
+          throw new Error("Could not determine data for label due to an unexpected issue.");
+      }
+
+      const pdfBuffer = await generateProductLabelPdf(labelDataItem);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      // Sanitize filename
+      const safeSku = (labelDataItem.sku || `product_${labelDataItem.product_id}`).replace(/[^a-z0-9_.-]/gi, '_');
+      const fileName = `label_${safeSku}${labelDataItem.variant_id ? '_var_' + labelDataItem.variant_id : ''}.pdf`;
+      res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+      res.send(pdfBuffer);
+
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      next(error); // Pass to global error handler
     }
   }
-});
+);
+
+// GET /api/admin/products/:productId/inventory-batches - Get inventory batch information
+router.get(
+  '/:productId/inventory-batches',
+  [
+    param('productId').isInt({ gt: 0 }).toInt().withMessage('Product ID must be a positive integer.'),
+    query('variant_id').optional().isInt({ gt: 0 }).toInt().withMessage('Variant ID must be a positive integer if provided.'),
+    query('page').optional().isInt({ min: 1 }).toInt().default(1),
+    query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10),
+    query('sort_by').optional().isIn([
+      'received_date_desc', 'received_date_asc',
+      'expiry_date_asc', 'expiry_date_desc',
+      'current_quantity_asc', 'current_quantity_desc'
+    ])
+      .withMessage('Invalid sort_by value. Allowed values: received_date_desc, received_date_asc, expiry_date_asc, expiry_date_desc, current_quantity_asc, current_quantity_desc')
+      .default('received_date_desc')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { productId } = req.params; // isInt by validator
+    const { variant_id, page, limit, sort_by } = req.query; // types validated
+    const offset = (page - 1) * limit;
+
+    try {
+      // Check if product exists
+      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+      if (productCheck.rows.length === 0) {
+        throw new NotFoundError(`Product with ID ${productId} not found.`);
+      }
+
+      const queryParams = [productId];
+      let whereClauses = ['ib.product_id = $1'];
+      let currentParamIndex = 1;
+
+      if (variant_id) {
+        currentParamIndex++;
+        queryParams.push(variant_id);
+        whereClauses.push(`ib.variant_id = $${currentParamIndex}`);
+      }
+
+      const whereString = whereClauses.join(' AND ');
+
+      let orderByClause = 'ORDER BY ib.received_date DESC, ib.id DESC'; // Default
+      switch (sort_by) {
+        case 'received_date_asc':
+          orderByClause = 'ORDER BY ib.received_date ASC, ib.id ASC';
+          break;
+        case 'expiry_date_asc':
+          orderByClause = 'ORDER BY ib.expiry_date ASC NULLS LAST, ib.id ASC';
+          break;
+        case 'expiry_date_desc':
+          orderByClause = 'ORDER BY ib.expiry_date DESC NULLS FIRST, ib.id DESC';
+          break;
+        case 'current_quantity_asc':
+          orderByClause = 'ORDER BY ib.current_quantity ASC, ib.id ASC';
+          break;
+        case 'current_quantity_desc':
+          orderByClause = 'ORDER BY ib.current_quantity DESC, ib.id DESC';
+          break;
+        // Default case 'received_date_desc' is already set
+      }
+
+      const dataQuery = `
+        SELECT
+          ib.*,
+          p.name as product_name,
+          pv.sku as variant_sku,
+          po.id as purchase_order_id,
+          s.name as supplier_name
+        FROM inventory_batches ib
+        JOIN products p ON ib.product_id = p.id
+        LEFT JOIN product_variants pv ON ib.variant_id = pv.id
+        LEFT JOIN purchase_order_items poi ON ib.purchase_order_item_id = poi.id
+        LEFT JOIN purchase_orders po ON poi.purchase_order_id = po.id
+        LEFT JOIN suppliers s ON po.supplier_id = s.id
+        WHERE ${whereString}
+        ${orderByClause}
+        LIMIT $${currentParamIndex + 1} OFFSET $${currentParamIndex + 2};
+      `;
+      const dataParams = [...queryParams, limit, offset];
+
+      const countQuery = `
+        SELECT COUNT(*)
+        FROM inventory_batches ib
+        WHERE ${whereString};
+      `;
+      // Count query uses only filter params (productId, variant_id)
+      const countParams = queryParams.slice(0, currentParamIndex);
+
+      const dataResult = await db.query(dataQuery, dataParams);
+      const countResult = await db.query(countQuery, countParams);
+
+      const totalRecords = parseInt(countResult.rows[0].count);
+      const totalPages = Math.ceil(totalRecords / limit);
+
+      res.status(200).json({
+        data: dataResult.rows,
+        pagination: {
+          total: totalRecords,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+          sort_by: sort_by
+        }
+      });
+
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return res.status(404).json({ message: error.message });
+      }
+      next(error); // Pass to global error handler
+    }
+  }
+);
 
 // GET /api/admin/products/:productId/label-data - Get structured data for product labels
 router.get(
@@ -209,7 +389,9 @@ router.get(
             selling_price: parseFloat(variant.final_price).toFixed(2), // final_price is already calculated in getProductById
             currency_code: STORE_CURRENCY_CODE, // Assuming product/variant prices are in store's base currency
             currency_symbol: STORE_CURRENCY_SYMBOL,
-            qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`
+            qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`,
+            qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&variantId=${variant.id}&quantity=1`,
+            qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}&ref_variant=${variant.id}`
           });
         }
       } else {
@@ -224,7 +406,9 @@ router.get(
           selling_price: parseFloat(product.price).toFixed(2),
           currency_code: STORE_CURRENCY_CODE,
             currency_symbol: STORE_CURRENCY_SYMBOL,
-            qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`
+            qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`,
+            qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&quantity=1`,
+            qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}`
         });
       }
       res.status(200).json(labelsData);

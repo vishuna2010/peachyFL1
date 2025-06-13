@@ -45,7 +45,8 @@ router.post(
         throw new Error('Cost price must be a non-negative decimal.');
       }
       return true;
-    }).withMessage('Cost price must be a non-negative decimal or null.')
+    }).withMessage('Cost price must be a non-negative decimal or null.'),
+    body('wholesale_price_modifier').optional({ nullable: true, checkFalsy: true }).isDecimal({ decimal_digits: '0,2' }).toFloat().withMessage('Wholesale price modifier must be a decimal value.')
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -54,8 +55,8 @@ router.post(
     }
 
     const { productId } = req.params;
-    // cost_price is now validated and coerced by express-validator if provided
-    const { sku, price_modifier, stock_quantity, image_url, option_value_ids, cost_price } = req.body;
+    // cost_price and wholesale_price_modifier are now validated and coerced by express-validator if provided
+    const { sku, price_modifier, stock_quantity, image_url, option_value_ids, cost_price, wholesale_price_modifier } = req.body;
     const finalSku = sku && sku.trim() !== '' ? sku.trim() : null;
 
     // Manual validation for cost_price is no longer needed here due to express-validator
@@ -133,9 +134,9 @@ router.post(
       }
 
       const variantInsertResult = await client.query(
-        `INSERT INTO product_variants (product_id, sku, price_modifier, stock_quantity, image_url, cost_price)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [productId, finalSku, price_modifier, stock_quantity, image_url || null, cost_price === undefined ? null : cost_price] // use validated/coerced cost_price
+        `INSERT INTO product_variants (product_id, sku, price_modifier, stock_quantity, image_url, cost_price, wholesale_price_modifier)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [productId, finalSku, price_modifier, stock_quantity, image_url || null, cost_price === undefined ? null : cost_price, wholesale_price_modifier === undefined ? null : wholesale_price_modifier]
       );
       const newVariant = variantInsertResult.rows[0];
 
@@ -253,15 +254,16 @@ router.put(
         throw new Error('Cost price must be a non-negative decimal.');
       }
       return true;
-    }).withMessage('Cost price must be a non-negative decimal or null.')
+    }).withMessage('Cost price must be a non-negative decimal or null.'),
+    body('wholesale_price_modifier').optional({ nullable: true, checkFalsy: true }).isDecimal({ decimal_digits: '0,2' }).toFloat().withMessage('Wholesale price modifier must be a decimal value.')
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { variantId } = req.params;
-    // cost_price is now validated and coerced by express-validator if provided
-    const { sku, price_modifier, stock_quantity, image_url, option_value_ids, reason, cost_price } = req.body;
+    // cost_price and wholesale_price_modifier are now validated and coerced by express-validator if provided
+    const { sku, price_modifier, stock_quantity, image_url, option_value_ids, reason, cost_price, wholesale_price_modifier } = req.body;
 
     if (Object.keys(req.body).length === 0) {
         return next(new BadRequestError("No fields provided for update."));
@@ -353,7 +355,7 @@ router.put(
 
       const updatedVariantResult = await client.query(
         `UPDATE product_variants
-         SET sku = $1, price_modifier = $2, stock_quantity = $3, image_url = $4, cost_price = $6, updated_at = NOW()
+         SET sku = $1, price_modifier = $2, stock_quantity = $3, image_url = $4, cost_price = $6, wholesale_price_modifier = $7, updated_at = NOW()
          WHERE id = $5 RETURNING *`,
         [
           effectiveSku,
@@ -361,7 +363,8 @@ router.put(
           stock_quantity !== undefined ? stock_quantity : currentVariant.stock_quantity,
           image_url !== undefined ? image_url : currentVariant.image_url,
           variantId,
-          cost_price !== undefined ? cost_price : currentVariant.cost_price // Use validated/coerced cost_price
+          cost_price !== undefined ? cost_price : currentVariant.cost_price,
+          wholesale_price_modifier !== undefined ? wholesale_price_modifier : currentVariant.wholesale_price_modifier
         ]
       );
       await client.query('COMMIT');
