@@ -194,8 +194,12 @@ router.post('/', isAuthenticated, async (req, res) => {
     const orderTaxSummaryDetails = taxCalculationResult.tax_summary_details;
     // --- End Tax Calculation ---
 
-    let finalTotalAmount = subtotalForItems; // This is pre-tax subtotal
-    let originalTotalAmountBeforeDiscount = subtotalForItems; // This is also pre-tax subtotal
+    // Calculate subtotal based on exclusive prices for discount calculation and DB storage
+    let subtotalExclusive = itemsWithTaxDetails.reduce((acc, item) => acc + (parseFloat(item.calculated_exclusive_unit_price) * item.quantity), 0);
+    subtotalExclusive = parseFloat(subtotalExclusive.toFixed(2));
+
+    let finalTotalAmount = subtotalExclusive; // Start with exclusive subtotal
+    let originalTotalAmountBeforeDiscount = subtotalExclusive; // Store exclusive subtotal
     let appliedDiscountId = null;
     let appliedDiscountCode = null;
     let appliedDiscountAmount = null;
@@ -204,22 +208,24 @@ router.post('/', isAuthenticated, async (req, res) => {
         const discountResult = await client.query('SELECT * FROM discounts WHERE code = $1 FOR UPDATE', [discount_code.toUpperCase()]);
         if (discountResult.rows.length === 0) { await client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid discount code.' }); }
         const discount = discountResult.rows[0];
-        if (!discount.is_active || (discount.valid_from && new Date(discount.valid_from) > new Date()) || (discount.valid_until && new Date(discount.valid_until) < new Date()) || (discount.usage_limit !== null && discount.times_used >= discount.usage_limit) || (discount.min_order_amount !== null && subtotalForItems < parseFloat(discount.min_order_amount))) {
+        // Use subtotalExclusive for min_order_amount check
+        if (!discount.is_active || (discount.valid_from && new Date(discount.valid_from) > new Date()) || (discount.valid_until && new Date(discount.valid_until) < new Date()) || (discount.usage_limit !== null && discount.times_used >= discount.usage_limit) || (discount.min_order_amount !== null && subtotalExclusive < parseFloat(discount.min_order_amount))) {
             let message = 'Discount code cannot be applied.';
             if (!discount.is_active) message = 'Discount code is not active.';
             await client.query('ROLLBACK'); return res.status(400).json({ message });
         }
-        if (discount.type === 'percentage') { appliedDiscountAmount = subtotalForItems * (parseFloat(discount.value) / 100.0); }
+        // Use subtotalExclusive for percentage discount calculation
+        if (discount.type === 'percentage') { appliedDiscountAmount = subtotalExclusive * (parseFloat(discount.value) / 100.0); }
         else if (discount.type === 'fixed_amount') { appliedDiscountAmount = parseFloat(discount.value); }
-        appliedDiscountAmount = parseFloat(Math.min(subtotalForItems, appliedDiscountAmount).toFixed(2));
-        // finalTotalAmount is subtotal - discount at this point
-        finalTotalAmount = parseFloat((subtotalForItems - appliedDiscountAmount).toFixed(2));
+        appliedDiscountAmount = parseFloat(Math.min(subtotalExclusive, appliedDiscountAmount).toFixed(2));
+
+        finalTotalAmount = parseFloat((subtotalExclusive - appliedDiscountAmount).toFixed(2));
         appliedDiscountId = discount.id; appliedDiscountCode = discount.code;
         await client.query('UPDATE discounts SET times_used = times_used + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [discount.id]);
     }
-    // Else, finalTotalAmount remains subtotalForItems (if no discount code)
+    // Else, finalTotalAmount remains subtotalExclusive (if no discount code)
 
-    // Now add tax to the (potentially discounted) subtotal
+    // Now add tax to the (potentially discounted) exclusive subtotal
     finalTotalAmount = parseFloat((finalTotalAmount + orderTotalTaxAmount).toFixed(2));
 
     const orderInsertQuery = `
@@ -252,14 +258,12 @@ router.post('/', isAuthenticated, async (req, res) => {
     // Use itemsWithTaxDetails for inserting order items as it contains the tax calculations
     for (let i = 0; i < itemsWithTaxDetails.length; i++) {
         const processedItem = itemsWithTaxDetails[i];
-        // priceAtPurchase for the DB should be the original unit price used for tax calculation.
-        // orderItemsToInsert[i].priceAtPurchase holds this.
         await client.query(orderItemInsertQuery, [
             newOrder.id,
             processedItem.product_id,
             processedItem.variant_id || null,
             processedItem.quantity,
-            orderItemsToInsert[i].priceAtPurchase, // Original unit price before tax
+            parseFloat(processedItem.calculated_exclusive_unit_price).toFixed(2), // Store EXCLUSIVE price
             processedItem.line_item_tax_amount || 0,
             processedItem.applied_tax_rate_percentage || null,
             processedItem.tax_class_id_at_purchase || null
@@ -319,30 +323,41 @@ router.post('/', isAuthenticated, async (req, res) => {
     res.status(201).json({ message: 'Order created successfully.', order: createdOrderDetails });
 
     // Email Sending Logic
-    let customerEmail = req.user.email; // From JWT payload
-    if (!customerEmail) { // Fallback if not in JWT (e.g. if user was fetched by ID without email in token)
+    let customerEmail = req.user.email;
+    let customerName = req.user.name;
+
+    if (!customerEmail || !customerName) {
         try {
             const userResult = await db.query('SELECT email, name FROM users WHERE id = $1', [userId]);
             if (userResult.rows.length > 0) {
-                customerEmail = userResult.rows[0].email;
-                // If req.user didn't have name, we can potentially add it to createdOrderDetails or emailOrderData
-                if (!req.user.name && userResult.rows[0].name) {
-                     if (!createdOrderDetails.user) createdOrderDetails.user = {}; // Ensure user object exists
-                     createdOrderDetails.user.name = userResult.rows[0].name;
-                }
+                if (!customerEmail) customerEmail = userResult.rows[0].email;
+                if (!customerName) customerName = userResult.rows[0].name;
             }
-        } catch (userFetchError) { console.error("Error fetching user email/name for order confirmation:", userFetchError); }
+        } catch (userFetchError) { console.error("Error fetching user details for order confirmation:", userFetchError); }
     }
 
     if (customerEmail) {
       const emailOrderData = {
-          ...createdOrderDetails,
-          // Ensure shippingAddress and billingAddress are in the format expected by the template
-          // createdOrderDetails already includes these from earlier in the route
-          user: { // Ensure a user object exists for the template
-            name: req.user.name || (createdOrderDetails.user ? createdOrderDetails.user.name : undefined), // Prioritize name from JWT or fetched user
-            email: customerEmail
-          }
+          ...newOrder, // Contains DB accurate totals, including original_total_amount (now exclusive subtotal)
+          user: { name: customerName, email: customerEmail },
+          shippingAddress: req.body.shippingAddress, // Use original input for addresses display
+          billingAddress: finalBillingAddress,        // Use final billing for display
+          items: orderItemsToInsert.map((item, idx) => ({ // Use original items for display price consistency
+              name: item.product_name,
+              quantity: item.quantity,
+              price_at_purchase: item.priceAtPurchase, // This is the original listed price
+              line_item_tax_amount: itemsWithTaxDetails[idx].line_item_tax_amount, // For display if needed
+              // applied_tax_rate_percentage: itemsWithTaxDetails[idx].applied_tax_rate_percentage // also available
+          })),
+          // Explicitly pass the pre-tax, pre-cart-discount subtotal for display in email summary
+          // The EJS template uses order.subtotal, order.discount_applied, order.total_tax_amount, order.total_amount
+          // newOrder already has original_total_amount (which is subtotalExclusive)
+          // and total_tax_amount, and total_amount.
+          // The discount_applied object is also part of newOrder if a discount was applied.
+          // So, spreading newOrder should be mostly correct. We just need to ensure subtotal is clear.
+          // The EJS template uses order.subtotal. Let's ensure this is the exclusive subtotal.
+          subtotal: originalTotalAmountBeforeDiscount, // This is subtotalExclusive
+          discount_applied: appliedDiscountId ? { code: appliedDiscountCode, amount_deducted: appliedDiscountAmount } : null
       };
 
       (async () => {
