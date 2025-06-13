@@ -120,6 +120,7 @@ This section outlines the primary driver for future backend development, based o
           - [X] Phase 2: API endpoint to view product cost history (paginated & filterable).
         - [~] Supports multi-currency
           - [X] Phase 1: PO Items & Cost History store costs in supplier's currency and attempt to store in base currency (1:1 if matches, NULL otherwise).
+          - [X] Phase 2: Allow manual input of exchange_rate_to_base during PO receiving to calculate and store base_currency_cost_price.
     - [X] Selling Price
         - Retail and wholesale options
         - Bulk discounts and dynamic pricing
@@ -134,7 +135,8 @@ This section outlines the primary driver for future backend development, based o
       - [X] Logging for Customer Returns (restock).
     - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
     - Batch and expiry tracking
-    - (Consider: Stock Takes / Cycle Counting - Admin UI)
+    - [~] Stock Takes / Cycle Counting
+      - [X] Phase 1: Backend API endpoint (`/api/admin/stock-adjustments/physical-count`) to update stock to counted quantity and log adjustment.
     - (Consider: Stock Movement Tracking (Advanced - for multi-location) - Admin UI)
     - (Consider: Settings - Default Units of Measure, Reason Codes for Stock Adjustments, Warehouse/Location Management - Admin UI)
 4.  **Label Generation & QR Code Printing**

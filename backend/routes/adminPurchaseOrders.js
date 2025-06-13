@@ -110,7 +110,7 @@ router.post('/', async (req, res) => {
 router.post('/:poId/items/:poItemId/receive', async (req, res) => {
   const BASE_CURRENCY_CODE = process.env.BASE_CURRENCY_CODE || 'USD'; // Define base currency
   const { poId, poItemId } = req.params;
-  const { quantity_received_now } = req.body;
+  const { quantity_received_now, exchange_rate_to_base } = req.body;
 
   // 1. Validate Inputs
   if (isNaN(parseInt(poId)) || isNaN(parseInt(poItemId))) {
@@ -146,13 +146,25 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
     const poItem = poItemResult.rows[0];
 
     let baseCostPrice = null;
-    let exchangeRate = null;
-    if (poItem.currency_code && poItem.currency_code.toUpperCase() === BASE_CURRENCY_CODE) {
+    let exchangeRateForStorage = null; // Renamed to avoid conflict
+    const poItemCurrency = poItem.currency_code ? poItem.currency_code.toUpperCase() : null;
+
+    if (poItemCurrency === BASE_CURRENCY_CODE) {
         baseCostPrice = poItem.unit_cost_price;
-        exchangeRate = 1;
+        exchangeRateForStorage = 1;
+    } else if (poItemCurrency && exchange_rate_to_base !== undefined) {
+        const parsedExchangeRate = parseFloat(exchange_rate_to_base);
+        if (!isNaN(parsedExchangeRate) && parsedExchangeRate > 0) {
+            // Assuming exchange_rate_to_base is the rate to multiply by foreign currency to get base currency
+            baseCostPrice = parseFloat((poItem.unit_cost_price * parsedExchangeRate).toFixed(2));
+            exchangeRateForStorage = parsedExchangeRate;
+        } else {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'Invalid exchange_rate_to_base provided. Must be a positive number.' });
+        }
     }
-    // If currencies differ, actual conversion would be needed here in a more advanced version.
-    // For now, baseCostPrice and exchangeRate remain null if not the base currency.
+    // If currencies differ and no valid exchange_rate_to_base is provided,
+    // baseCostPrice and exchangeRateForStorage remain null.
 
     // 3. Fetch Product or Variant (and lock)
     // The poItem now has product_id and potentially product_variant_id
@@ -238,7 +250,7 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $2
        RETURNING *;`,
-      [qtyReceivedNow, poItemId, baseCostPrice, exchangeRate]
+      [qtyReceivedNow, poItemId, baseCostPrice, exchangeRateForStorage]
     );
 
     // 7. Update products or product_variants stock
@@ -290,8 +302,8 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
         poItem.unit_cost_price,
         qtyReceivedNow,
         poItemId,
-        baseCostPrice,    // New
-        exchangeRate      // New
+        baseCostPrice,    // Value from new logic
+        exchangeRateForStorage      // Value from new logic
     ];
     await client.query(costHistoryQuery, costHistoryValues);
 
