@@ -228,14 +228,17 @@ This section outlines the primary driver for future backend development, based o
     - [ ] Multiple tax types (VAT, Sales Tax, Customs)
     - [~] Define name, rate %, jurisdiction, code, and validity dates
         - [X] Phase 1: Schema for `tax_rates` table designed and added to seed.js (includes name, rate, jurisdiction, type, code, active status, validity dates).
+        - [X] Phase 2: CRUD API endpoints for managing `tax_rates` implemented.
 2.  **Customer-Based Logic**
     - [ ] Taxable vs tax-exempt customers
     - [ ] Apply based on billing address
 3.  **Product-Based Tax Classes**
     - [~] Standard Rate, Reduced Rate, Zero Rate
         - [X] Phase 1: Schema for `tax_classes` table designed and added to seed.js.
+        - [X] Phase 2: CRUD API endpoints for managing `tax_classes` implemented.
     - [~] Tag products by tax class
         - [X] Phase 1: `tax_class_id` FK column added to `products` table schema (and in seed.js).
+        - [X] Phase 2: Product CRUD APIs updated to support assigning/unsetting `tax_class_id` on products.
 4.  **Dynamic Calculation**
     - [ ] Auto-calculate tax on invoice/checkout
     - [ ] Support inclusive and exclusive pricing
