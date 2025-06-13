@@ -10,6 +10,7 @@ const { NotFoundError } = require('../utils/AppError');
 router.use(isAuthenticated, isAdmin);
 
 const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+const BILLABLE_ORDER_STATUSES = ['shipped', 'completed', 'delivered']; // 'completed' can be an alias for delivered or a separate final step
 
 // GET /admin/orders - List all orders
 router.get('/orders', async (req, res) => {
@@ -26,6 +27,7 @@ router.get('/orders', async (req, res) => {
       SELECT
         o.id, o.user_id, u.email as user_email,
         o.status, o.total_amount,
+        o.invoice_number, o.invoice_issue_date, -- Added new fields
         o.shipping_address_line1, o.shipping_city, o.shipping_postal_code, o.shipping_country,
         o.created_at, o.updated_at
       FROM orders o
@@ -122,23 +124,51 @@ router.put('/orders/:id/status', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Check if order exists
-    const orderExistsResult = await client.query('SELECT id FROM orders WHERE id = $1 FOR UPDATE', [id]);
-    if (orderExistsResult.rows.length === 0) {
+    // Fetch current order details including invoice_number and status
+    const orderCheckResult = await client.query('SELECT id, status, invoice_number FROM orders WHERE id = $1 FOR UPDATE', [id]);
+    if (orderCheckResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ message: `Order with ID ${id} not found.` });
     }
+    const currentOrder = orderCheckResult.rows[0];
 
-    // Update the order status and updated_at timestamp
-    const updateQuery = `
-      UPDATE orders
-      SET status = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-      RETURNING *;
-    `;
-    // RETURNING id, user_id, status, total_amount, created_at, updated_at;
-    // Fetch more details if needed for the response, similar to GET /orders/:id
-    const updatedOrderResult = await client.query(updateQuery, [newStatus.toLowerCase(), id]);
+    let newInvoiceNumber = currentOrder.invoice_number; // Preserve existing if any
+    let generateInvoice = false;
+
+    if (currentOrder.invoice_number === null && BILLABLE_ORDER_STATUSES.includes(newStatus.toLowerCase())) {
+      generateInvoice = true;
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = (today.getMonth() + 1).toString().padStart(2, '0');
+      const day = today.getDate().toString().padStart(2, '0');
+      newInvoiceNumber = `INV-${year}${month}${day}-${id}`;
+    }
+
+    let updateQuery;
+    const queryParams = [];
+
+    if (generateInvoice) {
+      updateQuery = `
+        UPDATE orders
+        SET status = $1,
+            invoice_number = $2,
+            invoice_issue_date = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+        RETURNING *;
+      `;
+      queryParams.push(newStatus.toLowerCase(), newInvoiceNumber, id);
+    } else {
+      updateQuery = `
+        UPDATE orders
+        SET status = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING *;
+      `;
+      queryParams.push(newStatus.toLowerCase(), id);
+    }
+
+    const updatedOrderResult = await client.query(updateQuery, queryParams);
 
     await client.query('COMMIT');
 

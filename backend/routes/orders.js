@@ -39,64 +39,115 @@ router.post('/', isAuthenticated, async (req, res) => {
     for (const item of cart) {
       let priceAtPurchase;
       let productName;
-      let currentStock;
+      // let currentStock; // This will now be sum of batches or checked against aggregate first
       let productSku = null;
+      let aggregate_old_stock_quantity; // For stock_movement_log
 
       if (item.productVariantId) {
-        const variantResult = await client.query(
+        const variantAggregateResult = await client.query(
           `SELECT pv.stock_quantity, pv.price_modifier, pv.sku as variant_sku,
                   p.price as base_price, p.name as base_product_name, p.sku as base_product_sku
            FROM product_variants pv
            JOIN products p ON pv.product_id = p.id
-           WHERE pv.id = $1 AND pv.product_id = $2 FOR UPDATE OF pv`,
+           WHERE pv.id = $1 AND pv.product_id = $2 FOR UPDATE OF pv, p`, // Lock both product and variant
           [item.productVariantId, item.productId]
         );
-        if (variantResult.rows.length === 0) {
+        if (variantAggregateResult.rows.length === 0) {
           await client.query('ROLLBACK');
           return res.status(404).json({ message: `Product variant with ID ${item.productVariantId} for product ID ${item.productId} not found.` });
         }
-        const variant = variantResult.rows[0];
-        currentStock = variant.stock_quantity;
-        priceAtPurchase = parseFloat(variant.base_price) + parseFloat(variant.price_modifier);
-        productName = `${variant.base_product_name} (Variant)`;
-        productSku = variant.variant_sku || variant.base_product_sku;
+        const variantData = variantAggregateResult.rows[0];
+        aggregate_old_stock_quantity = variantData.stock_quantity;
+        priceAtPurchase = parseFloat(variantData.base_price) + parseFloat(variantData.price_modifier);
+        productName = `${variantData.base_product_name} (Variant)`; // For error messages
+        productSku = variantData.variant_sku || variantData.base_product_sku;
 
-        if (currentStock < item.quantity) {
+
+        if (aggregate_old_stock_quantity < item.quantity) { // Quick check against aggregate
           await client.query('ROLLBACK');
-          return res.status(400).json({ message: `Not enough stock for variant "${productName}". Available: ${currentStock}, Requested: ${item.quantity}.` });
+          throw new BadRequestError(`Not enough stock for variant "${productName}". Available: ${aggregate_old_stock_quantity}, Requested: ${item.quantity}.`);
         }
+
+        // Batch deduction logic for variant
+        const batches = await client.query(
+          `SELECT id, current_quantity FROM inventory_batches
+           WHERE product_id = $1 AND variant_id = $2 AND current_quantity > 0
+           ORDER BY expiry_date ASC NULLS LAST, received_date ASC, id ASC FOR UPDATE`, // OF inventory_batches implied by context
+          [item.productId, item.productVariantId]
+        );
+
+        let totalBatchStock = batches.rows.reduce((sum, batch) => sum + batch.current_quantity, 0);
+        if (totalBatchStock < item.quantity) {
+          await client.query('ROLLBACK');
+          throw new BadRequestError(`Insufficient batch stock for variant "${productName}". Available in batches: ${totalBatchStock}, Requested: ${item.quantity}.`);
+        }
+
+        let qtyToFulfill = item.quantity;
+        for (const batch of batches.rows) {
+          if (qtyToFulfill === 0) break;
+          const qtyFromThisBatch = Math.min(qtyToFulfill, batch.current_quantity);
+          await client.query(
+            'UPDATE inventory_batches SET current_quantity = current_quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [qtyFromThisBatch, batch.id]
+          );
+          qtyToFulfill -= qtyFromThisBatch;
+        }
+        // End Batch deduction for variant
+
         stockUpdates.push({
-          type: 'variant',
-          id: item.productVariantId,
-          productId: item.productId, // Added
-          quantityToDecrement: item.quantity,
-          old_stock_quantity: currentStock // Added (currentStock was variant.stock_quantity)
+          type: 'variant', id: item.productVariantId, productId: item.productId,
+          quantityToDecrement: item.quantity, old_stock_quantity: aggregate_old_stock_quantity
         });
-      } else {
-        const productResult = await client.query(
+
+      } else { // Base Product
+        const productAggregateResult = await client.query(
           'SELECT name, price, stock_quantity, sku FROM products WHERE id = $1 FOR UPDATE',
           [item.productId]
         );
-        if (productResult.rows.length === 0) {
+        if (productAggregateResult.rows.length === 0) {
           await client.query('ROLLBACK');
           return res.status(404).json({ message: `Product with ID ${item.productId} not found.` });
         }
-        const product = productResult.rows[0];
-        currentStock = product.stock_quantity;
-        priceAtPurchase = parseFloat(product.price);
-        productName = product.name;
-        productSku = product.sku;
+        const productData = productAggregateResult.rows[0];
+        aggregate_old_stock_quantity = productData.stock_quantity;
+        priceAtPurchase = parseFloat(productData.price);
+        productName = productData.name; // For error messages
+        productSku = productData.sku;
 
-        if (currentStock < item.quantity) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ message: `Not enough stock for product "${productName}". Available: ${currentStock}, Requested: ${item.quantity}.` });
+        if (aggregate_old_stock_quantity < item.quantity) { // Quick check
+            await client.query('ROLLBACK');
+            throw new BadRequestError(`Not enough stock for product "${productName}". Available: ${aggregate_old_stock_quantity}, Requested: ${item.quantity}.`);
         }
+
+        // Batch deduction logic for base product
+        const batches = await client.query(
+          `SELECT id, current_quantity FROM inventory_batches
+           WHERE product_id = $1 AND variant_id IS NULL AND current_quantity > 0
+           ORDER BY expiry_date ASC NULLS LAST, received_date ASC, id ASC FOR UPDATE`, // OF inventory_batches implied
+          [item.productId]
+        );
+
+        let totalBatchStock = batches.rows.reduce((sum, batch) => sum + batch.current_quantity, 0);
+        if (totalBatchStock < item.quantity) {
+          await client.query('ROLLBACK');
+          throw new BadRequestError(`Insufficient batch stock for product "${productName}". Available in batches: ${totalBatchStock}, Requested: ${item.quantity}.`);
+        }
+
+        let qtyToFulfill = item.quantity;
+        for (const batch of batches.rows) {
+          if (qtyToFulfill === 0) break;
+          const qtyFromThisBatch = Math.min(qtyToFulfill, batch.current_quantity);
+          await client.query(
+            'UPDATE inventory_batches SET current_quantity = current_quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [qtyFromThisBatch, batch.id]
+          );
+          qtyToFulfill -= qtyFromThisBatch;
+        }
+        // End Batch deduction for base product
+
         stockUpdates.push({
-          type: 'base',
-          id: item.productId,
-          productId: item.productId, // Added (can be item.productId)
-          quantityToDecrement: item.quantity,
-          old_stock_quantity: currentStock // Added (currentStock was product.stock_quantity)
+          type: 'base', id: item.productId, productId: item.productId,
+          quantityToDecrement: item.quantity, old_stock_quantity: aggregate_old_stock_quantity
         });
       }
 

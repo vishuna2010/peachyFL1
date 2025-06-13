@@ -30,6 +30,9 @@ async function createSchema(client) {
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         role VARCHAR(50) DEFAULT 'user' NOT NULL,
+        is_tax_exempt BOOLEAN DEFAULT FALSE NOT NULL,
+        tax_exemption_certificate_id VARCHAR(100) NULL,
+        tax_exemption_notes TEXT NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
@@ -70,6 +73,52 @@ async function createSchema(client) {
     `);
     console.log('Table "categories" checked/created.');
 
+    // Tax Classes Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tax_classes (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) UNIQUE NOT NULL,
+          description TEXT NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+    `);
+    console.log('Table "tax_classes" checked/created.');
+
+    // Tax Rates Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tax_rates (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          rate_percentage NUMERIC(6, 4) NOT NULL CHECK (rate_percentage >= 0 AND rate_percentage <= 1),
+          jurisdiction TEXT NOT NULL,
+          tax_type VARCHAR(50) NOT NULL,
+          tax_code VARCHAR(50) NULL,
+          is_active BOOLEAN DEFAULT TRUE NOT NULL,
+          valid_from DATE NULL,
+          valid_until DATE NULL,
+          created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
+          CONSTRAINT uq_tax_rate_name UNIQUE (name)
+      );
+    `);
+    console.log('Table "tax_rates" checked/created.');
+
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tax_rates_jurisdiction ON tax_rates(jurisdiction);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tax_rates_tax_type ON tax_rates(tax_type);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_tax_rates_is_active ON tax_rates(is_active);`);
+    console.log('Indexes for "tax_rates" checked/created.');
+
+    // Tax Class Rates Table (Many-to-Many linking tax_classes and tax_rates)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tax_class_rates (
+          tax_class_id INTEGER NOT NULL REFERENCES tax_classes(id) ON DELETE CASCADE,
+          tax_rate_id INTEGER NOT NULL REFERENCES tax_rates(id) ON DELETE CASCADE,
+          PRIMARY KEY (tax_class_id, tax_rate_id)
+      );
+    `);
+    console.log('Table "tax_class_rates" checked/created.');
+
     // Products Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS products (
@@ -81,6 +130,7 @@ async function createSchema(client) {
         cost_price NUMERIC(10, 2) NULL,
         category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
         supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL,
+        tax_class_id INTEGER NULL REFERENCES tax_classes(id) ON DELETE SET NULL,
         sku VARCHAR(100) UNIQUE,
         stock_quantity INTEGER DEFAULT 0 NOT NULL,
         reorder_threshold INTEGER DEFAULT 0,
@@ -96,6 +146,8 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "products" checked/created.');
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_products_tax_class_id ON products(tax_class_id);`);
+    console.log('Index "idx_products_tax_class_id" on "products" checked/created.');
 
     // Product Variants Table
     await client.query(`
@@ -255,6 +307,10 @@ async function createSchema(client) {
         discount_id INTEGER REFERENCES discounts(id) ON DELETE SET NULL,
         discount_code_applied VARCHAR(255),
         discount_amount_applied NUMERIC(10,2),
+        total_tax_amount NUMERIC(10, 2) DEFAULT 0.00 NOT NULL,
+        tax_summary_details JSONB NULL,
+        invoice_number VARCHAR(50) UNIQUE NULL,
+        invoice_issue_date TIMESTAMPTZ NULL,
         shipping_address_line1 TEXT NOT NULL,
         shipping_address_line2 TEXT,
         shipping_city VARCHAR(100) NOT NULL,
@@ -282,10 +338,15 @@ async function createSchema(client) {
         product_variant_id INTEGER REFERENCES product_variants(id) ON DELETE RESTRICT, -- Prevent variant deletion
         quantity INTEGER NOT NULL,
         price_at_purchase NUMERIC(10, 2) NOT NULL,
+        line_item_tax_amount NUMERIC(10, 2) DEFAULT 0.00 NOT NULL,
+        applied_tax_rate_percentage NUMERIC(6, 4) NULL,
+        tax_class_id_at_purchase INTEGER NULL REFERENCES tax_classes(id) ON DELETE SET NULL,
         CHECK (product_variant_id IS NOT NULL OR product_id IS NOT NULL) -- Ensure one is present
       );
     `);
     console.log('Table "order_items" checked/created.');
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_order_items_tax_class_id_at_purchase ON order_items(tax_class_id_at_purchase);`);
+    console.log('Index "idx_order_items_tax_class_id_at_purchase" on "order_items" checked/created.');
 
     // Purchase Orders Table
     await client.query(`

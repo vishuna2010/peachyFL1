@@ -141,6 +141,7 @@ This section outlines the primary driver for future backend development, based o
       - [X] Phase 2a: PO Receipt API optionally accepts batch details & creates records in `inventory_batches`.
       - [X] Phase 2b: Admin API endpoint to view inventory batches for a product/variant (paginated & sortable).
       - [X] Phase 2c: Admin API endpoint (`PUT /api/admin/inventory-batches/:batchId`) to update batch details (qty, expiry, number) and log qty changes.
+      - [X] Phase 3: Sales order fulfillment deducts stock from batches (FEFO/FIFO strategy).
     - [~] Stock Takes / Cycle Counting
       - [X] Phase 1: Backend API endpoint (`/api/admin/stock-adjustments/physical-count`) to update stock to counted quantity and log adjustment.
     - (Consider: Stock Movement Tracking (Advanced - for multi-location) - Admin UI)
@@ -160,7 +161,8 @@ This section outlines the primary driver for future backend development, based o
       - [X] Phase 1: Schema fields added to `purchase_orders` table; Admin API (`PUT /api/admin/purchase-orders/:id`) updated to set these fields. GET routes return fields.
 6.  **Sales Order & Fulfillment**
     - Integration with e-commerce platforms
-    - FIFO or batch-aware stock deduction
+    - [~] FIFO or batch-aware stock deduction
+        - [X] Phase 1: Implemented batch-aware stock deduction (FEFO/FIFO) during sales order creation.
     - [~] PDF invoice generation
       - [X] Phase 1: Basic PDF invoice generated via admin API endpoint (/api/admin/orders/:orderId/invoice/pdf).
     - [~] Order packing label printing
@@ -208,7 +210,64 @@ This section outlines the primary driver for future backend development, based o
 
 ---
 
-## IV. Testing
+## IV. Tax Engine & Invoicing Module (New Specification)
+
+### Invoice Structure
+- [~] Unique Invoice Number
+    - [X] Phase 1: Schema field added to `orders`; API logic to generate/store on status change (e.g., to 'shipped'/'completed').
+- [~] Customer Information
+    - [X] Phase 1: Schema fields for user tax exemption status added to `users` table.
+- [~] Date/Time of Issue
+    - [X] Phase 1: Schema field added to `orders`; API logic to store on status change.
+- [~] Itemized Line Items
+    - [ ] Product Name, SKU, Quantity
+    - [~] Unit Price (Excl. Tax)
+        - [X] Assumed to be current `order_items.price_at_purchase`.
+    - [~] Discount, Tax Rate, Tax Amount
+        - [X] Phase 1: Schema fields for `line_item_tax_amount` and `applied_tax_rate_percentage` added to `order_items`.
+    - [~] Line Total (Incl. Tax)
+        - [X] Phase 1: Schema fields in place to calculate this.
+- [~] Subtotal, Total Tax, Shipping Fee
+    - [X] Phase 1: Schema field `total_tax_amount` (and `tax_summary_details`) added to `orders` table. (Shipping fee is pre-existing or separate).
+- [~] Grand Total (Incl. Tax)
+    - [X] Existing `orders.total_amount` will eventually include tax. Schema fields in place.
+- [ ] Payment Status (Pending, Paid, Refunded)
+
+### Tax Engine
+1.  **Configurable Tax Rules**
+    - [ ] Multiple tax types (VAT, Sales Tax, Customs)
+    - [~] Define name, rate %, jurisdiction, code, and validity dates
+        - [X] Phase 1: Schema for `tax_rates` table designed and added to seed.js (includes name, rate, jurisdiction, type, code, active status, validity dates).
+        - [X] Phase 2: CRUD API endpoints for managing `tax_rates` implemented.
+2.  **Customer-Based Logic**
+    - [~] Taxable vs tax-exempt customers
+        - [X] Phase 1: Schema fields for user tax exemption (`is_tax_exempt`, `tax_exemption_certificate_id`, `tax_exemption_notes`) added to `users` table and seed.js.
+        - [X] Phase 2: Admin APIs for Users (GET list, GET ID, PUT ID) updated to include/manage tax exemption fields.
+    - [ ] Apply based on billing address
+3.  **Product-Based Tax Classes**
+    - [~] Standard Rate, Reduced Rate, Zero Rate
+        - [X] Phase 1: Schema for `tax_classes` table designed and added to seed.js.
+        - [X] Phase 2: CRUD API endpoints for managing `tax_classes` implemented.
+    - [~] Tag products by tax class
+        - [X] Phase 1: `tax_class_id` FK column added to `products` table schema (and in seed.js).
+        - [X] Phase 2: Product CRUD APIs updated to support assigning/unsetting `tax_class_id` on products.
+    - [~] Link Tax Classes to Specific Tax Rates
+        - [X] Phase 1: Schema for join table `tax_class_rates` designed and added to seed.js.
+4.  **Dynamic Calculation**
+    - [~] Auto-calculate tax on invoice/checkout
+        - [X] Phase 1: Basic tax calculation service (`calculateTaxForCartItems`) created for cart items (handles user exemption, simplified jurisdiction, single rate per item from product's tax class).
+    - [ ] Support inclusive and exclusive pricing
+5.  **Tax Reporting**
+    - [ ] Monthly/quarterly returns
+    - [ ] Summary by region
+    - [ ] Export invoice-level data
+
+### Optional: QR Invoice Label
+- [ ] Link to online invoice or validation portal
+
+---
+
+## V. Testing
 
 ### A. Backend
 - Develop unit tests for services and utility functions.
@@ -220,7 +279,7 @@ This section outlines the primary driver for future backend development, based o
 
 ---
 
-## V. Deployment & Operations
+## VI. Deployment & Operations
 
 - Finalize and document the AWS Amplify deployment strategy.
 - Implement database backup and restore procedures.

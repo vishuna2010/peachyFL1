@@ -47,7 +47,7 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
     name, description, price, category_id, tags: tagNames,
     stock_quantity = 0, supplier_id, sku, reorder_threshold,
     brand_manufacturer, supplier_reference, product_status,
-    cost_price, wholesale_price
+    cost_price, wholesale_price, tax_class_id // Added tax_class_id
   } = req.body;
 
   if (!name || price === undefined) { return res.status(400).json({ message: 'Name and price are required.' }); }
@@ -102,11 +102,27 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
+
+    let validated_tax_class_id = null;
+    if (tax_class_id !== undefined && tax_class_id !== null && tax_class_id !== '') {
+        const tcId = parseInt(tax_class_id);
+        if (isNaN(tcId) || tcId <= 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'Invalid tax_class_id format. Must be a positive integer.' });
+        }
+        const taxClassCheck = await client.query('SELECT id FROM tax_classes WHERE id = $1', [tcId]);
+        if (taxClassCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: `Invalid tax_class_id: Tax class with ID ${tcId} not found.` });
+        }
+        validated_tax_class_id = tcId;
+    }
+
     const productQuery = `
       INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, reorder_threshold,
-                            brand_manufacturer, supplier_reference, product_status, cost_price, wholesale_price,
+                            brand_manufacturer, supplier_reference, product_status, cost_price, wholesale_price, tax_class_id,
                             updated_at, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING * `;
     const productResult = await client.query(productQuery, [
       name, description, parseFloat(price), category_id ? parseInt(category_id) : null, imageUrl, stock,
@@ -116,7 +132,8 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
       supplier_reference || null,
       final_product_status,
       parsed_cost_price,
-      parsed_wholesale_price
+      parsed_wholesale_price,
+      validated_tax_class_id
     ]);
     const newProduct = productResult.rows[0];
 
@@ -249,7 +266,7 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
     name, description, price, category_id, tags: tagNames,
     stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold,
     brand_manufacturer, supplier_reference, product_status,
-    cost_price, wholesale_price
+    cost_price, wholesale_price, tax_class_id // Added tax_class_id
   } = req.body;
 
   if (isNaN(parseInt(id))) { return res.status(400).json({ message: 'Invalid product ID.' }); }
@@ -261,7 +278,7 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
 
   try {
     await client.query('BEGIN');
-    const currentProductResult = await client.query('SELECT image_url, sku, has_variants FROM products WHERE id = $1 FOR UPDATE', [id]);
+    const currentProductResult = await client.query('SELECT image_url, sku, has_variants, tax_class_id FROM products WHERE id = $1 FOR UPDATE', [id]);
     if (currentProductResult.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ message: 'Product not found.' }); }
     const currentProduct = currentProductResult.rows[0];
     finalImageUrlToStoreInDb = currentProduct.image_url;
@@ -327,6 +344,24 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
 
     addClause('name', name); addClause('description', description); addClause('price', price, true);
     addClause('category_id', category_id, false, true);
+    // tax_class_id validation and clause addition
+    if (tax_class_id !== undefined) {
+        if (tax_class_id === null || tax_class_id === '') {
+            addClause('tax_class_id', null);
+        } else {
+            const tcId = parseInt(tax_class_id);
+            if (isNaN(tcId) || tcId <= 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ message: 'Invalid tax_class_id format. Must be a positive integer or null/empty to clear.' });
+            }
+            const taxClassCheck = await client.query('SELECT id FROM tax_classes WHERE id = $1', [tcId]);
+            if (taxClassCheck.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ message: `Invalid tax_class_id: Tax class with ID ${tcId} not found.` });
+            }
+            addClause('tax_class_id', tcId, false, true);
+        }
+    }
     addClause('brand_manufacturer', brand_manufacturer);
     addClause('supplier_reference', supplier_reference);
     if (product_status !== undefined) {
