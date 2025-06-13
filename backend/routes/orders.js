@@ -194,8 +194,8 @@ router.post('/', isAuthenticated, async (req, res) => {
     const orderTaxSummaryDetails = taxCalculationResult.tax_summary_details;
     // --- End Tax Calculation ---
 
-    let finalTotalAmount = subtotalForItems; // Start with subtotal (pre-tax, pre-discount)
-    let originalTotalAmountBeforeDiscount = subtotalForItems; // Subtotal before any cart-level discount
+    let finalTotalAmount = subtotalForItems; // This is pre-tax subtotal
+    let originalTotalAmountBeforeDiscount = subtotalForItems; // This is also pre-tax subtotal
     let appliedDiscountId = null;
     let appliedDiscountCode = null;
     let appliedDiscountAmount = null;
@@ -318,20 +318,59 @@ router.post('/', isAuthenticated, async (req, res) => {
     };
     res.status(201).json({ message: 'Order created successfully.', order: createdOrderDetails });
 
-    let customerEmail = req.user.email;
-    if (!customerEmail) {
+    // Email Sending Logic
+    let customerEmail = req.user.email; // From JWT payload
+    if (!customerEmail) { // Fallback if not in JWT (e.g. if user was fetched by ID without email in token)
         try {
-            const userResult = await db.query('SELECT email FROM users WHERE id = $1', [userId]);
-            if (userResult.rows.length > 0) { customerEmail = userResult.rows[0].email; }
-        } catch (userFetchError) { console.error("Error fetching user email for order confirmation:", userFetchError); }
+            const userResult = await db.query('SELECT email, name FROM users WHERE id = $1', [userId]);
+            if (userResult.rows.length > 0) {
+                customerEmail = userResult.rows[0].email;
+                // If req.user didn't have name, we can potentially add it to createdOrderDetails or emailOrderData
+                if (!req.user.name && userResult.rows[0].name) {
+                     if (!createdOrderDetails.user) createdOrderDetails.user = {}; // Ensure user object exists
+                     createdOrderDetails.user.name = userResult.rows[0].name;
+                }
+            }
+        } catch (userFetchError) { console.error("Error fetching user email/name for order confirmation:", userFetchError); }
     }
+
     if (customerEmail) {
-      sendEmail({
-        to: customerEmail, subject: `Order Confirmation #${newOrder.id}`,
-        text: getOrderConfirmationText(createdOrderDetails, customerEmail),
-        html: getOrderConfirmationHtml(createdOrderDetails, customerEmail),
-      }).then(emailResult => { /* logging */ }).catch(emailError => { /* logging */ });
-    } else { console.warn(`No customer email found for order ${newOrder.id}. Skipping confirmation email.`); }
+      const emailOrderData = {
+          ...createdOrderDetails,
+          // Ensure shippingAddress and billingAddress are in the format expected by the template
+          // createdOrderDetails already includes these from earlier in the route
+          user: { // Ensure a user object exists for the template
+            name: req.user.name || (createdOrderDetails.user ? createdOrderDetails.user.name : undefined), // Prioritize name from JWT or fetched user
+            email: customerEmail
+          }
+      };
+
+      (async () => {
+          try {
+              const emailHtml = await getOrderConfirmationHtml(emailOrderData, customerEmail);
+              const emailText = getOrderConfirmationText(emailOrderData, customerEmail);
+
+              sendEmail({
+                  to: customerEmail,
+                  subject: `Order Confirmation #${newOrder.id}`,
+                  text: emailText,
+                  html: emailHtml,
+              }).then(emailResult => {
+                  if (emailResult.success) {
+                      console.log(`Order confirmation email sent for order ${newOrder.id} to ${customerEmail}. Preview: ${emailResult.previewUrl || 'N/A'}`);
+                  } else {
+                      console.error(`Failed to send order confirmation email for order ${newOrder.id}: ${emailResult.error}`);
+                  }
+              }).catch(emailError => {
+                  console.error(`Error in sendEmail promise chain for order ${newOrder.id}:`, emailError);
+              });
+          } catch (templateError) {
+              console.error(`Error generating email content for order ${newOrder.id}:`, templateError);
+          }
+      })();
+    } else {
+        console.warn(`No customer email found for order ${newOrder.id}. Skipping confirmation email.`);
+    }
 
   } catch (error) {
     await client.query('ROLLBACK');

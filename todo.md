@@ -4,98 +4,7 @@ This document consolidates future enhancements and pending tasks for the platfor
 
 ---
 
-## I. Storefront UI/UX (Customer Facing)
-
-### A. Product Listing Page (PLP - `pages/index.vue`)
-- **Advanced Filters UI (Phase 2+):**
-  - Implement collapsible sidebar for filters on desktop. *(DONE - Basic structure implemented)*
-  - Implement modal/drawer for filters on mobile. *(DONE - Basic structure implemented)*
-  - [X] Add visual filters: Color swatches implemented for "Color" option on PLP.
-  - [X] Enhance price range filter with improved number inputs, validation, and styling (deferred more visual slider).
-- **General UI/UX:**
-  - Further review and refine global typography (Poppins font, scale, line heights, spacing).
-  - Design more engaging and helpful empty state components (e.g., "No products match your filters").
-
-### B. Product Detail Page (PDP - `pages/products/[id].vue`)
-- **Image Gallery Phase 2:**
-  - Implement click-to-zoom on main image. *(DONE)*
-  - Improve thumbnail interactions (e.g., better scrolling for many images). *(DONE - basic scroll, active styling)*
-- **Variant Selector Refinement:**
-  - [X] Display visual swatches for "Color" options on PDP selector.
-  - [X] Ensure "Size" or other options are clear and possibly indicate stock per selection dynamically (Implemented visual hints for out-of-stock combinations based on current selections).
-- **Product Information Tabs:** *(DONE - Description, Specs (placeholder), Reviews (placeholder))*
-  - Enhance "Specifications" tab with actual data if/when available from backend.
-- **Customer Reviews Display:**
-  - Display list of approved public reviews in the "Reviews" tab. *(DONE)*
-- **Customer Review Submission:**
-  - UI for users to submit new reviews. *(DONE - ReviewForm.vue and PDP integration)*
-
-### C. User Authentication & Profile
-- **Login/Registration Pages (`pages/login.vue`, `pages/register.vue`):**
-  - Style with Tailwind CSS. *(DONE)*
-- **Core User Profile Features (`pages/profile/*.vue`):**
-  - Connect "My Orders" list page to backend API. *(DONE - Verified existing)*
-  - Connect "Order Detail" page to backend API. *(DONE - Verified existing)*
-  - Implement "Change Password" functionality. *(DONE)*
-  - Implement "Update Profile Details" (e.g., user's name). *(DONE)*
-
-### D. General UI Polish & Feedback
-- **Interactive Feedback (Phase 2+):**
-  - Implement Skeleton Loaders for PLP, PDP, Order History. *(DONE)*
-  - Refine Toast Notification usage/styling if needed.
-- **Empty States & Error Pages:**
-  - Design more engaging and helpful empty state components throughout the application.
-  - Ensure the custom 404 page (`error.vue`) is robust and potentially add more specific error pages.
-
----
-
-## II. Admin Panel UI/UX
-
-### A. Dashboard (`pages/admin/index.vue`)
-- Implement actual data fetching for Stat Cards. *(DONE)*
-- Integrate basic charts (e.g., sales over time - requires backend data source).
-- Implement "Recent Activity" and "Recent Orders Table" sections with real data.
-
-### B. Core Page Styling & Structure
-- **Refactor Key Admin Pages with Tailwind CSS:**
-  - [X] `admin/users/index.vue`
-  - `admin/products/index.vue` *(DONE)*
-  - [X] `admin/products/new.vue / edit/[id].vue`
-  - `admin/orders/index.vue` / `[id].vue`
-  - (Other admin pages as they are developed).
-- Create reusable admin-specific form components if beneficial.
-
-### C. Layout & Navigation
-- Add SVG icons to all `AdminSidebar.vue` navigation items. *(DONE)*
-- Implement breadcrumb navigation within the admin section.
-- Implement a functional global search bar in the top admin bar (for searching orders, products, users etc.).
-- Add notification icon/dropdown placeholder in top admin bar.
-- Consider more sophisticated collapse mechanism for the sidebar (e.g., icon-only view).
-
-### D. Category Management
-- Create `frontend/pages/admin/categories/index.vue`. *(DONE)*
-- Create `frontend/pages/admin/categories/new.vue`. *(DONE)*
-- Create `frontend/pages/admin/categories/edit/[id].vue`. *(DONE)*
-
-### E. Product Option & Variant Management (New Section)
-- **Global Product Options UI:**
-  - Page to manage global option types (`/admin/options/index.vue`). *(DONE)*
-  - Page to manage global values for an option type (`/admin/options/[optionId]/values.vue`). *(DONE)*
-- **Product-Specific Variant UI (likely within product edit page `/admin/products/edit/[id].vue` or a dedicated sub-page):**
-  - [X] Assign global options to a specific product (UI implemented in ProductOptionsManager on product edit page).
-  - [X] Specify which global option values are applicable for that product's assigned options (UI implemented on `.../manage-values.vue` page).
-  - [X] Create/edit/delete variants based on combinations of these values (setting SKU, price modifier, stock, image). (Display, Add Form & Logic, Edit Form & Logic, Delete Logic implemented).
-
-### F. Review Moderation
-- Create Admin Page for Review Moderation (`/admin/reviews/index.vue`). *(DONE)*
-
-### H. Reporting (Admin UI)
-- Create `frontend/pages/admin/reports/index.vue` (as a dashboard for various reports).
-  - Consider UI for Low Stock Report (linked to "Reorder threshold alerts" in Core Modules).
-  - Consider UI for Stock Valuation Report.
-  - Consider UI for Inventory History/Audit Trail Report.
-
----
+# Backend
 
 ## III. Backend Development Roadmap & Core Modules
 
@@ -113,6 +22,7 @@ This section outlines the primary driver for future backend development, based o
       - [X] Phase 1: Backend CRUD for multiple images, images included in product detail API.
       - [X] Phase 2: Primary image selection and sync with main product image_url.
     - [X] Status (Active / Inactive / Archived)
+    - Enhance "Specifications" tab with actual data if/when available from backend. (Moved from I.B)
 2.  **Pricing Engine**
     - [X] Buying Price
         - [~] Historical tracking per supplier
@@ -196,8 +106,8 @@ This section outlines the primary driver for future backend development, based o
   - Implement tax calculation logic.
 - **Payment Gateway Integration (Major Feature):**
   - Integrate Stripe or PayPal for actual payment processing.
-- **Email Templating:**
-  - Use HTML templates (e.g., Handlebars, EJS) for transactional emails.
+- [~] Email Templating:
+  - [X] Phase 1: Implement EJS templating for Order Confirmation email (HTML). Created template structure (`order_confirmation.ejs`), refactored `emailService.js` to use it, and updated `orders.js` to call it correctly.
 - **Search API Refinements:**
   - Enhance product search (`GET /api/products`) for better partial match performance (e.g., PostgreSQL full-text search, `pg_trgm`).
 - **Input Validation Review:**
@@ -207,8 +117,6 @@ This section outlines the primary driver for future backend development, based o
 - [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
 - [X] Major `seed.js` overhaul: Implemented full schema creation (`CREATE TABLE IF NOT EXISTS` for all tables including all new columns/features) and added comprehensive sample data for new entities (product images, stock logs, cost history) and new fields in existing entities.
 - [X] Updated `seed.js` `createSchema` to include PO delivery tracking fields and the new `inventory_batches` table; added sample data for `inventory_batches`.
-
----
 
 ## IV. Tax Engine & Invoicing Module (New Specification)
 
@@ -236,7 +144,8 @@ This section outlines the primary driver for future backend development, based o
 
 ### Tax Engine
 1.  **Configurable Tax Rules**
-    - [ ] Multiple tax types (VAT, Sales Tax, Customs)
+    - [~] Multiple tax types (VAT, Sales Tax, Customs)
+        - [X] Phase 1: Implement sequential/compounding tax calculation if different tax types apply (e.g., PST on subtotal+GST).
     - [~] Define name, rate %, jurisdiction, code, and validity dates
         - [X] Phase 1: Schema for `tax_rates` table designed and added to seed.js (includes name, rate, jurisdiction, type, code, active status, validity dates).
         - [X] Phase 2: CRUD API endpoints for managing `tax_rates` implemented.
@@ -275,7 +184,117 @@ This section outlines the primary driver for future backend development, based o
 
 ---
 
-## V. Testing
+# Frontend
+
+## I. Storefront UI/UX (Customer Facing) - Frontend Aspects
+
+### B. Product Detail Page (PDP - `pages/products/[id].vue`)
+- **Customer Review Submission:**
+  - UI for users to submit new reviews. *(DONE - ReviewForm.vue and PDP integration)*
+
+### C. User Authentication & Profile
+- **Core User Profile Features (`pages/profile/*.vue`):**
+  - Connect "My Orders" list page to backend API. *(DONE - Verified existing)*
+  - Connect "Order Detail" page to backend API. *(DONE - Verified existing)*
+  - Implement "Change Password" functionality. *(DONE)*
+  - Implement "Update Profile Details" (e.g., user's name). *(DONE)*
+
+## II. Admin Panel UI/UX - Frontend Aspects
+
+### A. Dashboard (`pages/admin/index.vue`)
+- Implement actual data fetching for Stat Cards. *(DONE)*
+- Integrate basic charts (e.g., sales over time - requires backend data source).
+- Implement "Recent Activity" and "Recent Orders Table" sections with real data.
+
+### B. Core Page Styling & Structure
+- Create reusable admin-specific form components if beneficial.
+
+### D. Category Management
+- Create `frontend/pages/admin/categories/index.vue`. *(DONE)*
+- Create `frontend/pages/admin/categories/new.vue`. *(DONE)*
+- Create `frontend/pages/admin/categories/edit/[id].vue`. *(DONE)*
+
+### E. Product Option & Variant Management (New Section)
+- **Global Product Options UI:**
+  - Page to manage global option types (`/admin/options/index.vue`). *(DONE)*
+  - Page to manage global values for an option type (`/admin/options/[optionId]/values.vue`). *(DONE)*
+- **Product-Specific Variant UI (likely within product edit page `/admin/products/edit/[id].vue` or a dedicated sub-page):**
+  - [X] Assign global options to a specific product (UI implemented in ProductOptionsManager on product edit page).
+  - [X] Specify which global option values are applicable for that product's assigned options (UI implemented on `.../manage-values.vue` page).
+  - [X] Create/edit/delete variants based on combinations of these values (setting SKU, price modifier, stock, image). (Display, Add Form & Logic, Edit Form & Logic, Delete Logic implemented).
+
+### F. Review Moderation
+- Create Admin Page for Review Moderation (`/admin/reviews/index.vue`). *(DONE)*
+
+### H. Reporting (Admin UI)
+- Create `frontend/pages/admin/reports/index.vue` (as a dashboard for various reports).
+
+---
+
+# UI/UX
+
+## I. Storefront UI/UX (Customer Facing) - UI/UX Aspects
+
+### A. Product Listing Page (PLP - `pages/index.vue`)
+- **Advanced Filters UI (Phase 2+):**
+  - Implement collapsible sidebar for filters on desktop. *(DONE - Basic structure implemented)*
+  - Implement modal/drawer for filters on mobile. *(DONE - Basic structure implemented)*
+  - [X] Add visual filters: Color swatches implemented for "Color" option on PLP.
+  - [X] Enhance price range filter with improved number inputs, validation, and styling (deferred more visual slider).
+- **General UI/UX:**
+  - Further review and refine global typography (Poppins font, scale, line heights, spacing).
+  - Design more engaging and helpful empty state components (e.g., "No products match your filters").
+
+### B. Product Detail Page (PDP - `pages/products/[id].vue`)
+- **Image Gallery Phase 2:**
+  - Implement click-to-zoom on main image. *(DONE)*
+  - Improve thumbnail interactions (e.g., better scrolling for many images). *(DONE - basic scroll, active styling)*
+- **Variant Selector Refinement:**
+  - [X] Display visual swatches for "Color" options on PDP selector.
+  - [X] Ensure "Size" or other options are clear and possibly indicate stock per selection dynamically (Implemented visual hints for out-of-stock combinations based on current selections).
+- **Product Information Tabs:** *(DONE - Description, Specs (placeholder), Reviews (placeholder))*
+- **Customer Reviews Display:**
+  - Display list of approved public reviews in the "Reviews" tab. *(DONE)*
+
+### C. User Authentication & Profile
+- **Login/Registration Pages (`pages/login.vue`, `pages/register.vue`):**
+  - Style with Tailwind CSS. *(DONE)*
+
+### D. General UI Polish & Feedback
+- **Interactive Feedback (Phase 2+):**
+  - Implement Skeleton Loaders for PLP, PDP, Order History. *(DONE)*
+  - Refine Toast Notification usage/styling if needed.
+- **Empty States & Error Pages:**
+  - Design more engaging and helpful empty state components throughout the application.
+  - Ensure the custom 404 page (`error.vue`) is robust and potentially add more specific error pages.
+
+## II. Admin Panel UI/UX - UI/UX Aspects
+
+### B. Core Page Styling & Structure
+- **Refactor Key Admin Pages with Tailwind CSS:**
+  - [X] `admin/users/index.vue`
+  - `admin/products/index.vue` *(DONE)*
+  - [X] `admin/products/new.vue / edit/[id].vue`
+  - `admin/orders/index.vue` / `[id].vue`
+  - (Other admin pages as they are developed).
+
+### C. Layout & Navigation
+- Add SVG icons to all `AdminSidebar.vue` navigation items. *(DONE)*
+- Implement breadcrumb navigation within the admin section.
+- Implement a functional global search bar in the top admin bar (for searching orders, products, users etc.).
+- Add notification icon/dropdown placeholder in top admin bar.
+- Consider more sophisticated collapse mechanism for the sidebar (e.g., icon-only view).
+
+### H. Reporting (Admin UI)
+  - Consider UI for Low Stock Report (linked to "Reorder threshold alerts" in Core Modules).
+  - Consider UI for Stock Valuation Report.
+  - Consider UI for Inventory History/Audit Trail Report.
+
+---
+
+# Testing
+
+## V. Testing (Original Section V)
 
 ### A. Backend
 - Develop unit tests for services and utility functions.
@@ -287,10 +306,12 @@ This section outlines the primary driver for future backend development, based o
 
 ---
 
-## VI. Deployment & Operations
+# Deployment & Operations
+
+## VI. Deployment & Operations (Original Section VI)
 
 - Finalize and document the AWS Amplify deployment strategy.
-- Implement database backup and restore procedures.
+- Implement database backup and restore procedures. (Moved to Backend)
 - Setup monitoring and logging for the production environment.
 
 ---
