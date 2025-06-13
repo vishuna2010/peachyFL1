@@ -110,7 +110,7 @@ router.post('/', async (req, res) => {
 router.post('/:poId/items/:poItemId/receive', async (req, res) => {
   const BASE_CURRENCY_CODE = process.env.BASE_CURRENCY_CODE || 'USD'; // Define base currency
   const { poId, poItemId } = req.params;
-  const { quantity_received_now, exchange_rate_to_base } = req.body;
+  const { quantity_received_now, exchange_rate_to_base, batch_number, expiry_date } = req.body;
 
   // 1. Validate Inputs
   if (isNaN(parseInt(poId)) || isNaN(parseInt(poItemId))) {
@@ -120,6 +120,23 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
     return res.status(400).json({ message: 'quantity_received_now must be a positive integer.' });
   }
   const qtyReceivedNow = parseInt(quantity_received_now);
+
+  // Validate batch_number: If provided, must be a non-empty string.
+  if (batch_number !== undefined && (typeof batch_number !== 'string' || batch_number.trim() === '')) {
+    return res.status(400).json({ message: 'batch_number, if provided, must be a non-empty string.' });
+  }
+
+  // Validate expiry_date: If provided, must be a valid date string or null.
+  let finalExpiryDate = null;
+  if (expiry_date !== undefined && expiry_date !== null && expiry_date !== '') {
+    const parsedExpiry = new Date(expiry_date);
+    if (!isNaN(parsedExpiry.getTime())) {
+      finalExpiryDate = parsedExpiry.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+    } else {
+      return res.status(400).json({ message: 'Invalid expiry_date format. Please use YYYY-MM-DD, or provide null or an empty string.' });
+    }
+  }
+
 
   const client = await db.pool.connect();
   try {
@@ -324,6 +341,47 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
     ];
     await client.query(costHistoryQuery, costHistoryValues);
 
+    // Insert into inventory_batches if batch_number is provided
+    let newBatchId = null;
+    const finalBatchNumber = batch_number ? batch_number.trim() : null;
+
+    if (finalBatchNumber) {
+      const batchInsertQuery = `
+        INSERT INTO inventory_batches
+          (product_id, variant_id, batch_number, expiry_date, initial_quantity, current_quantity,
+           cost_price_at_receipt, currency_code_at_receipt, base_currency_cost_price_at_receipt,
+           exchange_rate_used, purchase_order_item_id, received_date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+        RETURNING id;
+      `;
+      const batchInsertValues = [
+        poItem.product_id,
+        poItem.product_variant_id || null,
+        finalBatchNumber,
+        finalExpiryDate, // Already parsed and validated
+        qtyReceivedNow, // initial_quantity
+        qtyReceivedNow, // current_quantity
+        poItem.unit_cost_price,
+        poItem.currency_code || null,
+        baseCostPrice,       // from earlier logic
+        exchangeRateForStorage, // from earlier logic
+        poItemId
+      ];
+      try {
+        const batchResult = await client.query(batchInsertQuery, batchInsertValues);
+        newBatchId = batchResult.rows[0].id;
+        console.log(`Created inventory batch ID ${newBatchId} for PO Item ${poItemId}`);
+      } catch (batchError) {
+        if (batchError.code === '23505') { // unique_violation for unique_batch_per_item
+            await client.query('ROLLBACK');
+            return res.status(409).json({ message: `Batch number "${finalBatchNumber}" already exists for this product/variant. Please use a unique batch number.` });
+        }
+        // For other errors, re-throw to rollback the main transaction
+        console.error('Error inserting into inventory_batches:', batchError);
+        throw batchError;
+      }
+    }
+
     // 8. Update purchase_orders.status and updated_at
     const allItemsForPOResult = await client.query(
       'SELECT quantity_ordered, quantity_received FROM purchase_order_items WHERE purchase_order_id = $1',
@@ -381,11 +439,17 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
     const finalItemsResult = await db.query(finalItemsQuery, [poId]);
     updatedPurchaseOrder.items = finalItemsResult.rows;
 
-    res.status(200).json({
+    const responsePayload = {
         message: `Successfully received ${qtyReceivedNow} unit(s) for item ${poItemId} on PO #${poId}.`,
         purchaseOrder: updatedPurchaseOrder,
         updatedItem: updatedPoItemResult.rows[0]
-    });
+    };
+
+    if (newBatchId) {
+        responsePayload.new_batch_id = newBatchId;
+    }
+
+    res.status(200).json(responsePayload);
 
   } catch (error) {
     await client.query('ROLLBACK');

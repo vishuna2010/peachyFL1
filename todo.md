@@ -138,6 +138,8 @@ This section outlines the primary driver for future backend development, based o
     - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
     - [~] Batch and expiry tracking
       - [X] Phase 1: Schema designed for `inventory_batches` table (includes batch_number, expiry_date, quantities, cost at receipt).
+      - [X] Phase 2a: PO Receipt API optionally accepts batch details & creates records in `inventory_batches`.
+      - [X] Phase 2b: Admin API endpoint to view inventory batches for a product/variant (paginated & sortable).
     - [~] Stock Takes / Cycle Counting
       - [X] Phase 1: Backend API endpoint (`/api/admin/stock-adjustments/physical-count`) to update stock to counted quantity and log adjustment.
     - (Consider: Stock Movement Tracking (Advanced - for multi-location) - Admin UI)
