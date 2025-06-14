@@ -8,7 +8,7 @@
         <!-- Centered Navigation Links -->
         <div class="hidden md:flex items-center space-x-6 flex-grow justify-center">
           <NuxtLink to="/" class="text-text-primary hover:text-brand-primary transition-colors duration-150">Home</NuxtLink>
-          <NuxtLink to="/products" class="text-text-primary hover:text-brand-primary transition-colors duration-150">Shop All</NuxtLink>
+          <NuxtLink to="/" class="text-text-primary hover:text-brand-primary transition-colors duration-150">Shop All</NuxtLink>
           <!-- Add other static links here if desired, e.g., About, Contact -->
         </div>
 
@@ -74,7 +74,7 @@
     <div v-if="isMobileMenuOpen" class="md:hidden fixed inset-x-0 top-16 bg-white shadow-lg z-40 border-t border-neutral-medium">
       <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
         <NuxtLink to="/" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">Home</NuxtLink>
-        <NuxtLink to="/products" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">Shop All</NuxtLink>
+        <NuxtLink to="/" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">Shop All</NuxtLink>
 
         <!-- Divider (optional) -->
         <hr class="my-2 border-neutral-medium" />
