@@ -115,6 +115,7 @@ This section outlines the primary driver for future backend development, based o
 - **Input Validation Review:**
   - [~] Systematically review and enhance input validation for all API endpoints using a library like `joi` or `express-validator` (already started using `express-validator`).
   - [X] Enhanced input validation for Discount Management routes (`/api/admin/discounts`) using express-validator.
+  - [X] Enhanced input validation for Category Management routes (`/api/admin/categories`) using express-validator.
 
 ### E. Development Utilities: Data Seeding (Existing)
 - [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
