@@ -13,9 +13,10 @@
     </div>
 
     <!-- Navigation -->
-    <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
-      <NuxtLink
-        v-for="item in navigationItems"
+    <ClientOnly>
+      <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
+        <NuxtLink
+          v-for="item in navigationItems"
         :key="item.name"
         :to="item.href"
         @click="closeMobileSidebarIfNeeded"
@@ -97,7 +98,8 @@
           </NuxtLink>
         </div>
       </div>
-    </nav>
+      </nav>
+    </ClientOnly>
 
     <!-- Footer / View Site Link -->
     <div class="p-4 border-t border-neutral-700 mt-auto">
