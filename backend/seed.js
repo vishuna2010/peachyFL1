@@ -287,7 +287,7 @@ async function createSchema(client) {
     await client.query(`ALTER TABLE product_option_values ADD COLUMN IF NOT EXISTS product_option_id INTEGER;`);
     await client.query(`ALTER TABLE product_option_values ADD COLUMN IF NOT EXISTS value VARCHAR(255);`);
     console.log('All columns for "product_option_values" table ensured/checked (basic existence).');
-
+    
     // Product Assigned Options Table (linking options to products)
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_assigned_options (
@@ -364,7 +364,7 @@ async function createSchema(client) {
     console.log('Unique index on "product_images(product_id, image_url)" ensured/checked.');
 
     await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_primary_image_per_product
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_primary_image_per_product 
       ON product_images (product_id) WHERE is_primary = TRUE;
     `);
     console.log('Unique index "idx_unique_primary_image_per_product" on "product_images" checked/created.');
@@ -911,7 +911,7 @@ async function seedSpecificGlobalOptionsAndValues(client, seededDataIds) {
 }
 
 
-async function seedSuppliers(client, seededDataIds) {
+async function seedSuppliers(client, seededDataIds) { 
   seededDataIds.suppliers = seededDataIds.suppliers || {};
   const sampleSuppliers = [
     { name: 'Global Electronics Inc.', contact_person: 'Jane Doe', email: 'jane.doe@globalelectronics.com', phone: '123-456-7890', currency_code: 'USD' },
@@ -925,10 +925,10 @@ async function seedSuppliers(client, seededDataIds) {
       let result = await client.query(
         `INSERT INTO suppliers (name, contact_person, email, phone, currency_code)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (name) DO UPDATE SET
-           contact_person = EXCLUDED.contact_person,
-           email = EXCLUDED.email,
-           phone = EXCLUDED.phone,
+         ON CONFLICT (name) DO UPDATE SET 
+           contact_person = EXCLUDED.contact_person, 
+           email = EXCLUDED.email, 
+           phone = EXCLUDED.phone, 
            currency_code = EXCLUDED.currency_code,
            updated_at = CURRENT_TIMESTAMP
          RETURNING id;`,
@@ -1003,7 +1003,7 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
     {
       name: 'Smart Home LED Bulb',
       description: 'Wi-Fi enabled smart LED bulb, compatible with Alexa and Google Assistant.',
-      price: 19.99, cost_price: 9.00, wholesale_price: null,
+      price: 19.99, cost_price: 9.00, wholesale_price: null, 
       stock_quantity: 200, category_name: 'Home Goods', supplier_name: 'Global Electronics Inc.',
       image_url: null, sku: 'SMBLB-LED-WIFI-012', reorder_threshold: 30,
       brand_manufacturer: 'ConnectHome', supplier_reference: 'CH-BLB-001', product_status: 'active',
@@ -1044,17 +1044,17 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
       if (product.tax_class_key && !taxClassId) {
           console.warn(`Tax Class ID for key "${product.tax_class_key}" not found for product "${product.name}". Tax class will be NULL.`);
       }
-
+      
       const productInsertResult = await client.query(
         `INSERT INTO products (name, description, price, stock_quantity, category_id, supplier_id, image_url, sku, reorder_threshold,
                                 brand_manufacturer, supplier_reference, product_status, cost_price, wholesale_price, tax_class_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-         ON CONFLICT (sku) DO UPDATE SET
+         ON CONFLICT (sku) DO UPDATE SET 
            name = EXCLUDED.name, description = EXCLUDED.description, price = EXCLUDED.price, stock_quantity = EXCLUDED.stock_quantity,
-           category_id = EXCLUDED.category_id, supplier_id = EXCLUDED.supplier_id, image_url = EXCLUDED.image_url,
-           reorder_threshold = EXCLUDED.reorder_threshold, brand_manufacturer = EXCLUDED.brand_manufacturer,
-           supplier_reference = EXCLUDED.supplier_reference, product_status = EXCLUDED.product_status,
-           cost_price = EXCLUDED.cost_price, wholesale_price = EXCLUDED.wholesale_price, tax_class_id = EXCLUDED.tax_class_id,
+           category_id = EXCLUDED.category_id, supplier_id = EXCLUDED.supplier_id, image_url = EXCLUDED.image_url, 
+           reorder_threshold = EXCLUDED.reorder_threshold, brand_manufacturer = EXCLUDED.brand_manufacturer, 
+           supplier_reference = EXCLUDED.supplier_reference, product_status = EXCLUDED.product_status, 
+           cost_price = EXCLUDED.cost_price, wholesale_price = EXCLUDED.wholesale_price, tax_class_id = EXCLUDED.tax_class_id, 
            updated_at = CURRENT_TIMESTAMP
          RETURNING id;`,
         [
@@ -1062,7 +1062,7 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
           categoryId, supplierId, product.image_url, product.sku, product.reorder_threshold || 0,
           product.brand_manufacturer, product.supplier_reference, product.product_status || 'active',
           product.cost_price, product.wholesale_price,
-          taxClassId
+          taxClassId 
         ]
       );
 
@@ -1203,7 +1203,7 @@ async function seedProductVariants(client, seededDataIds) {
 
     const variantsToSeed = [
         {
-            baseProductSku: 'TSHRT-MEN-COT-005',
+            baseProductSku: 'TSHRT-MEN-COT-005', 
             variantSku: 'TSHRT-RD-S',
             price_modifier: 0.00, cost_price: 12.50, wholesale_price_modifier: -1.00,
             stock_quantity: 10, image_url: 'https://via.placeholder.com/300x300.png?text=T-Shirt+Red+S',
@@ -1217,7 +1217,7 @@ async function seedProductVariants(client, seededDataIds) {
             optionValueMapping: [ { option: 'color', valueKey: 'blueId' }, { option: 'size', valueKey: 'mediumId' } ]
         },
         {
-            baseProductSku: 'HDPHN-WL-BT-001',
+            baseProductSku: 'HDPHN-WL-BT-001', 
             variantSku: 'HDPHN-GRN',
             price_modifier: 5.00, cost_price: 92.00, wholesale_price_modifier: 2.00,
             stock_quantity: 20, image_url: 'https://via.placeholder.com/300x300.png?text=Headphones+Green',
@@ -1228,7 +1228,7 @@ async function seedProductVariants(client, seededDataIds) {
 
     try {
         for (const variantData of variantsToSeed) {
-            const productId = seededDataIds.products[variantData.baseProductSku];
+            const productId = seededDataIds.products[variantData.baseProductSku]; 
             if (!productId) {
                 console.warn(`Base product with SKU ${variantData.baseProductSku} not found. Skipping variant ${variantData.variantSku}.`);
                 continue;
@@ -1248,8 +1248,8 @@ async function seedProductVariants(client, seededDataIds) {
             const variantResult = await client.query(
                 `INSERT INTO product_variants (product_id, sku, price_modifier, stock_quantity, image_url, cost_price, wholesale_price_modifier)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)
-                 ON CONFLICT (sku) DO UPDATE SET
-                   price_modifier = EXCLUDED.price_modifier,
+                 ON CONFLICT (sku) DO UPDATE SET 
+                   price_modifier = EXCLUDED.price_modifier, 
                    stock_quantity = EXCLUDED.stock_quantity,
                    image_url = EXCLUDED.image_url,
                    cost_price = EXCLUDED.cost_price,
@@ -1350,49 +1350,49 @@ async function seedProductReviews(client, seededDataIds) {
         console.log('Product review seeding completed.');
     } catch (error) {
         console.error('Error seeding product reviews:', error);
-        throw error;
+        throw error; 
     }
 }
 
 
 async function seedDatabase() {
   console.log('Starting database seeding...');
-  let client;
+  let client; 
   try {
     client = await pool.connect();
-    await createSchema(client);
+    await createSchema(client); 
 
-    await client.query('BEGIN');
+    await client.query('BEGIN'); 
 
-    const seededDataIds = {
-      users: {},
-      options: {},
-      optionValues: {},
+    const seededDataIds = { 
+      users: {}, 
+      options: {}, 
+      optionValues: {}, 
       products: {},
-      taxClasses: {},
-      taxRates: {}
+      taxClasses: {}, 
+      taxRates: {}    
     };
-    await seedTaxConfiguration(client, seededDataIds);
+    await seedTaxConfiguration(client, seededDataIds); 
 
     await seedAdminUser(client, seededDataIds.users);
     await seedRegularUsers(client, seededDataIds.users);
     await seedCategories(client);
-    await seedSuppliers(client, seededDataIds);
+    await seedSuppliers(client, seededDataIds); 
     await seedSpecificGlobalOptionsAndValues(client, seededDataIds);
-    await seedProducts(client, seededDataIds);
+    await seedProducts(client, seededDataIds); 
 
     const productSkusToConfigure = ['TSHRT-MEN-COT-005', 'HDPHN-WL-BT-001'];
     if (Object.keys(seededDataIds.products).length > 0 &&
         seededDataIds.options.colorOptionId && seededDataIds.options.sizeOptionId) {
       await seedProductOptionConfigurations(client, seededDataIds, productSkusToConfigure);
-      await seedProductVariants(client, seededDataIds);
+      await seedProductVariants(client, seededDataIds); 
     } else {
       console.warn("Skipping product option configurations and variant seeding due to missing product IDs or global option/value IDs.");
     }
-
+    
     await seedProductImages(client, seededDataIds);
     await seedProductReviews(client, seededDataIds);
-    await seedInventoryBatches(client, seededDataIds);
+    await seedInventoryBatches(client, seededDataIds); 
     await seedCostHistory(client, seededDataIds);
     await seedStockMovements(client, seededDataIds);
 
@@ -1451,7 +1451,7 @@ async function seedTaxConfiguration(client, seededDataIds) {
         'INSERT INTO tax_classes (name, description) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, updated_at = CURRENT_TIMESTAMP RETURNING id;',
         [tc.name, tc.description]
       );
-      const key = tc.name.toLowerCase().replace(/ /g, '_');
+      const key = tc.name.toLowerCase().replace(/ /g, '_'); 
       seededDataIds.taxClasses[key] = result.rows[0].id;
       console.log(`Tax Class "${tc.name}" seeded with ID ${result.rows[0].id}.`);
     }
@@ -1459,11 +1459,11 @@ async function seedTaxConfiguration(client, seededDataIds) {
     // Seed Tax Rates
     for (const tr of taxRatesToSeed) {
       const result = await client.query(
-        `INSERT INTO tax_rates (name, rate_percentage, jurisdiction, tax_type, tax_code, is_active, valid_from, valid_until)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (name) DO UPDATE SET
-           rate_percentage = EXCLUDED.rate_percentage,
-           jurisdiction = EXCLUDED.jurisdiction,
+        `INSERT INTO tax_rates (name, rate_percentage, jurisdiction, tax_type, tax_code, is_active, valid_from, valid_until) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+         ON CONFLICT (name) DO UPDATE SET 
+           rate_percentage = EXCLUDED.rate_percentage, 
+           jurisdiction = EXCLUDED.jurisdiction, 
            tax_type = EXCLUDED.tax_type,
            tax_code = EXCLUDED.tax_code,
            is_active = EXCLUDED.is_active,
@@ -1482,8 +1482,8 @@ async function seedTaxConfiguration(client, seededDataIds) {
     const links = [
       { classKey: 'standard_goods', rateKey: 'ca_sales_tax' },
       { classKey: 'standard_goods', rateKey: 'ny_sales_tax' },
-      { classKey: 'tax_exempt_goods', rateKey: 'tx_sales_tax_exempt' },
-      { classKey: 'standard_goods', rateKey: 'federal_gst_canada' },
+      { classKey: 'tax_exempt_goods', rateKey: 'tx_sales_tax__exempt' },
+      { classKey: 'standard_goods', rateKey: 'federal_gst_canada' },    
       { classKey: 'reduced_rate_goods', rateKey: 'reduced_ca_sales_tax' }
     ];
 
@@ -1504,7 +1504,7 @@ async function seedTaxConfiguration(client, seededDataIds) {
     console.log('Tax configuration seeding completed.');
   } catch (error) {
     console.error('Error seeding tax configuration:', error);
-    throw error;
+    throw error; 
   }
 }
 
@@ -1516,15 +1516,15 @@ async function seedProductImages(client, seededDataIds) {
   }
 
   const imagesToSeed = [
-    {
-      productSku: 'HDPHN-WL-BT-001',
+    { 
+      productSku: 'HDPHN-WL-BT-001', 
       images: [
         { image_url: 'https://via.placeholder.com/600x600.png?text=Headphones+Gallery+1', alt_text: 'Headphones Side View', display_order: 1, is_primary: true },
         { image_url: 'https://via.placeholder.com/600x600.png?text=Headphones+Gallery+2', alt_text: 'Headphones Front View', display_order: 2, is_primary: false },
       ]
     },
-    {
-      productSku: 'TSHRT-MEN-COT-005',
+    { 
+      productSku: 'TSHRT-MEN-COT-005', 
       images: [
         { image_url: 'https://via.placeholder.com/600x600.png?text=T-Shirt+Gallery+1', alt_text: 'T-Shirt Front', display_order: 1, is_primary: true },
       ]
@@ -1582,23 +1582,23 @@ async function seedStockMovements(client, seededDataIds) {
 
   if (productId1) {
     movements.push({
-        product_id: productId1, variant_id: null, user_id: adminUserId, movement_type: 'initial_stock_setup',
+        product_id: productId1, variant_id: null, user_id: adminUserId, movement_type: 'initial_stock_setup', 
         quantity_changed: 150, new_quantity_on_hand: 150, reason: 'Initial stock from seed'
     });
     movements.push({
-        product_id: productId1, variant_id: null, user_id: adminUserId, movement_type: 'stock_take_decrease',
+        product_id: productId1, variant_id: null, user_id: adminUserId, movement_type: 'stock_take_decrease', 
         quantity_changed: -5, new_quantity_on_hand: 145, reason: 'Stock count adjustment'
     });
   }
-  if (variantId1_1) {
+  if (variantId1_1) { 
      movements.push({
-        product_id: productId1, variant_id: variantId1_1, user_id: adminUserId, movement_type: 'po_receipt',
+        product_id: productId1, variant_id: variantId1_1, user_id: adminUserId, movement_type: 'po_receipt', 
         quantity_changed: 10, new_quantity_on_hand: 20, reason: 'PO #123 Receipt', reference_id: 'poitem_placeholder_1'
     });
   }
    if (productId2) {
     movements.push({
-        product_id: productId2, variant_id: null, user_id: adminUserId, movement_type: 'sale_deduction',
+        product_id: productId2, variant_id: null, user_id: adminUserId, movement_type: 'sale_deduction', 
         quantity_changed: -2, new_quantity_on_hand: 298, reason: 'Order #XYZ Sale', reference_id: 'order_placeholder_1'
     });
   }
@@ -1606,7 +1606,7 @@ async function seedStockMovements(client, seededDataIds) {
   try {
     for (const move of movements) {
       await client.query(
-        `INSERT INTO stock_movement_logs
+        `INSERT INTO stock_movement_logs 
           (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING;`,
         [move.product_id, move.variant_id, move.user_id, move.movement_type, move.quantity_changed, move.new_quantity_on_hand, move.reason, move.reference_id]
@@ -1624,26 +1624,26 @@ async function seedCostHistory(client, seededDataIds) {
     console.warn("Product IDs or Supplier IDs not available. Skipping cost history seeding.");
     return;
   }
-
+  
   const supplierId1 = seededDataIds.suppliers['Global Electronics Inc.'];
-  const productId1 = seededDataIds.products['HDPHN-WL-BT-001'];
-  const variantId1_1 = seededDataIds.variants ? seededDataIds.variants['HDPHN-GRN'] : null;
+  const productId1 = seededDataIds.products['HDPHN-WL-BT-001']; 
+  const variantId1_1 = seededDataIds.variants ? seededDataIds.variants['HDPHN-GRN'] : null; 
 
   const historyEntries = [];
 
   if (productId1 && supplierId1) {
     historyEntries.push({
-        product_id: productId1, variant_id: null, supplier_id: supplierId1, currency_code: 'USD', cost_price: 85.00, quantity_received: 50,
+        product_id: productId1, variant_id: null, supplier_id: supplierId1, currency_code: 'USD', cost_price: 85.00, quantity_received: 50, 
         purchase_order_item_id: null, effective_date: '2023-01-15T00:00:00Z', base_currency_cost_price: 85.00, exchange_rate_at_receipt: 1.0
     });
     historyEntries.push({
-        product_id: productId1, variant_id: null, supplier_id: supplierId1, currency_code: 'USD', cost_price: 87.50, quantity_received: 100,
+        product_id: productId1, variant_id: null, supplier_id: supplierId1, currency_code: 'USD', cost_price: 87.50, quantity_received: 100, 
         purchase_order_item_id: null, effective_date: '2023-03-20T00:00:00Z', base_currency_cost_price: 87.50, exchange_rate_at_receipt: 1.0
     });
   }
-  if (variantId1_1 && supplierId1 && productId1) {
+  if (variantId1_1 && supplierId1 && productId1) { 
      historyEntries.push({
-        product_id: productId1, variant_id: variantId1_1, supplier_id: supplierId1, currency_code: 'USD', cost_price: 92.00, quantity_received: 20,
+        product_id: productId1, variant_id: variantId1_1, supplier_id: supplierId1, currency_code: 'USD', cost_price: 92.00, quantity_received: 20, 
         purchase_order_item_id: null, effective_date: '2023-04-10T00:00:00Z', base_currency_cost_price: 92.00, exchange_rate_at_receipt: 1.0
     });
   }
@@ -1652,7 +1652,7 @@ async function seedCostHistory(client, seededDataIds) {
     for (const entry of historyEntries) {
       await client.query(
         `INSERT INTO product_cost_history
-          (product_id, variant_id, supplier_id, currency_code, cost_price, quantity_received,
+          (product_id, variant_id, supplier_id, currency_code, cost_price, quantity_received, 
            purchase_order_item_id, effective_date, base_currency_cost_price, exchange_rate_at_receipt)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT DO NOTHING;`,
         [entry.product_id, entry.variant_id, entry.supplier_id, entry.currency_code, entry.cost_price, entry.quantity_received,
@@ -1672,13 +1672,13 @@ async function seedInventoryBatches(client, seededDataIds) {
     return;
   }
 
-  const productSku1 = 'HDPHN-WL-BT-001';
-  const variantSku1 = 'HDPHN-GRN';
-
+  const productSku1 = 'HDPHN-WL-BT-001'; 
+  const variantSku1 = 'HDPHN-GRN';       
+  
   const productId1 = seededDataIds.products[productSku1];
   const variantId1 = seededDataIds.variants && seededDataIds.variants[variantSku1] ? seededDataIds.variants[variantSku1] : null;
-
-  const productSku2 = 'TSHRT-MEN-COT-005';
+  
+  const productSku2 = 'TSHRT-MEN-COT-005'; 
   const productId2 = seededDataIds.products[productSku2];
 
   const batchesToSeed = [];
@@ -1690,39 +1690,39 @@ async function seedInventoryBatches(client, seededDataIds) {
       batch_number: 'BATCH_V001_202305',
       expiry_date: '2026-05-31',
       initial_quantity: 50,
-      current_quantity: 45,
-      cost_price_at_receipt: 92.00,
-      currency_code_at_receipt: 'USD',
+      current_quantity: 45, 
+      cost_price_at_receipt: 92.00, 
+      currency_code_at_receipt: 'USD', 
       base_currency_cost_price_at_receipt: 92.00,
       exchange_rate_used: 1.0,
-      purchase_order_item_id: null
+      purchase_order_item_id: null 
     });
   }
 
   if (productId2) {
     batchesToSeed.push({
       product_id: productId2,
-      variant_id: null,
+      variant_id: null, 
       batch_number: 'BATCH_P002_202304',
-      expiry_date: null,
+      expiry_date: null, 
       initial_quantity: 100,
       current_quantity: 80,
       cost_price_at_receipt: 12.00,
-      currency_code_at_receipt: 'EUR',
-      base_currency_cost_price_at_receipt: null,
+      currency_code_at_receipt: 'EUR', 
+      base_currency_cost_price_at_receipt: null, 
       exchange_rate_used: null,
       purchase_order_item_id: null
     });
-     batchesToSeed.push({
+     batchesToSeed.push({ 
       product_id: productId2,
-      variant_id: null,
+      variant_id: null, 
       batch_number: 'BATCH_P003_202306',
       expiry_date: null,
       initial_quantity: 100,
       current_quantity: 100,
       cost_price_at_receipt: 12.50,
       currency_code_at_receipt: 'EUR',
-      purchase_order_item_id: null
+      purchase_order_item_id: null 
     });
   }
 
@@ -1734,10 +1734,10 @@ async function seedInventoryBatches(client, seededDataIds) {
   try {
     for (const batch of batchesToSeed) {
       await client.query(
-        `INSERT INTO inventory_batches
-          (product_id, variant_id, batch_number, expiry_date, initial_quantity, current_quantity,
+        `INSERT INTO inventory_batches 
+          (product_id, variant_id, batch_number, expiry_date, initial_quantity, current_quantity, 
            cost_price_at_receipt, currency_code_at_receipt, base_currency_cost_price_at_receipt, exchange_rate_used, purchase_order_item_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
          ON CONFLICT (product_id, variant_id, batch_number) DO NOTHING;`,
         [
           batch.product_id, batch.variant_id, batch.batch_number, batch.expiry_date, batch.initial_quantity, batch.current_quantity,
