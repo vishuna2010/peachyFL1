@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
+const { query, validationResult } = require('express-validator');
 
 // Apply auth middleware to all routes in this router
 router.use(isAuthenticated, isAdmin);
@@ -39,6 +40,109 @@ router.get('/low-stock-products', async (req, res) => {
   } catch (error) {
     console.error('Error fetching low stock products report:', error);
     res.status(500).json({ message: 'Failed to retrieve low stock products report.' });
+  }
+});
+
+const validateTaxReturnsParams = [
+  query('year')
+    .notEmpty().withMessage('Year is required.')
+    .isInt({ min: 2000, max: new Date().getFullYear() + 5 }).withMessage(`Year must be an integer between 2000 and ${new Date().getFullYear() + 5}.`)
+    .toInt(),
+  query('periodType')
+    .trim()
+    .notEmpty().withMessage('periodType is required.')
+    .isIn(['monthly', 'quarterly']).withMessage("periodType must be either 'monthly' or 'quarterly'."),
+  query('month')
+    .optional()
+    .isInt({ min: 1, max: 12 }).withMessage('Month must be an integer between 1 and 12.')
+    .toInt()
+    .custom((value, { req }) => {
+      if (req.query.periodType === 'monthly' && (value === undefined || value === null)) {
+        throw new Error('Month is required when periodType is "monthly".');
+      }
+      if (req.query.periodType === 'quarterly' && value !== undefined && value !== null) {
+        throw new Error('Month should not be provided when periodType is "quarterly".');
+      }
+      return true;
+    }),
+  query('quarter')
+    .optional()
+    .isInt({ min: 1, max: 4 }).withMessage('Quarter must be an integer between 1 and 4.')
+    .toInt()
+    .custom((value, { req }) => {
+      if (req.query.periodType === 'quarterly' && (value === undefined || value === null)) {
+        throw new Error('Quarter is required when periodType is "quarterly".');
+      }
+      if (req.query.periodType === 'monthly' && value !== undefined && value !== null) {
+        throw new Error('Quarter should not be provided when periodType is "monthly".');
+      }
+      return true;
+    })
+];
+
+// GET /api/admin/reports/tax-returns - Fetch total tax collected for a given period (month/quarter)
+router.get('/tax-returns', validateTaxReturnsParams, async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  // Use validated and sanitized values from req.query for year, periodType, month, quarter
+  const { year, periodType, month, quarter } = req.query; // Validated and sanitized
+
+  let startDate;
+  let endDate;
+
+  if (periodType === 'monthly') {
+    // month is 1-indexed from validator, but 0-indexed for Date constructor
+    startDate = new Date(year, month - 1, 1);
+    endDate = new Date(year, month, 1); // First day of next month
+  } else { // periodType === 'quarterly'
+    let startMonth;
+    if (quarter === 1) startMonth = 0; // Q1: Jan-Mar (months 0,1,2)
+    else if (quarter === 2) startMonth = 3; // Q2: Apr-Jun (months 3,4,5)
+    else if (quarter === 3) startMonth = 6; // Q3: Jul-Sep (months 6,7,8)
+    else startMonth = 9; // Q4: Oct-Dec (months 9,10,11)
+
+    startDate = new Date(year, startMonth, 1);
+    endDate = new Date(year, startMonth + 3, 1); // First day of the month after the quarter ends
+  }
+
+  const queryParams = [];
+
+  // Define relevant order statuses
+  const RELEVANT_ORDER_STATUSES = ['completed', 'shipped', 'delivered']; // Consider which statuses mean "tax is final"
+  queryParams.push(RELEVANT_ORDER_STATUSES);
+  queryParams.push(startDate);
+  queryParams.push(endDate);
+
+  try {
+    const query = `
+      SELECT
+        COALESCE(SUM(o.total_tax_amount), 0) as total_tax_for_period
+      FROM orders o
+      WHERE o.status = ANY($1::varchar[])
+        AND o.created_at >= $2
+        AND o.created_at < $3;
+    `;
+
+    const result = await db.query(query, queryParams);
+    const totalTax = result.rows[0] ? parseFloat(result.rows[0].total_tax_for_period).toFixed(2) : "0.00";
+
+    // Response formatting will be handled in the next step.
+    // For now, just return the fetched totalTax along with parameters.
+    res.status(200).json({
+      report_parameters: {
+        year,
+        periodType,
+        ...(month && { month }), // Conditionally add month
+        ...(quarter && { quarter }) // Conditionally add quarter
+      },
+      total_tax_for_period: totalTax
+    });
+
+  } catch (error) {
+    console.error('Error generating tax returns report:', error);
+    res.status(500).json({ message: 'Failed to generate tax returns report.' });
   }
 });
 
@@ -388,5 +492,22 @@ router.get('/sales', async (req, res) => {
   }
 });
 
+// GET /api/admin/reports/tax-returns - Fetch total tax collected for a given period (month/quarter)
+router.get('/tax-returns', async (req, res) => {
+  // Validation and Logic will be implemented in subsequent steps.
+  // For now, include basic structure.
+  const { year, periodType, month, quarter } = req.query;
+
+  try {
+    // Placeholder for validation, date range calculation, query, and response formatting.
+    res.status(200).json({
+      message: 'Tax returns endpoint placeholder - logic to be implemented.',
+      received_params: { year, periodType, month, quarter }
+    });
+  } catch (error) {
+    console.error('Error generating tax returns report:', error);
+    res.status(500).json({ message: 'Failed to generate tax returns report.' });
+  }
+});
 
 module.exports = router;
