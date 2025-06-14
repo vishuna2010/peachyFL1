@@ -132,9 +132,9 @@ async function fetchOptions() {
   isLoading.value = true;
   fetchError.value = null;
   try {
-    // The GET /api/admin/options does not yet support product_count or value_count directly
+    // The GET /admin/options does not yet support product_count or value_count directly
     // For now, we fetch just the options. value_count can be added later or fetched on demand.
-    const response = await $axios.get('/api/admin/options');
+    const response = await $axios.get('/admin/options');
     options.value = response.data.map(opt => ({ ...opt, value_count: 0 })); // Placeholder for value_count
 
     // To get actual value_counts, we'd need to iterate and make more calls, or backend sends it.
@@ -189,10 +189,10 @@ const handleSubmitOption = async () => {
   isSubmitting.value = true;
   try {
     if (isEditing.value) {
-      await $axios.put(`/api/admin/options/${currentOption.value.id}`, { name: currentOption.value.name.trim() });
+      await $axios.put(`/admin/options/${currentOption.value.id}`, { name: currentOption.value.name.trim() });
       toast.success('Option type updated successfully!');
     } else {
-      await $axios.post('/api/admin/options', { name: currentOption.value.name.trim() });
+      await $axios.post('/admin/options', { name: currentOption.value.name.trim() });
       toast.success('Option type added successfully!');
     }
     fetchOptions(); // Refresh the list
@@ -211,7 +211,7 @@ const handleDeleteOption = async (optionId) => {
   }
   isDeleting.value = optionId;
   try {
-    await $axios.delete(`/api/admin/options/${optionId}`);
+    await $axios.delete(`/admin/options/${optionId}`);
     toast.success('Option type deleted successfully!');
     fetchOptions(); // Refresh the list
   } catch (error) {
