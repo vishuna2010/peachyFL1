@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
-const { body, param, validationResult } = require('express-validator');
+const { body, param, query, validationResult } = require('express-validator'); // Added query
 const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppError'); // Assuming AppError.js exports these
 
 // Apply auth middleware to all routes in this router
@@ -180,10 +180,21 @@ router.post('/', validateCreateDiscount, async (req, res, next) => {
   }
 });
 
+// Validation for GET /
+const validateListDiscountsParams = [
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer.').toInt(),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be an integer between 1 and 100.').toInt()
+];
+
 // GET /api/admin/discounts - List all discount codes
-router.get('/', async (req, res, next) => { // Added next for consistency
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20; // Default to 20, consistent with other list routes
+router.get('/', validateListDiscountsParams, async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const page = req.query.page || 1; // Default if optional and not provided
+  const limit = req.query.limit || 20; // Default if optional and not provided
   const offset = (page - 1) * limit;
 
   try {
