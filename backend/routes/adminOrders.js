@@ -5,6 +5,7 @@ const { isAuthenticated, isAdmin } = require('../auth');
 const { generateOrderInvoicePdf, generatePackingSlipPdf } = require('../services/pdfService');
 const { param, validationResult } = require('express-validator');
 const { NotFoundError } = require('../utils/AppError');
+const crypto = require('crypto');
 
 // Apply auth middleware to all routes in this router
 router.use(isAuthenticated, isAdmin);
@@ -241,9 +242,15 @@ router.get(
       const itemsResult = await db.query(itemsQuery, [orderId]);
       orderDataFromDb.items = itemsResult.rows;
 
+    // Generate QR Code URL
+    const token = crypto.randomBytes(8).toString('hex');
+    const frontendInvoiceViewUrlBase = process.env.FRONTEND_INVOICE_VIEW_URL_BASE || 'https://example.com/invoices'; // Fallback URL
+    const invoice_qr_code_url = `${frontendInvoiceViewUrlBase}/${orderId}?token=${token}`;
+
       // Prepare orderDetails for PDF generation
       const orderDetailsForPdf = {
         ...orderDataFromDb,
+        invoice_qr_code_url: invoice_qr_code_url, // Added this line
         // Company details can be from env or config
         company_name: process.env.COMPANY_NAME || "My Awesome Store",
         company_address: process.env.COMPANY_ADDRESS || "123 Store Street, Shopsville, ST 12345",

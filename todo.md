@@ -192,7 +192,8 @@ This section outlines the primary driver for future backend development, based o
         - [X] Phase 1: Created admin API endpoint (`/api/admin/reports/invoice-export`) providing detailed order and line item data (including product, customer, addresses, pricing, and tax details) suitable for export. Supports date filtering.
 
 ### Optional: QR Invoice Label
-- [ ] Link to online invoice or validation portal
+- [~] Link to online invoice or validation portal
+  - [X] Phase 1 (Backend): Implemented generation of a unique URL (using order ID and a short random token) for online invoice viewing. This URL is added to the data passed to the PDF invoice generation service.
 
 ---
 
