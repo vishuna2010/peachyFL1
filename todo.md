@@ -109,7 +109,8 @@ This section outlines the primary driver for future backend development, based o
 - [~] Email Templating:
   - [X] Phase 1: Implement EJS templating for Order Confirmation email (HTML). Created template structure (`order_confirmation.ejs`), refactored `emailService.js` to use it, and updated `orders.js` to call it correctly.
 - **Search API Refinements:**
-  - Enhance product search (`GET /api/products`) for better partial match performance (e.g., PostgreSQL full-text search, `pg_trgm`).
+  - [~] Enhance product search (`GET /api/products`) for better partial match performance (e.g., PostgreSQL full-text search, `pg_trgm`).
+    - [X] Phase 1: Implemented case-insensitive partial matching (ILIKE) for product name, description, and SKU (base product and variant SKUs).
 - **Input Validation Review:**
   - Systematically review and enhance input validation for all API endpoints using a library like `joi` or `express-validator` (already started using `express-validator`).
 

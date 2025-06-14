@@ -33,6 +33,12 @@ async function getAllProducts({
                           p.has_variants, p.average_rating, p.review_count,
                           p.created_at, p.updated_at`;
 
+  // Conditionally join product_variants if needed for searchTerm or optionValueId
+  let needsVariantJoin = !!optionValueId;
+  if (searchTerm) {
+      needsVariantJoin = true;
+  }
+
   let fromClause = `
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
@@ -54,24 +60,43 @@ async function getAllProducts({
       LEFT JOIN product_variants pv ON p.id = pv.product_id
       LEFT JOIN product_variant_option_values pvov ON pv.id = pvov.product_variant_id
     `;
+  } else if (needsVariantJoin && !fromClause.includes('product_variants pv')) {
+    // Join for searchTerm if not already joined by optionValueId
+    fromClause += ` LEFT JOIN product_variants pv ON p.id = pv.product_id `;
   }
 
+
   let baseSelect = selectPrefix + fromClause;
+
   let countBaseQuery = `SELECT COUNT(DISTINCT p.id) as total_count FROM products p `;
-  if (optionValueId) { // Also add joins to count query if filtering by optionValueId
-      countBaseQuery += `
-        LEFT JOIN product_variants pv ON p.id = pv.product_id
-        LEFT JOIN product_variant_option_values pvov ON pv.id = pvov.product_variant_id
-      `;
+  if (needsVariantJoin && !countBaseQuery.includes('product_variants pv')) {
+      countBaseQuery += ` LEFT JOIN product_variants pv ON p.id = pv.product_id `;
+  }
+  if (optionValueId && !countBaseQuery.includes('product_variant_option_values pvov')) {
+      // This join implies pv is already joined or should be.
+      if (!countBaseQuery.includes('product_variants pv')) { // Ensure pv is joined for pvov
+         countBaseQuery += ` LEFT JOIN product_variants pv ON p.id = pv.product_id `;
+      }
+      countBaseQuery += ` LEFT JOIN product_variant_option_values pvov ON pv.id = pvov.product_variant_id `;
   }
 
 
   let whereClauses = [];
   if (searchTerm) {
-    whereClauses.push(`(p.name ILIKE $${paramIndex} OR p.description ILIKE $${paramIndex})`);
-    queryValues.push(`%${searchTerm}%`);
-    paramIndex++;
+    const searchTermPattern = `%${searchTerm}%`;
+    queryValues.push(searchTermPattern); // Add value for $paramIndex
+    let searchOrClauses = [
+        `p.name ILIKE $${paramIndex}`,
+        `p.description ILIKE $${paramIndex}`,
+        `p.sku ILIKE $${paramIndex}`
+    ];
+    if (needsVariantJoin) {
+        searchOrClauses.push(`pv.sku ILIKE $${paramIndex}`);
+    }
+    whereClauses.push(`(${searchOrClauses.join(" OR ")})`);
+    paramIndex++; // Increment for the next filter
   }
+
   if (categoryId) {
     whereClauses.push(`p.category_id = $${paramIndex}`);
     queryValues.push(categoryId);
