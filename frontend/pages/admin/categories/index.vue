@@ -38,7 +38,7 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ category.product_count }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                 <NuxtLink :to="`/admin/categories/edit/${category.id}`" class="text-indigo-600 hover:text-indigo-900 hover:underline">Edit</NuxtLink>
-                <button @click="handleDeleteCategory(category.id)" class="text-red-600 hover:text-red-800 hover:underline disabled:opacity-50" :disabled="isDeleting === category.id">
+                <button @click="handleDeleteCategory(category.id, category.name)" class="text-red-600 hover:text-red-800 hover:underline disabled:opacity-50" :disabled="isDeleting === category.id">
                   {{ isDeleting === category.id ? 'Deleting...' : 'Delete' }}
                 </button>
               </td>
@@ -96,7 +96,7 @@ async function fetchCategories(page = 1) {
   isLoading.value = true;
   fetchError.value = null;
   try {
-    const response = await $axios.get('/api/admin/categories', {
+    const response = await $axios.get('/admin/categories', { // Corrected path
       params: {
         page: page,
         limit: paginationData.value.pageSize,
@@ -125,12 +125,12 @@ async function fetchCategories(page = 1) {
   }
 }
 
-const handleDeleteCategory = async (categoryId) => {
-  if (window.confirm(`Are you sure you want to delete category ID ${categoryId}?`)) {
+const handleDeleteCategory = async (categoryId, categoryName) => { // Added categoryName for toast
+  if (window.confirm(`Are you sure you want to delete category "${categoryName}" (ID: ${categoryId})?`)) { // Added categoryName to confirm
     isDeleting.value = categoryId;
     try {
-      await $axios.delete(`/api/admin/categories/${categoryId}`);
-      toast.success(`Category ID ${categoryId} deleted successfully.`);
+      await $axios.delete(`/admin/categories/${categoryId}`); // Corrected path
+      toast.success(`Category "${categoryName}" deleted successfully.`); // Used categoryName
 
       let pageToFetch = paginationData.value.currentPage;
       if (categories.value.length === 1 && pageToFetch > 1) {
@@ -139,7 +139,7 @@ const handleDeleteCategory = async (categoryId) => {
       fetchCategories(pageToFetch);
     } catch (err) {
       console.error(`Failed to delete category ${categoryId}:`, err);
-      toast.error(err.response?.data?.message || `Failed to delete category ${categoryId}.`);
+      toast.error(err.response?.data?.message || `Failed to delete category "${categoryName}".`); // Used categoryName
     } finally {
       isDeleting.value = null;
     }
