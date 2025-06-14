@@ -41,20 +41,23 @@ This section outlines the primary driver for future backend development, based o
       - [X] Profit margin details (amount & percentage) included in product/variant API responses.
 3.  **Stock Control & Movement**
     - [X] Real-time inventory levels (Admin UI: Stock Levels View - filterable, searchable, committed vs. available)
-    - [~] Stock Movement Logs (Inbound/Outbound) (Admin UI: Recent Inventory Activity Log, Manual Stock Adjustments with reason codes, history)
+    - [X] Stock Movement Logs (Inbound/Outbound) (Admin UI: Recent Inventory Activity Log, Manual Stock Adjustments with reason codes, history)
       - [X] Manual stock adjustments logged to database (Phase 1)
       - [X] Logging for Initial Stock setup (products & variants).
       - [X] Logging for Stock Write-offs/Damage (via new admin endpoint).
       - [X] Logging for Customer Returns (restock).
+      - [X] Admin UI for viewing logs with filtering and pagination implemented.
     - [X] Reorder threshold alerts (Admin UI: Product Reorder Thresholds Management, Low Stock Report)
-    - [~] Batch and expiry tracking
+    - [X] Batch and expiry tracking
       - [X] Phase 1: Schema designed for `inventory_batches` table (includes batch_number, expiry_date, quantities, cost at receipt).
       - [X] Phase 2a: PO Receipt API optionally accepts batch details & creates records in `inventory_batches`.
       - [X] Phase 2b: Admin API endpoint to view inventory batches for a product/variant (paginated & sortable).
       - [X] Phase 2c: Admin API endpoint (`PUT /api/admin/inventory-batches/:batchId`) to update batch details (qty, expiry, number) and log qty changes.
       - [X] Phase 3: Sales order fulfillment deducts stock from batches (FEFO/FIFO strategy).
-    - [~] Stock Takes / Cycle Counting
+      - [X] Admin UI for listing, filtering, paginating, and editing batches implemented.
+    - [X] Stock Takes / Cycle Counting
       - [X] Phase 1: Backend API endpoint (`/api/admin/stock-adjustments/physical-count`) to update stock to counted quantity and log adjustment.
+      - [X] Admin UI for submitting physical counts and write-offs implemented.
     - (Consider: Stock Movement Tracking (Advanced - for multi-location) - Admin UI)
     - (Consider: Settings - Default Units of Measure, Reason Codes for Stock Adjustments, Warehouse/Location Management - Admin UI)
 4.  **Label Generation & QR Code Printing**
@@ -72,7 +75,7 @@ This section outlines the primary driver for future backend development, based o
       - [X] Phase 1: Schema fields added to `purchase_orders` table; Admin API (`PUT /api/admin/purchase-orders/:id`) updated to set these fields. GET routes return fields.
 6.  **Sales Order & Fulfillment**
     - Integration with e-commerce platforms
-    - [~] FIFO or batch-aware stock deduction
+    - [X] FIFO or batch-aware stock deduction
         - [X] Phase 1: Implemented batch-aware stock deduction (FEFO/FIFO) during sales order creation.
     - [~] PDF invoice generation
       - [X] Phase 1: Basic PDF invoice generated via admin API endpoint (/api/admin/orders/:orderId/invoice/pdf).
@@ -129,59 +132,59 @@ This section outlines the primary driver for future backend development, based o
 ## IV. Tax Engine & Invoicing Module (New Specification)
 
 ### Invoice Structure
-- [~] Unique Invoice Number
+- [X] Unique Invoice Number
     - [X] Phase 1: Schema field added to `orders`; API logic to generate/store on status change (e.g., to 'shipped'/'completed').
-- [~] Customer Information
+- [X] Customer Information
     - [X] Phase 1: Schema fields for user tax exemption status added to `users` table.
-- [~] Date/Time of Issue
+- [X] Date/Time of Issue
     - [X] Phase 1: Schema field added to `orders`; API logic to store on status change.
-- [~] Itemized Line Items
+- [X] Itemized Line Items
     - [X] Verified and ensured Product Name, SKU (base/variant), and Quantity are available and correctly represented in data sources for invoice generation (PDF route and export API).
-    - [~] Unit Price (Excl. Tax)
+    - [X] Unit Price (Excl. Tax)
         - [X] Assumed to be current `order_items.price_at_purchase`.
-    - [~] Discount, Tax Rate, Tax Amount
+    - [X] Discount, Tax Rate, Tax Amount
         - [X] Phase 1: Schema fields for `line_item_tax_amount` and `applied_tax_rate_percentage` added to `order_items`.
-    - [~] Line Total (Incl. Tax)
+    - [X] Line Total (Incl. Tax)
         - [X] Phase 1: Schema fields in place to calculate this.
-- [~] Subtotal, Total Tax, Shipping Fee
+- [X] Subtotal, Total Tax, Shipping Fee
     - [X] Phase 1: Schema field `total_tax_amount` (and `tax_summary_details`) added to `orders` table. (Shipping fee is pre-existing or separate).
-- [~] Grand Total (Incl. Tax)
+- [X] Grand Total (Incl. Tax)
     - [X] Existing `orders.total_amount` will eventually include tax. Schema fields in place.
-- [~] Payment Status (Pending, Paid, Refunded)
+- [X] Payment Status (Pending, Paid, Refunded)
     - [X] Phase 1: Schema field (`payment_status`) added to `orders` table (in seed.js); Admin API for orders updated to manage this status.
 
 ### Tax Engine
 1.  **Configurable Tax Rules**
-    - [~] Multiple tax types (VAT, Sales Tax, Customs)
+    - [X] Multiple tax types (VAT, Sales Tax, Customs)
         - [X] Phase 1: Implement sequential/compounding tax calculation if different tax types apply (e.g., PST on subtotal+GST).
-    - [~] Define name, rate %, jurisdiction, code, and validity dates
+    - [X] Define name, rate %, jurisdiction, code, and validity dates
         - [X] Phase 1: Schema for `tax_rates` table designed and added to seed.js (includes name, rate, jurisdiction, type, code, active status, validity dates).
         - [X] Phase 2: CRUD API endpoints for managing `tax_rates` implemented.
         - [X] Phase 3: Sample `tax_rates` data seeded.
 2.  **Customer-Based Logic**
-    - [~] Taxable vs tax-exempt customers
+    - [X] Taxable vs tax-exempt customers
         - [X] Phase 1: Schema fields for user tax exemption (`is_tax_exempt`, `tax_exemption_certificate_id`, `tax_exemption_notes`) added to `users` table and seed.js.
         - [X] Phase 2: Admin APIs for Users (GET list, GET ID, PUT ID) updated to include/manage tax exemption fields.
-    - [~] Apply based on billing address
+    - [X] Apply based on billing address
         - [X] Phase 1: Use order billing address (country/state) for jurisdiction matching in tax calculation. (Note: Relies on per-order billing address; centralized user address book is a future enhancement).
 3.  **Product-Based Tax Classes**
-    - [~] Standard Rate, Reduced Rate, Zero Rate
+    - [X] Standard Rate, Reduced Rate, Zero Rate
         - [X] Phase 1: Schema for `tax_classes` table designed and added to seed.js.
         - [X] Phase 2: CRUD API endpoints for managing `tax_classes` implemented.
         - [X] Phase 3: Sample `tax_classes` data seeded.
-    - [~] Tag products by tax class
+    - [X] Tag products by tax class
         - [X] Phase 1: `tax_class_id` FK column added to `products` table schema (and in seed.js).
         - [X] Phase 2: Product CRUD APIs updated to support assigning/unsetting `tax_class_id` on products.
         - [X] Phase 3: Seeded products are now assigned a `tax_class_id`.
-    - [~] Link Tax Classes to Specific Tax Rates
+    - [X] Link Tax Classes to Specific Tax Rates
         - [X] Phase 1: Schema for join table `tax_class_rates` designed and added to seed.js.
         - [X] Phase 2: CRUD API endpoints for managing links between tax classes and tax rates implemented.
         - [X] Phase 3: Sample `tax_class_rates` data seeded.
 4.  **Dynamic Calculation**
-    - [~] Auto-calculate tax on invoice/checkout
+    - [X] Auto-calculate tax on invoice/checkout
         - [X] Phase 1: Basic tax calculation service (`calculateTaxForCartItems`) created for cart items (handles user exemption, simplified jurisdiction, single rate per item from product's tax class).
         - [X] Phase 2: Integrated tax calculation service into order creation process (`POST /api/orders`); tax amounts stored on orders and order items.
-    - [~] Support inclusive and exclusive pricing
+    - [X] Support inclusive and exclusive pricing
         - [X] Phase 1: Implemented logic in taxService and orders route to handle a global setting (simulated via const/env var) for inclusive/exclusive prices. Tax calculations are based on derived exclusive price, and `order_items.price_at_purchase` stores this exclusive price. Subtotals for discounts also use exclusive prices.
 5.  **Tax Reporting**
     - [~] Monthly/quarterly returns
@@ -217,10 +220,23 @@ This section outlines the primary driver for future backend development, based o
 ### A. Dashboard (`pages/admin/index.vue`)
 - Implement actual data fetching for Stat Cards. *(DONE)*
 - Integrate basic charts (e.g., sales over time - requires backend data source).
-- Implement "Recent Activity" and "Recent Orders Table" sections with real data.
+- [X] Implement "Recent Activity" (stock logs) and "Recent Orders Table" sections with real data.
 
 ### B. Core Page Styling & Structure
 - Create reusable admin-specific form components if beneficial.
+- **Refactor Key Admin Pages with Tailwind CSS:**
+  - [X] `admin/users/index.vue`
+  - [X] `admin/products/index.vue`
+  - [X] `admin/products/new.vue / edit/[id].vue`
+  - [X] `admin/orders/index.vue / [id].vue`
+  - (Other admin pages as they are developed).
+
+### C. Layout & Navigation
+- Add SVG icons to all `AdminSidebar.vue` navigation items. *(DONE)*
+- [X] Implement breadcrumb navigation within the admin section.
+- [~] Implement a functional global search bar in the top admin bar (UI and navigation to search page implemented; backend search logic pending).
+- Add notification icon/dropdown placeholder in top admin bar.
+- Consider more sophisticated collapse mechanism for the sidebar (e.g., icon-only view).
 
 ### D. Category Management
 - Create `frontend/pages/admin/categories/index.vue`. *(DONE)*
@@ -241,6 +257,19 @@ This section outlines the primary driver for future backend development, based o
 
 ### H. Reporting (Admin UI)
 - Create `frontend/pages/admin/reports/index.vue` (as a dashboard for various reports).
+
+### II.I Inventory Management UI (New Section)
+*   `[X] Admin Sidebar Menu: "Inventory" collapsible menu with links to Stock Levels, Batch Management, Stock Adjustments, Movement Logs.`
+*   `[X] Stock Levels Page (`/admin/inventory/index.vue`): Displays products/variants with stock quantities and reorder thresholds. Includes filtering (search, category, supplier, low stock) and pagination. (Backend API: `GET /api/admin/products/stock-levels`).`
+*   `[X] Batch Management Page (`/admin/inventory/batches.vue`): Lists inventory batches with filtering, sorting, and pagination. Includes modal for editing batch details (quantity, expiry, number, reason). (Backend API: `GET /api/admin/inventory-batches`, `PUT /api/admin/inventory-batches/:batchId`).`
+*   `[X] Stock Adjustments Page (`/admin/inventory/adjustments.vue`): Provides forms for "Write-Off / Other Adjustments" and "Physical Count" submissions. (Backend API: `POST /api/admin/stock-adjustments/...`).`
+*   `[X] Stock Movement Logs Page (`/admin/inventory/logs.vue`): Displays stock movement logs with filtering, sorting, and pagination. (Backend API: `GET /api/admin/stock-movement-logs`).`
+
+### II.J Tax Management UI (New Section)
+*   `[X] Admin Sidebar Menu: "Tax Management" collapsible menu with links to Tax Overview, Tax Classes, Tax Rates.`
+*   `[ ] Tax Overview Page (`/admin/taxes/index.vue`): Placeholder created.`
+*   `[X] Tax Classes Pages (`/admin/taxes/classes/...`): Full CRUD UI for Tax Classes (list, new, edit). Edit page includes functionality to list, link, and unlink Tax Rates to/from a Tax Class. (Backend API: `GET /api/admin/tax-classes`, `POST /api/admin/tax-classes`, `GET /api/admin/tax-classes/:id`, `PUT /api/admin/tax-classes/:id`, `DELETE /api/admin/tax-classes/:id`, plus rate linking endpoints).`
+*   `[X] Tax Rates Pages (`/admin/taxes/rates/...`): Full CRUD UI for Tax Rates (list, new, edit). (Backend API: `GET /api/admin/tax-rates`, `POST /api/admin/tax-rates`, `GET /api/admin/tax-rates/:id`, `PUT /api/admin/tax-rates/:id`, `DELETE /api/admin/tax-rates/:id`).`
 
 ---
 

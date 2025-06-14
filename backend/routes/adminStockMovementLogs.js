@@ -15,7 +15,7 @@ const validateGetLogsParams = [
   query('start_date').optional().isISO8601().toDate(),
   query('end_date').optional().isISO8601().toDate()
     .custom((value, { req }) => {
-      if (req.query.start_date && value < req.query.start_date) {
+      if (req.query.start_date && value < new Date(req.query.start_date)) {
         throw new Error('End date cannot be before start date.');
       }
       return true;
@@ -44,61 +44,54 @@ router.get('/', validateGetLogsParams, async (req, res, next) => {
 
   const offset = (page - 1) * limit;
   const queryParams = [];
-  let paramIndex = 1;
+  const conditions = [];
 
-  let baseQuery = `
-    FROM stock_movement_logs sml
+  let baseQueryFrom = `FROM stock_movement_logs sml
     LEFT JOIN products p ON sml.product_id = p.id
     LEFT JOIN product_variants pv ON sml.variant_id = pv.id
-    LEFT JOIN users u ON sml.user_id = u.id
-  `;
-  let conditions = [];
+    LEFT JOIN users u ON sml.user_id = u.id`;
+
+  let placeholderIndex = 1;
 
   if (product_id) {
-     conditions.push(`sml.product_id = $${paramIndex++}`);
+    conditions.push(`sml.product_id = $${placeholderIndex++}`);
     queryParams.push(product_id);
   }
   if (variant_id) {
-     conditions.push(`sml.variant_id = $${paramIndex++}`);
+    conditions.push(`sml.variant_id = $${placeholderIndex++}`);
     queryParams.push(variant_id);
   }
   if (movement_type) {
-     conditions.push(`sml.movement_type ILIKE $${paramIndex++}`);
-     queryParams.push(`%${movement_type}%`);
+    conditions.push(`sml.movement_type ILIKE $${placeholderIndex++}`);
+    queryParams.push(`%${movement_type}%`);
   }
   if (start_date) {
-     conditions.push(`sml.timestamp >= $${paramIndex++}`);
+    conditions.push(`sml.timestamp >= $${placeholderIndex++}`);
     queryParams.push(start_date);
   }
   if (end_date) {
     const adjustedEndDate = new Date(end_date);
-    adjustedEndDate.setHours(23, 59, 59, 999); // Include whole day
-     conditions.push(`sml.timestamp <= $${paramIndex++}`);
+    adjustedEndDate.setHours(23, 59, 59, 999);
+    conditions.push(`sml.timestamp <= $${placeholderIndex++}`);
     queryParams.push(adjustedEndDate);
   }
 
-  if (conditions.length > 0) {
-    baseQuery += ' WHERE ' + conditions.join(' AND ');
-  }
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  const countQuery = 'SELECT COUNT(sml.id) as total_count ' + baseQuery;
-   const dataQuery = `
-    SELECT
-      sml.*,
-      p.name as product_name,
-      p.sku as product_sku,
-      pv.sku as variant_sku,
-      u.email as user_email
-    \` + baseQuery + \` ORDER BY sml.${sort_by} ${sort_order}, sml.id ${sort_order} LIMIT $${paramIndex++} OFFSET $${paramIndex++}\`;
+  const countQueryString = `SELECT COUNT(sml.id) as total_count ${baseQueryFrom} ${whereClause}`;
 
-  const countQueryParams = [...queryParams];
-  const dataQueryParams = [...queryParams, limit, offset];
+  const dataSelectClause = `SELECT sml.*, p.name as product_name, p.sku as product_sku, pv.sku as variant_sku, u.email as user_email `;
+  const dataOrderClause = `ORDER BY sml.${sort_by} ${sort_order}, sml.id ${sort_order}`;
+  const dataLimitOffsetClause = `LIMIT $${placeholderIndex++} OFFSET $${placeholderIndex++}`;
+  const dataQueryString = `${dataSelectClause} ${baseQueryFrom} ${whereClause} ${dataOrderClause} ${dataLimitOffsetClause}`;
+
+  const dataFinalParams = [...queryParams, limit, offset];
 
   try {
-    const countResult = await db.query(countQuery, countQueryParams);
-    const totalLogs = parseInt(countResult.rows[0].total_count);
+    const countResult = await db.query(countQueryString, queryParams); // queryParams for count has only filter values
+    const totalLogs = parseInt(countResult.rows[0].total_count, 10);
 
-    const logsResult = await db.query(dataQuery, dataQueryParams);
+    const logsResult = await db.query(dataQueryString, dataFinalParams);
 
     res.status(200).json({
       data: logsResult.rows,
@@ -113,7 +106,7 @@ router.get('/', validateGetLogsParams, async (req, res, next) => {
     });
   } catch (error) {
     console.error('Error fetching stock movement logs:', error);
-    next(error); // Pass to global error handler
+    next(error);
   }
 });
 
