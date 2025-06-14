@@ -22,7 +22,8 @@ This section outlines the primary driver for future backend development, based o
       - [X] Phase 1: Backend CRUD for multiple images, images included in product detail API.
       - [X] Phase 2: Primary image selection and sync with main product image_url.
     - [X] Status (Active / Inactive / Archived)
-    - Enhance "Specifications" tab with actual data if/when available from backend. (Moved from I.B)
+    - [~] Enhance "Specifications" tab with actual data if/when available from backend. (Moved from I.B)
+      - [X] Phase 1 (Backend): Added \`specifications\` JSONB column to \`products\`. Updated admin CRUD and public product detail API to support it. Seeded sample specs.
 2.  **Pricing Engine**
     - [X] Buying Price
         - [~] Historical tracking per supplier

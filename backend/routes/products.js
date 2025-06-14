@@ -47,7 +47,7 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
     name, description, price, category_id, tags: tagNames,
     stock_quantity = 0, supplier_id, sku, reorder_threshold,
     brand_manufacturer, supplier_reference, product_status,
-    cost_price, wholesale_price, tax_class_id // Added tax_class_id
+    cost_price, wholesale_price, tax_class_id, specifications // Add specifications
   } = req.body;
 
   if (!name || price === undefined) { return res.status(400).json({ message: 'Name and price are required.' }); }
@@ -101,6 +101,29 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
 
   const client = await db.pool.connect();
   try {
+    let parsedSpecifications = null;
+    if (specifications !== undefined && specifications !== null) {
+      if (typeof specifications === 'string') {
+        if (specifications.trim() === '') {
+          parsedSpecifications = null;
+        } else {
+          try {
+            parsedSpecifications = JSON.parse(specifications);
+            if (typeof parsedSpecifications !== 'object' || parsedSpecifications === null) {
+              // Ensure it's an object after parsing, not a primitive like number/string if JSON.parse was abused
+              return res.status(400).json({ message: 'Specifications must be a valid JSON object string or a direct JSON object.' });
+            }
+          } catch (e) {
+            return res.status(400).json({ message: 'Invalid JSON string for specifications.' });
+          }
+        }
+      } else if (typeof specifications === 'object') {
+        parsedSpecifications = specifications; // Already an object
+      } else {
+        return res.status(400).json({ message: 'Specifications must be a valid JSON object string or a direct JSON object.' });
+      }
+    }
+
     await client.query('BEGIN');
 
     let validated_tax_class_id = null;
@@ -120,9 +143,9 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
 
     const productQuery = `
       INSERT INTO products (name, description, price, category_id, image_url, stock_quantity, supplier_id, sku, reorder_threshold,
-                            brand_manufacturer, supplier_reference, product_status, cost_price, wholesale_price, tax_class_id,
+                            brand_manufacturer, supplier_reference, product_status, cost_price, wholesale_price, tax_class_id, specifications,
                             updated_at, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING * `;
     const productResult = await client.query(productQuery, [
       name, description, parseFloat(price), category_id ? parseInt(category_id) : null, imageUrl, stock,
@@ -133,7 +156,8 @@ router.post('/', isAuthenticated, isAdmin, productImageUploadMiddleware, handleM
       final_product_status,
       parsed_cost_price,
       parsed_wholesale_price,
-      validated_tax_class_id
+      validated_tax_class_id,
+      parsedSpecifications
     ]);
     const newProduct = productResult.rows[0];
 
@@ -266,7 +290,7 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
     name, description, price, category_id, tags: tagNames,
     stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold,
     brand_manufacturer, supplier_reference, product_status,
-    cost_price, wholesale_price, tax_class_id // Added tax_class_id
+    cost_price, wholesale_price, tax_class_id, specifications // Add specifications
   } = req.body;
 
   if (isNaN(parseInt(id))) { return res.status(400).json({ message: 'Invalid product ID.' }); }
@@ -392,6 +416,30 @@ router.put('/:id', isAuthenticated, isAdmin, productImageUploadMiddleware, handl
         addClause('reorder_threshold', rt, false, true);
     }
     if (req.file || newImageUrlFromRequest === null) { addClause('image_url', finalImageUrlToStoreInDb); }
+
+    let parsedSpecificationsUpdate = undefined; // Important: use undefined if not provided
+    if (specifications !== undefined) {
+       if (specifications === null || (typeof specifications === 'string' && specifications.trim() === '')) {
+           parsedSpecificationsUpdate = null; // Explicitly set to null
+       } else if (typeof specifications === 'string') {
+           try {
+               parsedSpecificationsUpdate = JSON.parse(specifications);
+               if (typeof parsedSpecificationsUpdate !== 'object' || parsedSpecificationsUpdate === null) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ message: 'Specifications must be a valid JSON object string or a direct JSON object to update.' });
+               }
+           } catch (e) {
+               await client.query('ROLLBACK');
+               return res.status(400).json({ message: 'Invalid JSON string for specifications update.' });
+           }
+       } else if (typeof specifications === 'object') {
+           parsedSpecificationsUpdate = specifications; // Already an object
+       } else {
+           await client.query('ROLLBACK');
+           return res.status(400).json({ message: 'Specifications must be a valid JSON object string, a direct JSON object, or null/empty to clear for update.' });
+       }
+       addClause('specifications', parsedSpecificationsUpdate); // addClause handles JS objects for JSONB
+    }
 
     let updatedProduct = currentProduct; // Start with current, overwrite with fetched if update happens
 
