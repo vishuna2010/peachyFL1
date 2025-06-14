@@ -123,7 +123,7 @@ async function fetchOrders(page = currentPage.value, pageSize = limit.value) {
     const effectivePage = Number(page) || 1;
     const effectivePageSize = Number(pageSize) || 10;
 
-    const response = await $axios.get('/api/admin/orders', { // Changed from /admin/orders to /api/admin/orders
+    const response = await $axios.get('/admin/orders', {
       params: {
         page: effectivePage,
         limit: effectivePageSize,
