@@ -26,6 +26,30 @@
         {{ item.name }}
       </NuxtLink>
 
+      <!-- Inventory Sub-menu -->
+      <div>
+        <button @click="toggleInventorySubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
+          <span class="flex items-center">
+            <span v-html="iconInventory" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+            Inventory
+          </span>
+          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': inventorySubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+        </button>
+        <div v-if="inventorySubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
+          <NuxtLink
+            v-for="invItem in inventoryItems"
+            :key="invItem.name"
+            :to="invItem.href"
+            @click="closeMobileSidebarIfNeeded"
+            class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
+            :class="isActive(invItem.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+          >
+            <span v-if="invItem.iconSvg" v-html="invItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(invItem.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            {{ invItem.name }}
+          </NuxtLink>
+        </div>
+      </div>
+
       <!-- Reports Sub-menu -->
       <div>
         <button @click="toggleReportsSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
@@ -92,6 +116,7 @@ const iconSuppliers = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewB
 const iconPurchaseOrders = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>`;
 const iconReportsMain = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>`;
 const iconReportSubItem = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>`;
+const iconInventory = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6A1.125 1.125 0 012.25 10.875v-3.75zM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-8.25zM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-2.25z" /></svg>`;
 
 
 const navigationItems = ref([
@@ -114,8 +139,20 @@ const reportItems = ref([
     { name: 'Best Sellers', href: '/admin/reports/best-sellers', iconSvg: iconReportSubItem },
 ]);
 
+const inventorySubmenuOpen = ref(false);
+const inventoryItems = ref([
+  { name: 'Stock Levels', href: '/admin/inventory', iconSvg: iconReportSubItem },
+  { name: 'Batch Management', href: '/admin/inventory/batches', iconSvg: iconReportSubItem },
+  { name: 'Stock Adjustments', href: '/admin/inventory/adjustments', iconSvg: iconReportSubItem },
+  { name: 'Movement Logs', href: '/admin/inventory/logs', iconSvg: iconReportSubItem }
+]);
+
 const toggleReportsSubmenu = () => {
   reportsSubmenuOpen.value = !reportsSubmenuOpen.value;
+};
+
+const toggleInventorySubmenu = () => {
+  inventorySubmenuOpen.value = !inventorySubmenuOpen.value;
 };
 
 const isActive = (path) => {
