@@ -227,11 +227,14 @@ router.get(
 
       const itemsQuery = `
         SELECT
-          oi.quantity, oi.price_at_purchase,
-          p.name as product_name
-          /* Add other item details if needed by invoice, e.g., SKU */
+          oi.quantity,
+          oi.price_at_purchase,
+          p.name as product_name,
+          p.sku as product_sku,     -- Added base product SKU
+          pv.sku as variant_sku     -- Added variant SKU
         FROM order_items oi
         JOIN products p ON oi.product_id = p.id
+        LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id -- Added LEFT JOIN
         WHERE oi.order_id = $1
         ORDER BY oi.id ASC;
       `;

@@ -131,7 +131,7 @@ This section outlines the primary driver for future backend development, based o
 - [~] Date/Time of Issue
     - [X] Phase 1: Schema field added to `orders`; API logic to store on status change.
 - [~] Itemized Line Items
-    - [ ] Product Name, SKU, Quantity
+    - [X] Verified and ensured Product Name, SKU (base/variant), and Quantity are available and correctly represented in data sources for invoice generation (PDF route and export API).
     - [~] Unit Price (Excl. Tax)
         - [X] Assumed to be current `order_items.price_at_purchase`.
     - [~] Discount, Tax Rate, Tax Amount
