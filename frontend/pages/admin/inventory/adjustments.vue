@@ -190,7 +190,7 @@ const handleWriteOffSubmit = async () => {
   };
 
   try {
-    await $axios.post('/api/admin/stock-adjustments/write-off', payload);
+    await $axios.post('/admin/stock-adjustments/write-off', payload);
     toast.success('Stock adjustment recorded successfully.');
     resetWriteOffForm();
   } catch (error) {
@@ -217,7 +217,7 @@ const handlePhysicalCountSubmit = async () => {
   };
 
   try {
-    await $axios.post('/api/admin/stock-adjustments/physical-count', payload);
+    await $axios.post('/admin/stock-adjustments/physical-count', payload);
     toast.success('Physical count recorded and stock updated successfully.');
     resetPhysicalCountForm();
   } catch (error) {

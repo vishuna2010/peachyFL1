@@ -147,7 +147,7 @@ const fetchTaxClass = async () => {
   isLoading.value = true;
   fetchError.value = null;
   try {
-    const response = await $axios.get(`/api/admin/tax-classes/${classId.value}`);
+    const response = await $axios.get(`/admin/tax-classes/${classId.value}`);
     taxClass.value = response.data;
     className.value = response.data.name;
     classDescription.value = response.data.description || '';
@@ -163,7 +163,7 @@ const fetchTaxClass = async () => {
 const fetchLinkedRates = async () => {
   isRatesLoading.value = true;
   try {
-    const response = await $axios.get(`/api/admin/tax-classes/${classId.value}/rates`);
+    const response = await $axios.get(`/admin/tax-classes/${classId.value}/rates`);
     linkedRates.value = response.data;
   } catch (error) {
     console.error('Error fetching linked rates:', error);
@@ -176,7 +176,7 @@ const fetchLinkedRates = async () => {
 const fetchAllRates = async () => {
   // isRatesLoading can also cover this as they load in parallel often
   try {
-    const response = await $axios.get('/api/admin/tax-rates?limit=1000'); // Fetch all, or implement pagination if list is huge
+    const response = await $axios.get('/admin/tax-rates?limit=1000'); // Fetch all, or implement pagination if list is huge
     allRates.value = response.data.data;
   } catch (error) {
     console.error('Error fetching all rates:', error);
@@ -206,7 +206,7 @@ const handleUpdateSubmit = async () => {
     description: classDescription.value.trim() || null,
   };
   try {
-    const response = await $axios.put(`/api/admin/tax-classes/${classId.value}`, payload);
+    const response = await $axios.put(`/admin/tax-classes/${classId.value}`, payload);
     taxClass.value = response.data; // Update local state with response
     className.value = response.data.name;
     classDescription.value = response.data.description || '';
@@ -225,7 +225,7 @@ const handleLinkRate = async () => {
     return;
   }
   try {
-    await $axios.post(`/api/admin/tax-classes/${classId.value}/rates`, { tax_rate_id: selectedRateToLink.value });
+    await $axios.post(`/admin/tax-classes/${classId.value}/rates`, { tax_rate_id: selectedRateToLink.value });
     toast.success('Tax rate linked successfully.');
     await fetchLinkedRates(); // Refresh linked rates
     selectedRateToLink.value = null; // Reset dropdown
@@ -240,7 +240,7 @@ const handleUnlinkRate = async (rateId, rateName) => {
     return;
   }
   try {
-    await $axios.delete(`/api/admin/tax-classes/${classId.value}/rates/${rateId}`);
+    await $axios.delete(`/admin/tax-classes/${classId.value}/rates/${rateId}`);
     toast.success(`Tax rate "${rateName}" unlinked successfully.`);
     await fetchLinkedRates(); // Refresh linked rates
   } catch (error) {

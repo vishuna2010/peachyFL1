@@ -180,7 +180,7 @@ const fetchTaxRates = async () => {
   }
 
   try {
-    const response = await $axios.get('/api/admin/tax-rates', { params });
+    const response = await $axios.get('/admin/tax-rates', { params });
     taxRates.value = response.data.data;
     totalPages.value = response.data.pagination.totalPages || 1;
     totalRates.value = response.data.pagination.total;
@@ -212,7 +212,7 @@ const deleteTaxRate = async (rateId, rateName) => {
     return;
   }
   try {
-    await $axios.delete(`/api/admin/tax-rates/${rateId}`);
+    await $axios.delete(`/admin/tax-rates/${rateId}`);
     toast.success(`Tax rate "${rateName}" deleted successfully.`);
     if (taxRates.value.length === 1 && currentPage.value > 1) {
       currentPage.value--;

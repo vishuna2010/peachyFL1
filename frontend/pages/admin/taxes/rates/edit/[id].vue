@@ -152,7 +152,7 @@ const fetchTaxRate = async () => {
   isLoading.value = true;
   fetchError.value = null;
   try {
-    const response = await $axios.get(`/api/admin/tax-rates/${rateId.value}`);
+    const response = await $axios.get(`/admin/tax-rates/${rateId.value}`);
     const rate = response.data;
     formData.value = {
       ...rate,
@@ -220,7 +220,7 @@ const handleUpdateSubmit = async () => {
   };
 
   try {
-    await $axios.put(`/api/admin/tax-rates/${rateId.value}`, payload);
+    await $axios.put(`/admin/tax-rates/${rateId.value}`, payload);
     toast.success('Tax rate updated successfully!');
     router.push('/admin/taxes/rates');
   } catch (error) {

@@ -220,10 +220,10 @@ async function fetchDashboardStats() {
       ordersRes,
       productsRes
     ] = await Promise.all([
-      $axios.get('/api/admin/stats/total-revenue'),
-      $axios.get('/api/admin/stats/users-count'),
-      $axios.get('/api/admin/stats/orders-count'),
-      $axios.get('/api/admin/stats/products-count')
+      $axios.get('/admin/stats/total-revenue'),
+      $axios.get('/admin/stats/users-count'),
+      $axios.get('/admin/stats/orders-count'),
+      $axios.get('/admin/stats/products-count')
     ]);
 
     // Update Total Revenue
@@ -299,7 +299,7 @@ async function fetchRecentOrders() {
   isLoadingRecentOrders.value = true;
   recentOrdersError.value = null;
   try {
-    const response = await $axios.get('/api/admin/orders', {
+    const response = await $axios.get('/admin/orders', {
       params: { page: 1, limit: 5 } // Default sort by created_at DESC is usually applied by backend
     });
     recentOrders.value = response.data.data;
@@ -357,7 +357,7 @@ async function fetchRecentActivity() {
   isLoadingRecentActivity.value = true;
   recentActivityError.value = null;
   try {
-    const response = await $axios.get('/api/admin/stock-movement-logs', {
+    const response = await $axios.get('/admin/stock-movement-logs', {
       params: { page: 1, limit: 5, sort_by: 'timestamp', sort_order: 'DESC' }
     });
     recentActivity.value = response.data.data;

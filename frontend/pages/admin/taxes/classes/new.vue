@@ -71,7 +71,7 @@ const handleSubmit = async () => {
   };
 
   try {
-    await $axios.post('/api/admin/tax-classes', payload);
+    await $axios.post('/admin/tax-classes', payload);
     toast.success('Tax class created successfully!');
     router.push('/admin/taxes/classes');
   } catch (error) {

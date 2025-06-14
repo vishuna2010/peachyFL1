@@ -161,7 +161,7 @@ const handleSubmit = async () => {
   };
 
   try {
-    await $axios.post('/api/admin/tax-rates', payload);
+    await $axios.post('/admin/tax-rates', payload);
     toast.success('Tax rate created successfully!');
     router.push('/admin/taxes/rates');
   } catch (error) {

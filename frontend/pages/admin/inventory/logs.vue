@@ -203,7 +203,7 @@ const fetchLogs = async () => {
 
 
   try {
-    const response = await $axios.get('/api/admin/stock-movement-logs', { params });
+    const response = await $axios.get('/admin/stock-movement-logs', { params });
     logs.value = response.data.data;
     totalPages.value = response.data.pagination.totalPages;
     totalLogs.value = response.data.pagination.total;

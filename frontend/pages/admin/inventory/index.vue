@@ -213,7 +213,7 @@ const fetchStockLevels = async () => {
 
 
   try {
-    const response = await $axios.get('/api/admin/products/stock-levels', { params });
+    const response = await $axios.get('/admin/products/stock-levels', { params });
     stockItems.value = response.data.data;
     totalPages.value = response.data.pagination.totalPages || 1;
     totalItems.value = response.data.pagination.total;

@@ -274,7 +274,7 @@ const fetchBatches = async () => {
   }
 
   try {
-    const response = await $axios.get('/api/admin/inventory-batches', { params });
+    const response = await $axios.get('/admin/inventory-batches', { params });
     batches.value = response.data.data;
     totalPages.value = response.data.pagination.totalPages || 1;
     totalBatches.value = response.data.pagination.total;
@@ -377,7 +377,7 @@ const handleUpdateBatch = async () => {
   };
 
   try {
-    await $axios.put(`/api/admin/inventory-batches/${editingBatch.value.id}`, payload);
+    await $axios.put(`/admin/inventory-batches/${editingBatch.value.id}`, payload);
     toast.success(`Batch ID ${editingBatch.value.id} updated successfully.`);
     await fetchBatches();
     closeEditModal();

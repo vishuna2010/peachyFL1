@@ -106,7 +106,7 @@ const fetchTaxClasses = async () => {
   isLoading.value = true;
   fetchError.value = null;
   try {
-    const response = await $axios.get('/api/admin/tax-classes', {
+    const response = await $axios.get('/admin/tax-classes', {
       params: {
         page: currentPage.value,
         limit: limit.value,
@@ -133,7 +133,7 @@ const deleteTaxClass = async (classId, className) => {
     return;
   }
   try {
-    await $axios.delete(`/api/admin/tax-classes/${classId}`);
+    await $axios.delete(`/admin/tax-classes/${classId}`);
     toast.success(`Tax class "${className}" deleted successfully.`);
     // Refresh the list. If on last page and it becomes empty, go to prev page.
     if (taxClasses.value.length === 1 && currentPage.value > 1) {
