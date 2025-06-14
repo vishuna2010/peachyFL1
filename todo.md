@@ -109,14 +109,20 @@ This section outlines the primary driver for future backend development, based o
 - [~] Email Templating:
   - [X] Phase 1: Implement EJS templating for Order Confirmation email (HTML). Created template structure (`order_confirmation.ejs`), refactored `emailService.js` to use it, and updated `orders.js` to call it correctly.
 - **Search API Refinements:**
-  - Enhance product search (`GET /api/products`) for better partial match performance (e.g., PostgreSQL full-text search, `pg_trgm`).
+  - [~] Enhance product search (`GET /api/products`) for better partial match performance (e.g., PostgreSQL full-text search, `pg_trgm`).
+    - [X] Phase 1: Implemented case-insensitive partial matching (ILIKE) for product name, description, and SKU (base product and variant SKUs).
 - **Input Validation Review:**
-  - Systematically review and enhance input validation for all API endpoints using a library like `joi` or `express-validator` (already started using `express-validator`).
+  - [~] Systematically review and enhance input validation for all API endpoints using a library like `joi` or `express-validator` (already started using `express-validator`).
+  - [X] Enhanced input validation for Discount Management routes (`/api/admin/discounts`) using express-validator.
 
 ### E. Development Utilities: Data Seeding (Existing)
 - [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
 - [X] Major `seed.js` overhaul: Implemented full schema creation (`CREATE TABLE IF NOT EXISTS` for all tables including all new columns/features) and added comprehensive sample data for new entities (product images, stock logs, cost history) and new fields in existing entities.
 - [X] Updated `seed.js` `createSchema` to include PO delivery tracking fields and the new `inventory_batches` table; added sample data for `inventory_batches`.
+- [X] CRITICAL: Review and fix `seed.js` `createSchema` function to ensure it correctly handles adding new columns to existing tables (e.g., using `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...`) before attempting to create indexes or use these columns. Issues were noted with `order_items.tax_class_id_at_purchase` and an attempt to add `products.specifications`.
+  - [X] Phase 1: Refactored `createSchema` by ensuring all columns for all tables are explicitly checked/added with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` after initial `CREATE TABLE IF NOT EXISTS ...` statements. This makes schema creation more robust against pre-existing tables with older definitions.
+  - [X] Phase 1a: Ensured unique index exists on `product_variants.sku` to resolve `ON CONFLICT` issues during seeding.
+  - [X] Phase 1b: Ensured unique constraint/index exists on `product_images(product_id, image_url)` to resolve `ON CONFLICT` issues during seeding.
 
 ## IV. Tax Engine & Invoicing Module (New Specification)
 
@@ -128,7 +134,7 @@ This section outlines the primary driver for future backend development, based o
 - [~] Date/Time of Issue
     - [X] Phase 1: Schema field added to `orders`; API logic to store on status change.
 - [~] Itemized Line Items
-    - [ ] Product Name, SKU, Quantity
+    - [X] Verified and ensured Product Name, SKU (base/variant), and Quantity are available and correctly represented in data sources for invoice generation (PDF route and export API).
     - [~] Unit Price (Excl. Tax)
         - [X] Assumed to be current `order_items.price_at_purchase`.
     - [~] Discount, Tax Rate, Tax Amount
@@ -173,11 +179,14 @@ This section outlines the primary driver for future backend development, based o
     - [~] Auto-calculate tax on invoice/checkout
         - [X] Phase 1: Basic tax calculation service (`calculateTaxForCartItems`) created for cart items (handles user exemption, simplified jurisdiction, single rate per item from product's tax class).
         - [X] Phase 2: Integrated tax calculation service into order creation process (`POST /api/orders`); tax amounts stored on orders and order items.
-    - [ ] Support inclusive and exclusive pricing
+    - [~] Support inclusive and exclusive pricing
+        - [X] Phase 1: Implemented logic in taxService and orders route to handle a global setting (simulated via const/env var) for inclusive/exclusive prices. Tax calculations are based on derived exclusive price, and `order_items.price_at_purchase` stores this exclusive price. Subtotals for discounts also use exclusive prices.
 5.  **Tax Reporting**
     - [ ] Monthly/quarterly returns
-    - [ ] Summary by region
-    - [ ] Export invoice-level data
+    - [~] Summary by region
+        - [X] Phase 1: Created admin API endpoint (`/api/admin/reports/tax-summary-by-region`) to provide total tax collected and order count, grouped by billing country and region/state. Supports optional date filtering.
+    - [~] Export invoice-level data
+        - [X] Phase 1: Created admin API endpoint (`/api/admin/reports/invoice-export`) providing detailed order and line item data (including product, customer, addresses, pricing, and tax details) suitable for export. Supports date filtering.
 
 ### Optional: QR Invoice Label
 - [ ] Link to online invoice or validation portal

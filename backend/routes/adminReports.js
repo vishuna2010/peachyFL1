@@ -42,6 +42,168 @@ router.get('/low-stock-products', async (req, res) => {
   }
 });
 
+// GET /api/admin/reports/invoice-export - Export invoice-level data
+router.get('/invoice-export', async (req, res) => {
+  // Logic for date validation, query construction, and data fetching will be added in the next step.
+  // For now, include basic structure and placeholder for the logic.
+  const { start_date, end_date } = req.query;
+  const queryParams = [];
+  let dateConditions = "";
+  let paramIndex = 1;
+
+  // Validate and build date conditions (copied from tax-summary-by-region for now)
+  if (start_date) {
+    const startDateObj = new Date(start_date);
+    if (isNaN(startDateObj.getTime())) {
+      return res.status(400).json({ message: 'Invalid start_date format. Please use YYYY-MM-DD.' });
+    }
+    queryParams.push(startDateObj);
+    dateConditions += ` AND o.created_at >= $${paramIndex++}`;
+  }
+
+  if (end_date) {
+    const endDateObj = new Date(end_date);
+    if (isNaN(endDateObj.getTime())) {
+      return res.status(400).json({ message: 'Invalid end_date format. Please use YYYY-MM-DD.' });
+    }
+    endDateObj.setHours(23, 59, 59, 999); // Include whole end day
+    queryParams.push(endDateObj);
+    dateConditions += ` AND o.created_at <= $${paramIndex++}`;
+  }
+
+  if (start_date && end_date && new Date(start_date) > new Date(end_date)) {
+     return res.status(400).json({ message: 'start_date cannot be after end_date.' });
+  }
+
+  try {
+    // Define relevant order statuses to include in the export
+    const RELEVANT_ORDER_STATUSES = ['processing', 'shipped', 'delivered', 'completed'];
+    // Add RELEVANT_ORDER_STATUSES to queryParams, ensuring paramIndex is updated
+    queryParams.push(RELEVANT_ORDER_STATUSES);
+    const statusCondition = `o.status = ANY($${paramIndex++}::varchar[])`;
+
+    const query = `
+      SELECT
+        o.id as order_id,
+        o.created_at as order_date,
+        o.status as order_status,
+        o.payment_status,
+        u.email as customer_email,
+        u.name as customer_name,
+        o.billing_country,
+        o.billing_state_province_region,
+        o.billing_city,
+        o.billing_postal_code,
+        o.shipping_country,
+        o.shipping_state_province_region,
+        o.shipping_city,
+        o.shipping_postal_code,
+        oi.id as line_item_id,
+        p.sku as product_sku,
+        p.name as product_name,
+        pv.sku as variant_sku,
+        oi.quantity,
+        oi.price_at_purchase as exclusive_unit_price,
+        (oi.quantity * oi.price_at_purchase) as line_item_exclusive_subtotal,
+        oi.line_item_tax_amount,
+        ((oi.quantity * oi.price_at_purchase) + oi.line_item_tax_amount) as line_item_total_inclusive_of_tax,
+        o.original_total_amount as order_exclusive_subtotal_before_discount,
+        o.discount_amount_applied as order_discount_amount,
+        o.total_tax_amount as order_total_tax,
+        o.total_amount as order_grand_total,
+        oi.tax_class_id_at_purchase,
+        tc.name as tax_class_name_at_purchase,
+        oi.applied_tax_rate_percentage as line_item_effective_tax_rate,
+        o.tax_summary_details as order_tax_summary_json
+      FROM orders o
+      JOIN order_items oi ON o.id = oi.order_id
+      JOIN products p ON oi.product_id = p.id
+      LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id
+      LEFT JOIN users u ON o.user_id = u.id
+      LEFT JOIN tax_classes tc ON oi.tax_class_id_at_purchase = tc.id
+      WHERE ${statusCondition} ${dateConditions}  -- dateConditions will be empty if no dates are provided
+      ORDER BY o.id ASC, oi.id ASC;
+    `;
+
+    const result = await db.query(query, queryParams);
+
+    // The data formatting will be handled in the next step, for now, just return raw rows.
+    // Or, if simple enough, include basic formatting here.
+    // For this step, let's return raw rows and plan detailed formatting for the next step if complex.
+    res.status(200).json(result.rows);
+
+  } catch (error) {
+    console.error('Error generating invoice export:', error);
+    res.status(500).json({ message: 'Failed to generate invoice export.' });
+  }
+});
+
+// GET /api/admin/reports/tax-summary-by-region - Fetch total tax collected grouped by region
+router.get('/tax-summary-by-region', async (req, res) => {
+  const { start_date, end_date } = req.query;
+  const queryParams = [];
+  let dateConditions = "";
+  let paramIndex = 1;
+
+  // Validate and build date conditions
+  if (start_date) {
+    const startDateObj = new Date(start_date);
+    if (isNaN(startDateObj.getTime())) {
+      return res.status(400).json({ message: 'Invalid start_date format. Please use YYYY-MM-DD.' });
+    }
+    queryParams.push(startDateObj);
+    dateConditions += ` AND o.created_at >= $${paramIndex++}`;
+  }
+
+  if (end_date) {
+    const endDateObj = new Date(end_date);
+    if (isNaN(endDateObj.getTime())) {
+      return res.status(400).json({ message: 'Invalid end_date format. Please use YYYY-MM-DD.' });
+    }
+    endDateObj.setHours(23, 59, 59, 999); // Include whole end day
+    queryParams.push(endDateObj);
+    dateConditions += ` AND o.created_at <= $${paramIndex++}`;
+  }
+
+  if (start_date && end_date && new Date(start_date) > new Date(end_date)) {
+     return res.status(400).json({ message: 'start_date cannot be after end_date.' });
+  }
+
+  // Define valid statuses for orders to be included in tax summary
+  const VALID_TAXED_ORDER_STATUSES = ['processing', 'shipped', 'delivered', 'completed'];
+  queryParams.push(VALID_TAXED_ORDER_STATUSES);
+  const statusCondition = `o.status = ANY($${paramIndex++}::varchar[])`;
+
+  try {
+    const query = `
+      SELECT
+        o.billing_country,
+        o.billing_state_province_region,
+        COALESCE(SUM(o.total_tax_amount), 0) as total_tax_collected,
+        COUNT(DISTINCT o.id) as total_orders_contributing_tax
+      FROM orders o
+      WHERE o.total_tax_amount > 0 AND ${statusCondition} ${dateConditions}
+      GROUP BY o.billing_country, o.billing_state_province_region
+      ORDER BY o.billing_country, o.billing_state_province_region;
+    `;
+
+    const result = await db.query(query, queryParams);
+
+    const reportData = result.rows.map(row => ({
+        country: row.billing_country,
+        region: row.billing_state_province_region || 'N/A', // Handle null regions
+        total_tax_collected: parseFloat(row.total_tax_collected).toFixed(2),
+        total_orders_contributing_tax: parseInt(row.total_orders_contributing_tax)
+    }));
+
+    res.status(200).json(reportData);
+
+  } catch (error) {
+    console.error('Error generating tax summary by region report:', error);
+    res.status(500).json({ message: 'Failed to generate tax summary by region report.' });
+  }
+});
+
 
 // --- Best Sellers Report ---
 // VALID_SALE_STATUSES is already defined above for the Sales Report
