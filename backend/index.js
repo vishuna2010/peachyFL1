@@ -17,7 +17,7 @@ const adminReportRoutes = require('./routes/adminReports'); // Import admin repo
 const adminProductSpecificOptionsRoutes = require('./routes/adminProductSpecificOptions'); // Import product-specific option config routes
 const adminOptionManagementRoutes = require('./routes/adminOptionManagement'); // Import admin option management routes
 const adminProductVariantsRoutes = require('./routes/adminProductVariants.js'); // Import admin product variants routes
-const adminVariantDetailRoutes = require('./routes/adminVariantDetails.js');   // For variant-specific GET/PUT/DELETE by variant ID - Note: adminProductVariantsRoutes now includes /variants/:variantId
+// const adminVariantDetailRoutes = require('./routes/adminVariantDetails.js');   // For variant-specific GET/PUT/DELETE by variant ID - Note: adminProductVariantsRoutes now includes /variants/:variantId
 const adminReviewRoutes = require('./routes/adminReviews'); // Import admin review routes
 const adminCategoryRoutes = require('./routes/adminCategories'); // Import admin category routes
 const adminStatsRoutes = require('./routes/adminStats'); // Import admin statistics routes
@@ -69,7 +69,7 @@ app.use('/api/admin', adminProductSpecificOptionsRoutes); // Mount product-speci
 app.use('/api/admin', adminProductVariantsRoutes); // Mount product variants routes (e.g., /products/:productId/variants and /variants/:variantId)
 app.use('/api/admin/reviews', adminReviewRoutes); // Mount admin review management routes
 // Consider if adminVariantDetailRoutes is still needed or if its functionality is covered by adminProductVariantsRoutes. For now, keeping it if it serves other specific details.
-app.use('/api/admin', adminVariantDetailRoutes); // If it has distinct routes like /variant-details/:id for other purposes.
+// app.use('/api/admin', adminVariantDetailRoutes); // If it has distinct routes like /variant-details/:id for other purposes.
 
 // --- Public and User-Specific Review Routes ---
 // (e.g. POST /api/products/:productId/reviews, GET /api/products/:productId/reviews)
