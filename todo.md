@@ -22,7 +22,8 @@ This section outlines the primary driver for future backend development, based o
       - [X] Phase 1: Backend CRUD for multiple images, images included in product detail API.
       - [X] Phase 2: Primary image selection and sync with main product image_url.
     - [X] Status (Active / Inactive / Archived)
-    - Enhance "Specifications" tab with actual data if/when available from backend. (Moved from I.B)
+    - [~] Enhance "Specifications" tab with actual data if/when available from backend. (Moved from I.B)
+      - [X] Phase 1 (Backend): Added \`specifications\` JSONB column to \`products\`. Updated admin CRUD and public product detail API to support it. Seeded sample specs.
 2.  **Pricing Engine**
     - [X] Buying Price
         - [~] Historical tracking per supplier
@@ -182,7 +183,8 @@ This section outlines the primary driver for future backend development, based o
     - [~] Support inclusive and exclusive pricing
         - [X] Phase 1: Implemented logic in taxService and orders route to handle a global setting (simulated via const/env var) for inclusive/exclusive prices. Tax calculations are based on derived exclusive price, and `order_items.price_at_purchase` stores this exclusive price. Subtotals for discounts also use exclusive prices.
 5.  **Tax Reporting**
-    - [ ] Monthly/quarterly returns
+    - [~] Monthly/quarterly returns
+      - [X] Phase 1: Created admin API endpoint (`/api/admin/reports/tax-returns`) to provide total tax collected for a specified year and period (month/quarter), based on order creation date.
     - [~] Summary by region
         - [X] Phase 1: Created admin API endpoint (`/api/admin/reports/tax-summary-by-region`) to provide total tax collected and order count, grouped by billing country and region/state. Supports optional date filtering.
     - [~] Export invoice-level data

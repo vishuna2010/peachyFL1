@@ -987,6 +987,13 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
       stock_quantity: 150, category_name: 'Electronics', supplier_name: 'Global Electronics Inc.',
       image_url: null, sku: 'HDPHN-WL-BT-001', reorder_threshold: 25,
       brand_manufacturer: 'AudioMax', supplier_reference: 'AM-HDPN-001', product_status: 'active',
+      specifications: {
+            "Connectivity": "Bluetooth 5.0, AUX",
+            "Battery Life": "20 hours",
+            "Driver Size": "40mm",
+            "Noise Cancellation": "Active Noise Cancellation",
+            "Color Options": ["Black", "White", "Blue"]
+        },
       tags: ['Audio', 'Wireless', 'Gadget'],
       tax_class_key: 'standard_goods' // Key to look up in seededDataIds.taxClasses
     },
@@ -997,6 +1004,12 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
       stock_quantity: 300, category_name: 'Apparel', supplier_name: 'Fashion Forward Ltd.',
       image_url: null, sku: 'TSHRT-MEN-COT-005', reorder_threshold: 50,
       brand_manufacturer: 'Basic Threads', supplier_reference: 'BT-TS-M-COT', product_status: 'active',
+      specifications: {
+            "Material": "100% Organic Cotton",
+            "Fit": "Regular Fit",
+            "Neckline": "Crew Neck",
+            "Care Instructions": "Machine wash cold, tumble dry low"
+        },
       tags: ['Clothing', 'Men', 'Summer'],
       tax_class_key: 'standard_goods'
     },
@@ -1007,6 +1020,7 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
       stock_quantity: 200, category_name: 'Home Goods', supplier_name: 'Global Electronics Inc.',
       image_url: null, sku: 'SMBLB-LED-WIFI-012', reorder_threshold: 30,
       brand_manufacturer: 'ConnectHome', supplier_reference: 'CH-BLB-001', product_status: 'active',
+      specifications: null,
       tags: ['Smart Home', 'Lighting'],
       tax_class_key: 'reduced_rate_goods' // Example for reduced rate
     },
@@ -1017,6 +1031,7 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
       stock_quantity: 250, category_name: 'Books', supplier_name: null,
       image_url: null, sku: 'BOOK-THRILLER-001',
       brand_manufacturer: 'PageTurners Publishing', supplier_reference: null, product_status: 'active',
+      specifications: null,
       tags: ['Thriller', 'Fiction', 'Suspense'],
       tax_class_key: 'tax_exempt_goods' // Example for exempt
     }
@@ -1047,14 +1062,15 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
 
       const productInsertResult = await client.query(
         `INSERT INTO products (name, description, price, stock_quantity, category_id, supplier_id, image_url, sku, reorder_threshold,
-                                brand_manufacturer, supplier_reference, product_status, cost_price, wholesale_price, tax_class_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                                brand_manufacturer, supplier_reference, product_status, cost_price, wholesale_price, tax_class_id, specifications)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (sku) DO UPDATE SET
            name = EXCLUDED.name, description = EXCLUDED.description, price = EXCLUDED.price, stock_quantity = EXCLUDED.stock_quantity,
            category_id = EXCLUDED.category_id, supplier_id = EXCLUDED.supplier_id, image_url = EXCLUDED.image_url,
            reorder_threshold = EXCLUDED.reorder_threshold, brand_manufacturer = EXCLUDED.brand_manufacturer,
            supplier_reference = EXCLUDED.supplier_reference, product_status = EXCLUDED.product_status,
            cost_price = EXCLUDED.cost_price, wholesale_price = EXCLUDED.wholesale_price, tax_class_id = EXCLUDED.tax_class_id,
+           specifications = EXCLUDED.specifications,
            updated_at = CURRENT_TIMESTAMP
          RETURNING id;`,
         [
@@ -1062,7 +1078,8 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
           categoryId, supplierId, product.image_url, product.sku, product.reorder_threshold || 0,
           product.brand_manufacturer, product.supplier_reference, product.product_status || 'active',
           product.cost_price, product.wholesale_price,
-          taxClassId
+          taxClassId,
+          product.specifications
         ]
       );
 
