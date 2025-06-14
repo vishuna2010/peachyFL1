@@ -39,6 +39,17 @@ async function createSchema(client) {
     `);
     console.log('Table "users" checked/created.');
 
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50);`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_tax_exempt BOOLEAN;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tax_exemption_certificate_id VARCHAR(100) NULL;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tax_exemption_notes TEXT NULL;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "users" table ensured/checked (basic existence).');
+
     // Suppliers Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS suppliers (
@@ -60,6 +71,21 @@ async function createSchema(client) {
     `);
     console.log('Table "suppliers" checked/created.');
 
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS name VARCHAR(255);`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS contact_person VARCHAR(255);`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS email VARCHAR(255);`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS address_line1 TEXT;`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS address_line2 TEXT;`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS city VARCHAR(100);`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20);`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS country VARCHAR(100);`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS notes TEXT;`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS currency_code VARCHAR(3);`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "suppliers" table ensured/checked (basic existence).');
+
     // Categories Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS categories (
@@ -73,6 +99,13 @@ async function createSchema(client) {
     `);
     console.log('Table "categories" checked/created.');
 
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS name VARCHAR(255);`);
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS description TEXT;`);
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS parent_category_id INTEGER;`);
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "categories" table ensured/checked (basic existence).');
+
     // Tax Classes Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS tax_classes (
@@ -84,6 +117,12 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "tax_classes" checked/created.');
+
+    await client.query(`ALTER TABLE tax_classes ADD COLUMN IF NOT EXISTS name VARCHAR(255);`);
+    await client.query(`ALTER TABLE tax_classes ADD COLUMN IF NOT EXISTS description TEXT NULL;`);
+    await client.query(`ALTER TABLE tax_classes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE tax_classes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "tax_classes" table ensured/checked (basic existence).');
 
     // Tax Rates Table
     await client.query(`
@@ -104,6 +143,18 @@ async function createSchema(client) {
     `);
     console.log('Table "tax_rates" checked/created.');
 
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS name VARCHAR(255);`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS rate_percentage NUMERIC(6, 4);`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS jurisdiction TEXT;`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS tax_type VARCHAR(50);`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS tax_code VARCHAR(50) NULL;`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS is_active BOOLEAN;`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS valid_from DATE NULL;`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS valid_until DATE NULL;`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "tax_rates" table ensured/checked (basic existence).');
+
     await client.query(`CREATE INDEX IF NOT EXISTS idx_tax_rates_jurisdiction ON tax_rates(jurisdiction);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_tax_rates_tax_type ON tax_rates(tax_type);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_tax_rates_is_active ON tax_rates(is_active);`);
@@ -118,6 +169,10 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "tax_class_rates" checked/created.');
+
+    await client.query(`ALTER TABLE tax_class_rates ADD COLUMN IF NOT EXISTS tax_class_id INTEGER;`);
+    await client.query(`ALTER TABLE tax_class_rates ADD COLUMN IF NOT EXISTS tax_rate_id INTEGER;`);
+    console.log('All columns for "tax_class_rates" table ensured/checked (basic existence).');
 
     // Products Table
     await client.query(`
@@ -141,11 +196,37 @@ async function createSchema(client) {
         brand_manufacturer TEXT,
         supplier_reference TEXT,
         product_status VARCHAR(20) DEFAULT 'active' NOT NULL CHECK (product_status IN ('active', 'inactive', 'archived')),
+        specifications JSONB NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('Table "products" checked/created.');
+
+    // Ensure all columns exist for products, especially if table pre-existed with an older schema
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS name VARCHAR(255);`); // NOT NULL should be handled by CREATE or separate ALTER
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS description TEXT;`);
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS price NUMERIC(10, 2);`); // NOT NULL by CREATE
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS wholesale_price NUMERIC(10, 2) NULL;`);
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_price NUMERIC(10, 2) NULL;`);
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id INTEGER;`); // FK by CREATE or separate ALTER
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS supplier_id INTEGER;`); // FK by CREATE or separate ALTER
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS tax_class_id INTEGER;`); // FK by CREATE or separate ALTER
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS sku VARCHAR(100);`); // UNIQUE by CREATE or separate ALTER
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_quantity INTEGER;`); // DEFAULT/NOT NULL by CREATE
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS reorder_threshold INTEGER;`); // DEFAULT by CREATE
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;`);
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS has_variants BOOLEAN;`); // DEFAULT/NOT NULL by CREATE
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS average_rating NUMERIC(3, 2);`); // DEFAULT by CREATE
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS review_count INTEGER;`); // DEFAULT by CREATE
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS brand_manufacturer TEXT;`);
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS supplier_reference TEXT;`);
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS product_status VARCHAR(20);`); // DEFAULT/NOT NULL/CHECK by CREATE
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS specifications JSONB NULL;`); // The new column
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`); // DEFAULT by CREATE
+    await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`); // DEFAULT by CREATE
+    console.log('All columns for "products" table ensured/checked (basic existence).');
+
     await client.query(`CREATE INDEX IF NOT EXISTS idx_products_tax_class_id ON products(tax_class_id);`);
     console.log('Index "idx_products_tax_class_id" on "products" checked/created.');
 
@@ -166,6 +247,20 @@ async function createSchema(client) {
     `);
     console.log('Table "product_variants" checked/created.');
 
+    await client.query(`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS product_id INTEGER;`);
+    await client.query(`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS sku VARCHAR(100);`);
+    await client.query(`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS price_modifier NUMERIC(10, 2);`);
+    await client.query(`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS wholesale_price_modifier NUMERIC(10, 2) NULL;`);
+    await client.query(`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS cost_price NUMERIC(10, 2) NULL;`);
+    await client.query(`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS stock_quantity INTEGER;`);
+    await client.query(`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS image_url TEXT;`);
+    await client.query(`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "product_variants" table ensured/checked (basic existence).');
+
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_product_variants_sku_unique ON product_variants(sku);`);
+    console.log('Unique index on "product_variants.sku" ensured/checked.');
+
     // Product Options Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_options (
@@ -174,6 +269,9 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "product_options" checked/created.');
+
+    await client.query(`ALTER TABLE product_options ADD COLUMN IF NOT EXISTS name VARCHAR(255);`);
+    console.log('All columns for "product_options" table ensured/checked (basic existence).');
 
     // Product Option Values Table
     await client.query(`
@@ -186,6 +284,10 @@ async function createSchema(client) {
     `);
     console.log('Table "product_option_values" checked/created.');
 
+    await client.query(`ALTER TABLE product_option_values ADD COLUMN IF NOT EXISTS product_option_id INTEGER;`);
+    await client.query(`ALTER TABLE product_option_values ADD COLUMN IF NOT EXISTS value VARCHAR(255);`);
+    console.log('All columns for "product_option_values" table ensured/checked (basic existence).');
+
     // Product Assigned Options Table (linking options to products)
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_assigned_options (
@@ -196,6 +298,10 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "product_assigned_options" checked/created.');
+
+    await client.query(`ALTER TABLE product_assigned_options ADD COLUMN IF NOT EXISTS product_id INTEGER;`);
+    await client.query(`ALTER TABLE product_assigned_options ADD COLUMN IF NOT EXISTS option_id INTEGER;`);
+    console.log('All columns for "product_assigned_options" table ensured/checked (basic existence).');
 
     // Product Assigned Option Values Table (linking specific values of an assigned option to a product)
     await client.query(`
@@ -208,6 +314,10 @@ async function createSchema(client) {
     `);
     console.log('Table "product_assigned_option_values" checked/created.');
 
+    await client.query(`ALTER TABLE product_assigned_option_values ADD COLUMN IF NOT EXISTS product_assigned_option_id INTEGER;`);
+    await client.query(`ALTER TABLE product_assigned_option_values ADD COLUMN IF NOT EXISTS option_value_id INTEGER;`);
+    console.log('All columns for "product_assigned_option_values" table ensured/checked (basic existence).');
+
     // Product Variant Option Values Table (linking variants to specific option values)
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_variant_option_values (
@@ -218,6 +328,10 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "product_variant_option_values" checked/created.');
+
+    await client.query(`ALTER TABLE product_variant_option_values ADD COLUMN IF NOT EXISTS product_variant_id INTEGER;`);
+    await client.query(`ALTER TABLE product_variant_option_values ADD COLUMN IF NOT EXISTS product_option_value_id INTEGER;`);
+    console.log('All columns for "product_variant_option_values" table ensured/checked (basic existence).');
 
     // Product Images Table
     await client.query(`
@@ -230,10 +344,25 @@ async function createSchema(client) {
         display_order INTEGER DEFAULT 0 NOT NULL,
         is_primary BOOLEAN DEFAULT FALSE NOT NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT unique_product_image_url UNIQUE (product_id, image_url)
       );
     `);
     console.log('Table "product_images" checked/created.');
+
+    await client.query(`ALTER TABLE product_images ADD COLUMN IF NOT EXISTS product_id INTEGER;`);
+    await client.query(`ALTER TABLE product_images ADD COLUMN IF NOT EXISTS image_url TEXT;`);
+    await client.query(`ALTER TABLE product_images ADD COLUMN IF NOT EXISTS s3_key TEXT;`);
+    await client.query(`ALTER TABLE product_images ADD COLUMN IF NOT EXISTS alt_text VARCHAR(255);`);
+    await client.query(`ALTER TABLE product_images ADD COLUMN IF NOT EXISTS display_order INTEGER;`);
+    await client.query(`ALTER TABLE product_images ADD COLUMN IF NOT EXISTS is_primary BOOLEAN;`);
+    await client.query(`ALTER TABLE product_images ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE product_images ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "product_images" table ensured/checked (basic existence).');
+
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_product_images_product_id_image_url_unique ON product_images(product_id, image_url);`);
+    console.log('Unique index on "product_images(product_id, image_url)" ensured/checked.');
+
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_primary_image_per_product
       ON product_images (product_id) WHERE is_primary = TRUE;
@@ -249,6 +378,9 @@ async function createSchema(client) {
     `);
     console.log('Table "tags" checked/created.');
 
+    await client.query(`ALTER TABLE tags ADD COLUMN IF NOT EXISTS name VARCHAR(255);`);
+    console.log('All columns for "tags" table ensured/checked (basic existence).');
+
     // Product Tags Table (Many-to-Many)
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_tags (
@@ -258,6 +390,10 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "product_tags" checked/created.');
+
+    await client.query(`ALTER TABLE product_tags ADD COLUMN IF NOT EXISTS product_id INTEGER;`);
+    await client.query(`ALTER TABLE product_tags ADD COLUMN IF NOT EXISTS tag_id INTEGER;`);
+    console.log('All columns for "product_tags" table ensured/checked (basic existence).');
 
     // Product Reviews Table
     await client.query(`
@@ -275,6 +411,16 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "product_reviews" checked/created.');
+
+    await client.query(`ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS product_id INTEGER;`);
+    await client.query(`ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS user_id INTEGER;`);
+    await client.query(`ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS rating INTEGER;`);
+    await client.query(`ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS title VARCHAR(255);`);
+    await client.query(`ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS comment TEXT;`);
+    await client.query(`ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS status VARCHAR(20);`);
+    await client.query(`ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "product_reviews" table ensured/checked (basic existence).');
 
     // Discounts Table
     await client.query(`
@@ -295,6 +441,20 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "discounts" checked/created.');
+
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS code VARCHAR(255);`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS type VARCHAR(50);`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS value NUMERIC(10, 2);`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS description TEXT;`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN;`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS valid_from TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS valid_until TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS usage_limit INTEGER;`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS times_used INTEGER;`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS min_order_amount NUMERIC(10, 2);`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE discounts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "discounts" table ensured/checked (basic existence).');
 
     // Orders Table
     await client.query(`
@@ -330,6 +490,34 @@ async function createSchema(client) {
     `);
     console.log('Table "orders" checked/created.');
 
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_id INTEGER;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_amount NUMERIC(10, 2);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS original_total_amount NUMERIC(10,2) NULL;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_id INTEGER;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_code_applied VARCHAR(255);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount_applied NUMERIC(10,2);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_tax_amount NUMERIC(10, 2);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_summary_details JSONB NULL;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50) NULL;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_issue_date TIMESTAMPTZ NULL;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address_line1 TEXT;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_address_line2 TEXT;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_city VARCHAR(100);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_state_province_region VARCHAR(100);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_postal_code VARCHAR(20);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_country VARCHAR(100);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_address_line1 TEXT;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_address_line2 TEXT;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_city VARCHAR(100);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_state_province_region VARCHAR(100);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_postal_code VARCHAR(20);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_country VARCHAR(100);`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "orders" table ensured/checked (basic existence).');
+
     // Order Items Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS order_items (
@@ -346,6 +534,20 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "order_items" checked/created.');
+
+    // Ensure all columns exist for order_items, especially if table pre-existed with an older schema
+    await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE;`);
+    await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT;`);
+    await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE RESTRICT;`);
+    await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL;`);
+    await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS price_at_purchase NUMERIC(10, 2) NOT NULL;`);
+    await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS line_item_tax_amount NUMERIC(10, 2) DEFAULT 0.00 NOT NULL;`);
+    await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS applied_tax_rate_percentage NUMERIC(6, 4) NULL;`);
+    await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tax_class_id_at_purchase INTEGER NULL REFERENCES tax_classes(id) ON DELETE SET NULL;`);
+    // Note: The CHECK constraint is part of the table definition and not typically added with ADD COLUMN IF NOT EXISTS.
+    // The id SERIAL PRIMARY KEY is also part of the initial CREATE TABLE.
+    console.log('All columns for "order_items" table ensured/checked (basic existence).');
+
     await client.query(`CREATE INDEX IF NOT EXISTS idx_order_items_tax_class_id_at_purchase ON order_items(tax_class_id_at_purchase);`);
     console.log('Index "idx_order_items_tax_class_id_at_purchase" on "order_items" checked/created.');
 
@@ -368,6 +570,19 @@ async function createSchema(client) {
     `);
     console.log('Table "purchase_orders" checked/created.');
 
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS supplier_id INTEGER;`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS order_date TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS expected_delivery_date TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS notes TEXT;`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS shipping_carrier VARCHAR(100) NULL;`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(100) NULL;`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS delivery_status VARCHAR(50) NULL;`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER;`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "purchase_orders" table ensured/checked (basic existence).');
+
     // Purchase Order Items Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS purchase_order_items (
@@ -387,6 +602,19 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "purchase_order_items" checked/created.');
+
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS purchase_order_id INTEGER;`);
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS product_id INTEGER;`);
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS product_variant_id INTEGER;`);
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS quantity_ordered INTEGER;`);
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS quantity_received INTEGER;`);
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS unit_cost_price NUMERIC(10, 2);`);
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS currency_code VARCHAR(3);`);
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS base_currency_cost_price NUMERIC(12, 2) NULL;`);
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS exchange_rate_at_receipt NUMERIC(12, 6) NULL;`);
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "purchase_order_items" table ensured/checked (basic existence).');
 
     // Inventory Batches Table
     await client.query(`
@@ -411,6 +639,22 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "inventory_batches" checked/created.');
+
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS product_id INTEGER;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS variant_id INTEGER NULL;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS batch_number VARCHAR(100);`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS expiry_date DATE NULL;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS received_date TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS initial_quantity INTEGER;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS current_quantity INTEGER;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS cost_price_at_receipt NUMERIC(12, 2) NULL;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS currency_code_at_receipt VARCHAR(3) NULL;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS base_currency_cost_price_at_receipt NUMERIC(12, 2) NULL;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS exchange_rate_used NUMERIC(12, 6) NULL;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS purchase_order_item_id INTEGER NULL;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "inventory_batches" table ensured/checked (basic existence).');
 
     await client.query(`CREATE INDEX IF NOT EXISTS idx_inventory_batches_product_id ON inventory_batches(product_id);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_inventory_batches_variant_id ON inventory_batches(variant_id);`);
@@ -438,6 +682,19 @@ async function createSchema(client) {
     `);
     console.log('Table "stock_movement_logs" checked/created.');
 
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS timestamp TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS product_id INTEGER;`);
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS variant_id INTEGER;`);
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS user_id INTEGER;`);
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS movement_type VARCHAR(50);`);
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS quantity_changed INTEGER;`);
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS new_quantity_on_hand INTEGER;`);
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS reason TEXT;`);
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS reference_id VARCHAR(255);`);
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE stock_movement_logs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "stock_movement_logs" table ensured/checked (basic existence).');
+
     // Product Cost History Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_cost_history (
@@ -457,6 +714,19 @@ async function createSchema(client) {
       );
     `);
     console.log('Table "product_cost_history" checked/created.');
+
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS product_id INTEGER;`);
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS variant_id INTEGER;`);
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS supplier_id INTEGER;`);
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS currency_code VARCHAR(3);`);
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS cost_price NUMERIC(10, 2);`);
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS quantity_received INTEGER;`);
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS purchase_order_item_id INTEGER;`);
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS effective_date TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS base_currency_cost_price NUMERIC(12, 2) NULL;`);
+    await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS exchange_rate_at_receipt NUMERIC(12, 6) NULL;`);
+    console.log('All columns for "product_cost_history" table ensured/checked (basic existence).');
 
     console.log('Schema creation process completed.');
   } catch (error) {
@@ -1212,7 +1482,7 @@ async function seedTaxConfiguration(client, seededDataIds) {
     const links = [
       { classKey: 'standard_goods', rateKey: 'ca_sales_tax' },
       { classKey: 'standard_goods', rateKey: 'ny_sales_tax' },
-      { classKey: 'tax_exempt_goods', rateKey: 'tx_sales_tax_exempt' },
+      { classKey: 'tax_exempt_goods', rateKey: 'tx_sales_tax__exempt' },
       { classKey: 'standard_goods', rateKey: 'federal_gst_canada' },
       { classKey: 'reduced_rate_goods', rateKey: 'reduced_ca_sales_tax' }
     ];

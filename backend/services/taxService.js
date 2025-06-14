@@ -1,6 +1,9 @@
 const db = require('../db'); // Not strictly needed if dbClient is always used, but good for consistency or potential direct use elsewhere.
 const { NotFoundError, BadRequestError } = require('../utils/AppError'); // Import if needed for errors thrown by this service
 
+const PRICES_ARE_INCLUSIVE = process.env.PRICES_ARE_INCLUSIVE === 'true' || false;
+// For testing, you might temporarily set this to true, e.g., const PRICES_ARE_INCLUSIVE = true;
+
 /**
  * Calculates tax for cart items based on customer, shipping address, and product tax classes.
  * Phase 1: Assumes one applicable tax rate per item based on jurisdiction and tax class.
@@ -60,9 +63,11 @@ async function calculateTaxForCartItems(cartItems, customerId, billingAddressFor
     for (const cartItem of cartItems) {
         // Initialize item with tax fields (copying to avoid modifying original cartItem if it's from a shared reference elsewhere)
         const itemWithTax = {
-            ...cartItem,
+            ...cartItem, // Contains productId, quantity, unit_price (which might be inclusive or exclusive)
+            original_unit_price: parseFloat(cartItem.unit_price), // Store original price
+            calculated_exclusive_unit_price: parseFloat(cartItem.unit_price), // Default to original, adjusted if inclusive
             line_item_tax_amount: 0,
-            applied_tax_rate_percentage: null,
+            applied_tax_rate_percentage: null, // This will store R_total_eff
             tax_class_id_at_purchase: null,
         };
 
@@ -86,14 +91,11 @@ async function calculateTaxForCartItems(cartItems, customerId, billingAddressFor
         itemWithTax.tax_class_id_at_purchase = productTaxClassId;
 
         if (productTaxClassId === null || potentialJurisdictions.length === 0) {
-            // Product is not assigned to any tax class, or no jurisdiction to check
-            line_items_with_tax_details.push(itemWithTax);
+            line_items_with_tax_details.push(itemWithTax); // No tax class or no jurisdiction to check
             continue;
         }
 
-        // Build IN clause for jurisdictions dynamically for SQL query
         const jurisdictionPlaceholders = potentialJurisdictions.map((_, i) => `LOWER($${i + 2})`).join(',');
-
         const allApplicableRatesQuery = `
             SELECT tr.id as tax_rate_id, tr.name, tr.rate_percentage, tr.jurisdiction, tr.tax_type
             FROM tax_rates tr
@@ -105,86 +107,110 @@ async function calculateTaxForCartItems(cartItems, customerId, billingAddressFor
               AND (tr.valid_until IS NULL OR tr.valid_until >= CURRENT_DATE)
             ORDER BY LENGTH(tr.jurisdiction) DESC, tr.id;
         `;
-        // Note: The productId is itemWithTax.productId, unit_price is itemWithTax.unit_price
-
         const queryValues = [productTaxClassId, ...potentialJurisdictions];
         const taxRateResults = await dbClient.query(allApplicableRatesQuery, queryValues);
 
-        let itemLineTaxTotal = 0;
+        let R_total_eff = 0; // Total effective rate for this item
 
-            if (taxRateResults.rows.length > 0) {
-                const PRIMARY_TAX_TYPES = ['GST', 'VAT'];
-                const primaryRates = [];
-                const secondaryRates = [];
+        if (taxRateResults.rows.length > 0) {
+            const PRIMARY_TAX_TYPES = ['GST', 'VAT'];
+            const primaryRates = [];
+            const secondaryRates = [];
+            const processedRateIdsForTempCalc = new Set();
 
-                const processedRateIdsForCategorization = new Set();
-                for (const rateRecord of taxRateResults.rows) {
-                    if (processedRateIdsForCategorization.has(rateRecord.tax_rate_id)) {
-                        continue;
-                    }
-                    const taxTypeUpper = rateRecord.tax_type ? rateRecord.tax_type.toUpperCase() : "";
-                    if (PRIMARY_TAX_TYPES.includes(taxTypeUpper)) {
-                        primaryRates.push(rateRecord);
-                    } else {
-                        secondaryRates.push(rateRecord);
-                    }
-                    processedRateIdsForCategorization.add(rateRecord.tax_rate_id);
-                }
-
-                const item_extended_base_price = parseFloat(itemWithTax.unit_price) * itemWithTax.quantity;
-                let totalPrimaryTaxForThisItem = 0;
-
-                // Process Primary Rates
-                for (const rateRecord of primaryRates) {
-                    const rate = parseFloat(rateRecord.rate_percentage);
-                    const tax_for_this_rate = item_extended_base_price * rate;
-                    totalPrimaryTaxForThisItem += tax_for_this_rate;
-
-                    const summaryKey = rateRecord.tax_rate_id.toString();
-                    if (!applied_taxes_summary[summaryKey]) {
-                        applied_taxes_summary[summaryKey] = {
-                            tax_rate_id: rateRecord.tax_rate_id, name: rateRecord.name,
-                            rate_percentage: rate,
-                            total_tax_for_this_rate: 0,
-                            tax_type: rateRecord.tax_type // Store tax_type in summary
-                        };
-                    }
-                    applied_taxes_summary[summaryKey].total_tax_for_this_rate += tax_for_this_rate;
-                }
-
-                itemLineTaxTotal += totalPrimaryTaxForThisItem;
-
-                // Process Secondary Rates
-                const base_for_secondary_taxes = item_extended_base_price + totalPrimaryTaxForThisItem;
-                let totalSecondaryTaxForThisItem = 0;
-
-                for (const rateRecord of secondaryRates) {
-                    const rate = parseFloat(rateRecord.rate_percentage);
-                    const tax_for_this_rate = base_for_secondary_taxes * rate;
-                    totalSecondaryTaxForThisItem += tax_for_this_rate;
-
-                    const summaryKey = rateRecord.tax_rate_id.toString();
-                    if (!applied_taxes_summary[summaryKey]) {
-                        applied_taxes_summary[summaryKey] = {
-                            tax_rate_id: rateRecord.tax_rate_id, name: rateRecord.name,
-                            rate_percentage: rate,
-                            total_tax_for_this_rate: 0,
-                            tax_type: rateRecord.tax_type // Store tax_type in summary
-                        };
-                    }
-                    applied_taxes_summary[summaryKey].total_tax_for_this_rate += tax_for_this_rate;
-                }
-                itemLineTaxTotal += totalSecondaryTaxForThisItem;
-
-                itemWithTax.line_item_tax_amount = parseFloat(itemLineTaxTotal.toFixed(2));
-
-                if (item_extended_base_price > 0) {
-                    itemWithTax.applied_tax_rate_percentage = parseFloat((itemLineTaxTotal / item_extended_base_price).toFixed(4));
+            for (const rateRecord of taxRateResults.rows) {
+                if (processedRateIdsForTempCalc.has(rateRecord.tax_rate_id)) continue;
+                const taxTypeUpper = rateRecord.tax_type ? rateRecord.tax_type.toUpperCase() : "";
+                if (PRIMARY_TAX_TYPES.includes(taxTypeUpper)) {
+                    primaryRates.push(rateRecord);
                 } else {
-                    itemWithTax.applied_tax_rate_percentage = 0;
+                    secondaryRates.push(rateRecord);
                 }
-                overall_total_tax += itemWithTax.line_item_tax_amount;
+                processedRateIdsForTempCalc.add(rateRecord.tax_rate_id);
             }
+
+            let temp_total_primary_tax_rate = 0;
+            primaryRates.forEach(r => temp_total_primary_tax_rate += parseFloat(r.rate_percentage));
+
+            const temp_base_for_secondary_rate_calc = (1 + temp_total_primary_tax_rate);
+            let temp_total_secondary_tax_rate_on_primary_base = 0;
+            secondaryRates.forEach(r => temp_total_secondary_tax_rate_on_primary_base += (temp_base_for_secondary_rate_calc * parseFloat(r.rate_percentage)));
+
+            R_total_eff = temp_total_primary_tax_rate + temp_total_secondary_tax_rate_on_primary_base;
+
+            if (PRICES_ARE_INCLUSIVE) {
+                if ((1 + R_total_eff) !== 0) {
+                    itemWithTax.calculated_exclusive_unit_price = itemWithTax.original_unit_price / (1 + R_total_eff);
+                } else {
+                    itemWithTax.calculated_exclusive_unit_price = itemWithTax.original_unit_price; // Avoid division by zero, treat as 0 tax
+                }
+            }
+            // If not inclusive, calculated_exclusive_unit_price remains same as original_unit_price (set at itemWithTax init)
+        }
+
+        itemWithTax.calculated_exclusive_unit_price = parseFloat(itemWithTax.calculated_exclusive_unit_price.toFixed(4));
+        itemWithTax.applied_tax_rate_percentage = parseFloat(R_total_eff.toFixed(4));
+
+        // Now, proceed with actual tax amount calculation using calculated_exclusive_unit_price
+        let itemLineTaxTotal = 0;
+        const item_extended_exclusive_price = itemWithTax.calculated_exclusive_unit_price * itemWithTax.quantity;
+
+        if (taxRateResults.rows.length > 0) { // Re-check or use categorized rates
+            const PRIMARY_TAX_TYPES = ['GST', 'VAT'];
+            const primaryRates = []; // Re-populate or pass from above categorization
+            const secondaryRates = [];
+            const processedRateIdsForActualCalc = new Set();
+
+            for (const rateRecord of taxRateResults.rows) {
+                if (processedRateIdsForActualCalc.has(rateRecord.tax_rate_id)) continue;
+                const taxTypeUpper = rateRecord.tax_type ? rateRecord.tax_type.toUpperCase() : "";
+                if (PRIMARY_TAX_TYPES.includes(taxTypeUpper)) { primaryRates.push(rateRecord); }
+                else { secondaryRates.push(rateRecord); }
+                processedRateIdsForActualCalc.add(rateRecord.tax_rate_id);
+            }
+
+            let totalPrimaryTaxForThisItem = 0;
+            for (const rateRecord of primaryRates) {
+                const rate = parseFloat(rateRecord.rate_percentage);
+                const tax_for_this_rate = item_extended_exclusive_price * rate;
+                totalPrimaryTaxForThisItem += tax_for_this_rate;
+
+                const summaryKey = rateRecord.tax_rate_id.toString();
+                if (!applied_taxes_summary[summaryKey]) {
+                    applied_taxes_summary[summaryKey] = {
+                        tax_rate_id: rateRecord.tax_rate_id, name: rateRecord.name,
+                        rate_percentage: rate,
+                        total_tax_for_this_rate: 0,
+                        tax_type: rateRecord.tax_type
+                    };
+                }
+                applied_taxes_summary[summaryKey].total_tax_for_this_rate += tax_for_this_rate;
+            }
+            itemLineTaxTotal += totalPrimaryTaxForThisItem;
+
+            const base_for_secondary_taxes = item_extended_exclusive_price + totalPrimaryTaxForThisItem;
+            let totalSecondaryTaxForThisItem = 0;
+            for (const rateRecord of secondaryRates) {
+                const rate = parseFloat(rateRecord.rate_percentage);
+                const tax_for_this_rate = base_for_secondary_taxes * rate;
+                totalSecondaryTaxForThisItem += tax_for_this_rate;
+
+                const summaryKey = rateRecord.tax_rate_id.toString();
+                if (!applied_taxes_summary[summaryKey]) {
+                    applied_taxes_summary[summaryKey] = {
+                        tax_rate_id: rateRecord.tax_rate_id, name: rateRecord.name,
+                        rate_percentage: rate,
+                        total_tax_for_this_rate: 0,
+                        tax_type: rateRecord.tax_type
+                    };
+                }
+                applied_taxes_summary[summaryKey].total_tax_for_this_rate += tax_for_this_rate;
+            }
+            itemLineTaxTotal += totalSecondaryTaxForThisItem;
+
+            itemWithTax.line_item_tax_amount = parseFloat(itemLineTaxTotal.toFixed(2));
+            overall_total_tax += itemWithTax.line_item_tax_amount;
+        }
         line_items_with_tax_details.push(itemWithTax);
     }
 
