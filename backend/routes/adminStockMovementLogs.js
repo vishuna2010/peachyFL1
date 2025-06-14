@@ -55,25 +55,25 @@ router.get('/', validateGetLogsParams, async (req, res, next) => {
   let conditions = [];
 
   if (product_id) {
-    conditions.push(\`sml.product_id = $${paramIndex++}\`);
+     conditions.push(`sml.product_id = $${paramIndex++}`);
     queryParams.push(product_id);
   }
   if (variant_id) {
-    conditions.push(\`sml.variant_id = $${paramIndex++}\`);
+     conditions.push(`sml.variant_id = $${paramIndex++}`);
     queryParams.push(variant_id);
   }
   if (movement_type) {
-    conditions.push(\`sml.movement_type ILIKE $${paramIndex++}\`);
-    queryParams.push(\`%${movement_type}%\`);
+     conditions.push(`sml.movement_type ILIKE $${paramIndex++}`);
+     queryParams.push(`%${movement_type}%`);
   }
   if (start_date) {
-    conditions.push(\`sml.timestamp >= $${paramIndex++}\`);
+     conditions.push(`sml.timestamp >= $${paramIndex++}`);
     queryParams.push(start_date);
   }
   if (end_date) {
     const adjustedEndDate = new Date(end_date);
     adjustedEndDate.setHours(23, 59, 59, 999); // Include whole day
-    conditions.push(\`sml.timestamp <= $${paramIndex++}\`);
+     conditions.push(`sml.timestamp <= $${paramIndex++}`);
     queryParams.push(adjustedEndDate);
   }
 
@@ -82,7 +82,7 @@ router.get('/', validateGetLogsParams, async (req, res, next) => {
   }
 
   const countQuery = 'SELECT COUNT(sml.id) as total_count ' + baseQuery;
-  const dataQuery = \`
+   const dataQuery = `
     SELECT
       sml.*,
       p.name as product_name,

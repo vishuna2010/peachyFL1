@@ -50,6 +50,30 @@
         </div>
       </div>
 
+      <!-- Tax Management Sub-menu -->
+      <div>
+        <button @click="toggleTaxSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
+          <span class="flex items-center">
+            <span v-html="iconTax" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+            Tax Management
+          </span>
+          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': taxSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+        </button>
+        <div v-if="taxSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
+          <NuxtLink
+            v-for="taxItem in taxItems"
+            :key="taxItem.name"
+            :to="taxItem.href"
+            @click="closeMobileSidebarIfNeeded"
+            class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
+            :class="isActive(taxItem.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+          >
+            <span v-if="taxItem.iconSvg" v-html="taxItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(taxItem.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            {{ taxItem.name }}
+          </NuxtLink>
+        </div>
+      </div>
+
       <!-- Reports Sub-menu -->
       <div>
         <button @click="toggleReportsSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
@@ -117,7 +141,7 @@ const iconPurchaseOrders = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" 
 const iconReportsMain = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>`;
 const iconReportSubItem = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>`;
 const iconInventory = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6A1.125 1.125 0 012.25 10.875v-3.75zM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-8.25zM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-2.25z" /></svg>`;
-
+const iconTax = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.25 7.25A.75.75 0 018 6.5h8.5a.75.75 0 01.75.75v8.5a.75.75 0 01-.75.75H8a.75.75 0 01-.75-.75v-8.5z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01zm0 4.5a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01zm4.5-4.5a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01zm0 4.5a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01z" /><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 9.75l-6.75 6.75" /></svg>`
 
 const navigationItems = ref([
   { name: 'Dashboard', href: '/admin', iconSvg: iconDashboard },
@@ -147,12 +171,23 @@ const inventoryItems = ref([
   { name: 'Movement Logs', href: '/admin/inventory/logs', iconSvg: iconReportSubItem }
 ]);
 
+const taxSubmenuOpen = ref(false);
+const taxItems = ref([
+  { name: 'Tax Overview', href: '/admin/taxes', iconSvg: iconReportSubItem },
+  { name: 'Tax Classes', href: '/admin/taxes/classes', iconSvg: iconReportSubItem },
+  { name: 'Tax Rates', href: '/admin/taxes/rates', iconSvg: iconReportSubItem },
+]);
+
 const toggleReportsSubmenu = () => {
   reportsSubmenuOpen.value = !reportsSubmenuOpen.value;
 };
 
 const toggleInventorySubmenu = () => {
   inventorySubmenuOpen.value = !inventorySubmenuOpen.value;
+};
+
+const toggleTaxSubmenu = () => {
+  taxSubmenuOpen.value = !taxSubmenuOpen.value;
 };
 
 const isActive = (path) => {
