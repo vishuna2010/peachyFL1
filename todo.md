@@ -119,7 +119,10 @@ This section outlines the primary driver for future backend development, based o
 - [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
 - [X] Major `seed.js` overhaul: Implemented full schema creation (`CREATE TABLE IF NOT EXISTS` for all tables including all new columns/features) and added comprehensive sample data for new entities (product images, stock logs, cost history) and new fields in existing entities.
 - [X] Updated `seed.js` `createSchema` to include PO delivery tracking fields and the new `inventory_batches` table; added sample data for `inventory_batches`.
-- [ ] CRITICAL: Review and fix `seed.js` `createSchema` function to ensure it correctly handles adding new columns to existing tables (e.g., using `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...`) before attempting to create indexes or use these columns. Issues were noted with `order_items.tax_class_id_at_purchase` and an attempt to add `products.specifications`.
+- [X] CRITICAL: Review and fix `seed.js` `createSchema` function to ensure it correctly handles adding new columns to existing tables (e.g., using `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...`) before attempting to create indexes or use these columns. Issues were noted with `order_items.tax_class_id_at_purchase` and an attempt to add `products.specifications`.
+  - [X] Phase 1: Refactored `createSchema` by ensuring all columns for all tables are explicitly checked/added with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` after initial `CREATE TABLE IF NOT EXISTS ...` statements. This makes schema creation more robust against pre-existing tables with older definitions.
+  - [X] Phase 1a: Ensured unique index exists on `product_variants.sku` to resolve `ON CONFLICT` issues during seeding.
+  - [X] Phase 1b: Ensured unique constraint/index exists on `product_images(product_id, image_url)` to resolve `ON CONFLICT` issues during seeding.
 
 ## IV. Tax Engine & Invoicing Module (New Specification)
 
