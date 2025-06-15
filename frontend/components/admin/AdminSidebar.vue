@@ -15,17 +15,34 @@
     <!-- Navigation -->
     <ClientOnly>
       <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
-        <NuxtLink
-          v-for="item in navigationItems"
-        :key="item.name"
-        :to="item.href"
-        @click="closeMobileSidebarIfNeeded"
-        class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150"
-        :class="isActive(item.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
-      >
-        <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0" :class="isActive(item.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
-        {{ item.name }}
-      </NuxtLink>
+        <template v-for="item in navigationItems" :key="item.name">
+          <NuxtLink
+            v-if="!(item.name === 'Products' || item.name === 'Product Options')"
+            :to="item.href"
+            @click="closeMobileSidebarIfNeeded"
+            class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150"
+            :class="isActive(item.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+          >
+            <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0" :class="isActive(item.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            {{ item.name }}
+          </NuxtLink>
+          <ClientOnly v-else>
+            <NuxtLink
+              :to="item.href"
+              @click="closeMobileSidebarIfNeeded"
+              class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150"
+              :class="isActive(item.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+            >
+              <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0" :class="isActive(item.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+              {{ item.name }}
+            </NuxtLink>
+            <template #fallback>
+              <div class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 opacity-50">
+                {{ item.name }} (Loading...)
+              </div>
+            </template>
+          </ClientOnly>
+        </template>
 
       <!-- Inventory Sub-menu -->
       <div>
