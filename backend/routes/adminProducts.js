@@ -68,6 +68,38 @@ router.get('/', validateGetProductsParams, async (req, res, next) => {
   }
 });
 
+// GET /api/admin/products/:productId - Get a single product by ID (admin)
+router.get(
+  '/:productId',
+  [
+    param('productId')
+      .isInt({ gt: 0 })
+      .withMessage('Product ID must be a positive integer.')
+      .toInt() // Sanitize to integer
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      // req.params.productId is now an integer due to .toInt()
+      const product = await productService.getProductById(req.params.productId);
+      // productService.getProductById is expected to throw NotFoundError if not found
+      res.status(200).json({ data: product });
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        // Log this specific case for admin, or just return 404
+        console.log(`Admin request for non-existent product ID: ${req.params.productId}`);
+        return res.status(404).json({ message: error.message });
+      }
+      // For other errors (e.g., database connection issues), pass to global handler
+      next(error);
+    }
+  }
+);
+
 
 const validateGetStockLevelsParams = [
   query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'),
