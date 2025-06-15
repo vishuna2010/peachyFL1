@@ -26,7 +26,7 @@
         {{ item.name }}
       </NuxtLink>
 
-      <!-- Inventory Sub-menu -->
+      <!-- Inventory Sub-menu (Structure remains as it was, assuming it's functional) -->
       <div>
         <button @click="toggleInventorySubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
           <span class="flex items-center">
@@ -50,7 +50,7 @@
         </div>
       </div>
 
-      <!-- Tax Management Sub-menu -->
+      <!-- Tax Management Sub-menu (Structure remains as it was, assuming it's functional) -->
       <div>
         <button @click="toggleTaxSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
           <span class="flex items-center">
@@ -74,7 +74,7 @@
         </div>
       </div>
 
-      <!-- Reports Sub-menu -->
+      <!-- Reports Sub-menu (Structure remains as it was, assuming it's functional) -->
       <div>
         <button @click="toggleReportsSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
           <span class="flex items-center">
