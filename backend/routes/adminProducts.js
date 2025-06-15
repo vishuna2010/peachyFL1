@@ -6,6 +6,7 @@ const productService = require('../services/productService');
 const { query, param, validationResult } = require('express-validator');
 const { NotFoundError } = require('../utils/AppError');
 const { generateProductLabelPdf } = require('../services/pdfService'); // Ensured at top
+const taxService = require('../services/taxService');
 
 
 // Apply auth middleware to all routes in this router
@@ -553,15 +554,22 @@ router.get(
     try {
       const product = await productService.getProductById(parseInt(productId));
       // productService.getProductById should throw NotFoundError if product doesn't exist.
+      // product.tax_class_id should be available from getProductById
 
-      // For now, assume a base store currency. This can be enhanced later.
-      const STORE_CURRENCY_CODE = 'USD'; // Example, ideally from config
-      const STORE_CURRENCY_SYMBOL = '$';   // Example, ideally from config or currency data
+      const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD';
+      const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$';
 
       const labelsData = [];
 
       if (product.has_variants && product.variants && product.variants.length > 0) {
         for (const variant of product.variants) {
+          const baseSellingPrice = parseFloat(variant.final_price);
+          let taxDetails = { taxAmount: 0, priceWithTax: baseSellingPrice, appliedRates: [] };
+
+          if (product.tax_class_id) {
+            taxDetails = await taxService.calculatePriceWithAppliedTaxes(baseSellingPrice, product.tax_class_id);
+          }
+
           let suffixParts = [];
           if (product.available_options && variant.option_value_ids) {
             for (const valId of variant.option_value_ids) {
@@ -575,6 +583,7 @@ router.get(
             }
           }
           const constructed_suffix = suffixParts.length > 0 ? ` - ${suffixParts.join(', ')}` : '';
+          const variantSku = variant.sku || product.sku;
 
           labelsData.push({
             product_id: product.id,
@@ -582,32 +591,47 @@ router.get(
             product_name: product.name,
             variant_name_suffix: constructed_suffix,
             full_display_name: `${product.name}${constructed_suffix}`,
-            sku: variant.sku || product.sku, // Prioritize variant SKU
-            // A more robust barcode might include product ID and variant ID if SKU is not guaranteed unique across all
-            barcode_value: variant.sku || product.sku || `${product.id}${variant.id ? '-' + variant.id : ''}`,
-            selling_price: parseFloat(variant.final_price).toFixed(2), // final_price is already calculated in getProductById
-            currency_code: STORE_CURRENCY_CODE, // Assuming product/variant prices are in store's base currency
+            sku: variantSku,
+            barcode_value: variantSku, // Prioritize variant SKU, then product SKU
+            selling_price: baseSellingPrice.toFixed(2), // Pre-tax price
+            vat_price: parseFloat(taxDetails.priceWithTax).toFixed(2), // Price with tax
+            base_price_for_tax_calc: baseSellingPrice.toFixed(2),
+            tax_amount: parseFloat(taxDetails.taxAmount).toFixed(2),
+            applied_tax_rates: taxDetails.appliedRates,
+            currency_code: STORE_CURRENCY_CODE,
             currency_symbol: STORE_CURRENCY_SYMBOL,
             qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`,
             qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&variantId=${variant.id}&quantity=1`,
             qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}&ref_variant=${variant.id}`
           });
         }
-      } else {
+      } else { // Product without variants
+        const baseSellingPrice = parseFloat(product.price);
+        let taxDetails = { taxAmount: 0, priceWithTax: baseSellingPrice, appliedRates: [] };
+
+        if (product.tax_class_id) {
+          taxDetails = await taxService.calculatePriceWithAppliedTaxes(baseSellingPrice, product.tax_class_id);
+        }
+        const productSku = product.sku || product.id.toString();
+
         labelsData.push({
           product_id: product.id,
           variant_id: null,
           product_name: product.name,
           variant_name_suffix: null,
           full_display_name: product.name,
-          sku: product.sku,
-          barcode_value: product.sku || product.id.toString(),
-          selling_price: parseFloat(product.price).toFixed(2),
+          sku: productSku,
+          barcode_value: productSku, // Product SKU or ID
+          selling_price: baseSellingPrice.toFixed(2), // Pre-tax price
+          vat_price: parseFloat(taxDetails.priceWithTax).toFixed(2), // Price with tax
+          base_price_for_tax_calc: baseSellingPrice.toFixed(2),
+          tax_amount: parseFloat(taxDetails.taxAmount).toFixed(2),
+          applied_tax_rates: taxDetails.appliedRates,
           currency_code: STORE_CURRENCY_CODE,
-            currency_symbol: STORE_CURRENCY_SYMBOL,
-            qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`,
-            qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&quantity=1`,
-            qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}`
+          currency_symbol: STORE_CURRENCY_SYMBOL,
+          qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`,
+          qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&quantity=1`,
+          qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}`
         });
       }
       res.status(200).json(labelsData);

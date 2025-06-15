@@ -34,24 +34,28 @@ function getProductLabelHtml(labelData, barcodeDataUrl, qrCodeDataUrl) {
   const sku = labelData.sku || 'N/A';
   const displayName = labelData.full_display_name || 'N/A';
   const currencySymbol = labelData.currency_symbol || '$';
+  const vatPriceFormatted = labelData.vat_price ? parseFloat(labelData.vat_price).toFixed(2) : null;
+  // labelData.tax_amount and labelData.applied_tax_rates are available if needed for display
 
   return `
     <!DOCTYPE html>
     <html>
     <head><title>Product Label</title><style>
-      body { font-family: Arial, sans-serif; width: 300px; padding: 10px; text-align: center; border: 1px solid #ccc; box-sizing: border-box; }
+      body { font-family: Arial, sans-serif; width: 300px; /* Approx 3 inches at 96-100 DPI */ padding: 10px; text-align: center; border: 1px solid #ccc; box-sizing: border-box; }
       h1 { font-size: 18px; margin: 5px 0; word-wrap: break-word; }
       .sku { font-size: 12px; margin-bottom: 5px; }
-      .price { font-size: 16px; font-weight: bold; margin-bottom: 8px; }
+      .price { font-size: 14px; margin-bottom: 3px; } /* Adjusted base price font size */
+      .vat-price { font-size: 16px; font-weight: bold; margin-bottom: 8px; } /* VAT price more prominent */
       img.barcode { display: block; margin: 0 auto 5px auto; max-width: 90%; height: auto; }
-      img.qrcode { display: block; margin: 5px auto 0 auto; max-width: 35%; height: auto; } /* Adjusted QR code size */
+      img.qrcode { display: block; margin: 5px auto 0 auto; max-width: 35%; height: auto; }
     </style></head>
     <body>
       <h1>${displayName}</h1>
       <p class="sku">SKU: ${sku}</p>
-      <p class="price">${currencySymbol}${sellingPrice}</p>
+      <p class="price">Price: ${currencySymbol}${sellingPrice}</p>
+      ${vatPriceFormatted ? `<p class="price vat-price">VAT Price: ${currencySymbol}${vatPriceFormatted}</p>` : ''}
       ${barcodeDataUrl ? `<img src="${barcodeDataUrl}" alt="Barcode for ${sku}" class="barcode" />` : '<p>No barcode.</p>'}
-      ${qrCodeDataUrl ? `<img src="${qrCodeDataUrl}" alt="QR Code" class="qrcode" />` : ''}
+      ${qrCodeDataUrl ? `<img src="${qrCodeDataUrl}" alt="QR Code for ${labelData.barcode_value}" class="qrcode" />` : ''}
     </body>
     </html>
   `;
@@ -71,9 +75,9 @@ async function generateProductLabelPdf(productLabelData) {
     }
     const barcodeDataUrl = barcodeText ? generateBarcodeDataURL(barcodeText) : null;
 
-    // Generate QR Code
-    const qrCodeDataUrl = productLabelData.qr_code_data_product_url
-      ? await generateQrCodeDataURL(productLabelData.qr_code_data_product_url)
+    // Generate QR Code using barcode_value (SKU)
+    const qrCodeDataUrl = productLabelData.barcode_value
+      ? await generateQrCodeDataURL(productLabelData.barcode_value)
       : null;
 
     const htmlContent = getProductLabelHtml(productLabelData, barcodeDataUrl, qrCodeDataUrl);
