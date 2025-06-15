@@ -184,7 +184,7 @@ async function fetchOrderDetails() {
   statusUpdateSuccess.value = '';
   try {
     // Corrected API endpoint
-    const response = await $axios.get(`/api/admin/orders/${orderId}`);
+    const response = await $axios.get(`/admin/orders/${orderId}`);
     order.value = response.data;
     if (order.value) {
       selectedStatus.value = order.value.status;
@@ -212,7 +212,7 @@ async function handleUpdateStatus() {
 
   try {
     // Corrected API endpoint
-    const response = await $axios.put(`/api/admin/orders/${orderId}/status`, {
+    const response = await $axios.put(`/admin/orders/${orderId}/status`, {
       status: selectedStatus.value,
     });
     if (response.data && response.data.order) {

@@ -210,7 +210,7 @@ async function fetchGlobalOptionsAndColorValues() {
   optionsFetchError.value = null;
   try {
     // Fetch all global option types
-    const optionsResponse = await $axios.get('/api/admin/options'); // Assuming admin endpoint lists all global options
+    const optionsResponse = await $axios.get('/admin/options'); // Assuming admin endpoint lists all global options
     allGlobalOptions.value = optionsResponse.data;
 
     // Find the "Color" option
@@ -221,7 +221,7 @@ async function fetchGlobalOptionsAndColorValues() {
     if (foundColorOption) {
       colorOption.value = foundColorOption;
       // Fetch values for the "Color" option
-      const valuesResponse = await $axios.get(`/api/admin/options/${colorOption.value.id}/values`);
+      const valuesResponse = await $axios.get(`/admin/options/${colorOption.value.id}/values`);
       colorOptionValues.value = valuesResponse.data;
     } else {
       console.warn('Global "Color" option type not found.');

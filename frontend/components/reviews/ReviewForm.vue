@@ -144,8 +144,8 @@ const handleSubmitReview = async () => {
       payload.title = title.value.trim();
     }
 
-    // The API endpoint /api/products/:productId/reviews is protected by isAuthenticated middleware
-    await $axios.post(`/api/products/${props.productId}/reviews`, payload);
+    // The API endpoint /products/:productId/reviews is protected by isAuthenticated middleware
+    await $axios.post(`/products/${props.productId}/reviews`, payload);
 
     toast.success('Review submitted successfully! It will appear after moderation.');
     emit('reviewSubmittedSuccessfully');

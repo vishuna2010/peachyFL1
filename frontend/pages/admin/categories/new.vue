@@ -76,7 +76,7 @@ const handleSubmit = async () => {
 
   isLoading.value = true;
   try {
-    await $axios.post('/api/admin/categories', { name: categoryName.value.trim() });
+    await $axios.post('/admin/categories', { name: categoryName.value.trim() });
     toast.success('Category added successfully!');
     router.push('/admin/categories');
   } catch (error) {

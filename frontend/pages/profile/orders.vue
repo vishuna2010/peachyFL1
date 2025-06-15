@@ -132,7 +132,7 @@ async function fetchUserOrders(pageToFetch = currentPage.value) {
   isLoading.value = true;
   fetchError.value = null;
   try {
-    const response = await $axios.get('/api/orders/my-history', {
+    const response = await $axios.get('/orders/my-history', {
       params: {
         page: pageToFetch,
         limit: limit.value

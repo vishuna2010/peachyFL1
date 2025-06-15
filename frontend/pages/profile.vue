@@ -149,7 +149,7 @@ const handleChangePassword = async () => {
   console.log('Attempting to change password with current password (hidden) and new password (hidden)');
 
   try {
-    const response = await $axios.post('/api/auth/change-password', {
+    const response = await $axios.post('/auth/change-password', {
       currentPassword: currentPassword.value,
       newPassword: newPassword.value,
     });
@@ -190,7 +190,7 @@ const handleUpdateProfile = async () => {
 
   isUpdatingProfile.value = true;
   try {
-    const response = await $axios.put('/api/users/me/profile', {
+    const response = await $axios.put('/users/me/profile', {
       name: profileName.value,
     });
 

@@ -162,7 +162,7 @@ async function fetchOrderDetail() {
   order.value = null;
 
   try {
-    const response = await $axios.get(`/api/orders/my-history/${currentOrderId}`);
+    const response = await $axios.get(`/orders/my-history/${currentOrderId}`);
     order.value = response.data;
   } catch (err) {
     console.error(`Failed to fetch order details for order ${currentOrderId}:`, err);

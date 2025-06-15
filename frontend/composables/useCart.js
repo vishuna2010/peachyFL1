@@ -158,7 +158,7 @@ export const useCart = () => {
     const subtotal = cartSubtotal.value;
 
     try {
-      const response = await $axios.post('/api/cart/validate-discount', {
+      const response = await $axios.post('/cart/validate-discount', {
         discount_code: codeToApply.trim().toUpperCase(),
         cart_subtotal: subtotal
       });

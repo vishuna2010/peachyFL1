@@ -85,7 +85,7 @@ const fetchCategoryData = async () => {
   isFetching.value = true;
   fetchError.value = null;
   try {
-    const response = await $axios.get(`/api/admin/categories/${categoryId}`);
+    const response = await $axios.get(`/admin/categories/${categoryId}`);
     // The API returns the category object directly, not nested like { category: ... }
     // And it includes product_count, which we don't need for the form, but name is what we need.
     if (response.data && response.data.name) {
@@ -131,7 +131,7 @@ const handleUpdate = async () => {
 
   isLoading.value = true;
   try {
-    await $axios.put(`/api/admin/categories/${categoryId}`, { name: categoryName.value.trim() });
+    await $axios.put(`/admin/categories/${categoryId}`, { name: categoryName.value.trim() });
     toast.success('Category updated successfully!');
     router.push('/admin/categories');
   } catch (error) {

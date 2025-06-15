@@ -684,7 +684,7 @@ async function checkUserReviewStatus() {
   }
   isLoadingUserReview.value = true;
   try {
-    const response = await $axios.get(`/api/products/${product.value.id}/reviews/my-review`);
+    const response = await $axios.get(`/products/${product.value.id}/reviews/my-review`);
     if (response.data && response.data.id) {
       userReview.value = response.data; userHasReviewed.value = true; showReviewForm.value = false;
     } else {
