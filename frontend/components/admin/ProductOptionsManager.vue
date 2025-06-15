@@ -108,7 +108,7 @@ const assignableGlobalOptions = computed(() => {
 
 async function fetchAllGlobalOptionsInternal() {
   try {
-    const response = await $axios.get('/api/admin/options');
+    const response = await $axios.get('/admin/options');
     allGlobalOptions.value = response.data;
   } catch (err) {
     allGlobalOptions.value = [];
@@ -125,7 +125,7 @@ async function fetchAssignedProductOptionsInternal() {
     return;
   }
   try {
-    const response = await $axios.get(`/api/admin/products/${propProductId.value}/assigned-options`);
+    const response = await $axios.get(`/admin/products/${propProductId.value}/assigned-options`);
     assignedProductOptions.value = response.data;
   } catch (err) {
     assignedProductOptions.value = [];
@@ -184,7 +184,7 @@ async function handleAssignOptionToProduct() {
   }
   actionLoading.value = { type: 'assign', id: selectedGlobalOptionIdToAssign.value };
   try {
-    await $axios.post(`/api/admin/products/${propProductId.value}/options`, {
+    await $axios.post(`/admin/products/${propProductId.value}/options`, {
       option_id: selectedGlobalOptionIdToAssign.value
     });
     toast.success('Option assigned to product successfully.');
@@ -204,7 +204,7 @@ async function handleRemoveAssignedOption(assignedOptionId) {
   }
   actionLoading.value = { type: 'remove', id: assignedOptionId };
   try {
-    await $axios.delete(`/api/admin/assigned-options/${assignedOptionId}`);
+    await $axios.delete(`/admin/assigned-options/${assignedOptionId}`);
     toast.success('Option assignment removed successfully.');
     await fetchAssignedProductOptionsInternal();
   } catch (error) {

@@ -327,7 +327,7 @@ async function handleVariantFormSubmit() {
       return;
     }
     try {
-      const response = await $axios.put(`/api/admin/variants/${editingVariantId.value}`, payload);
+      const response = await $axios.put(`/admin/variants/${editingVariantId.value}`, payload);
       if (response && (response.status === 200 || response.status === 204)) { // 204 for No Content is also success
         toast.success('Variant updated successfully!');
         fetchProductVariants();
@@ -355,7 +355,7 @@ async function handleVariantFormSubmit() {
   } else {
     // ADD MODE (existing logic)
     try {
-      const response = await $axios.post(`/api/admin/products/${propProductId.value}/variants`, payload);
+      const response = await $axios.post(`/admin/products/${propProductId.value}/variants`, payload);
       if (response && (response.status === 201 || response.status === 200)) {
         toast.success('Variant added successfully!');
         fetchProductVariants();
@@ -392,7 +392,7 @@ async function handleDeleteVariant(variantId) {
   addVariantFormError.value = null; // Clear form error if any, though not directly related
 
   try {
-    await $axios.delete(`/api/admin/variants/${variantId}`);
+    await $axios.delete(`/admin/variants/${variantId}`);
     toast.success('Variant deleted successfully!');
     fetchProductVariants(); // Refresh the list
   } catch (error) {
@@ -411,11 +411,11 @@ async function fetchConfiguredProductOptions() {
   if (!propProductId.value) return;
   isLoadingConfiguredOptions.value = true;
   try {
-    const assignedOptionsResponse = await $axios.get(`/api/admin/products/${propProductId.value}/assigned-options`);
+    const assignedOptionsResponse = await $axios.get(`/admin/products/${propProductId.value}/assigned-options`);
     const fetchedConfiguredOptions = [];
 
     for (const assignedOpt of assignedOptionsResponse.data) {
-      const valuesResponse = await $axios.get(`/api/admin/assigned-options/${assignedOpt.id}/values`);
+      const valuesResponse = await $axios.get(`/admin/assigned-options/${assignedOpt.id}/values`);
       fetchedConfiguredOptions.push({
         assigned_option_id: assignedOpt.id,
         option_id: assignedOpt.option_id,
@@ -440,7 +440,7 @@ async function fetchProductVariants() {
   if (!propProductId.value) return;
   isLoadingVariants.value = true;
   try {
-    const response = await $axios.get(`/api/admin/products/${propProductId.value}/variants`);
+    const response = await $axios.get(`/admin/products/${propProductId.value}/variants`);
     existingVariants.value = response.data;
   } catch (err) {
     console.error(`Error fetching variants for product ${propProductId.value}:`, err);
