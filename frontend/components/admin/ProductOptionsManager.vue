@@ -109,7 +109,7 @@ const assignableGlobalOptions = computed(() => {
 async function fetchAllGlobalOptionsInternal() {
   try {
     const response = await $axios.get('/admin/options');
-    allGlobalOptions.value = response.data;
+    allGlobalOptions.value = response.data.data; // Correctly access the array
   } catch (err) {
     allGlobalOptions.value = [];
     throw err;
