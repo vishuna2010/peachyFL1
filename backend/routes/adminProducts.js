@@ -3,10 +3,13 @@ const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
 const productService = require('../services/productService');
-const { query, param, validationResult } = require('express-validator');
+const { query, param, body, validationResult } = require('express-validator'); // Added body
 const { NotFoundError } = require('../utils/AppError');
 const { generateProductLabelPdf } = require('../services/pdfService'); // Ensured at top
 const taxService = require('../services/taxService');
+const { productImageUploadMiddleware, handleMulterError } = require('../../middleware/fileUpload'); // Adjusted path
+const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../../services/s3Service'); // Adjusted path
+const { getOrCreateTagIds, getS3KeyFromUrl } = require('../../utils/productHelpers'); // Adjusted path
 
 
 // Apply auth middleware to all routes in this router
@@ -96,6 +99,214 @@ router.get(
       }
       // For other errors (e.g., database connection issues), pass to global handler
       next(error);
+    }
+  }
+);
+
+// PUT /api/admin/products/:productId - Update a product
+const validateUpdateProductParams = [
+  param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt(),
+  body('name').optional().isString().trim().notEmpty().withMessage('Name cannot be empty when provided.'),
+  body('description').optional({ checkFalsy: true }).isString().trim(), // checkFalsy to allow empty string to be null
+  body('price').optional().isFloat({ gt: 0 }).withMessage('Price must be greater than 0.').toFloat(),
+  body('category_id').optional({ nullable: true }).isInt({ gt: 0 }).withMessage('Category ID must be a positive integer.').toInt(),
+  body('supplier_id').optional({ nullable: true }).isInt({ gt: 0 }).withMessage('Supplier ID must be a positive integer.').toInt(),
+  body('sku').optional({ nullable: true }).isString().trim(),
+  body('stock_quantity').optional().isInt({ min: 0 }).withMessage('Stock quantity must be a non-negative integer.').toInt(),
+  body('reorder_threshold').optional({ nullable: true }).isInt({ min: 0 }).withMessage('Reorder threshold must be non-negative.').toInt(),
+  body('product_status').optional().isIn(['active', 'inactive', 'archived', 'draft']).withMessage('Invalid product status.'),
+  body('tax_class_id').optional({ nullable: true }).isInt({ gt: 0 }).withMessage('Tax Class ID must be a positive integer.').toInt(),
+  body('cost_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Cost price must be non-negative.').toFloat(),
+  body('wholesale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Wholesale price must be non-negative.').toFloat(),
+  body('brand_manufacturer').optional({ nullable: true }).isString().trim(),
+  body('supplier_reference').optional({ nullable: true }).isString().trim(),
+  body('specifications').optional({ nullable: true }), // Further validation might be needed if it's a JSON string
+  body('tags').optional({ nullable: true }).isArray().withMessage('Tags must be an array of strings or null.'),
+  body('tags.*').optional().isString().trim(),
+  body('image_url').optional({ nullable: true }).isString().trim().withMessage('Image URL must be a string or null to remove.')
+];
+
+router.put(
+  '/:productId',
+  productImageUploadMiddleware, // Handles req.file
+  handleMulterError,
+  validateUpdateProductParams,
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { productId } = req.params;
+    const {
+      name, description, price, category_id, tags: tagNames, // tagNames from req.body.tags
+      stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold,
+      brand_manufacturer, supplier_reference, product_status,
+      cost_price, wholesale_price, tax_class_id, specifications
+    } = req.body;
+
+    const client = await db.pool.connect();
+    let s3FileKeyToStore = null;
+    let finalImageUrlToStoreInDb = undefined; // To distinguish from null (explicit removal)
+    let oldS3KeyToDelete = null;
+
+    try {
+      await client.query('BEGIN');
+
+      const currentProductResult = await client.query('SELECT image_url, sku, has_variants FROM products WHERE id = $1 FOR UPDATE', [productId]);
+      if (currentProductResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return next(new NotFoundError(`Product with ID ${productId} not found.`));
+      }
+      const currentProduct = currentProductResult.rows[0];
+      finalImageUrlToStoreInDb = currentProduct.image_url; // Default to current image
+
+      // Image handling
+      if (req.file) { // New image uploaded
+        if (isS3Configured()) {
+          try {
+            const uniqueFileName = `product-images/product-${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
+            const s3Data = await uploadFileToS3(req.file.buffer, uniqueFileName, req.file.mimetype);
+            finalImageUrlToStoreInDb = s3Data.Location;
+            s3FileKeyToStore = s3Data.Key; // Keep track of new key for potential rollback
+            if (currentProduct.image_url) {
+              oldS3KeyToDelete = getS3KeyFromUrl(currentProduct.image_url);
+            }
+          } catch (s3Error) {
+            await client.query('ROLLBACK');
+            console.error("S3 Upload Error on product update:", s3Error);
+            return res.status(500).json({ message: "Failed to upload new image to S3." });
+          }
+        } else {
+          await client.query('ROLLBACK');
+          console.warn("Attempted to upload new image, but S3 is not configured.");
+          return res.status(500).json({ message: "Image upload service is not configured." });
+        }
+      } else if (newImageUrlFromRequest === null && currentProduct.image_url) { // Explicitly removing image
+        if (isS3Configured()) {
+          oldS3KeyToDelete = getS3KeyFromUrl(currentProduct.image_url);
+        }
+        finalImageUrlToStoreInDb = null;
+      }
+      // If newImageUrlFromRequest is a string, it means client wants to keep the existing one or set a new one by URL (not supported by this flow directly, image_url field is for this)
+      // If newImageUrlFromRequest is undefined, it means no change to image from form-data text fields, rely on req.file or current image.
+
+      const setClauses = [];
+      const queryUpdateValues = [];
+      let currentParamIndex = 1;
+
+      const addClause = (field, value, isJson = false) => {
+        if (value !== undefined) {
+          setClauses.push(`${field} = $${currentParamIndex++}`);
+          queryUpdateValues.push(isJson && typeof value === 'string' ? JSON.parse(value) : value);
+        }
+      };
+
+      // Add fields from req.body to update query if they exist
+      addClause('name', name);
+      addClause('description', description);
+      addClause('price', price);
+      addClause('category_id', category_id === '' ? null : category_id);
+      addClause('supplier_id', supplier_id === '' ? null : supplier_id);
+      addClause('sku', sku === '' ? null : sku);
+
+      if (stock_quantity !== undefined && !currentProduct.has_variants) {
+        addClause('stock_quantity', stock_quantity);
+      } else if (stock_quantity !== undefined && currentProduct.has_variants) {
+        console.warn(`Attempt to update base stock_quantity for product ID ${productId} which has variants. This update to stock_quantity is ignored.`);
+      }
+
+      addClause('reorder_threshold', reorder_threshold === '' ? null : reorder_threshold);
+      addClause('product_status', product_status);
+      addClause('tax_class_id', tax_class_id === '' ? null : tax_class_id);
+      addClause('cost_price', cost_price === '' ? null : cost_price);
+      addClause('wholesale_price', wholesale_price === '' ? null : wholesale_price);
+      addClause('brand_manufacturer', brand_manufacturer);
+      addClause('supplier_reference', supplier_reference);
+
+      if (specifications !== undefined) {
+        let parsedSpecs = specifications;
+        if (typeof specifications === 'string') {
+          try {
+            parsedSpecs = JSON.parse(specifications);
+          } catch (e) {
+            // If parsing fails, and it's not explicitly null, it's an error or keep as string if DB allows
+            // For JSONB, it must be valid JSON or null.
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: "Invalid JSON string for specifications." });
+          }
+        }
+        addClause('specifications', parsedSpecs === '' ? null : parsedSpecs, true);
+      }
+
+      if (req.file || finalImageUrlToStoreInDb === null) { // If new image uploaded or image explicitly removed
+         addClause('image_url', finalImageUrlToStoreInDb);
+      }
+
+
+      if (setClauses.length > 0) {
+        setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+        const updateQueryString = `UPDATE products SET ${setClauses.join(", ")} WHERE id = $${currentParamIndex} RETURNING id`;
+        queryUpdateValues.push(productId);
+        const updateResult = await client.query(updateQueryString, queryUpdateValues);
+        if (updateResult.rowCount === 0) {
+          await client.query('ROLLBACK');
+          // This should ideally not happen if FOR UPDATE lock was successful and ID is correct
+          return next(new NotFoundError(`Product with ID ${productId} not found during update attempt.`));
+        }
+      }
+
+      // Tags handling
+      if (tagNames !== undefined) { // tagNames can be an empty array to remove all tags
+        await client.query('DELETE FROM product_tags WHERE product_id = $1', [productId]);
+        if (Array.isArray(tagNames) && tagNames.length > 0) {
+          const tagIds = await getOrCreateTagIds(tagNames, client); // client from this scope
+          for (const tagId of tagIds) {
+            await client.query('INSERT INTO product_tags (product_id, tag_id) VALUES ($1, $2)', [productId, tagId]);
+          }
+        }
+        // If only tags changed, and no other fields, ensure updated_at is touched
+        if (setClauses.length === 0) {
+           await client.query('UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [productId]);
+        }
+      }
+
+      await client.query('COMMIT');
+
+      // If commit was successful, delete old S3 image if applicable
+      if (oldS3KeyToDelete && isS3Configured()) {
+        try {
+          await deleteFileFromS3(oldS3KeyToDelete);
+          console.log(`Successfully deleted old S3 image: ${oldS3KeyToDelete}`);
+        } catch (s3DeleteError) {
+          // Log this error but don't fail the request as the main DB update was successful
+          console.error(`Failed to delete old S3 image ${oldS3KeyToDelete} after product update:`, s3DeleteError);
+        }
+      }
+
+      // Fetch the updated product with all necessary details for the response
+      const updatedProduct = await productService.getProductById(productId); // Uses its own client connection
+      res.status(200).json({ data: updatedProduct });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      // If a new image was uploaded to S3 but DB transaction failed, delete the new S3 image
+      if (s3FileKeyToStore && isS3Configured()) {
+        try {
+          await deleteFileFromS3(s3FileKeyToStore);
+          console.log(`Rolled back S3 upload for key: ${s3FileKeyToStore} due to DB error on product update.`);
+        } catch (s3RollbackError) {
+          console.error(`Critical: Failed to rollback S3 upload for key ${s3FileKeyToStore} after DB error:`, s3RollbackError);
+          // This situation might require manual cleanup in S3.
+        }
+      }
+      // Handle specific DB errors like unique constraint violations (e.g., SKU)
+      if (error.code === '23505' && error.constraint === 'products_sku_key') {
+        return res.status(409).json({ message: `SKU "${sku}" already exists.` });
+      }
+      next(error); // Pass to global error handler
+    } finally {
+      client.release();
     }
   }
 );
