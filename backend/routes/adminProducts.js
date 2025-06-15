@@ -11,6 +11,63 @@ const { generateProductLabelPdf } = require('../services/pdfService'); // Ensure
 // Apply auth middleware to all routes in this router
 router.use(isAuthenticated, isAdmin);
 
+// Validators for GET /api/admin/products
+const validateGetProductsParams = [
+  query('page').optional().isInt({ min: 1 }).toInt().default(1),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10),
+  query('search_term').optional().isString().trim(),
+  query('category_id').optional().isInt({ gt: 0 }).toInt(),
+  query('sort_by').optional().isString().trim(), // Specific validation is done in productService
+  query('status').optional().isString().trim().isIn(['active', 'draft', 'archived', 'all', 'inactive']).default('all'), // 'inactive' is alias for 'draft' perhaps, or its own state. 'all' means no status filter.
+  query('stock_status').optional().isString().trim().isIn(['in_stock', 'out_of_stock', 'low_stock', 'all']).default('all'),
+  // ensure sort_order is also accepted if sent by client, even if productService has a default
+  query('sort_order').optional().isIn(['ASC', 'DESC', 'asc', 'desc']).toUpperCase(),
+];
+
+// GET /api/admin/products - List all products (admin)
+router.get('/', validateGetProductsParams, async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const options = {
+      page: req.query.page,
+      limit: req.query.limit,
+      search_term: req.query.search_term,
+      category_id: req.query.category_id,
+      sort_by: req.query.sort_by,
+      sort_order: req.query.sort_order, // Pass this to service
+      status: req.query.status === 'all' ? undefined : req.query.status, // productService should handle undefined as "no filter"
+      stock_status: req.query.stock_status === 'all' ? undefined : req.query.stock_status, // productService should handle this
+      include_variants: true, // Admin list likely wants to know about variants
+      include_total_stock: true, // For products with variants, sum up variant stock
+      is_admin_request: true, // Flag for service layer if special logic needed
+    };
+
+    const result = await productService.getAllProducts(options);
+
+    // productService.getAllProducts is expected to return { products, totalProducts, page, limit, totalPages }
+    // Adapt to the frontend's expectation: { data: [], pagination: {} }
+    res.status(200).json({
+      data: result.products,
+      pagination: {
+        currentPage: result.page,
+        totalPages: result.totalPages,
+        totalItems: result.totalProducts,
+        limit: result.limit,
+        // Optionally include other info if productService provides it and frontend can use it
+        // sort_by: result.sort_by,
+        // sort_order: result.sort_order
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
 const validateGetStockLevelsParams = [
   query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'),
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('Limit must be an integer between 1 and 100.'),

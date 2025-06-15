@@ -19,7 +19,12 @@ async function getAllProducts({
   minPrice,
   maxPrice,
   sortBy,
-  optionValueId, // New filter parameter
+  sort_order = 'ASC', // New: 'ASC' or 'DESC'
+  optionValueId,
+  status, // New: 'active', 'draft', 'archived', etc.
+  stock_status, // New: 'in_stock', 'out_of_stock', 'low_stock'
+  is_admin_request = false, // New: boolean
+  include_total_stock = false, // New: boolean, to add total stock for variant products
   page = 1,
   limit = 10
 }) {
@@ -27,17 +32,49 @@ async function getAllProducts({
   let paramIndex = 1;
 
   // Base columns to select from products p.
-  // average_rating and review_count are now part of products table.
-  const productColumns = `p.id, p.name, p.description, p.price, p.category_id, p.image_url,
-                          p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold,
-                          p.has_variants, p.average_rating, p.review_count,
-                          p.created_at, p.updated_at`;
+  const productColumns = `
+    p.id, p.name, p.description, p.price, p.category_id, p.image_url,
+    p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold,
+    p.has_variants, p.average_rating, p.review_count, p.product_status,
+    p.created_at, p.updated_at
+  `;
+  // Note: p.product_status is added
 
-  // Conditionally join product_variants if needed for searchTerm or optionValueId
-  let needsVariantJoin = !!optionValueId;
-  if (searchTerm) {
-      needsVariantJoin = true;
+  let ctes = []; // Common Table Expressions
+
+  // CTE for effective stock (handles variants)
+  const stockCte = `
+    product_effective_stock AS (
+      SELECT
+        p_stock.id as product_id,
+        CASE
+          WHEN p_stock.has_variants THEN COALESCE((SELECT SUM(pv_stock.stock_quantity) FROM product_variants pv_stock WHERE pv_stock.product_id = p_stock.id), 0)
+          ELSE p_stock.stock_quantity
+        END as effective_stock_quantity,
+        CASE
+          WHEN p_stock.has_variants THEN
+            COALESCE((SELECT SUM(pv_stock.stock_quantity) FROM product_variants pv_stock WHERE pv_stock.product_id = p_stock.id), 0) > 0 AND
+            COALESCE((SELECT SUM(pv_stock.stock_quantity) FROM product_variants pv_stock WHERE pv_stock.product_id = p_stock.id), 0) < p_stock.reorder_threshold
+          ELSE p_stock.stock_quantity > 0 AND p_stock.stock_quantity < p_stock.reorder_threshold
+        END as is_low_stock
+      FROM products p_stock
+    )
+  `;
+  ctes.push(stockCte);
+
+  let withClause = "";
+  if (ctes.length > 0) {
+    withClause = `WITH ${ctes.join(", ")} `;
   }
+
+  // Determine if product_variants table needs to be joined in the main query
+  // It's needed for optionValueId filter or if searchTerm needs to check variant SKUs.
+  let needsVariantJoinForFilter = !!optionValueId;
+  if (searchTerm && !needsVariantJoinForFilter) { // if searchTerm is present and we haven't decided to join variants yet
+      // This simple flag is not enough, as the join must be conditional in the query string itself.
+      // For now, let's assume searchTerm might apply to variants if they exist.
+  }
+
 
   let fromClause = `
     FROM products p
@@ -45,72 +82,73 @@ async function getAllProducts({
     LEFT JOIN suppliers s ON p.supplier_id = s.id
     LEFT JOIN product_tags pt ON p.id = pt.product_id
     LEFT JOIN tags t ON pt.tag_id = t.id
+    LEFT JOIN product_effective_stock pes ON p.id = pes.product_id
   `;
 
-  let selectPrefix = `SELECT ${productColumns},
-                             c.name as category_name, s.name as supplier_name,
-                             COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags`;
+  let selectColumns = `${productColumns},
+    c.name as category_name, s.name as supplier_name,
+    COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags,
+    pes.effective_stock_quantity, pes.is_low_stock`;
 
-  // If filtering by optionValueId, we need to ensure products are distinct and join with variant tables.
-  if (optionValueId) {
-    selectPrefix = `SELECT DISTINCT ${productColumns},
-                                  c.name as category_name, s.name as supplier_name,
-                                  COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags`;
+  if (include_total_stock) { // This is somewhat redundant if pes.effective_stock_quantity is already what's needed
+    selectColumns += `, pes.effective_stock_quantity as total_stock_display`;
+  }
+
+
+  let selectPrefix = `SELECT ${selectColumns}`;
+  if (optionValueId) { // If filtering by optionValueId, ensure distinct products
+    selectPrefix = `SELECT DISTINCT ON (p.id) ${selectColumns}`; // Use DISTINCT ON (p.id) and matching ORDER BY p.id first
     fromClause += `
-      LEFT JOIN product_variants pv ON p.id = pv.product_id
-      LEFT JOIN product_variant_option_values pvov ON pv.id = pvov.product_variant_id
+      LEFT JOIN product_variants pv_filter ON p.id = pv_filter.product_id
+      LEFT JOIN product_variant_option_values pvov_filter ON pv_filter.id = pvov_filter.product_variant_id
     `;
-  } else if (needsVariantJoin && !fromClause.includes('product_variants pv')) {
-    // Join for searchTerm if not already joined by optionValueId
-    fromClause += ` LEFT JOIN product_variants pv ON p.id = pv.product_id `;
+  } else if (searchTerm) { // General search might need to check variant SKU
+     // No explicit join here, search term logic will handle conditional pv.sku search if needed
   }
 
-
-  let baseSelect = selectPrefix + fromClause;
-
-  let countBaseQuery = `SELECT COUNT(DISTINCT p.id) as total_count FROM products p `;
-  if (needsVariantJoin && !countBaseQuery.includes('product_variants pv')) {
-      countBaseQuery += ` LEFT JOIN product_variants pv ON p.id = pv.product_id `;
-  }
-  if (optionValueId && !countBaseQuery.includes('product_variant_option_values pvov')) {
-      // This join implies pv is already joined or should be.
-      if (!countBaseQuery.includes('product_variants pv')) { // Ensure pv is joined for pvov
-         countBaseQuery += ` LEFT JOIN product_variants pv ON p.id = pv.product_id `;
-      }
-      countBaseQuery += ` LEFT JOIN product_variant_option_values pvov ON pv.id = pvov.product_variant_id `;
+  let baseSelect = withClause + selectPrefix + fromClause;
+  let countBaseQuery = withClause + `SELECT COUNT(DISTINCT p.id) as total_count FROM products p LEFT JOIN product_effective_stock pes ON p.id = pes.product_id `;
+   // Add joins to countBaseQuery if they are part of filtering conditions
+  if (optionValueId) {
+    countBaseQuery += `
+      LEFT JOIN product_variants pv_filter_count ON p.id = pv_filter_count.product_id
+      LEFT JOIN product_variant_option_values pvov_filter_count ON pv_filter_count.id = pvov_filter_count.product_variant_id
+    `;
   }
 
 
   let whereClauses = [];
+
+  if (!is_admin_request) {
+    // Non-admins should only see active products by default
+    whereClauses.push(`p.product_status = 'active'`);
+  }
+
   if (searchTerm) {
     const searchTermPattern = `%${searchTerm}%`;
-    queryValues.push(searchTermPattern); // Add value for $paramIndex
-    let searchOrClauses = [
-        `p.name ILIKE $${paramIndex}`,
-        `p.description ILIKE $${paramIndex}`,
-        `p.sku ILIKE $${paramIndex}`
-    ];
-    if (needsVariantJoin) {
-        searchOrClauses.push(`pv.sku ILIKE $${paramIndex}`);
-    }
-    whereClauses.push(`(${searchOrClauses.join(" OR ")})`);
-    paramIndex++; // Increment for the next filter
+    queryValues.push(searchTermPattern);
+    // Search in product name, desc, sku, AND variant skus if product has_variants.
+    // This requires a more complex sub-condition for variants.
+    let searchCondition = `(
+      p.name ILIKE $${paramIndex} OR
+      p.description ILIKE $${paramIndex} OR
+      p.sku ILIKE $${paramIndex} OR
+      (p.has_variants AND EXISTS (
+        SELECT 1 FROM product_variants pv_search
+        WHERE pv_search.product_id = p.id AND pv_search.sku ILIKE $${paramIndex}
+      ))
+    )`;
+    whereClauses.push(searchCondition);
+    paramIndex++;
   }
 
   if (categoryId) {
     whereClauses.push(`p.category_id = $${paramIndex}`);
     queryValues.push(categoryId);
     paramIndex++;
-    // Ensure category join is in countBaseQuery if categoryId is used (already part of fromClause for baseSelect)
-    if (!countBaseQuery.includes('LEFT JOIN categories c ON p.category_id = c.id') && optionValueId) { // If optionValueId already added its joins
-        // This logic might be tricky if category join isn't always part of optionValueId path
-    } else if (!countBaseQuery.includes('LEFT JOIN categories c ON p.category_id = c.id')) {
-        // Add if not present from optionValueId path
-        countBaseQuery += ` LEFT JOIN categories c ON p.category_id = c.id `;
-    }
   }
   if (minPrice !== undefined) {
-    whereClauses.push(`p.price >= $${paramIndex}`);
+    whereClauses.push(`p.price >= $${paramIndex}`); // Assumes p.price is base price. Variant pricing is complex.
     queryValues.push(minPrice);
     paramIndex++;
   }
@@ -120,60 +158,115 @@ async function getAllProducts({
     paramIndex++;
   }
   if (optionValueId) {
-    whereClauses.push(`pvov.product_option_value_id = $${paramIndex}`);
+    whereClauses.push(`pvov_filter.product_option_value_id = $${paramIndex}`);
     queryValues.push(optionValueId);
     paramIndex++;
+     // Add to countBaseQuery's WHERE clause too
+    if (!countBaseQuery.includes('WHERE')) countBaseQuery += ' WHERE '; else countBaseQuery += ' AND ';
+    countBaseQuery += `pvov_filter_count.product_option_value_id = $${paramIndex}`; // Use the same paramIndex, queryValues are copied later
   }
+
+  if (status && status !== 'all') {
+    whereClauses.push(`p.product_status = $${paramIndex}`);
+    queryValues.push(status);
+    paramIndex++;
+  }
+
+  if (stock_status && stock_status !== 'all') {
+    if (stock_status === 'in_stock') {
+      whereClauses.push(`pes.effective_stock_quantity > 0`);
+    } else if (stock_status === 'out_of_stock') {
+      whereClauses.push(`(pes.effective_stock_quantity <= 0 OR pes.effective_stock_quantity IS NULL)`);
+    } else if (stock_status === 'low_stock') {
+      whereClauses.push(`pes.is_low_stock = TRUE`);
+    }
+  }
+
 
   if (whereClauses.length > 0) {
     const whereString = " WHERE " + whereClauses.join(" AND ");
     baseSelect += whereString;
-    countBaseQuery += whereString; // Apply same filters to count
+    // Apply to countBaseQuery, carefully, as it might already have a WHERE from optionValueId
+    if (countBaseQuery.includes('WHERE')) {
+        countBaseQuery += " AND " + whereClauses.filter(c => !c.startsWith('pvov_filter.')).join(" AND "); // Avoid duplicating optionValueId filter
+    } else {
+        countBaseQuery += whereString;
+    }
   }
 
-  // Group by all selected non-aggregated columns from products, categories, and suppliers
-  // This is necessary because of the array_agg for tags and potential DISTINCT on product columns.
-  // If using SELECT DISTINCT p.id, p.name ..., then GROUP BY those same columns.
-  // The productColumns string already lists all p.* columns.
-  // c.name and s.name are from LEFT JOINs and also selected.
-  baseSelect += ` GROUP BY ${productColumns}, c.name, s.name `;
+  // Group by for main query if not using DISTINCT ON or if other aggregations are added
+  // For DISTINCT ON (p.id) to work, p.id must be the first item in ORDER BY
+  // If using array_agg, GROUP BY is necessary.
+  const groupByColumns = `${productColumns}, c.name, s.name, pes.effective_stock_quantity, pes.is_low_stock`;
+  baseSelect += ` GROUP BY ${groupByColumns} `;
+  if (include_total_stock) { // Already covered by pes.effective_stock_quantity
+      // baseSelect += `, total_stock_display`; // No, total_stock_display is from pes
+  }
 
 
-  let orderByClause = " ORDER BY p.created_at DESC ";
+  let orderByClause = "";
+  const sortOrderSql = (sort_order && sort_order.toUpperCase() === 'DESC') ? 'DESC' : 'ASC';
+
   const allowedSorts = {
-    'price_asc': 'p.price ASC NULLS LAST', 'price_desc': 'p.price DESC NULLS LAST',
-    'name_asc': 'p.name ASC', 'name_desc': 'p.name DESC',
-    'created_at_desc': 'p.created_at DESC', 'created_at_asc': 'p.created_at ASC'
+    'price': `p.price ${sortOrderSql} NULLS LAST`,
+    'name': `p.name ${sortOrderSql}`,
+    'created_at': `p.created_at ${sortOrderSql}`,
+    'stock': `pes.effective_stock_quantity ${sortOrderSql} NULLS LAST`, // Sort by effective stock
+    // Add more as needed, e.g., 'status', 'sku'
+    'product_status': `p.product_status ${sortOrderSql}`,
+    'sku': `p.sku ${sortOrderSql}`
   };
 
-  if (sortBy && allowedSorts[sortBy]) {
+  if (optionValueId) { // When DISTINCT ON (p.id) is used for optionValueId filter
+    orderByClause = ` ORDER BY p.id ${sortOrderSql} `; // p.id must be first
+    if (sortBy && allowedSorts[sortBy]) {
+        orderByClause += `, ${allowedSorts[sortBy]}`;
+    } else { // Default secondary sort if sortBy is not valid or not 'p.id'
+        orderByClause += `, p.created_at ${sortOrderSql}`;
+    }
+  } else if (sortBy && allowedSorts[sortBy]) {
     orderByClause = ` ORDER BY ${allowedSorts[sortBy]} `;
-  } else if (sortBy && !allowedSorts[sortBy]) {
-    throw new BadRequestError("Invalid sort_by parameter.");
+  } else {
+    orderByClause = ` ORDER BY p.created_at ${sortOrderSql} `; // Default sort
   }
   baseSelect += orderByClause;
 
-  const numPage = page;
-  const numLimit = limit;
+
+  const numPage = Number(page) || 1;
+  const numLimit = Number(limit) || 10;
   const offset = (numPage - 1) * numLimit;
 
   baseSelect += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1} `;
+
+  // Create a separate copy of queryValues for count to avoid mutation issues with limit/offset
   const countQueryValues = [...queryValues];
   const finalQueryValuesForSelect = [...queryValues, numLimit, offset];
+
+  // console.log('Executing product list query:', baseSelect);
+  // console.log('With params:', finalQueryValuesForSelect);
+  // console.log('Executing count query:', countBaseQuery);
+  // console.log('With params:', countQueryValues);
 
   const productsResult = await db.query(baseSelect, finalQueryValuesForSelect);
   const countResult = await db.query(countBaseQuery, countQueryValues);
 
   const totalProducts = parseInt(countResult.rows[0].total_count);
 
+  // The `products` field name is what the admin route expects in its response object's `data` field.
+  // The pagination field names also match what the admin route expects.
   return {
     products: productsResult.rows,
-    pagination: {
-      total_products: totalProducts,
-      current_page: numPage,
-      limit: numLimit,
-      total_pages: Math.ceil(totalProducts / numLimit)
-    }
+    totalProducts: totalProducts, // For admin route to construct its pagination.currentPage, etc.
+    page: numPage,
+    limit: numLimit,
+    totalPages: Math.ceil(totalProducts / numLimit)
+    // Old structure for reference (frontend/routes/products.js may use this):
+    // pagination: {
+    //   total_products: totalProducts,
+    //   current_page: numPage,
+    //   limit: numLimit,
+    //   total_pages: Math.ceil(totalProducts / numLimit)
+    // }
   };
 }
 
