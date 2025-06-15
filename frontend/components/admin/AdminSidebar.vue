@@ -4,7 +4,7 @@
 
     <!-- Sidebar Header -->
     <div class="p-4 border-b border-neutral-700 flex justify-between items-center">
-      <NuxtLink to="/admin" @click="closeMobileSidebarIfNeeded"> {/* Changed to /admin */}
+      <NuxtLink to="/admin" @click="closeMobileSidebarIfNeeded">
         <h1 class="text-xl font-semibold hover:text-brand-primary transition-colors">Admin Panel</h1>
       </NuxtLink>
       <button @click="emit('toggleMobileSidebar')" class="lg:hidden text-neutral-300 hover:text-white p-1 rounded-md">
@@ -13,52 +13,22 @@
     </div>
 
     <!-- Navigation -->
-    <ClientOnly>
-      <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
-        <template v-for="item in navigationItems" :key="item.name">
-          <template v-if="item.name === 'Products'">
-            <!-- Standard HTML <a> tag for Products link -->
-            <a
-              :href="item.href"
-              @click="closeMobileSidebarIfNeeded"
-              class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150 text-neutral-300 hover:bg-neutral-700 hover:text-white"
-            >
-              <!-- Icon span is removed as item.iconSvg is null for Products -->
-              {{ item.name }} (Plain Link Test)
-            </a>
-          </template>
-          <template v-else-if="item.name === 'Product Options'">
-            <ClientOnly :key="item.name + '-client'">
-              <NuxtLink
-                :to="item.href"
-                @click="closeMobileSidebarIfNeeded"
-                class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150"
-                :class="isActive(item.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
-              >
-                <!-- Icon span is removed as item.iconSvg is null for Product Options -->
-                {{ item.name }}
-              </NuxtLink>
-              <template #fallback>
-                <div class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 opacity-50">
-                  {{ item.name }} (Loading...)
-                </div>
-              </template>
-            </ClientOnly>
-          </template>
-          <template v-else> <!-- For all other links -->
-            <NuxtLink
-              :key="item.name + '-ssr'"
-              :to="item.href"
-              @click="closeMobileSidebarIfNeeded"
-              class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150"
-              :class="isActive(item.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
-            >
-              <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0" :class="isActive(item.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
-              <span v-else-if="item.name === 'Categories'" class="mr-3 h-5 w-5 flex-shrink-0"></span> <!-- Placeholder for spacing if icon is null -->
-              {{ item.name }}
-            </NuxtLink>
-          </template>
-        </template>
+    <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
+      <NuxtLink
+        v-for="item in navigationItems"
+        :key="item.name"
+        :to="item.href"
+        @click="closeMobileSidebarIfNeeded"
+        class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150"
+        :class="isActive(item.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+      >
+        <!-- Icon rendering span for main navigationItems temporarily commented out -->
+        <!--
+        <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0" :class="isActive(item.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+        -->
+        <span class="mr-3 h-5 w-5 flex-shrink-0"></span> <!-- Permanent placeholder for spacing -->
+        {{ item.name }}
+      </NuxtLink>
 
       <!-- Inventory Sub-menu -->
       <div>
@@ -117,7 +87,7 @@
           </span>
           <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': reportsSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
         </button>
-        <div v-if="reportsSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3"> {/* Adjusted ml for alignment with icon */}
+        <div v-if="reportsSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
           <NuxtLink
             v-for="report in reportItems"
             :key="report.name"
@@ -131,8 +101,7 @@
           </NuxtLink>
         </div>
       </div>
-      </nav>
-    </ClientOnly>
+    </nav>
 
     <!-- Footer / View Site Link -->
     <div class="p-4 border-t border-neutral-700 mt-auto">
@@ -141,7 +110,6 @@
         class="flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150"
         title="View Live Site"
       >
-        <!-- Placeholder for external link icon -->
         <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
         View Site
       </NuxtLink>
@@ -252,3 +220,5 @@ nav::-webkit-scrollbar-track {
   background-color: transparent;
 }
 </style>
+
+[end of frontend/components/admin/AdminSidebar.vue]
