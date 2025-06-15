@@ -47,7 +47,7 @@
           </template>
           <template v-else> <!-- For all other links -->
             <NuxtLink
-              :key="item.name + '-ssr'" <!-- Ensure unique key if item.name isn't already unique in this context -->
+              :key="item.name + '-ssr'"
               :to="item.href"
               @click="closeMobileSidebarIfNeeded"
               class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150"
