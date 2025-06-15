@@ -168,18 +168,25 @@ async function fetchProducts() {
     params.search_term = searchTerm.value;
   }
 
-  try {
-    const response = await $axios.get('/products', { params }); // Uses public /api/products
-    products.value = response.data.products;
-    pagination.value.total_products = response.data.pagination.total_products;
-    pagination.value.total_pages = response.data.pagination.total_pages;
-    pagination.value.current_page = response.data.pagination.current_page;
-  } catch (err) {
-    console.error('Failed to fetch products:', err);
-    fetchError.value = err.response?.data || err;
-  } finally {
-    isLoading.value = false;
-  }
+  // try {
+  //   const response = await $axios.get('/products', { params }); // Uses public /api/products
+  //   products.value = response.data.products;
+  //   pagination.value.total_products = response.data.pagination.total_products;
+  //   pagination.value.total_pages = response.data.pagination.total_pages;
+  //   pagination.value.current_page = response.data.pagination.current_page;
+  // } catch (err) {
+  //   console.error('Failed to fetch products:', err);
+  //   fetchError.value = err.response?.data || err;
+  // } finally {
+  //   isLoading.value = false;
+  // }
+  // Simulate successful load with no data for now
+  products.value = [];
+  pagination.value.total_products = products.value.length;
+  pagination.value.total_pages = 1;
+  pagination.value.current_page = 1;
+  isLoading.value = false;
+  fetchError.value = null;
 }
 
 function applyFilters() {
