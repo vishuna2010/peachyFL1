@@ -178,7 +178,7 @@ const fetchReviews = async () => {
       limit: limit.value,
       status: selectedStatus.value === 'all' ? undefined : selectedStatus.value,
     };
-    const response = await $axios.get('/api/admin/reviews', { params });
+    const response = await $axios.get('/admin/reviews', { params });
     reviews.value = response.data.data || []; // Assuming API returns { data: [], pagination: {} }
     totalPages.value = response.data.pagination?.totalPages || 1;
     currentPage.value = response.data.pagination?.currentPage || 1;
@@ -192,7 +192,7 @@ const fetchReviews = async () => {
 
 const updateReviewStatus = async (reviewId, newStatus) => {
   try {
-    await $axios.put(`/api/admin/reviews/${reviewId}/status`, { status: newStatus });
+    await $axios.put(`/admin/reviews/${reviewId}/status`, { status: newStatus });
     // alert('Review status updated successfully.'); // Or use a toast notification
     // Find the review in the list and update its status locally for immediate feedback
     const reviewIndex = reviews.value.findIndex(r => r.id === reviewId);
@@ -218,7 +218,7 @@ const confirmDeleteReview = (reviewId) => {
 
 const deleteReview = async (reviewId) => {
   try {
-    await $axios.delete(`/api/admin/reviews/${reviewId}`);
+    await $axios.delete(`/admin/reviews/${reviewId}`);
     // alert('Review deleted successfully.'); // Or use a toast
     fetchReviews(); // Refresh the list
   } catch (err) {

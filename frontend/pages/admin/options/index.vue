@@ -194,7 +194,7 @@ const fetchOptionTypes = async () => {
   isLoading.value = true;
   error.value = null;
   try {
-    const response = await $axios.get('/api/admin/options');
+    const response = await $axios.get('/admin/options');
     optionTypes.value = response.data.data || response.data; // Adapt to potential API structure
   } catch (err) {
     console.error('Error fetching option types:', err);
@@ -227,10 +227,10 @@ const saveOptionType = async () => {
   const payload = { name: currentOptionType.value.name };
   try {
     if (isEditingOptionType.value && currentOptionType.value.id) {
-      await $axios.put(`/api/admin/options/${currentOptionType.value.id}`, payload);
+      await $axios.put(`/admin/options/${currentOptionType.value.id}`, payload);
       // alert('Option type updated successfully!'); // Or use a toast
     } else {
-      await $axios.post('/api/admin/options', payload);
+      await $axios.post('/admin/options', payload);
       // alert('Option type added successfully!'); // Or use a toast
     }
     fetchOptionTypes();
@@ -253,7 +253,7 @@ const confirmDeleteOptionType = (optionTypeId) => {
 const deleteOptionType = async (optionTypeId) => {
   error.value = null;
   try {
-    await $axios.delete(`/api/admin/options/${optionTypeId}`);
+    await $axios.delete(`/admin/options/${optionTypeId}`);
     // alert('Option type deleted successfully!'); // Or use a toast
     fetchOptionTypes();
   } catch (err) {
@@ -295,7 +295,7 @@ const fetchValuesForOptionType = async (optionTypeId) => {
   isLoadingValues.value = true;
   valueManagementError.value = null;
   try {
-    const response = await $axios.get(`/api/admin/options/${optionTypeId}/values`);
+    const response = await $axios.get(`/admin/options/${optionTypeId}/values`);
     if (selectedOptionTypeForValues.value && selectedOptionTypeForValues.value.id === optionTypeId) {
         selectedOptionTypeForValues.value.values = response.data.data || response.data;
     }
@@ -312,7 +312,7 @@ const addOptionValue = async () => {
   if (!newValueName.value.trim() || !selectedOptionTypeForValues.value?.id) return;
   valueManagementError.value = null;
   try {
-    await $axios.post(`/api/admin/options/${selectedOptionTypeForValues.value.id}/values`, { value: newValueName.value.trim() });
+    await $axios.post(`/admin/options/${selectedOptionTypeForValues.value.id}/values`, { value: newValueName.value.trim() });
     newValueName.value = ''; // Clear input
     await fetchValuesForOptionType(selectedOptionTypeForValues.value.id); // Refresh list
     // alert('Value added successfully');
@@ -336,7 +336,7 @@ const updateOptionValue = async () => {
   if (!editingValue.value?.id || !editingValue.value.value.trim()) return;
   valueManagementError.value = null;
   try {
-    await $axios.put(`/api/admin/option-values/${editingValue.value.id}`, { value: editingValue.value.value.trim() });
+    await $axios.put(`/admin/option-values/${editingValue.value.id}`, { value: editingValue.value.value.trim() });
     const typeId = selectedOptionTypeForValues.value.id;
     editingValue.value = null; // Exit editing mode
     await fetchValuesForOptionType(typeId); // Refresh list
@@ -358,7 +358,7 @@ const confirmDeleteOptionValue = (valueId) => {
 const deleteOptionValue = async (valueId) => {
   valueManagementError.value = null;
   try {
-    await $axios.delete(`/api/admin/option-values/${valueId}`);
+    await $axios.delete(`/admin/option-values/${valueId}`);
     // alert('Value deleted successfully');
     if (selectedOptionTypeForValues.value?.id) {
       await fetchValuesForOptionType(selectedOptionTypeForValues.value.id); // Refresh list

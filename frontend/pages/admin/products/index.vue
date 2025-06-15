@@ -153,7 +153,7 @@ const fetchProducts = async () => {
       // category_id: selectedCategory.value || undefined, // For future
     };
 
-    const response = await $axios.get('/api/admin/products', { params });
+    const response = await $axios.get('/admin/products', { params });
 
     if (response.data && response.data.data) {
       products.value = response.data.data;
@@ -185,7 +185,7 @@ const deleteProduct = async (productId) => {
     return;
   }
   try {
-    await $axios.delete(`/api/admin/products/${productId}`);
+    await $axios.delete(`/admin/products/${productId}`);
     // alert('Product deleted successfully'); // Replace with a toast notification if available
     fetchProducts(); // Refresh the list
   } catch (err) {
