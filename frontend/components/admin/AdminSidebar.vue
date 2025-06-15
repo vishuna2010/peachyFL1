@@ -13,9 +13,10 @@
     </div>
 
     <!-- Navigation -->
-    <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
-      <NuxtLink
-        v-for="item in navigationItems"
+    <ClientOnly>
+      <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
+        <NuxtLink
+          v-for="item in navigationItems"
         :key="item.name"
         :to="item.href"
         @click="closeMobileSidebarIfNeeded"
@@ -25,6 +26,54 @@
         <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0" :class="isActive(item.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
         {{ item.name }}
       </NuxtLink>
+
+      <!-- Inventory Sub-menu -->
+      <div>
+        <button @click="toggleInventorySubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
+          <span class="flex items-center">
+            <span v-html="iconInventory" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+            Inventory
+          </span>
+          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': inventorySubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+        </button>
+        <div v-if="inventorySubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
+          <NuxtLink
+            v-for="invItem in inventoryItems"
+            :key="invItem.name"
+            :to="invItem.href"
+            @click="closeMobileSidebarIfNeeded"
+            class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
+            :class="isActive(invItem.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+          >
+            <span v-if="invItem.iconSvg" v-html="invItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(invItem.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            {{ invItem.name }}
+          </NuxtLink>
+        </div>
+      </div>
+
+      <!-- Tax Management Sub-menu -->
+      <div>
+        <button @click="toggleTaxSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
+          <span class="flex items-center">
+            <span v-html="iconTax" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+            Tax Management
+          </span>
+          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': taxSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+        </button>
+        <div v-if="taxSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
+          <NuxtLink
+            v-for="taxItem in taxItems"
+            :key="taxItem.name"
+            :to="taxItem.href"
+            @click="closeMobileSidebarIfNeeded"
+            class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
+            :class="isActive(taxItem.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+          >
+            <span v-if="taxItem.iconSvg" v-html="taxItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(taxItem.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            {{ taxItem.name }}
+          </NuxtLink>
+        </div>
+      </div>
 
       <!-- Reports Sub-menu -->
       <div>
@@ -49,7 +98,8 @@
           </NuxtLink>
         </div>
       </div>
-    </nav>
+      </nav>
+    </ClientOnly>
 
     <!-- Footer / View Site Link -->
     <div class="p-4 border-t border-neutral-700 mt-auto">
@@ -92,18 +142,19 @@ const iconSuppliers = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewB
 const iconPurchaseOrders = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>`;
 const iconReportsMain = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>`;
 const iconReportSubItem = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>`;
-
+const iconInventory = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6A1.125 1.125 0 012.25 10.875v-3.75zM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-8.25zM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-2.25z" /></svg>`;
+const iconTax = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.25 7.25A.75.75 0 018 6.5h8.5a.75.75 0 01.75.75v8.5a.75.75 0 01-.75.75H8a.75.75 0 01-.75-.75v-8.5z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01zm0 4.5a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01zm4.5-4.5a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01zm0 4.5a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01z" /><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 9.75l-6.75 6.75" /></svg>`
 
 const navigationItems = ref([
   { name: 'Dashboard', href: '/admin', iconSvg: iconDashboard },
   { name: 'Users', href: '/admin/users', iconSvg: iconUsers },
   { name: 'Products', href: '/admin/products', iconSvg: iconProducts },
-  { name: 'Categories', href: '/admin/categories', iconSvg: iconCategories },
+  { name: 'Categories', href: '/admin/categories', iconSvg: null }, // Icon removed
   { name: 'Orders', href: '/admin/orders', iconSvg: iconOrders },
   { name: 'Discounts', href: '/admin/discounts', iconSvg: iconDiscounts },
   { name: 'Suppliers', href: '/admin/suppliers', iconSvg: iconSuppliers },
   { name: 'Purchase Orders', href: '/admin/purchase-orders', iconSvg: iconPurchaseOrders },
-  { name: 'Product Options', href: '/admin/options', iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 17.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>` },
+  { name: 'Product Options', href: '/admin/options', iconSvg: null }, // Icon removed
   { name: 'Reviews', href: '/admin/reviews', iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.82.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.82-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>` },
 ]);
 
@@ -114,8 +165,31 @@ const reportItems = ref([
     { name: 'Best Sellers', href: '/admin/reports/best-sellers', iconSvg: iconReportSubItem },
 ]);
 
+const inventorySubmenuOpen = ref(false);
+const inventoryItems = ref([
+  { name: 'Stock Levels', href: '/admin/inventory', iconSvg: iconReportSubItem },
+  { name: 'Batch Management', href: '/admin/inventory/batches', iconSvg: iconReportSubItem },
+  { name: 'Stock Adjustments', href: '/admin/inventory/adjustments', iconSvg: iconReportSubItem },
+  { name: 'Movement Logs', href: '/admin/inventory/logs', iconSvg: iconReportSubItem }
+]);
+
+const taxSubmenuOpen = ref(false);
+const taxItems = ref([
+  { name: 'Tax Overview', href: '/admin/taxes', iconSvg: iconReportSubItem },
+  { name: 'Tax Classes', href: '/admin/taxes/classes', iconSvg: iconReportSubItem },
+  { name: 'Tax Rates', href: '/admin/taxes/rates', iconSvg: iconReportSubItem },
+]);
+
 const toggleReportsSubmenu = () => {
   reportsSubmenuOpen.value = !reportsSubmenuOpen.value;
+};
+
+const toggleInventorySubmenu = () => {
+  inventorySubmenuOpen.value = !inventorySubmenuOpen.value;
+};
+
+const toggleTaxSubmenu = () => {
+  taxSubmenuOpen.value = !taxSubmenuOpen.value;
 };
 
 const isActive = (path) => {

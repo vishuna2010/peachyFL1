@@ -1,65 +1,89 @@
 <template>
-  <div class="admin-orders-page">
-    <h2>Order Management</h2>
-
-    <div v-if="isLoading" class="loading-state">Loading orders...</div>
-    <div v-if="fetchError" class="error-state">
-      Error fetching orders: {{ fetchError.message || fetchError }}
+  <div class="p-4 sm:p-6 lg:p-8">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-semibold text-gray-900">Order Management</h1>
+      <!-- Optional: Add New Order button here if needed in future -->
     </div>
 
-    <template v-if="orders.length > 0 && !isLoading">
-      <table class="orders-table">
-        <thead>
-          <tr>
-            <th>Order ID</th>
-            <th>Customer Email</th>
-            <th>Total Amount</th>
-            <th>Status</th>
-            <th>Order Date</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="order in orders" :key="order.id">
-            <td>
-              <NuxtLink :to="`/admin/orders/${order.id}`">#{{ order.id }}</NuxtLink>
-            </td>
-            <td>{{ order.user_email }}</td>
-            <td>${{ parseFloat(order.total_amount).toFixed(2) }}</td>
-            <td><span :class="`status status-${order.status.toLowerCase()}`">{{ order.status }}</span></td>
-            <td>{{ new Date(order.created_at).toLocaleDateString() }}</td>
-            <td>
-              <NuxtLink :to="`/admin/orders/${order.id}`" class="action-link view-link">View</NuxtLink>
-              <!-- Future actions: e.g., Update Status -->
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-if="isLoading" class="text-center py-10">
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+      <p class="mt-2 text-sm text-gray-500">Loading orders...</p>
+    </div>
+    <div v-else-if="fetchError" class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg" role="alert">
+      <span class="font-medium">Error fetching orders:</span> {{ fetchError.message || fetchError }}
+    </div>
+    <div v-else-if="orders.length === 0" class="text-center py-10">
+      <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+      </svg>
+      <h3 class="mt-2 text-sm font-medium text-gray-900">No orders found</h3>
+      <p class="mt-1 text-sm text-gray-500">There are currently no orders to display.</p>
+    </div>
 
-      <div class="pagination-controls">
-        <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1 || isLoading">
-          Previous
-        </button>
-        <span>Page {{ currentPage }} of {{ totalPages }} (Total: {{ totalOrders }})</span>
-        <button @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages || isLoading">
-          Next
-        </button>
+    <template v-else>
+      <div class="overflow-x-auto border border-gray-200 rounded-md shadow-sm">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer Email</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Amount</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order Date</th>
+              <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr v-for="order in orders" :key="order.id" class="hover:bg-gray-50">
+              <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                <NuxtLink :to="`/admin/orders/${order.id}`" class="text-indigo-600 hover:text-indigo-800">#{{ order.id }}</NuxtLink>
+              </td>
+              <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ order.user_email }}</td>
+              <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ formatCurrency(order.total_amount) }}</td>
+              <td class="px-4 py-3 whitespace-nowrap text-sm">
+                <span :class="getStatusClass(order.status)" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
+                  {{ order.status }}
+                </span>
+              </td>
+              <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ formatOrderDate(order.created_at) }}</td>
+              <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                <NuxtLink :to="`/admin/orders/${order.id}`" class="text-indigo-600 hover:text-indigo-900">View</NuxtLink>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-6 flex items-center justify-between" v-if="totalPages > 1">
+        <p class="text-sm text-gray-700">
+          Page {{ currentPage }} of {{ totalPages }} (Total: {{ totalOrders }} orders)
+        </p>
+        <div class="flex space-x-2">
+          <button @click="changePage(currentPage - 1)" :disabled="currentPage === 1 || isLoading"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+            Previous
+          </button>
+          <button @click="changePage(currentPage + 1)" :disabled="currentPage === totalPages || isLoading"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+            Next
+          </button>
+        </div>
       </div>
     </template>
-
-    <div v-if="orders.length === 0 && !isLoading && !fetchError" class="empty-state">
-      <p>No orders found.</p>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import { useNuxtApp, useRoute, useRouter } from '#app';
+import { useNuxtApp, useRoute, useRouter, useHead } from '#app'; // Added useHead
 
 definePageMeta({
   layout: 'admin',
-  title: 'Order Management'
+  title: 'Order Management' // This might be overridden by useHead below
+});
+
+useHead({
+  title: 'Admin - Order Management',
 });
 
 const { $axios } = useNuxtApp();
@@ -71,24 +95,44 @@ const isLoading = ref(true);
 const fetchError = ref(null);
 
 const currentPage = ref(parseInt(route.query.page) || 1);
-const limit = ref(parseInt(route.query.limit) || 10);
+const limit = ref(parseInt(route.query.limit) || 10); // Default limit
 const totalOrders = ref(0);
 const totalPages = ref(1);
+
+const formatCurrency = (amount) => amount ? Number(amount).toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : 'N/A';
+const formatOrderDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString() : 'N/A';
+
+const getStatusClass = (status) => {
+  if (!status) return 'bg-gray-100 text-gray-800';
+  status = status.toLowerCase();
+  switch (status) {
+    case 'pending': return 'bg-yellow-100 text-yellow-800';
+    case 'processing': return 'bg-blue-100 text-blue-800';
+    case 'shipped': return 'bg-purple-100 text-purple-800';
+    case 'delivered': return 'bg-green-100 text-green-800';
+    case 'cancelled': return 'bg-red-100 text-red-800';
+    default: return 'bg-gray-100 text-gray-800';
+  }
+};
 
 async function fetchOrders(page = currentPage.value, pageSize = limit.value) {
   isLoading.value = true;
   fetchError.value = null;
   try {
+    // Ensure page and pageSize are numbers for the API call
+    const effectivePage = Number(page) || 1;
+    const effectivePageSize = Number(pageSize) || 10;
+
     const response = await $axios.get('/admin/orders', {
       params: {
-        page: page,
-        limit: pageSize,
+        page: effectivePage,
+        limit: effectivePageSize,
       },
     });
     orders.value = response.data.data;
     totalOrders.value = response.data.pagination.total;
     totalPages.value = response.data.pagination.totalPages;
-    currentPage.value = response.data.pagination.page; // Update currentPage from response
+    currentPage.value = response.data.pagination.page;
   } catch (err) {
     console.error('Failed to fetch orders:', err);
     fetchError.value = err.response?.data || err;
@@ -99,104 +143,50 @@ async function fetchOrders(page = currentPage.value, pageSize = limit.value) {
 
 function changePage(newPage) {
   if (newPage > 0 && newPage <= totalPages.value) {
-    router.push({ query: { ...route.query, page: newPage, limit: limit.value } });
-    // fetchOrders will be called by the watcher
+    // Update limit.value if it can change, for now it's fixed or from query
+    // router.push({ query: { ...route.query, page: newPage, limit: limit.value } });
+    // The watcher will trigger fetchOrders. Or call directly:
+    currentPage.value = newPage; // Directly update currentPage, watcher will handle it
   }
 }
 
-// Fetch orders when the component mounts
 onMounted(() => {
-  fetchOrders(currentPage.value, limit.value);
+  // Use current route query for initial fetch if available, otherwise defaults
+  const initialPage = parseInt(route.query.page) || 1;
+  const initialLimit = parseInt(route.query.limit) || limit.value;
+  currentPage.value = initialPage;
+  limit.value = initialLimit;
+  fetchOrders(initialPage, initialLimit);
 });
 
-// Watch for route query changes to refetch orders (for pagination)
 watch(
   () => route.query,
-  async (newQuery) => {
+  async (newQuery, oldQuery) => {
+    // Only refetch if page or limit actually changes and are valid numbers
     const newPage = parseInt(newQuery.page) || 1;
-    const newLimit = parseInt(newQuery.limit) || 10;
-    if (newPage !== currentPage.value || newLimit !== limit.value || orders.value.length === 0) { // also fetch if orders are empty
+    const newLimit = parseInt(newQuery.limit) || limit.value; // Use current limit if not in query
+
+    // Check if essential pagination params changed
+    if (newPage !== currentPage.value || newLimit !== limit.value || (oldQuery && (newQuery.page !== oldQuery.page || newQuery.limit !== oldQuery.limit))) {
+        // Update internal state before fetching
+        currentPage.value = newPage;
+        limit.value = newLimit;
         await fetchOrders(newPage, newLimit);
+    } else if (orders.value.length === 0 && !isLoading.value && !fetchError.value) {
+        // If orders are empty, try fetching (e.g., after an error or initial load with no params)
+        await fetchOrders(currentPage.value, limit.value);
     }
   },
-  { deep: true } // immediate: true might be useful if initial load depends on this
+  { deep: true }
 );
 
-
-useHead({
-  title: 'Admin - Order Management',
+// Watch currentPage directly if router.push is not used in changePage
+watch(currentPage, (newPage, oldPage) => {
+  if (newPage !== oldPage) {
+    // Update router query to reflect page change for bookmarking/sharing
+    router.push({ query: { ...route.query, page: newPage, limit: limit.value } });
+    // Fetching is handled by the route.query watcher
+  }
 });
+
 </script>
-
-<style scoped>
-.admin-orders-page {
-  padding: 1rem;
-}
-h2 {
-  margin-bottom: 1.5rem;
-}
-.loading-state, .error-state, .empty-state {
-  text-align: center;
-  padding: 2rem;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-  margin-top: 1rem;
-}
-.error-state { background-color: #fdd; color: #900; }
-
-.orders-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.orders-table th, .orders-table td {
-  border: 1px solid #ddd;
-  padding: 0.75rem;
-  text-align: left;
-}
-.orders-table th {
-  background-color: #f2f2f2;
-}
-.status {
-  padding: 0.2em 0.5em;
-  border-radius: 4px;
-  color: white;
-  font-size: 0.9em;
-  text-transform: capitalize;
-}
-.status-pending { background-color: #ffc107; color: #333; }
-.status-processing { background-color: #17a2b8; }
-.status-shipped { background-color: #007bff; }
-.status-delivered { background-color: #28a745; }
-.status-cancelled { background-color: #dc3545; }
-
-.action-link {
-  color: #007bff;
-  text-decoration: none;
-  margin-right: 0.5rem;
-}
-.action-link:hover {
-  text-decoration: underline;
-}
-
-.pagination-controls {
-  margin-top: 1.5rem;
-  text-align: center;
-}
-.pagination-controls button {
-  padding: 0.5rem 1rem;
-  margin: 0 0.5rem;
-  border: 1px solid #ccc;
-  background-color: #f8f9fa;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.pagination-controls button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-.pagination-controls span {
-  margin: 0 0.5rem;
-}
-</style>

@@ -81,13 +81,6 @@
             </div>
           </div>
 
-          <div class="mt-6 text-center">
-            <p class="text-sm text-gray-600">
-              <NuxtLink to="/auth/request-password-reset-page" class="font-medium text-indigo-600 hover:text-indigo-500 hover:underline">
-                Forgot your password?
-              </NuxtLink>
-            </p>
-          </div>
           <div class="mt-2 text-center">
              <p class="text-sm text-gray-600">
               Don't have an account?

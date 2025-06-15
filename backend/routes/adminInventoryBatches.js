@@ -2,11 +2,132 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
-const { param, body, validationResult } = require('express-validator');
+const { param, body, query, validationResult } = require('express-validator'); // Added 'query'
 const { NotFoundError, BadRequestError, ConflictError } = require('../utils/AppError');
 
 router.use(isAuthenticated, isAdmin);
 
+// Validation rules for GET / (list batches)
+const validateGetBatchesParams = [
+  query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('Limit must be an integer between 1 and 100.'),
+  query('product_id').optional().isInt({ min: 1 }).toInt().withMessage('Product ID must be a positive integer.'),
+  query('variant_id').optional().isInt({ min: 1 }).toInt().withMessage('Variant ID must be a positive integer.'),
+  query('batch_number').optional().isString().trim().escape(),
+  query('has_expired').optional().isBoolean().toBoolean(),
+  query('expires_soon_days').optional().isInt({ min: 1 }).toInt().withMessage('Expires soon days must be a positive integer.'),
+  query('sort_by').optional().isIn(['expiry_date', 'received_date', 'product_id', 'batch_number', 'current_quantity']).withMessage("Invalid sort_by value."),
+  query('sort_order').optional().isIn(['ASC', 'DESC']).withMessage("Invalid sort_order value. Allowed: 'ASC', 'DESC'.")
+];
+
+// GET / - List inventory batches with filtering, sorting, and pagination
+router.get('/', validateGetBatchesParams, async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const {
+    page = 1,
+    limit = 20,
+    product_id,
+    variant_id,
+    batch_number,
+    has_expired,
+    expires_soon_days,
+    sort_by = 'expiry_date', // Default sort
+    sort_order = 'ASC'     // Default order
+  } = req.query;
+
+  const offset = (page - 1) * limit;
+  const queryParams = [];
+  const conditions = [];
+  let paramIndex = 1; // For explicit parameter numbering in SQL
+
+  let baseQueryStringPart = `
+    FROM inventory_batches ib
+    LEFT JOIN products p ON ib.product_id = p.id
+    LEFT JOIN product_variants pv ON ib.variant_id = pv.id
+  `;
+
+  if (product_id) {
+    conditions.push(`ib.product_id = $${paramIndex++}`);
+    queryParams.push(product_id);
+  }
+  if (variant_id) {
+    conditions.push(`ib.variant_id = $${paramIndex++}`);
+    queryParams.push(variant_id);
+  }
+  if (batch_number) {
+    conditions.push(`ib.batch_number ILIKE $${paramIndex++}`);
+    queryParams.push(`%${batch_number}%`);
+  }
+  if (has_expired !== undefined) {
+    if (has_expired === true) {
+      conditions.push(`ib.expiry_date IS NOT NULL AND ib.expiry_date < CURRENT_DATE`);
+    } else { // has_expired === false
+      conditions.push(`(ib.expiry_date IS NULL OR ib.expiry_date >= CURRENT_DATE)`);
+    }
+  }
+  if (expires_soon_days) {
+    conditions.push(`ib.expiry_date IS NOT NULL AND ib.expiry_date >= CURRENT_DATE AND ib.expiry_date <= (CURRENT_DATE + ($${paramIndex++} * INTERVAL '1 day'))`);
+    queryParams.push(expires_soon_days);
+  }
+
+  if (conditions.length > 0) {
+    baseQueryStringPart += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  // Sanitize sort_by to prevent SQL injection, though isIn validation already helps.
+  // The fields are known and validated.
+  const validSortColumns = ['expiry_date', 'received_date', 'product_id', 'batch_number', 'current_quantity'];
+  const safeSortBy = validSortColumns.includes(sort_by) ? sort_by : 'expiry_date'; // Default to expiry_date if invalid
+  const safeSortOrder = sort_order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'; // Default to ASC
+
+  const countQuerySql = 'SELECT COUNT(ib.id) as total_count ' + baseQueryStringPart;
+
+  const dataSelectSql = 'SELECT ib.*, p.name as product_name, p.sku as product_sku, pv.sku as variant_sku ';
+  const dataOrderSql = ` ORDER BY ib.${safeSortBy} ${safeSortOrder}, ib.id ${safeSortOrder} `; // Added secondary sort by id for stable pagination
+
+  // For data query, parameter indices continue from where conditions left off
+  const dataLimitOffsetSql = `LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+  const dataQuerySql = dataSelectSql + baseQueryStringPart + dataOrderSql + dataLimitOffsetSql;
+
+  // Parameters for count query are just the filter conditions
+  const countFinalParams = [...queryParams];
+  // Parameters for data query include filter conditions, then limit, then offset
+  const dataFinalParams = [...queryParams, limit, offset];
+
+
+  try {
+    const countResult = await db.query(countQuerySql, countFinalParams);
+    const totalBatches = parseInt(countResult.rows[0].total_count, 10);
+
+    let batchesResultRows = [];
+    if (totalBatches > 0) {
+        const batchesResult = await db.query(dataQuerySql, dataFinalParams);
+        batchesResultRows = batchesResult.rows;
+    }
+
+    res.status(200).json({
+      data: batchesResultRows,
+      pagination: {
+        total: totalBatches,
+        page: page,
+        limit: limit,
+        totalPages: Math.ceil(totalBatches / limit),
+        hasNextPage: page < Math.ceil(totalBatches / limit),
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching inventory batches:', error);
+    next(error); // Pass to global error handler
+  }
+});
+
+
+// PUT /:batchId - Update an existing inventory batch
 router.put(
   '/:batchId',
   [

@@ -40,7 +40,7 @@
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                 <NuxtLink :to="`/admin/options/${opt.id}/values`" class="text-green-600 hover:text-green-800 hover:underline">Manage Values</NuxtLink>
                 <button @click="openEditModal(opt)" class="text-indigo-600 hover:text-indigo-900 hover:underline">Edit</button>
-                <button @click="handleDeleteOption(opt.id)" class="text-red-600 hover:text-red-800 hover:underline" :disabled="isDeleting === opt.id">
+                <button @click="handleDeleteOption(opt.id, opt.name)" class="text-red-600 hover:text-red-800 hover:underline" :disabled="isDeleting === opt.id">
                   {{ isDeleting === opt.id ? 'Deleting...' : 'Delete' }}
                 </button>
               </td>
@@ -104,7 +104,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useNuxtApp, definePageMeta, useHead } from '#app'; // useRouter is not explicitly used for navigation in this version
+import { useNuxtApp, definePageMeta, useHead } from '#app';
 import { useToast } from 'vue-toastification';
 
 definePageMeta({
@@ -117,7 +117,6 @@ useHead({
 
 const { $axios } = useNuxtApp();
 const toast = useToast();
-// const router = useRouter(); // Not used directly for navigation, NuxtLink is used
 
 const options = ref([]);
 const isLoading = ref(true);
@@ -125,29 +124,15 @@ const fetchError = ref(null);
 const showModal = ref(false);
 const isEditing = ref(false);
 const currentOption = ref({ id: null, name: '' });
-const isSubmitting = ref(false); // For form submission loading state
-const isDeleting = ref(null); // Tracks ID of option being deleted
+const isSubmitting = ref(false);
+const isDeleting = ref(null);
 
 async function fetchOptions() {
   isLoading.value = true;
   fetchError.value = null;
   try {
-    // The GET /api/admin/options does not yet support product_count or value_count directly
-    // For now, we fetch just the options. value_count can be added later or fetched on demand.
-    const response = await $axios.get('/api/admin/options');
-    options.value = response.data.map(opt => ({ ...opt, value_count: 0 })); // Placeholder for value_count
-
-    // To get actual value_counts, we'd need to iterate and make more calls, or backend sends it.
-    // Example for fetching value counts (can be slow, N+1):
-    // for (let opt of options.value) {
-    //   try {
-    //     const valuesResponse = await $axios.get(`/api/admin/options/${opt.id}/values`);
-    //     opt.value_count = valuesResponse.data.length;
-    //   } catch (countError) {
-    //     console.warn(`Could not fetch value count for option ${opt.id}`, countError);
-    //   }
-    // }
-
+    const response = await $axios.get('/admin/options'); // Corrected path
+    options.value = response.data.map(opt => ({ ...opt, value_count: opt.value_count || 0 })); // Ensure value_count exists
   } catch (err) {
     console.error('Error fetching option types:', err);
     fetchError.value = err.response?.data?.message || err.message || 'Could not load option types.';
@@ -166,14 +151,14 @@ const openAddModal = () => {
 };
 
 const openEditModal = (option) => {
-  currentOption.value = { ...option }; // Create a copy for editing
+  currentOption.value = { ...option };
   isEditing.value = true;
   showModal.value = true;
 };
 
 const closeModal = () => {
   showModal.value = false;
-  currentOption.value = { id: null, name: '' }; // Reset
+  currentOption.value = { id: null, name: '' };
 };
 
 const handleSubmitOption = async () => {
@@ -189,13 +174,13 @@ const handleSubmitOption = async () => {
   isSubmitting.value = true;
   try {
     if (isEditing.value) {
-      await $axios.put(`/api/admin/options/${currentOption.value.id}`, { name: currentOption.value.name.trim() });
+      await $axios.put(`/admin/options/${currentOption.value.id}`, { name: currentOption.value.name.trim() }); // Corrected path
       toast.success('Option type updated successfully!');
     } else {
-      await $axios.post('/api/admin/options', { name: currentOption.value.name.trim() });
+      await $axios.post('/admin/options', { name: currentOption.value.name.trim() }); // Corrected path
       toast.success('Option type added successfully!');
     }
-    fetchOptions(); // Refresh the list
+    fetchOptions();
     closeModal();
   } catch (error) {
     console.error('Error submitting option type:', error);
@@ -205,24 +190,20 @@ const handleSubmitOption = async () => {
   }
 };
 
-const handleDeleteOption = async (optionId) => {
-  if (!window.confirm('Are you sure you want to delete this option type? This might affect products and variants using its values.')) {
+const handleDeleteOption = async (optionId, optionName) => { // Added optionName for toast
+  if (!window.confirm(`Are you sure you want to delete option type "${optionName}" (ID: ${optionId})? This might affect products and variants.`)) {
     return;
   }
   isDeleting.value = optionId;
   try {
-    await $axios.delete(`/api/admin/options/${optionId}`);
-    toast.success('Option type deleted successfully!');
-    fetchOptions(); // Refresh the list
+    await $axios.delete(`/admin/options/${optionId}`); // Corrected path
+    toast.success(`Option type "${optionName}" deleted successfully.`);
+    fetchOptions();
   } catch (error) {
     console.error('Error deleting option type:', error);
-    toast.error(error.response?.data?.message || 'Failed to delete option type.');
+    toast.error(error.response?.data?.message || `Failed to delete option type "${optionName}".`);
   } finally {
     isDeleting.value = null;
   }
 };
 </script>
-
-<style scoped>
-/* Minimal scoped styles if needed, prefer Tailwind utilities */
-</style>

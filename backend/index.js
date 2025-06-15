@@ -12,11 +12,13 @@ const adminProductRoutes = require('./routes/adminProducts'); // Import admin pr
 const adminDiscountRoutes = require('./routes/adminDiscounts'); // Import admin discount routes
 const adminSupplierRoutes = require('./routes/adminSuppliers'); // Import admin supplier routes
 const adminPurchaseOrderRoutes = require('./routes/adminPurchaseOrders'); // Import admin PO routes
+const adminStockMovementLogsRoutes = require('./routes/adminStockMovementLogs');
+const adminInventoryBatchesRoutes = require('./routes/adminInventoryBatches'); // Added this line
 const adminReportRoutes = require('./routes/adminReports'); // Import admin report routes
 const adminProductSpecificOptionsRoutes = require('./routes/adminProductSpecificOptions'); // Import product-specific option config routes
 const adminOptionManagementRoutes = require('./routes/adminOptionManagement'); // Import admin option management routes
 const adminProductVariantsRoutes = require('./routes/adminProductVariants.js'); // Import admin product variants routes
-const adminVariantDetailRoutes = require('./routes/adminVariantDetails.js');   // For variant-specific GET/PUT/DELETE by variant ID - Note: adminProductVariantsRoutes now includes /variants/:variantId
+// const adminVariantDetailRoutes = require('./routes/adminVariantDetails.js');   // For variant-specific GET/PUT/DELETE by variant ID - Note: adminProductVariantsRoutes now includes /variants/:variantId
 const adminReviewRoutes = require('./routes/adminReviews'); // Import admin review routes
 const adminCategoryRoutes = require('./routes/adminCategories'); // Import admin category routes
 const adminStatsRoutes = require('./routes/adminStats'); // Import admin statistics routes
@@ -68,7 +70,7 @@ app.use('/api/admin', adminProductSpecificOptionsRoutes); // Mount product-speci
 app.use('/api/admin', adminProductVariantsRoutes); // Mount product variants routes (e.g., /products/:productId/variants and /variants/:variantId)
 app.use('/api/admin/reviews', adminReviewRoutes); // Mount admin review management routes
 // Consider if adminVariantDetailRoutes is still needed or if its functionality is covered by adminProductVariantsRoutes. For now, keeping it if it serves other specific details.
-app.use('/api/admin', adminVariantDetailRoutes); // If it has distinct routes like /variant-details/:id for other purposes.
+// app.use('/api/admin', adminVariantDetailRoutes); // If it has distinct routes like /variant-details/:id for other purposes.
 
 // --- Public and User-Specific Review Routes ---
 // (e.g. POST /api/products/:productId/reviews, GET /api/products/:productId/reviews)
@@ -91,6 +93,8 @@ app.use('/api/admin/products', adminProductImagesRoutes); // Mounts /:productId/
 app.use('/api/admin/discounts', adminDiscountRoutes);
 app.use('/api/admin/suppliers', adminSupplierRoutes);
 app.use('/api/admin/purchase-orders', adminPurchaseOrderRoutes);
+app.use('/api/admin/stock-movement-logs', adminStockMovementLogsRoutes);
+app.use('/api/admin/inventory-batches', adminInventoryBatchesRoutes); // Added this line
 app.use('/api/admin/reports', adminReportRoutes);
 app.use('/api/admin/stock-adjustments', adminStockAdjustmentsRoutes);
 app.use('/api/admin/returns', adminReturnsRoutes);

@@ -125,11 +125,15 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue';
-import { useNuxtApp, useRoute, useRouter, definePageMeta, useHead } from '#app'; // Added definePageMeta, useHead
+import { useNuxtApp, useRoute, useRouter, definePageMeta, useHead } from '#app';
 
 definePageMeta({
   layout: 'admin',
   title: 'Product Management'
+});
+
+useHead({
+  title: 'Admin - Product Management',
 });
 
 const { $axios } = useNuxtApp();
@@ -155,8 +159,6 @@ const pagination = ref({
 async function fetchProducts() {
   isLoading.value = true;
   fetchError.value = null;
-  // Do not clear actionMessage on fetch if it's from a redirect.
-  // actionMessage.value = ''; actionError.value = false;
 
   const params = {
     page: pagination.value.current_page,
@@ -167,8 +169,7 @@ async function fetchProducts() {
   }
 
   try {
-    // Using the public GET /api/products endpoint which supports search and returns supplier_name
-    const response = await $axios.get('/products', { params });
+    const response = await $axios.get('/products', { params }); // Uses public /api/products
     products.value = response.data.products;
     pagination.value.total_products = response.data.pagination.total_products;
     pagination.value.total_pages = response.data.pagination.total_pages;
@@ -182,20 +183,22 @@ async function fetchProducts() {
 }
 
 function applyFilters() {
-    pagination.value.current_page = 1; // Reset to first page for new search
+    pagination.value.current_page = 1;
     const query = { ...route.query, page: pagination.value.current_page, limit: pagination.value.limit };
     if (searchTerm.value) {
         query.search_term = searchTerm.value;
     } else {
-        delete query.search_term;
+        delete query.search_term; // Remove search_term from query if empty
     }
+    // Ensure page is 1 or undefined, not other falsy values
+    if (query.page === 1) delete query.page;
     router.push({ query });
 }
 
 function resetFilters() {
     searchTerm.value = '';
     pagination.value.current_page = 1;
-    router.push({ query: { page: 1, limit: pagination.value.limit } });
+    router.push({ query: { limit: pagination.value.limit } }); // Only keep limit, reset page and search
 }
 
 
@@ -203,6 +206,7 @@ function changePage(newPage) {
   if (newPage > 0 && newPage <= pagination.value.total_pages && newPage !== pagination.value.current_page) {
     const query = { ...route.query, page: newPage, limit: pagination.value.limit };
     if (searchTerm.value) query.search_term = searchTerm.value;
+    if (query.page === 1) delete query.page; // Clean URL if page is 1
     router.push({ query });
   }
 }
@@ -212,13 +216,14 @@ async function confirmDeleteProduct(product) {
     deletingId.value = product.id;
     actionMessage.value = ''; actionError.value = false;
     try {
-      await $axios.delete(`/products/${product.id}`); // Admin protected route from routes/products.js
+      await $axios.delete(`/products/${product.id}`); // Uses public /api/products/:id
       actionMessage.value = `Product "${product.name}" deleted successfully.`;
       actionError.value = false;
       if (products.value.length === 1 && pagination.value.current_page > 1) {
+        // If last item on a page (not first page) is deleted, go to previous page
         changePage(pagination.value.current_page - 1);
       } else {
-        fetchProducts();
+        fetchProducts(); // Otherwise, refresh current page
       }
     } catch (err) {
       console.error('Failed to delete product:', err);
@@ -237,11 +242,19 @@ onMounted(() => {
   } else if (route.query.updated === 'success') {
     actionMessage.value = 'Product updated successfully.'; actionError.value = false;
   }
+  // Clean up query params from redirects
   if (route.query.created || route.query.updated) {
-    router.replace({ query: { ...route.query, created: undefined, updated: undefined } });
+    const cleanedQuery = { ...route.query };
+    delete cleanedQuery.created;
+    delete cleanedQuery.updated;
+    router.replace({ query: cleanedQuery });
   }
-   setTimeout(() => { if(!actionError.value && actionMessage.value) actionMessage.value = ''; }, 3000);
+   setTimeout(() => { if(!actionError.value && actionMessage.value && !route.query.created && !route.query.updated) actionMessage.value = ''; }, 3000);
 
+  // Initial fetch based on current route query
+  pagination.value.current_page = parseInt(route.query.page) || 1;
+  pagination.value.limit = parseInt(route.query.limit) || 10;
+  searchTerm.value = route.query.search_term || '';
   fetchProducts();
 });
 
@@ -250,15 +263,23 @@ watch(() => route.query, (newQuery) => {
     const newLimit = parseInt(newQuery.limit) || pagination.value.limit;
     const newSearchTerm = newQuery.search_term || '';
 
-    if (newPage !== pagination.value.current_page || newLimit !== pagination.value.limit || newSearchTerm !== searchTerm.value || products.value.length === 0) {
+    let needsRefetch = false;
+    if (newPage !== pagination.value.current_page) {
         pagination.value.current_page = newPage;
+        needsRefetch = true;
+    }
+    if (newLimit !== pagination.value.limit) {
         pagination.value.limit = newLimit;
-        searchTerm.value = newSearchTerm; // Ensure local searchTerm is in sync with URL
+        needsRefetch = true;
+    }
+    if (newSearchTerm !== searchTerm.value) {
+        searchTerm.value = newSearchTerm;
+        needsRefetch = true;
+    }
+
+    if (needsRefetch || products.value.length === 0 && !isLoading.value && !fetchError.value) {
         fetchProducts();
     }
 }, { deep: true });
 
-useHead({
-  title: 'Admin - Product Management',
-});
 </script>

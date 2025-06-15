@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
 const { generateOrderInvoicePdf, generatePackingSlipPdf } = require('../services/pdfService');
-const { param, validationResult } = require('express-validator');
+const { param, query, validationResult } = require('express-validator'); // Added query
 const { NotFoundError } = require('../utils/AppError');
 const crypto = require('crypto');
 
@@ -14,10 +14,21 @@ const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered',
 const BILLABLE_ORDER_STATUSES = ['shipped', 'completed', 'delivered']; // 'completed' can be an alias for delivered or a separate final step
 const ALLOWED_PAYMENT_STATUSES = ['pending', 'paid', 'partially_paid', 'refunded', 'partially_refunded', 'failed', 'cancelled', 'voided'];
 
+// Validation for GET /orders
+const validateListOrdersParams = [
+  query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer.').toInt(),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be an integer between 1 and 100.').toInt()
+];
+
 // GET /admin/orders - List all orders
-router.get('/orders', async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
+router.get('/orders', validateListOrdersParams, async (req, res, next) => { // Added next
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const page = req.query.page || 1; // Default if optional and not provided
+  const limit = req.query.limit || 10; // Default if optional and not provided
   const offset = (page - 1) * limit;
 
   try {
@@ -50,7 +61,7 @@ router.get('/orders', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching orders for admin:', error);
-    res.status(500).json({ message: 'Failed to retrieve orders.' });
+    next(error); // Pass to global error handler
   }
 });
 

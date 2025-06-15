@@ -11,6 +11,148 @@ const { generateProductLabelPdf } = require('../services/pdfService'); // Ensure
 // Apply auth middleware to all routes in this router
 router.use(isAuthenticated, isAdmin);
 
+const validateGetStockLevelsParams = [
+  query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('Limit must be an integer between 1 and 100.'),
+  query('search_term').optional().isString().trim().escape(),
+  query('category_id').optional().isInt({ min: 1 }).toInt().withMessage('Category ID must be a positive integer.'),
+  query('supplier_id').optional().isInt({ min: 1 }).toInt().withMessage('Supplier ID must be a positive integer.'),
+  query('low_stock_only').optional().isBoolean().toBoolean().withMessage('low_stock_only must be a boolean.'),
+  query('sort_by').optional().isIn(['product_name', 'sku', 'stock_quantity', 'reorder_threshold']).withMessage("Invalid sort_by value."),
+  query('sort_order').optional().isIn(['ASC', 'DESC']).withMessage("Invalid sort_order value. Allowed: 'ASC', 'DESC'.")
+];
+
+router.get('/stock-levels', validateGetStockLevelsParams, async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const {
+    page = 1,
+    limit = 20,
+    search_term,
+    category_id,
+    supplier_id,
+    low_stock_only,
+    sort_by = 'product_name',
+    sort_order = 'ASC'
+  } = req.query;
+
+  const offset = (page - 1) * limit;
+  let queryParams = [];
+
+  let baseCteQuery = `
+    WITH stock_items AS (
+        SELECT
+            p.id as product_id,
+            NULL::INT as variant_id,
+            p.name as item_name,
+            p.sku as item_sku,
+            p.stock_quantity,
+            p.reorder_threshold,
+            p.has_variants,
+            p.category_id,
+            c.name as category_name,
+            p.supplier_id,
+            s.name as supplier_name,
+            'product' as item_type,
+            p.name as sort_product_name,
+            p.sku as sort_sku
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN suppliers s ON p.supplier_id = s.id
+        WHERE p.has_variants = FALSE
+        UNION ALL
+        SELECT
+            p.id as product_id,
+            pv.id as variant_id,
+            p.name || ' - ' || pv.sku as item_name,
+            pv.sku as item_sku,
+            pv.stock_quantity,
+            p.reorder_threshold,
+            TRUE as has_variants,
+            p.category_id,
+            c.name as category_name,
+            p.supplier_id,
+            s.name as supplier_name,
+            'variant' as item_type,
+            p.name as sort_product_name,
+            pv.sku as sort_sku
+        FROM product_variants pv
+        JOIN products p ON pv.product_id = p.id
+        LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN suppliers s ON p.supplier_id = s.id
+    )
+  `;
+
+  let conditions = [];
+  let paramIndex = 1;
+
+  if (search_term) {
+    conditions.push(`(item_name ILIKE $${paramIndex} OR item_sku ILIKE $${paramIndex})`);
+    queryParams.push(`%${search_term}%`);
+    paramIndex++;
+  }
+  if (category_id) {
+    conditions.push(`category_id = $${paramIndex}`);
+    queryParams.push(category_id);
+    paramIndex++;
+  }
+  if (supplier_id) {
+    conditions.push(`supplier_id = $${paramIndex}`);
+    queryParams.push(supplier_id);
+    paramIndex++;
+  }
+  if (low_stock_only === true) {
+    conditions.push(`(stock_quantity <= reorder_threshold AND reorder_threshold > 0)`);
+  }
+
+  let whereClause = "";
+  if (conditions.length > 0) {
+    whereClause = " WHERE " + conditions.join(" AND ");
+  }
+
+  try {
+    const countQueryString = baseCteQuery + `SELECT COUNT(*) as total_count FROM stock_items` + whereClause;
+    const countResult = await db.query(countQueryString, queryParams);
+    const totalItems = parseInt(countResult.rows[0].total_count);
+
+    let sortColumn = 'sort_product_name';
+    if (sort_by === 'sku') sortColumn = 'item_sku';
+    else if (sort_by === 'stock_quantity') sortColumn = 'stock_quantity';
+    else if (sort_by === 'reorder_threshold') sortColumn = 'reorder_threshold';
+
+    const safeSortOrder = sort_order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
+    const dataQueryString = baseCteQuery +
+      `SELECT * FROM stock_items` +
+      whereClause +
+      ` ORDER BY ${sortColumn} ${safeSortOrder}, product_id ${safeSortOrder}, variant_id ${safeSortOrder} NULLS LAST ` +
+      `LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+
+    const dataFinalParams = [...queryParams, limit, offset];
+    const itemsResult = await db.query(dataQueryString, dataFinalParams);
+
+    res.status(200).json({
+        data: itemsResult.rows,
+        pagination: {
+            total: totalItems,
+            page: page,
+            limit: limit,
+            totalPages: Math.ceil(totalItems / limit),
+            hasNextPage: page < Math.ceil(totalItems / limit),
+            hasPrevPage: page > 1,
+            sort_by: sort_by,
+            sort_order: sort_order
+        }
+    });
+  } catch (error) {
+    console.error('Error fetching stock levels:', error);
+    next(error);
+  }
+});
+
 // PUT /api/admin/products/:id/stock - Update a product's stock quantity
 router.put('/:id/stock', async (req, res) => {
   const { id } = req.params;
