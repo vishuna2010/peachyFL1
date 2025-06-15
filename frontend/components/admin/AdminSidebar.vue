@@ -148,7 +148,7 @@ const iconTax = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 
 const navigationItems = ref([
   { name: 'Dashboard', href: '/admin', iconSvg: iconDashboard },
   { name: 'Users', href: '/admin/users', iconSvg: iconUsers },
-  { name: 'Products', href: '/admin/products', iconSvg: iconProducts },
+  { name: 'Products', href: '/admin/products', iconSvg: null }, // Icon removed
   { name: 'Categories', href: '/admin/categories', iconSvg: null }, // Icon removed
   { name: 'Orders', href: '/admin/orders', iconSvg: iconOrders },
   { name: 'Discounts', href: '/admin/discounts', iconSvg: iconDiscounts },
