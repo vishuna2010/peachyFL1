@@ -274,8 +274,19 @@ async function getProductById(productId) {
   // productId is assumed to be validated as an integer by the caller (route handler)
   const client = await db.pool.connect();
   try {
-    // Temporarily simplified query for diagnostics
-    const productQuery = `SELECT * FROM products p WHERE p.id = $1;`;
+    const productQuery = `
+      SELECT p.*,
+             c.name as category_name,
+             s.name as supplier_name,
+             COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN suppliers s ON p.supplier_id = s.id
+      LEFT JOIN product_tags pt ON p.id = pt.product_id
+      LEFT JOIN tags t ON pt.tag_id = t.id
+      WHERE p.id = $1
+      GROUP BY p.id, c.name, s.name;
+    `; // p.has_variants is selected via p.*
     const productResult = await client.query(productQuery, [productId]);
 
     if (productResult.rows.length === 0) {
