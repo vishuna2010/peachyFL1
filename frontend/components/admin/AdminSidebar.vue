@@ -16,32 +16,48 @@
     <ClientOnly>
       <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
         <template v-for="item in navigationItems" :key="item.name">
-          <NuxtLink
-            v-if="!(item.name === 'Products' || item.name === 'Product Options')"
-            :to="item.href"
-            @click="closeMobileSidebarIfNeeded"
-            class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150"
-            :class="isActive(item.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
-          >
-            <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0" :class="isActive(item.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
-            {{ item.name }}
-          </NuxtLink>
-          <ClientOnly v-else>
+          <template v-if="item.name === 'Products'">
+            <!-- Standard HTML <a> tag for Products link -->
+            <a
+              :href="item.href"
+              @click="closeMobileSidebarIfNeeded"
+              class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150 text-neutral-300 hover:bg-neutral-700 hover:text-white"
+            >
+              <!-- Icon span is removed as item.iconSvg is null for Products -->
+              {{ item.name }} (Plain Link Test)
+            </a>
+          </template>
+          <template v-else-if="item.name === 'Product Options'">
+            <ClientOnly :key="item.name + '-client'">
+              <NuxtLink
+                :to="item.href"
+                @click="closeMobileSidebarIfNeeded"
+                class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150"
+                :class="isActive(item.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+              >
+                <!-- Icon span is removed as item.iconSvg is null for Product Options -->
+                {{ item.name }}
+              </NuxtLink>
+              <template #fallback>
+                <div class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 opacity-50">
+                  {{ item.name }} (Loading...)
+                </div>
+              </template>
+            </ClientOnly>
+          </template>
+          <template v-else> <!-- For all other links -->
             <NuxtLink
+              :key="item.name + '-ssr'" <!-- Ensure unique key if item.name isn't already unique in this context -->
               :to="item.href"
               @click="closeMobileSidebarIfNeeded"
               class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors duration-150"
               :class="isActive(item.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
             >
               <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0" :class="isActive(item.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+              <span v-else-if="item.name === 'Categories'" class="mr-3 h-5 w-5 flex-shrink-0"></span> <!-- Placeholder for spacing if icon is null -->
               {{ item.name }}
             </NuxtLink>
-            <template #fallback>
-              <div class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 opacity-50">
-                {{ item.name }} (Loading...)
-              </div>
-            </template>
-          </ClientOnly>
+          </template>
         </template>
 
       <!-- Inventory Sub-menu -->
