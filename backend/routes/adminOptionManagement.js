@@ -48,7 +48,7 @@ optionsRouter.get('/', async (req, res, next) => {
   try {
     // Consider pagination if the list grows very large in a real application
     const result = await db.query('SELECT * FROM product_options ORDER BY name ASC');
-    res.json(result.rows);
+    res.json({ data: result.rows });
   } catch (error) {
     next(error);
   }
@@ -195,7 +195,7 @@ optionsRouter.get(
         return next(new NotFoundError(`Option type with ID ${optionId} not found.`));
       }
       const result = await db.query('SELECT * FROM product_option_values WHERE product_option_id = $1 ORDER BY value ASC', [optionId]);
-      res.json(result.rows);
+      res.json({ data: result.rows });
     } catch (error) {
       next(error);
     }

@@ -116,12 +116,12 @@ router.get(
       const totalPages = Math.ceil(totalItems / limit);
 
       res.json({
-        reviews: reviewsResult.rows,
+        data: reviewsResult.rows, // Changed 'reviews' to 'data'
         pagination: {
           currentPage: page,
           totalPages,
           totalItems,
-          pageSize: limit
+          pageSize: limit // Retaining pageSize as it was, frontend might use 'limit' or 'pageSize'
         }
       });
     } catch (error) {
