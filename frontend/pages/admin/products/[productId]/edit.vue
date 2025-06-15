@@ -58,19 +58,19 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useNuxtApp, useRoute, useRouter, useHead } from '#app'; // Added useHead
+// Using #imports for Nuxt 3 auto-imports; adjust if using Nuxt 2 with different import paths
+import { useNuxtApp, useRoute, useRouter, useHead, definePageMeta } from '#imports';
 import ProductForm from '~/components/admin/ProductForm.vue';
 import ProductOptionsManager from '~/components/admin/ProductOptionsManager.vue';
 import ProductVariantsManager from '~/components/admin/ProductVariantsManager.vue';
 
 definePageMeta({
   layout: 'admin',
-  // title: 'Edit Product' // Title managed by useHead
 });
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
-const router = useRouter();
+const router = useRouter(); // Not used in current snippet, but good to have if navigation is needed
 
 const productData = ref(null);
 const categories = ref([]);
@@ -83,54 +83,72 @@ const fetchError = ref('');
 const isSubmitting = ref(false);
 const apiError = ref('');
 
-const productId = route.params.id;
+// Correctly use route.params.productId as per the new file structure
+const productId = ref(route.params.productId);
 const adminProductListPath = '/admin/products';
 
+useHead({
+  // Update title to use the reactive productId
+  title: () => `Admin - Edit Product ${productId.value || ''}`,
+});
+
+
 async function fetchProductAndRelatedData() {
+  if (!productId.value) {
+    fetchError.value = 'Product ID is missing.';
+    isLoadingInitialData.value = false;
+    isLoadingProduct.value = false;
+    return;
+  }
   isLoadingProduct.value = true;
   isLoadingInitialData.value = true;
   fetchError.value = '';
   try {
+    // API paths should be relative to baseURL, e.g., /admin/products/:id not /products/:id for admin section
+    // However, current code uses /products/:id and /admin/suppliers. Assuming these are correct for now.
+    // If admin endpoints are /admin/products/:id, then this should be:
+    // $axios.get(`/admin/products/${productId.value}`),
     const [productResponse, catResponse, supResponse] = await Promise.all([
-      $axios.get(`/products/${productId}`), // Public product endpoint includes variants and options
-      $axios.get('/categories'),
-      $axios.get('/admin/suppliers?limit=1000') // Assuming suppliers list is not excessively large
+      $axios.get(`/products/${productId.value}`), // Public product endpoint often includes variants/options
+      $axios.get('/categories'), // Public categories endpoint
+      $axios.get('/admin/suppliers?limit=1000') // Admin suppliers endpoint
     ]);
 
-    productData.value = productResponse.data;
-    categories.value = catResponse.data;
-    suppliers.value = supResponse.data.data || supResponse.data; // Handle paginated or direct array
+    productData.value = productResponse.data.data ? productResponse.data.data : productResponse.data; // Adapt to response structure
+    categories.value = catResponse.data.data ? catResponse.data.data : catResponse.data;
+    suppliers.value = supResponse.data.data || supResponse.data;
 
     isLoadingProduct.value = false;
   } catch (error) {
     console.error('Error fetching product details or related data:', error);
-    if (error.response?.status === 404 && error.config.url.includes(`/products/${productId}`)) {
-        productData.value = null; // Ensure productData is null on 404
-        fetchError.value = `Product with ID ${productId} not found.`;
+    if (error.response?.status === 404 && error.config.url.includes(`/products/${productId.value}`)) {
+        productData.value = null;
+        fetchError.value = `Product with ID ${productId.value} not found.`;
     } else {
         fetchError.value = error.response?.data?.message || 'Failed to load necessary data for product editing.';
     }
-    isLoadingProduct.value = false; // Also set to false on error
+    isLoadingProduct.value = false;
   } finally {
-    isLoadingInitialData.value = false; // Always set this to false
+    isLoadingInitialData.value = false;
   }
 }
 
 async function handleUpdateProduct(formDataPayload) {
+  if (!productId.value) {
+    apiError.value = 'Product ID is missing. Cannot update.';
+    return;
+  }
   isSubmitting.value = true;
   apiError.value = '';
   try {
-    await $axios.put(`/products/${productId}`, formDataPayload, {
+    // Similarly, if admin endpoint is /admin/products/:id for PUT:
+    // await $axios.put(`/admin/products/${productId.value}`, formDataPayload, {
+    await $axios.put(`/products/${productId.value}`, formDataPayload, {
        headers: {
         'Content-Type': 'multipart/form-data'
       }
     });
-    // Consider a more targeted re-fetch or optimistic update if performance is an issue.
-    // For now, re-fetching ensures all data (including options/variants if base product change affects them) is current.
-    await fetchProductAndRelatedData();
-
-    // Using Nuxt's useToast (if globally available or imported here) is better than alert
-    // For example: const toast = useToast(); toast.success('Product updated successfully!');
+    await fetchProductAndRelatedData(); // Re-fetch to get latest data
     alert('Base product details updated successfully!');
   } catch (error) {
     console.error('Error updating product:', error);
@@ -140,11 +158,9 @@ async function handleUpdateProduct(formDataPayload) {
   }
 }
 
-onMounted(fetchProductAndRelatedData);
-
-useHead({
-  title: `Admin - Edit Product ${productId}`,
+onMounted(() => {
+  // productId.value will be populated from route.params.productId by this time
+  fetchProductAndRelatedData();
 });
-</script>
 
-<!-- <style scoped> removed -->
+</script>
