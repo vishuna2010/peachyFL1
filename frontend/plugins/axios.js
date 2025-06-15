@@ -6,6 +6,10 @@ export default defineNuxtPlugin((nuxtApp) => {
   const backendBaseUrl = config.public.backendBaseUrl || 'http://localhost:3000'; // Fallback if not set
   const baseURL = `${backendBaseUrl}/api`;
 
+  // Initialize useState hooks in the main plugin scope
+  const authTokenState = useState('authToken');
+  const authUserState = useState('authUser'); // Assuming user state is also managed by useState
+
   const instance = axios.create({
     baseURL: baseURL,
     // You can add other default settings here, like headers
@@ -14,7 +18,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   // Add a request interceptor
   instance.interceptors.request.use(
     (config) => {
-      const authTokenState = useState('authToken');
+      // Use authTokenState from the outer scope
       const token = authTokenState.value;
 
       console.log('[Axios Interceptor] Current Token:', token ? 'Token Present' : 'Token Missing/Null');
@@ -45,9 +49,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       if (error.response && error.response.status === 401) {
         console.error('[Axios Response Interceptor] Received 401 Unauthorized. Logging out.');
 
-        const authTokenState = useState('authToken');
-        const authUserState = useState('authUser'); // Assuming user state is also managed by useState
-
+        // Use authTokenState and authUserState from the outer scope
         if (process.client) {
           localStorage.removeItem('authToken');
           localStorage.removeItem('authUser');
