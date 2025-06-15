@@ -255,11 +255,25 @@ router.get('/', [
       sortBy: sort_by,
       optionValueId: parsedOptionValueId, // Pass to service
       page: parsedPage,
-      limit: parsedLimit
+      limit: parsedLimit,
+      is_admin_request: false // Ensure public access rules are applied
     });
 
-    res.status(200).json(result);
-  } catch (error) {
+    // Transform the response
+    res.status(200).json({
+      products: result.products,
+      pagination: {
+        total_products: result.totalProducts,
+        current_page: result.page,
+        limit: result.limit,
+        total_pages: result.totalPages,
+        // Optional: hasNextPage and hasPrevPage can be derived by frontend or here
+        hasNextPage: result.page < result.totalPages,
+        hasPrevPage: result.page > 1
+      }
+    });
+  } catch (error)
+ {
     next(error); // Pass errors to the global error handler
   }
 });
