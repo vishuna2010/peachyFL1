@@ -14,16 +14,22 @@ export default defineNuxtPlugin((nuxtApp) => {
   // Add a request interceptor
   instance.interceptors.request.use(
     (config) => {
-      // Access the authToken state directly
-      const authTokenState = useState('authToken'); // Default value (null) can be set in useAuth
+      const authTokenState = useState('authToken');
       const token = authTokenState.value;
+
+      console.log('[Axios Interceptor] Current Token:', token ? 'Token Present' : 'Token Missing/Null');
+      console.log('[Axios Interceptor] Request URL:', config.url);
 
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+        console.log('[Axios Interceptor] Authorization header SET');
+      } else {
+        console.log('[Axios Interceptor] Authorization header NOT SET (no token)');
       }
       return config;
     },
     (error) => {
+      console.error('[Axios Interceptor] Request Error:', error);
       return Promise.reject(error);
     }
   );
