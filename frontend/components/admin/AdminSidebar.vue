@@ -13,99 +13,91 @@
     </div>
 
     <!-- Navigation -->
-    <!-- <ClientOnly> REMOVED ClientOnly wrapper from nav -->
-      <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
-        <!-- Simplified v-for loop for navigationItems -->
-        <NuxtLink
-          v-for="item in navigationItems"
-          :key="item.name"
-          :to="item.href"
-          @click="closeMobileSidebarIfNeeded"
-          class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white"
-          <!-- Removed :class="isActive(item.href) ? '...' : '...'" -->
-        >
-          <!-- Icon rendering span for main navigationItems temporarily commented out -->
-          <!--
-          <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0" :class="isActive(item.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
-          <span v-else-if="item.name === 'Categories' || item.name === 'Products' || item.name === 'Product Options'" class="mr-3 h-5 w-5 flex-shrink-0"></span>
-          -->
-          <span class="mr-3 h-5 w-5 flex-shrink-0"></span> <!-- Permanent placeholder for spacing -->
-          {{ item.name }}
-        </NuxtLink>
+    <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
+      <!-- Main Navigation Items -->
+      <NuxtLink
+        v-for="item in navigationItems"
+        :key="item.name"
+        :to="item.href"
+        @click="closeMobileSidebarIfNeeded"
+        class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white"
+      >
+        <span class="mr-3 h-5 w-5 flex-shrink-0"></span> <!-- Static spacer, icons are off for diagnostics -->
+        {{ item.name }}
+      </NuxtLink>
 
-        <!-- Inventory Sub-menu (Kept as is) -->
-        <div>
-          <button @click="toggleInventorySubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
-            <span class="flex items-center">
-              <span v-html="iconInventory" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
-              Inventory
-            </span>
-            <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': inventorySubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
-          </button>
-          <div v-if="inventorySubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
-            <NuxtLink
-              v-for="invItem in inventoryItems"
-              :key="invItem.name"
-              :to="invItem.href"
-              @click="closeMobileSidebarIfNeeded"
-              class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
-              :class="isActive(invItem.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
-            >
-              <span v-if="invItem.iconSvg" v-html="invItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(invItem.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
-              {{ invItem.name }}
-            </NuxtLink>
-          </div>
+      <!-- Inventory Sub-menu -->
+      <div>
+        <button @click="toggleInventorySubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
+          <span class="flex items-center">
+            <span v-html="iconInventory" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+            Inventory
+          </span>
+          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': inventorySubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+        </button>
+        <div v-if="inventorySubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
+          <NuxtLink
+            v-for="invItem in inventoryItems"
+            :key="invItem.name"
+            :to="invItem.href"
+            @click="closeMobileSidebarIfNeeded"
+            class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
+            :class="isActive(invItem.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+          >
+            <span v-if="invItem.iconSvg" v-html="invItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(invItem.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            {{ invItem.name }}
+          </NuxtLink>
         </div>
+      </div>
 
-        <!-- Tax Management Sub-menu (Kept as is) -->
-        <div>
-          <button @click="toggleTaxSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
-            <span class="flex items-center">
-              <span v-html="iconTax" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
-              Tax Management
-            </span>
-            <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': taxSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
-          </button>
-          <div v-if="taxSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
-            <NuxtLink
-              v-for="taxItem in taxItems"
-              :key="taxItem.name"
-              :to="taxItem.href"
-              @click="closeMobileSidebarIfNeeded"
-              class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
-              :class="isActive(taxItem.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
-            >
-              <span v-if="taxItem.iconSvg" v-html="taxItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(taxItem.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
-              {{ taxItem.name }}
-            </NuxtLink>
-          </div>
+      <!-- Tax Management Sub-menu -->
+      <div>
+        <button @click="toggleTaxSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
+          <span class="flex items-center">
+            <span v-html="iconTax" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+            Tax Management
+          </span>
+          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': taxSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+        </button>
+        <div v-if="taxSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
+          <NuxtLink
+            v-for="taxItem in taxItems"
+            :key="taxItem.name"
+            :to="taxItem.href"
+            @click="closeMobileSidebarIfNeeded"
+            class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
+            :class="isActive(taxItem.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+          >
+            <span v-if="taxItem.iconSvg" v-html="taxItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(taxItem.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            {{ taxItem.name }}
+          </NuxtLink>
         </div>
+      </div>
 
-        <!-- Reports Sub-menu (Kept as is) -->
-        <div>
-          <button @click="toggleReportsSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
-            <span class="flex items-center">
-              <span v-html="iconReportsMain" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
-              Reports
-            </span>
-            <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': reportsSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
-          </button>
-          <div v-if="reportsSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
-            <NuxtLink
-              v-for="report in reportItems"
-              :key="report.name"
-              :to="report.href"
-              @click="closeMobileSidebarIfNeeded"
-              class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
-              :class="isActive(report.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
-            >
-              <span v-if="report.iconSvg" v-html="report.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(report.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
-              {{ report.name }}
-            </NuxtLink>
-          </div>
+      <!-- Reports Sub-menu -->
+      <div>
+        <button @click="toggleReportsSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
+          <span class="flex items-center">
+            <span v-html="iconReportsMain" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+            Reports
+          </span>
+          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': reportsSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+        </button>
+        <div v-if="reportsSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
+          <NuxtLink
+            v-for="report in reportItems"
+            :key="report.name"
+            :to="report.href"
+            @click="closeMobileSidebarIfNeeded"
+            class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
+            :class="isActive(report.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+          >
+            <span v-if="report.iconSvg" v-html="report.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(report.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            {{ report.name }}
+          </NuxtLink>
         </div>
-      </nav>
-    <!-- </ClientOnly> REMOVED ClientOnly wrapper from nav -->
+      </div>
+    </nav>
 
     <!-- Footer / View Site Link -->
     <div class="p-4 border-t border-neutral-700 mt-auto">
