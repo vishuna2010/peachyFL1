@@ -195,51 +195,48 @@ router.put(
       const queryUpdateValues = [];
       let currentParamIndex = 1;
 
-      const addClause = (field, value, isJson = false) => {
+      const addClause = (field, value) => {
         if (value !== undefined) {
           setClauses.push(`${field} = $${currentParamIndex++}`);
-          queryUpdateValues.push(isJson && typeof value === 'string' ? JSON.parse(value) : value);
+          queryUpdateValues.push(value);
         }
       };
 
       // Add fields from req.body to update query if they exist
       addClause('name', name);
-      addClause('description', description);
+      addClause('description', description === '' ? null : description); // Handle empty string for nullable text fields
       addClause('price', price);
-      addClause('category_id', category_id === '' ? null : category_id);
-      addClause('supplier_id', supplier_id === '' ? null : supplier_id);
+      addClause('category_id', category_id === '' || category_id === null ? null : parseInt(category_id));
+      addClause('supplier_id', supplier_id === '' || supplier_id === null ? null : parseInt(supplier_id));
       addClause('sku', sku === '' ? null : sku);
 
-      if (stock_quantity !== undefined && !currentProduct.has_variants) {
-        addClause('stock_quantity', stock_quantity);
-      } else if (stock_quantity !== undefined && currentProduct.has_variants) {
-        console.warn(`Attempt to update base stock_quantity for product ID ${productId} which has variants. This update to stock_quantity is ignored.`);
+      if (stock_quantity !== undefined) {
+        if (!currentProduct.has_variants) {
+          addClause('stock_quantity', parseInt(stock_quantity));
+        } else {
+          console.warn(`Attempt to update base stock_quantity for product ID ${productId} which has variants. Update to stock_quantity ignored.`);
+        }
       }
 
-      addClause('reorder_threshold', reorder_threshold === '' ? null : reorder_threshold);
+      addClause('reorder_threshold', reorder_threshold === '' || reorder_threshold === null ? null : parseInt(reorder_threshold));
       addClause('product_status', product_status);
-      addClause('tax_class_id', tax_class_id === '' ? null : tax_class_id);
-      addClause('cost_price', cost_price === '' ? null : cost_price);
-      addClause('wholesale_price', wholesale_price === '' ? null : wholesale_price);
-      addClause('brand_manufacturer', brand_manufacturer);
-      addClause('supplier_reference', supplier_reference);
+      addClause('tax_class_id', tax_class_id === '' || tax_class_id === null ? null : parseInt(tax_class_id));
+      addClause('cost_price', cost_price === '' || cost_price === null ? null : parseFloat(cost_price));
+      addClause('wholesale_price', wholesale_price === '' || wholesale_price === null ? null : parseFloat(wholesale_price));
+      addClause('brand_manufacturer', brand_manufacturer === '' ? null : brand_manufacturer);
+      addClause('supplier_reference', supplier_reference === '' ? null : supplier_reference);
 
       if (specifications !== undefined) {
-        let parsedSpecs = specifications;
-        if (typeof specifications === 'string') {
-          try {
-            parsedSpecs = JSON.parse(specifications);
-          } catch (e) {
-            // If parsing fails, and it's not explicitly null, it's an error or keep as string if DB allows
-            // For JSONB, it must be valid JSON or null.
-            await client.query('ROLLBACK');
-            return res.status(400).json({ message: "Invalid JSON string for specifications." });
-          }
+        if (specifications === '' || specifications === null) {
+          addClause('specifications', null);
+        } else {
+          // Pass the string directly. The database will handle it based on column type (JSONB).
+          addClause('specifications', specifications);
         }
-        addClause('specifications', parsedSpecs === '' ? null : parsedSpecs, true);
       }
 
-      if (req.file || finalImageUrlToStoreInDb === null) { // If new image uploaded or image explicitly removed
+      // Ensure image_url is added to clauses only if it actually changed or was explicitly set to null
+      if (req.file || (newImageUrlFromRequest === null && currentProduct.image_url !== null) || (newImageUrlFromRequest !== undefined && newImageUrlFromRequest !== currentProduct.image_url) ) {
          addClause('image_url', finalImageUrlToStoreInDb);
       }
 
