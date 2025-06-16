@@ -7,7 +7,7 @@ const { query, param, body, validationResult } = require('express-validator'); /
 const { NotFoundError } = require('../utils/AppError');
 const { generateProductLabelPdf } = require('../services/pdfService'); // Ensured at top
 const taxService = require('../services/taxService');
-const { productImageUploadMiddleware, handleMulterError } = require('../../middleware/fileUpload'); // Adjusted path
+const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload'); // Corrected path
 const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../../services/s3Service'); // Adjusted path
 const { getOrCreateTagIds, getS3KeyFromUrl } = require('../../utils/productHelpers'); // Adjusted path
 
