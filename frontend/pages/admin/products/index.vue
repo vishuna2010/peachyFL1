@@ -65,13 +65,13 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm">
                 <span
                   :class="{
-                    'bg-green-100 text-green-800': product.status === 'active',
-                    'bg-yellow-100 text-yellow-800': product.status === 'draft',
-                    'bg-red-100 text-red-800': product.status === 'archived',
+                    'bg-green-100 text-green-800': product.product_status === 'active',
+                    'bg-yellow-100 text-yellow-800': product.product_status === 'draft' || product.product_status === 'inactive',
+                    'bg-red-100 text-red-800': product.product_status === 'archived',
                   }"
                   class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
                 >
-                  {{ product.status || 'N/A' }}
+                  {{ product.product_status || 'N/A' }}
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
