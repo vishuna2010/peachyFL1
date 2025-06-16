@@ -240,14 +240,19 @@ const handleSubmit = () => {
 
     let valueToAppend = processedFormData[key];
 
-    // This is where specifications would be handled if the form input existed for it
-    // if (key === 'specifications') {
-    //   if (typeof valueToAppend === 'object' && valueToAppend !== null) {
-    //     valueToAppend = JSON.stringify(valueToAppend);
-    //   } else if (valueToAppend === null || valueToAppend === undefined) {
-    //     continue; // Don't append if null/undefined, or send empty string if API requires
-    //   }
-    // }
+    if (key === 'specifications') {
+      if (typeof valueToAppend === 'object' && valueToAppend !== null) {
+        valueToAppend = JSON.stringify(valueToAppend);
+      } else if (valueToAppend === undefined) {
+        // If undefined, and we want to skip appending, we can 'continue' here.
+        // Or if we need to send null as an empty string for FormData:
+        // valueToAppend = '';
+        // For now, if undefined, it will be skipped by the append logic below.
+        // If it's null or an empty string, it will be handled by the append logic.
+      }
+      // If it's already a string (e.g., empty string, valid JSON string, or plain text) or null,
+      // it will be handled by the general append logic.
+    }
 
     if (valueToAppend !== null && valueToAppend !== undefined) {
       submissionData.append(key, valueToAppend);
@@ -255,6 +260,10 @@ const handleSubmit = () => {
       // This specific logic for image_url to send empty string for removal should be kept
       submissionData.append('image_url', '');
     }
+    // Note: FormData converts null to the string "null". If the backend expects actual null
+    // for empty optional fields and not the string "null", those fields should ideally be omitted
+    // from appending if their value is null. The current backend PUT route handles empty strings as null for some fields.
+    // The `valueToAppend !== null` check handles this for most fields.
   }
 
   // Handle tags

@@ -107,7 +107,7 @@ router.get(
 const validateUpdateProductParams = [
   param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt(),
   body('name').optional().isString().trim().notEmpty().withMessage('Name cannot be empty when provided.'),
-  body('description').optional({ checkFalsy: true }).isString().trim(), // checkFalsy to allow empty string to be null
+  body('description').optional({ checkFalsy: true }).isString().trim(),
   body('price').optional().isFloat({ gt: 0 }).withMessage('Price must be greater than 0.').toFloat(),
   body('category_id').optional({ nullable: true }).isInt({ gt: 0 }).withMessage('Category ID must be a positive integer.').toInt(),
   body('supplier_id').optional({ nullable: true }).isInt({ gt: 0 }).withMessage('Supplier ID must be a positive integer.').toInt(),
@@ -120,10 +120,10 @@ const validateUpdateProductParams = [
   body('wholesale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Wholesale price must be non-negative.').toFloat(),
   body('brand_manufacturer').optional({ nullable: true }).isString().trim(),
   body('supplier_reference').optional({ nullable: true }).isString().trim(),
-  body('specifications').optional({ nullable: true }), // Further validation might be needed if it's a JSON string
+  body('specifications').optional({ nullable: true }), // Validated as JSON string or object in handler
   body('tags').optional({ nullable: true }).isArray().withMessage('Tags must be an array of strings or null.'),
   body('tags.*').optional().isString().trim(),
-  body('image_url').optional({ nullable: true }).isString().trim().withMessage('Image URL must be a string or null to remove.')
+  body('image_url').optional({ nullable: true }).isString().trim().withMessage('Image URL must be a string or null to remove.') // For explicit nullification
 ];
 
 router.put(
@@ -138,8 +138,8 @@ router.put(
     }
 
     const { productId } = req.params;
-    const {
-      name, description, price, category_id, tags: tagNames, // tagNames from req.body.tags
+    const { /* extract all validated fields from req.body */
+      name, description, price, category_id, tags: tagNames,
       stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold,
       brand_manufacturer, supplier_reference, product_status,
       cost_price, wholesale_price, tax_class_id, specifications
@@ -147,7 +147,7 @@ router.put(
 
     const client = await db.pool.connect();
     let s3FileKeyToStore = null;
-    let finalImageUrlToStoreInDb = undefined; // To distinguish from null (explicit removal)
+    let finalImageUrlToStoreInDb = undefined;
     let oldS3KeyToDelete = null;
 
     try {
@@ -245,6 +245,27 @@ router.put(
         setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
         const updateQueryString = `UPDATE products SET ${setClauses.join(", ")} WHERE id = $${currentParamIndex} RETURNING id`;
         queryUpdateValues.push(productId);
+
+        // --- BEGIN DEBUG LOGGING ---
+        console.log('--- DEBUG: Product Update ---');
+        console.log('Timestamp:', new Date().toISOString());
+        console.log('Target Product ID:', productId);
+        console.log('Raw req.body:', JSON.stringify(req.body, null, 2));
+        console.log('Constructed SET Clauses:', setClauses.join(", "));
+        console.log('Values for SQL Query (queryUpdateValues):');
+        if (queryUpdateValues && Array.isArray(queryUpdateValues)) {
+          queryUpdateValues.forEach((value, index) => {
+            const correspondingClause = setClauses[index] ? setClauses[index].split('=')[0].trim() : 'UNKNOWN_FIELD';
+            // For the last value (productId for WHERE clause), adjust the clause display
+            const clauseToLog = index === queryUpdateValues.length -1 && index === setClauses.length ? `WHERE id` : correspondingClause;
+            console.log(`  ${clauseToLog} ($${index + 1}):`, value, `(JavaScript typeof: ${typeof value})`);
+          });
+        } else {
+          console.log('  queryUpdateValues is not an array or is undefined/null.');
+        }
+        console.log('--- END DEBUG: Product Update ---');
+        // --- END DEBUG LOGGING ---
+
         const updateResult = await client.query(updateQueryString, queryUpdateValues);
         if (updateResult.rowCount === 0) {
           await client.query('ROLLBACK');
