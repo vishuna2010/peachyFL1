@@ -225,7 +225,8 @@ router.get('/', [
       optionValueId: parsedOptionValueId, // Pass to service
       page: parsedPage,
       limit: parsedLimit,
-      is_admin_request: false // Ensure public access rules are applied
+      is_admin_request: false, // Ensure public access rules are applied
+      stock_status: 'in_stock' // Add this line
     });
 
     // Transform the response
