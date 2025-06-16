@@ -247,6 +247,23 @@ async function getAllProducts({
   // console.log('Executing count query:', countBaseQuery);
   // console.log('With params:', countQueryValues);
 
+  // --- BEGIN DEBUG LOGGING for optionValueId filter ---
+  if (optionValueId) { // 'optionValueId' here is the destructured parameter from the function arguments
+    console.log('--- DEBUG: getAllProducts with optionValueId ---');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Filtering by optionValueId:', optionValueId);
+    console.log('Constructed Main SQL Query (baseSelect):');
+    console.log(baseSelect);
+    console.log('Parameters for Main SQL Query (finalQueryValuesForSelect):');
+    console.log(JSON.stringify(finalQueryValuesForSelect, null, 2));
+    console.log('Constructed Count SQL Query (countBaseQuery):');
+    console.log(countBaseQuery);
+    console.log('Parameters for Count SQL Query (countQueryValues):');
+    console.log(JSON.stringify(countQueryValues, null, 2));
+    console.log('--- END DEBUG: getAllProducts with optionValueId ---');
+  }
+  // --- END DEBUG LOGGING for optionValueId filter ---
+
   const productsResult = await db.query(baseSelect, finalQueryValuesForSelect);
   const countResult = await db.query(countBaseQuery, countQueryValues);
 
