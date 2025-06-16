@@ -411,22 +411,33 @@ async function fetchConfiguredProductOptions() {
   if (!propProductId.value) return;
   isLoadingConfiguredOptions.value = true;
   try {
+    // This endpoint now returns assigned options with their specifically selected/allowed values
     const assignedOptionsResponse = await $axios.get(`/admin/products/${propProductId.value}/assigned-options`);
-    const fetchedConfiguredOptions = [];
 
-    for (const assignedOpt of assignedOptionsResponse.data) {
-      const valuesResponse = await $axios.get(`/admin/assigned-options/${assignedOpt.id}/values`);
-      fetchedConfiguredOptions.push({
-        assigned_option_id: assignedOpt.id,
-        option_id: assignedOpt.option_id,
-        option_name: assignedOpt.option_name,
-        allowed_values: valuesResponse.data.map(val => ({
-          value_id: val.option_value_id,
-          value_name: val.option_value_string
+    const fetchedConfiguredOptions = assignedOptionsResponse.data.map(assignedOpt => {
+      // The 'selected_values' array from the backend IS the list of allowed values for this product's option assignment.
+      // These are global product_option_values that have been specifically chosen for this product-option link.
+      if (!assignedOpt.selected_values || assignedOpt.selected_values.length === 0) {
+        toast.warn(`Option type "${assignedOpt.global_option_name}" has no specific values configured for this product. Variants cannot be created with it until values are selected.`);
+      }
+      return {
+        assigned_option_id: assignedOpt.assigned_option_id, // This is product_assigned_options.id
+        option_id: assignedOpt.global_option_id,          // This is product_options.id (the global option type)
+        option_name: assignedOpt.global_option_name,
+        // 'allowed_values' for the variant form should be the 'selected_values' from this product's specific configuration
+        allowed_values: assignedOpt.selected_values.map(val => ({
+          value_id: val.id,      // This is product_option_values.id
+          value_name: val.value  // This is product_option_values.value
         }))
-      });
+      };
+    });
+
+    configuredProductOptions.value = fetchedConfiguredOptions.filter(opt => opt.allowed_values.length > 0);
+
+    if (configuredProductOptions.value.length === 0 && assignedOptionsResponse.data.length > 0) {
+        toast.info("None of the assigned options for this product have any specific values configured. Please configure values for each option type to enable variant creation.");
     }
-    configuredProductOptions.value = fetchedConfiguredOptions;
+
   } catch (err) {
     console.error(`Error fetching configured options for product ${propProductId.value}:`, err);
     if (!fetchError.value) fetchError.value = err.response?.data?.message || err.message || `Failed to load configured options.`;

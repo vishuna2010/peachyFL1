@@ -385,6 +385,37 @@ const createTables = async () => {
     await client.query('CREATE INDEX IF NOT EXISTS idx_paov_assigned_option_id ON product_assigned_option_values(product_assigned_option_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_paov_option_value_id ON product_assigned_option_values(option_value_id);');
 
+    // --- Product Assigned Option Specific Values (NEW TABLE) ---
+    // This table defines the specific subset of global option values that are applicable
+    // for a particular product's assigned option type. E.g., for Product A's "Color" option,
+    // only "Red" and "Blue" might be allowed from the global "Red", "Blue", "Green" values.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_assigned_option_specific_values (
+        id SERIAL PRIMARY KEY,
+        product_assigned_option_id INTEGER NOT NULL REFERENCES product_assigned_options(id) ON DELETE CASCADE,
+        product_option_value_id INTEGER NOT NULL REFERENCES product_option_values(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (product_assigned_option_id, product_option_value_id)
+      );
+    `);
+    console.log('Table "product_assigned_option_specific_values" created or ensured.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trigger_update_paosv_updated_at') THEN
+          CREATE TRIGGER trigger_update_paosv_updated_at
+          BEFORE UPDATE ON product_assigned_option_specific_values
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "product_assigned_option_specific_values.updated_at" ensured.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_paosv_assigned_option_id ON product_assigned_option_specific_values(product_assigned_option_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_paosv_option_value_id ON product_assigned_option_specific_values(product_option_value_id);');
+
 
     // --- Product Variant Option Values (Junction Table) ---
     // This table was found to already exist. Ensuring its definition.

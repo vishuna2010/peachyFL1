@@ -303,20 +303,44 @@ async function createSchema(client) {
     await client.query(`ALTER TABLE product_assigned_options ADD COLUMN IF NOT EXISTS option_id INTEGER;`);
     console.log('All columns for "product_assigned_options" table ensured/checked (basic existence).');
 
-    // Product Assigned Option Values Table (linking specific values of an assigned option to a product)
+    // Product Assigned Option Specific Values Table (linking specific values of an assigned option to a product)
+    // This is the table name as per the schema update task.
     await client.query(`
-      CREATE TABLE IF NOT EXISTS product_assigned_option_values (
+      CREATE TABLE IF NOT EXISTS product_assigned_option_specific_values (
         id SERIAL PRIMARY KEY,
         product_assigned_option_id INTEGER NOT NULL REFERENCES product_assigned_options(id) ON DELETE CASCADE,
-        option_value_id INTEGER NOT NULL REFERENCES product_option_values(id) ON DELETE CASCADE,
-        UNIQUE (product_assigned_option_id, option_value_id)
+        product_option_value_id INTEGER NOT NULL REFERENCES product_option_values(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (product_assigned_option_id, product_option_value_id)
       );
     `);
-    console.log('Table "product_assigned_option_values" checked/created.');
+    console.log('Table "product_assigned_option_specific_values" checked/created.');
 
-    await client.query(`ALTER TABLE product_assigned_option_values ADD COLUMN IF NOT EXISTS product_assigned_option_id INTEGER;`);
-    await client.query(`ALTER TABLE product_assigned_option_values ADD COLUMN IF NOT EXISTS option_value_id INTEGER;`);
-    console.log('All columns for "product_assigned_option_values" table ensured/checked (basic existence).');
+    await client.query(`ALTER TABLE product_assigned_option_specific_values ADD COLUMN IF NOT EXISTS product_assigned_option_id INTEGER;`);
+    await client.query(`ALTER TABLE product_assigned_option_specific_values ADD COLUMN IF NOT EXISTS product_option_value_id INTEGER;`);
+    await client.query(`ALTER TABLE product_assigned_option_specific_values ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
+    await client.query(`ALTER TABLE product_assigned_option_specific_values ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
+    console.log('All columns for "product_assigned_option_specific_values" table ensured/checked (basic existence).');
+    // Ensuring trigger for product_assigned_option_specific_values
+    await client.query(`
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_trigger
+                WHERE tgname = 'trigger_update_paosv_updated_at'
+                AND tgrelid = 'product_assigned_option_specific_values'::regclass
+            ) THEN
+                CREATE TRIGGER trigger_update_paosv_updated_at
+                BEFORE UPDATE ON product_assigned_option_specific_values
+                FOR EACH ROW
+                EXECUTE FUNCTION trigger_set_timestamp(); -- Assuming trigger_set_timestamp is defined from users table
+            END IF;
+        END
+        $$;
+    `);
+    console.log('Trigger for "product_assigned_option_specific_values.updated_at" ensured.');
+
 
     // Product Variant Option Values Table (linking variants to specific option values)
     await client.query(`
@@ -1198,12 +1222,12 @@ async function seedProductOptionConfigurations(client, seededDataIds, productSku
             continue;
         }
         await client.query(
-          `INSERT INTO product_assigned_option_values (product_assigned_option_id, option_value_id)
+          `INSERT INTO product_assigned_option_specific_values (product_assigned_option_id, product_option_value_id)
            VALUES ($1, $2)
-           ON CONFLICT (product_assigned_option_id, option_value_id) DO NOTHING;`,
+           ON CONFLICT (product_assigned_option_id, product_option_value_id) DO NOTHING;`,
           [assignedOptionId, valueId]
         );
-        console.log(`  - Allowed value ID ${valueId} for assigned option ID ${assignedOptionId}.`);
+        console.log(`  - Allowed value ID ${valueId} for assigned option ID ${assignedOptionId} into product_assigned_option_specific_values.`);
       }
     }
   }

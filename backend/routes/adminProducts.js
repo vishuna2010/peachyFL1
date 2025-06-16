@@ -981,4 +981,67 @@ router.get(
   }
 );
 
+// GET /api/admin/products/:productId/assigned-options - List options assigned to a product, with their selected values
+router.get(
+  '/:productId/assigned-options',
+  [
+    param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt()
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { productId } = req.params;
+
+    try {
+      // Check if product exists
+      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+      if (productCheck.rows.length === 0) {
+        return next(new NotFoundError(`Product with ID ${productId} not found.`));
+      }
+
+      // Fetch assigned options for the product
+      const assignedOptionsQuery = `
+        SELECT
+          pao.id AS assigned_option_id,
+          pao.option_id AS global_option_id,
+          po.name AS global_option_name,
+          pao.created_at,
+          pao.updated_at
+        FROM product_assigned_options pao
+        JOIN product_options po ON pao.option_id = po.id
+        WHERE pao.product_id = $1
+        ORDER BY po.name;
+      `;
+      const assignedOptionsResult = await db.query(assignedOptionsQuery, [productId]);
+      const assignedOptions = assignedOptionsResult.rows;
+
+      // For each assigned option, fetch its specifically selected/allowed values
+      const augmentedAssignedOptions = [];
+      for (const assignedOpt of assignedOptions) {
+        const selectedValuesQuery = `
+          SELECT pov.id, pov.value
+          FROM product_option_values pov
+          JOIN product_assigned_option_specific_values paosv ON pov.id = paosv.product_option_value_id
+          WHERE paosv.product_assigned_option_id = $1
+          ORDER BY pov.value ASC;
+        `;
+        const selectedValuesResult = await db.query(selectedValuesQuery, [assignedOpt.assigned_option_id]);
+        augmentedAssignedOptions.push({
+          ...assignedOpt,
+          selected_values: selectedValuesResult.rows
+        });
+      }
+
+      res.status(200).json(augmentedAssignedOptions); // Frontend expects array directly in response.data
+
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+
 module.exports = router;

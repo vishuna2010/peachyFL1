@@ -199,27 +199,147 @@ router.get(
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    const { assignedOptionId } = req.params;
-    try {
-       const assignedOptionCheck = await db.query('SELECT id FROM product_assigned_options WHERE id = $1', [assignedOptionId]);
-      if (assignedOptionCheck.rows.length === 0) {
-        return next(new NotFoundError(`Product assigned option with ID ${assignedOptionId} not found.`));
-      }
+    const { productAssignedOptionId } = req.params; // Renamed for clarity to match route param
 
-      const result = await db.query(
-        `SELECT paov.id, paov.product_assigned_option_id, paov.option_value_id, pov.value as option_value_string
-         FROM product_assigned_option_values paov
-         JOIN product_option_values pov ON paov.option_value_id = pov.id
-         WHERE paov.product_assigned_option_id = $1
-         ORDER BY pov.value`,
-        [assignedOptionId]
+    try {
+      // 1. Fetch the product_assigned_options record to get option_id and global_option_name
+      const assignedOptionInfoQuery = await db.query(
+        `SELECT pao.option_id, po.name as global_option_name
+         FROM product_assigned_options pao
+         JOIN product_options po ON pao.option_id = po.id
+         WHERE pao.id = $1`,
+        [productAssignedOptionId]
       );
-      res.json(result.rows);
+
+      if (assignedOptionInfoQuery.rows.length === 0) {
+        return next(new NotFoundError(`Product assigned option with ID ${productAssignedOptionId} not found.`));
+      }
+      const { option_id: globalOptionId, global_option_name } = assignedOptionInfoQuery.rows[0];
+
+      // 2. Fetch all global product_option_values for this global_option_id
+      const allGlobalValuesQuery = await db.query(
+        `SELECT id, value FROM product_option_values
+         WHERE product_option_id = $1 ORDER BY value ASC`,
+        [globalOptionId]
+      );
+      const allGlobalValues = allGlobalValuesQuery.rows;
+
+      // 3. Fetch currently selected product_option_value_ids for this productAssignedOptionId
+      const selectedValuesQuery = await db.query(
+        `SELECT product_option_value_id FROM product_assigned_option_specific_values
+         WHERE product_assigned_option_id = $1`,
+        [productAssignedOptionId]
+      );
+      const selectedValueIds = new Set(selectedValuesQuery.rows.map(r => r.product_option_value_id));
+
+      // 4. Construct all_possible_values with is_selected flag
+      const allPossibleValuesWithSelection = allGlobalValues.map(globalVal => ({
+        ...globalVal, // id (global value id), value (global value name)
+        is_selected: selectedValueIds.has(globalVal.id)
+      }));
+
+      res.status(200).json({
+        data: {
+          assigned_option_id: parseInt(productAssignedOptionId),
+          global_option_name: global_option_name,
+          all_possible_values: allPossibleValuesWithSelection
+        }
+      });
+
     } catch (error) {
       next(error);
     }
   }
 );
+
+// PUT /assigned-options/:productAssignedOptionId/values - Update specific values for an assigned option
+router.put(
+  '/assigned-options/:productAssignedOptionId/values',
+  [
+    param('productAssignedOptionId').isInt({ gt: 0 }).withMessage('Assigned Option ID must be a positive integer.').toInt(),
+    body('value_ids').isArray().withMessage('value_ids must be an array.'),
+    body('value_ids.*').optional().isInt({ gt: 0 }).withMessage('Each value_id in value_ids must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { productAssignedOptionId } = req.params;
+    const { value_ids } = req.body; // Array of product_option_value_id
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Verify product_assigned_options record exists and get its global option_id
+      const assignedOptionResult = await client.query(
+        'SELECT option_id FROM product_assigned_options WHERE id = $1',
+        [productAssignedOptionId]
+      );
+      if (assignedOptionResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return next(new NotFoundError(`Product assigned option with ID ${productAssignedOptionId} not found.`));
+      }
+      const globalOptionIdForAssigned = assignedOptionResult.rows[0].option_id;
+
+      // Delete existing specific values for this product_assigned_option_id
+      await client.query(
+        'DELETE FROM product_assigned_option_specific_values WHERE product_assigned_option_id = $1',
+        [productAssignedOptionId]
+      );
+
+      const insertedValues = [];
+      if (value_ids && value_ids.length > 0) {
+        // Verify each value_id belongs to the correct global option type
+        const uniqueValueIds = [...new Set(value_ids)]; // Ensure unique IDs
+
+        for (const valueId of uniqueValueIds) {
+          if (valueId === null || valueId === undefined) continue; // Skip null/undefined if any
+
+          const globalValueCheck = await client.query(
+            'SELECT product_option_id FROM product_option_values WHERE id = $1',
+            [valueId]
+          );
+          if (globalValueCheck.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return next(new NotFoundError(`Global option value with ID ${valueId} not found.`));
+          }
+          if (globalValueCheck.rows[0].product_option_id !== globalOptionIdForAssigned) {
+            await client.query('ROLLBACK');
+            return next(new BadRequestError(`Option value ID ${valueId} does not belong to the global option type (ID ${globalOptionIdForAssigned}) associated with this product assignment.`));
+          }
+
+          // Insert new specific value
+          const insertResult = await client.query(
+            'INSERT INTO product_assigned_option_specific_values (product_assigned_option_id, product_option_value_id) VALUES ($1, $2) RETURNING product_option_value_id',
+            [productAssignedOptionId, valueId]
+          );
+          insertedValues.push(insertResult.rows[0].product_option_value_id);
+        }
+      }
+
+      await client.query('COMMIT');
+      res.status(200).json({
+        message: 'Assigned option values updated successfully.',
+        assigned_option_id: productAssignedOptionId,
+        set_value_ids: insertedValues
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      // Handle potential unique constraint errors if ON CONFLICT is not used and somehow a duplicate slips through logic
+      if (error.code === '23505' && error.constraint === 'product_assigned_option_specific_values_product_assigned_option_id_product_option_value_id_key') {
+         return next(new ConflictError('Attempted to assign a duplicate value. This should not happen with the delete-then-insert logic.'));
+      }
+      next(error);
+    } finally {
+      client.release();
+    }
+  }
+);
+
 
 // DELETE /assigned-option-values/:assignedValueId
 // (where assignedValueId is the ID from product_assigned_option_values table)
