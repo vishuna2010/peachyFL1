@@ -114,7 +114,7 @@ const fetchData = async () => {
   isLoading.value = true;
   fetchError.value = null;
   try {
-    const response = await $axios.get(`/admin/product-assigned-options/${assignedOptionId.value}/values`);
+    const response = await $axios.get(`/admin/assigned-options/${assignedOptionId.value}/values`);
     if (response.data && response.data.data) {
       globalOptionName.value = response.data.data.global_option_name || '';
       allPossibleValues.value = response.data.data.all_possible_values || [];
@@ -139,7 +139,7 @@ const handleSaveChanges = async () => {
     .map(valueItem => valueItem.id);
 
   try {
-    await $axios.put(`/admin/product-assigned-options/${assignedOptionId.value}/values`, {
+    await $axios.put(`/admin/assigned-options/${assignedOptionId.value}/values`, {
       value_ids: selectedValueIds,
     });
     toast.success('Assigned values updated successfully!');

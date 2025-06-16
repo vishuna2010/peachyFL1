@@ -199,7 +199,7 @@ router.get(
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    const { productAssignedOptionId } = req.params; // Renamed for clarity to match route param
+    const { assignedOptionId } = req.params; // Correctly use assignedOptionId from route param
 
     try {
       // 1. Fetch the product_assigned_options record to get option_id and global_option_name
@@ -208,11 +208,11 @@ router.get(
          FROM product_assigned_options pao
          JOIN product_options po ON pao.option_id = po.id
          WHERE pao.id = $1`,
-        [productAssignedOptionId]
+        [assignedOptionId]
       );
 
       if (assignedOptionInfoQuery.rows.length === 0) {
-        return next(new NotFoundError(`Product assigned option with ID ${productAssignedOptionId} not found.`));
+        return next(new NotFoundError(`Product assigned option with ID ${assignedOptionId} not found.`));
       }
       const { option_id: globalOptionId, global_option_name } = assignedOptionInfoQuery.rows[0];
 
@@ -228,7 +228,7 @@ router.get(
       const selectedValuesQuery = await db.query(
         `SELECT product_option_value_id FROM product_assigned_option_specific_values
          WHERE product_assigned_option_id = $1`,
-        [productAssignedOptionId]
+        [assignedOptionId]
       );
       const selectedValueIds = new Set(selectedValuesQuery.rows.map(r => r.product_option_value_id));
 
@@ -240,7 +240,7 @@ router.get(
 
       res.status(200).json({
         data: {
-          assigned_option_id: parseInt(productAssignedOptionId),
+          assigned_option_id: parseInt(assignedOptionId), // Use corrected variable
           global_option_name: global_option_name,
           all_possible_values: allPossibleValuesWithSelection
         }
@@ -252,11 +252,11 @@ router.get(
   }
 );
 
-// PUT /assigned-options/:productAssignedOptionId/values - Update specific values for an assigned option
+// PUT /assigned-options/:assignedOptionId/values - Update specific values for an assigned option
 router.put(
-  '/assigned-options/:productAssignedOptionId/values',
+  '/assigned-options/:assignedOptionId/values', // Changed param name here
   [
-    param('productAssignedOptionId').isInt({ gt: 0 }).withMessage('Assigned Option ID must be a positive integer.').toInt(),
+    param('assignedOptionId').isInt({ gt: 0 }).withMessage('Assigned Option ID must be a positive integer.').toInt(), // Changed param name here
     body('value_ids').isArray().withMessage('value_ids must be an array.'),
     body('value_ids.*').optional().isInt({ gt: 0 }).withMessage('Each value_id in value_ids must be a positive integer.')
   ],
@@ -266,7 +266,7 @@ router.put(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { productAssignedOptionId } = req.params;
+    const { assignedOptionId } = req.params; // Changed variable name here
     const { value_ids } = req.body; // Array of product_option_value_id
 
     const client = await db.pool.connect();
@@ -276,18 +276,18 @@ router.put(
       // Verify product_assigned_options record exists and get its global option_id
       const assignedOptionResult = await client.query(
         'SELECT option_id FROM product_assigned_options WHERE id = $1',
-        [productAssignedOptionId]
+        [assignedOptionId] // Changed variable name here
       );
       if (assignedOptionResult.rows.length === 0) {
         await client.query('ROLLBACK');
-        return next(new NotFoundError(`Product assigned option with ID ${productAssignedOptionId} not found.`));
+        return next(new NotFoundError(`Product assigned option with ID ${assignedOptionId} not found.`)); // Changed variable name here
       }
       const globalOptionIdForAssigned = assignedOptionResult.rows[0].option_id;
 
       // Delete existing specific values for this product_assigned_option_id
       await client.query(
         'DELETE FROM product_assigned_option_specific_values WHERE product_assigned_option_id = $1',
-        [productAssignedOptionId]
+        [assignedOptionId] // Changed variable name here
       );
 
       const insertedValues = [];
@@ -314,7 +314,7 @@ router.put(
           // Insert new specific value
           const insertResult = await client.query(
             'INSERT INTO product_assigned_option_specific_values (product_assigned_option_id, product_option_value_id) VALUES ($1, $2) RETURNING product_option_value_id',
-            [productAssignedOptionId, valueId]
+            [assignedOptionId, valueId] // Changed variable name here
           );
           insertedValues.push(insertResult.rows[0].product_option_value_id);
         }
@@ -323,7 +323,7 @@ router.put(
       await client.query('COMMIT');
       res.status(200).json({
         message: 'Assigned option values updated successfully.',
-        assigned_option_id: productAssignedOptionId,
+        assigned_option_id: assignedOptionId, // Changed variable name here
         set_value_ids: insertedValues
       });
 
