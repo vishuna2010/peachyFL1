@@ -244,27 +244,25 @@ const prevPage = () => {
 };
 
 // Watch for changes in filters or page
-watch([selectedStatus, currentPage], () => {
-  // Reset to page 1 if status changes, but not if only page changes
-  if (selectedStatus.value !== (watch.arguments?.[0]?.[0] || selectedStatus.value) ) { // A bit complex to check if it was status that changed
-      // A simpler way: if (currentPage.value !== 1 && arguments[2][0] !== arguments[3][0]) currentPage.value = 1;
-      // The above simple way is not perfect.
-      // For this setup, if selectedStatus changes, we want to go to page 1.
-      // If only currentPage changes, we don't want to reset it.
-      // The current watch setup will call fetchReviews. If selectedStatus changed,
-      // we ideally should reset currentPage to 1 BEFORE fetching.
-      // Let's adjust the logic slightly.
+
+// Watch for changes in selectedStatus
+watch(selectedStatus, (newStatus, oldStatus) => {
+  if (newStatus !== oldStatus) {
+    if (currentPage.value !== 1) {
+      currentPage.value = 1; // This will trigger the currentPage watcher
+    } else {
+      // If already on page 1, the currentPage watcher won't fire by itself,
+      // so trigger fetchReviews directly.
+      fetchReviews();
+    }
   }
-  fetchReviews();
 });
 
-// A more refined watch for selectedStatus to reset page
-watch(selectedStatus, (newStatus, oldStatus) => {
-    if (newStatus !== oldStatus && currentPage.value !== 1) {
-        currentPage.value = 1; // Reset to page 1, which will also trigger the combined watcher
-    } else if (newStatus !== oldStatus && currentPage.value === 1) {
-        fetchReviews(); // If already on page 1, combined watcher won't re-fetch due to page not changing
-    }
+// Watch for changes in currentPage
+watch(currentPage, (newPage, oldPage) => {
+  if (newPage !== oldPage) {
+    fetchReviews();
+  }
 });
 
 
