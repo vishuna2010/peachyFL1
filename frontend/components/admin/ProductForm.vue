@@ -231,14 +231,29 @@ const handleSubmit = () => {
                                         : parseInt(processedFormData.reorder_threshold);
   if (isNaN(processedFormData.reorder_threshold)) processedFormData.reorder_threshold = null;
 
+  // Note: The ProductForm doesn't currently have a 'specifications' field in its template or formData.
+  // If it were to be added, its handling would be here.
+  // For now, this loop correctly handles existing fields.
 
   for (const key in processedFormData) {
-    if (key === 'tags') continue; // Tags handled separately below
+    if (key === 'tags') continue; // Tags are handled separately
 
-    if (processedFormData[key] !== null && processedFormData[key] !== undefined) {
-      submissionData.append(key, processedFormData[key]);
+    let valueToAppend = processedFormData[key];
+
+    // This is where specifications would be handled if the form input existed for it
+    // if (key === 'specifications') {
+    //   if (typeof valueToAppend === 'object' && valueToAppend !== null) {
+    //     valueToAppend = JSON.stringify(valueToAppend);
+    //   } else if (valueToAppend === null || valueToAppend === undefined) {
+    //     continue; // Don't append if null/undefined, or send empty string if API requires
+    //   }
+    // }
+
+    if (valueToAppend !== null && valueToAppend !== undefined) {
+      submissionData.append(key, valueToAppend);
     } else if (key === 'image_url' && imageRemovalFlag.value) {
-        submissionData.append('image_url', '');
+      // This specific logic for image_url to send empty string for removal should be kept
+      submissionData.append('image_url', '');
     }
   }
 
