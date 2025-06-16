@@ -66,7 +66,6 @@ async function uploadFileToS3(fileBuffer, fileName, mimeType) {
     Key: fileName, // File name to save as in S3 (e.g., product-images/image.jpg)
     Body: fileBuffer,
     ContentType: mimeType,
-    ACL: 'public-read', // Makes the file publicly readable via its S3 URL
   };
 
   try {
