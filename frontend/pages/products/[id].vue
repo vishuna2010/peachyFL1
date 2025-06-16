@@ -15,24 +15,48 @@
         <!-- Image Column -->
         <div class="md:col-span-3 lg:col-span-1">
           <img
-            @click="openZoomModal(selectedImageUrl)"
-            v-if="selectedImageUrl"
-            :src="selectedImageUrl"
-            :alt="`Image of ${product.name}`"
+            @click="openZoomModal(selectedImage.value?.url)"
+            v-if="selectedImage && selectedImage.value?.url"
+            :src="selectedImage.value.url"
+            :alt="selectedImage.value.alt_text || product.name"
             class="w-full h-auto object-contain rounded-lg shadow-lg max-h-[550px] aspect-[4/5] cursor-zoom-in"
             key="selected-image"
           />
-          <div v-if="!selectedImageUrl" class="w-full h-[400px] md:h-[550px] flex items-center justify-center bg-neutral-medium rounded-lg text-text-secondary">No Image Available</div>
-          <div v-if="galleryImages.length > 1" class="mt-4 flex space-x-2 sm:space-x-3 overflow-x-auto py-2 px-1 justify-center">
-            <img
-              v-for="imageItem in galleryImages"
-              :key="imageItem.id"
-              :src="imageItem.url"
-              @click="selectedImageUrl = imageItem.url"
-              :alt="`${product.name} thumbnail ${imageItem.id}`"
-              class="h-16 w-16 sm:h-20 sm:w-20 object-cover rounded-md border-2 cursor-pointer transition-all duration-200 ease-in-out hover:border-gray-400"
-              :class="selectedImageUrl === imageItem.url ? 'border-indigo-500 ring-2 ring-indigo-300 ring-offset-1' : 'border-transparent'"
-            />
+          <div v-if="!selectedImage || !selectedImage.value?.url" class="w-full h-[400px] md:h-[550px] flex items-center justify-center bg-neutral-medium rounded-lg text-text-secondary">No Image Available</div>
+
+          <!-- Thumbnail Section with Arrows -->
+          <div v-if="galleryImages.length > 1" class="mt-4 relative flex items-center justify-center">
+            <!-- Previous Arrow -->
+            <button
+              v-if="galleryImages.length > 5"
+              @click="scrollThumbnails('prev')"
+              class="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-gray-700 bg-opacity-50 hover:bg-opacity-75 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+              :disabled="isPrevDisabled"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+
+            <div ref="thumbnailContainer" class="flex space-x-2 sm:space-x-3 overflow-x-auto py-2 px-1 no-scrollbar scroll-smooth">
+              <img
+                v-for="imageItem in galleryImages"
+                :key="imageItem.id"
+                :src="imageItem.url"
+                @click="selectedImage.value = imageItem"
+                :alt="imageItem.alt_text || product.name + ' thumbnail ' + imageItem.id"
+                class="h-16 w-16 sm:h-20 sm:w-20 object-cover rounded-md border-2 cursor-pointer transition-all duration-200 ease-in-out hover:border-gray-400 flex-shrink-0"
+                :class="selectedImage?.value?.url === imageItem.url ? 'border-indigo-500 ring-2 ring-indigo-300 ring-offset-1' : 'border-transparent'"
+              />
+            </div>
+
+            <!-- Next Arrow -->
+            <button
+              v-if="galleryImages.length > 5"
+              @click="scrollThumbnails('next')"
+              class="absolute right-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-gray-700 bg-opacity-50 hover:bg-opacity-75 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+              :disabled="isNextDisabled"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
           </div>
         </div>
 
@@ -306,7 +330,7 @@ function selectTab(tabKey) {
 const selectedOptions = reactive({});
 const currentVariant = ref(null);
 const galleryImages = ref([]);
-const selectedImageUrl = ref('');
+const selectedImage = ref(null); // New ref for selected image object
 
 const displayPrice = ref(0);
 const displaySku = ref('');
@@ -314,6 +338,28 @@ const displayStock = ref(0);
 const addToCartDisabled = ref(true);
 
 const quantity = ref(1);
+
+const thumbnailContainer = ref(null);
+const scrollStep = 200; // Or calculate based on thumbnail width + margin
+
+const isPrevDisabled = computed(() => thumbnailContainer.value && thumbnailContainer.value.scrollLeft <= 0);
+const isNextDisabled = computed(() => {
+  if (!thumbnailContainer.value) return true;
+  // -5 for a small tolerance, ensures the very end can be reached by clicking next.
+  return thumbnailContainer.value.scrollLeft + thumbnailContainer.value.clientWidth >= thumbnailContainer.value.scrollWidth - 5;
+});
+
+function scrollThumbnails(direction) {
+  if (!thumbnailContainer.value) return;
+  const container = thumbnailContainer.value;
+  let newScrollLeft;
+  if (direction === 'prev') {
+    newScrollLeft = Math.max(0, container.scrollLeft - scrollStep);
+  } else {
+    newScrollLeft = Math.min(container.scrollWidth - container.clientWidth, container.scrollLeft + scrollStep);
+  }
+  container.scrollLeft = newScrollLeft;
+}
 
 // Public Reviews State
 const productPublicReviews = ref([]);
@@ -506,7 +552,14 @@ function updateCurrentVariant() {
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = product.value.stock_quantity;
-    selectedImageUrl.value = product.value.image_url || galleryImages.value[0]?.url || '';
+    // Update selectedImage based on product or gallery, similar to fetchProduct
+    if (galleryImages.value.length > 0) {
+        selectedImage.value = galleryImages.value[0];
+    } else if (product.value.image_url) {
+        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
+    } else {
+        selectedImage.value = null;
+    }
     addToCartDisabled.value = product.value.stock_quantity <= 0;
     quantity.value = 1;
     return;
@@ -536,13 +589,35 @@ function updateCurrentVariant() {
     displayPrice.value = parseFloat(matchedVariant.final_price);
     displaySku.value = matchedVariant.sku || product.value.sku || '';
     displayStock.value = matchedVariant.stock_quantity;
-    selectedImageUrl.value = matchedVariant.image_url || product.value.image_url || galleryImages.value[0]?.url || '';
+    // Update selectedImage based on variant
+    if (matchedVariant.image_url) {
+        const existingGalleryImage = galleryImages.value.find(img => img.url === matchedVariant.image_url);
+        if (existingGalleryImage) {
+            selectedImage.value = existingGalleryImage;
+        } else {
+            selectedImage.value = { url: matchedVariant.image_url, alt_text: currentVariant.value.sku || product.value.name, id: 'variant_' + currentVariant.value.id };
+        }
+    } else if (galleryImages.value.length > 0) { // Fallback to first gallery image if variant has no specific image
+        selectedImage.value = galleryImages.value[0];
+    } else if (product.value.image_url) { // Fallback to main product image
+        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
+    } else {
+        selectedImage.value = null; // No image available
+    }
     addToCartDisabled.value = matchedVariant.stock_quantity <= 0;
   } else {
     currentVariant.value = null;
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = 0;
+    // Fallback selectedImage if no variant matches
+    if (galleryImages.value.length > 0) {
+        selectedImage.value = galleryImages.value[0];
+    } else if (product.value.image_url) {
+        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
+    } else {
+        selectedImage.value = null;
+    }
     addToCartDisabled.value = true;
   }
   quantity.value = 1;
@@ -555,7 +630,7 @@ async function fetchProduct() {
   Object.keys(selectedOptions).forEach(key => delete selectedOptions[key]);
   currentVariant.value = null;
   galleryImages.value = [];
-  selectedImageUrl.value = '';
+  selectedImage.value = null; // Initialize selectedImage
   productPublicReviews.value = [];
   currentPublicReviewsPage.value = 1;
 
@@ -563,21 +638,18 @@ async function fetchProduct() {
     const response = await $axios.get(`/products/${productId}`);
     product.value = response.data;
     if (product.value) {
-      const imageUrls = new Set();
-      if (product.value.image_url) imageUrls.add(product.value.image_url);
-      if (product.value.variants && Array.isArray(product.value.variants)) {
-        product.value.variants.forEach(variant => {
-          if (variant.image_url) imageUrls.add(variant.image_url);
-        });
-      }
-      galleryImages.value = Array.from(imageUrls).map((url, index) => ({ id: `gallery_img_${index}`, url }));
+      // Use gallery_images from product data
+      galleryImages.value = product.value.gallery_images || [];
 
       initializeSelections();
 
-      if (!selectedImageUrl.value && galleryImages.value.length > 0) {
-          selectedImageUrl.value = galleryImages.value[0].url;
-      } else if (!selectedImageUrl.value && product.value.image_url) {
-          selectedImageUrl.value = product.value.image_url;
+      // Initialize selectedImage based on the new galleryImages or product.image_url
+      if (galleryImages.value.length > 0) {
+        selectedImage.value = galleryImages.value[0];
+      } else if (product.value.image_url) {
+        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
+      } else {
+        selectedImage.value = null;
       }
     } else {
       fetchError.value = { message: "Product data is invalid or not found." };
@@ -631,13 +703,13 @@ const handleAddToCart = () => {
       id: currentVariant.value.id, product_id: product.value.id, variant_id: currentVariant.value.id,
       name: `${product.value.name}${variantOptionString ? ` - ${variantOptionString}` : ''}`,
       price: parseFloat(currentVariant.value.final_price), sku: currentVariant.value.sku || product.value.sku,
-      image_url: selectedImageUrl.value, type: 'variant',
+      image_url: selectedImage.value?.url || product.value.image_url, type: 'variant',
     };
   } else {
     cartItemData = {
       id: product.value.id, product_id: product.value.id, variant_id: null,
       name: product.value.name, price: parseFloat(product.value.price), sku: product.value.sku,
-      image_url: selectedImageUrl.value, type: 'product',
+      image_url: selectedImage.value?.url || product.value.image_url, type: 'product',
     };
   }
   addToCart(cartItemData, quantity.value);

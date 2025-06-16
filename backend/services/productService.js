@@ -317,7 +317,7 @@ async function getProductById(productId) {
 
     // Fetch product gallery images
     const imagesQuery = `
-      SELECT id, image_url, alt_text, display_order
+      SELECT id, image_url AS url, alt_text, display_order
       FROM product_images
       WHERE product_id = $1
       ORDER BY display_order ASC, id ASC;
@@ -384,6 +384,69 @@ async function getProductById(productId) {
       product.available_options = [];
       product.variants = [];
     }
+
+    // Create consolidated gallery_images
+    let gallery_images = [];
+    let imageUrlsSet = new Set();
+
+    // Add images from product.images
+    if (product.images && Array.isArray(product.images)) {
+      product.images.forEach(img => {
+        if (img.url && !imageUrlsSet.has(img.url)) {
+          imageUrlsSet.add(img.url);
+          gallery_images.push({
+            id: img.id,
+            url: img.url,
+            alt_text: img.alt_text || product.name,
+            display_order: img.display_order
+          });
+        }
+      });
+    }
+
+    // Ensure primary product.image_url is included
+    if (product.image_url && !imageUrlsSet.has(product.image_url)) {
+      imageUrlsSet.add(product.image_url);
+      gallery_images.push({
+        id: 'product_primary_' + product.id,
+        url: product.image_url,
+        alt_text: product.name,
+        display_order: -1 // Prioritize if no other primary is set
+      });
+    }
+
+    // Add images from product.variants
+    if (product.variants && Array.isArray(product.variants)) {
+      product.variants.forEach(variant => {
+        if (variant.image_url && !imageUrlsSet.has(variant.image_url)) {
+          imageUrlsSet.add(variant.image_url);
+          gallery_images.push({
+            id: 'variant_' + variant.id,
+            url: variant.image_url,
+            alt_text: variant.sku || product.name,
+            display_order: 1000 // Default high display_order for variant images
+          });
+        }
+      });
+    }
+
+    // Sort gallery_images by display_order, then by id for stable sort
+    gallery_images.sort((a, b) => {
+      if (a.display_order !== b.display_order) {
+        return a.display_order - b.display_order;
+      }
+      // Ensure 'product_primary_' comes before numeric ids if display_order is same
+      if (typeof a.id === 'string' && a.id.startsWith('product_primary_')) return -1;
+      if (typeof b.id === 'string' && b.id.startsWith('product_primary_')) return 1;
+      // Fallback to comparing ids (as strings or numbers)
+      if (a.id < b.id) return -1;
+      if (a.id > b.id) return 1;
+      return 0;
+    });
+
+    product.gallery_images = gallery_images;
+    // Optionally, delete product.images if it's now redundant
+    // delete product.images; // For now, keeping it as per instructions
 
     return product;
   } finally {
