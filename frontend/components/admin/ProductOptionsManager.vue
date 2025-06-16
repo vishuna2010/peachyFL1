@@ -184,7 +184,7 @@ async function handleAssignOptionToProduct() {
   }
   actionLoading.value = { type: 'assign', id: selectedGlobalOptionIdToAssign.value };
   try {
-    await $axios.post(`/admin/products/${propProductId.value}/options`, {
+    await $axios.post(`/admin/products/${propProductId.value}/assigned-options`, {
       option_id: selectedGlobalOptionIdToAssign.value
     });
     toast.success('Option assigned to product successfully.');
