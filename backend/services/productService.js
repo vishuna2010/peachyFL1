@@ -158,12 +158,26 @@ async function getAllProducts({
     paramIndex++;
   }
   if (optionValueId) {
-    whereClauses.push(`pvov_filter.product_option_value_id = $${paramIndex}`);
-    queryValues.push(optionValueId);
-    paramIndex++;
-     // Add to countBaseQuery's WHERE clause too
-    if (!countBaseQuery.includes('WHERE')) countBaseQuery += ' WHERE '; else countBaseQuery += ' AND ';
-    countBaseQuery += `pvov_filter_count.product_option_value_id = $${paramIndex}`; // Use the same paramIndex, queryValues are copied later
+    const intOptionValueId = parseInt(optionValueId, 10);
+    if (!isNaN(intOptionValueId)) {
+      // Add to main query's whereClauses and queryValues
+      whereClauses.push(`pvov_filter.product_option_value_id = $${paramIndex}`);
+      queryValues.push(intOptionValueId);
+      // paramIndex will be incremented after this block for the next potential filter
+
+      // Add the condition specifically for countBaseQuery using its alias and the same parameter
+      // This relies on intOptionValueId being present in countQueryValues at the same relative position.
+      if (!countBaseQuery.includes('WHERE')) {
+        countBaseQuery += ' WHERE ';
+      } else {
+        countBaseQuery += ' AND ';
+      }
+      countBaseQuery += `pvov_filter_count.product_option_value_id = $${paramIndex}`;
+      // Note: queryValues (and thus countQueryValues) will have intOptionValueId at the position $paramIndex refers to.
+      paramIndex++;
+    } else {
+      console.warn(`Invalid optionValueId encountered: ${optionValueId}. Skipping filter.`);
+    }
   }
 
   if (status && status !== 'all') {
@@ -186,10 +200,17 @@ async function getAllProducts({
   if (whereClauses.length > 0) {
     const whereString = " WHERE " + whereClauses.join(" AND ");
     baseSelect += whereString;
-    // Apply to countBaseQuery, carefully, as it might already have a WHERE from optionValueId
-    if (countBaseQuery.includes('WHERE')) {
-        countBaseQuery += " AND " + whereClauses.filter(c => !c.startsWith('pvov_filter.')).join(" AND "); // Avoid duplicating optionValueId filter
-    } else {
+    // For countBaseQuery, we need to apply only those whereClauses that DO NOT involve pvov_filter
+    // because the pvov_filter_count condition was added manually above.
+    // Or, more simply, build whereString without the optionValueId filter for count if it was handled separately.
+    // Let's rebuild whereString for count query if optionValueId was present.
+    if (optionValueId && !isNaN(parseInt(optionValueId,10))) {
+        const countWhereClauses = whereClauses.filter(c => !c.startsWith('pvov_filter.'));
+        if (countWhereClauses.length > 0) {
+             // countBaseQuery already has its optionValueId filter if needed
+            countBaseQuery += (countBaseQuery.includes('WHERE') ? ' AND ' : ' WHERE ') + countWhereClauses.join(" AND ");
+        }
+    } else if (whereClauses.length > 0) { // No optionValueId, or it was invalid
         countBaseQuery += whereString;
     }
   }
@@ -246,23 +267,6 @@ async function getAllProducts({
   // console.log('With params:', finalQueryValuesForSelect);
   // console.log('Executing count query:', countBaseQuery);
   // console.log('With params:', countQueryValues);
-
-  // --- BEGIN DEBUG LOGGING for optionValueId filter ---
-  if (optionValueId) { // 'optionValueId' here is the destructured parameter from the function arguments
-    console.log('--- DEBUG: getAllProducts with optionValueId ---');
-    console.log('Timestamp:', new Date().toISOString());
-    console.log('Filtering by optionValueId:', optionValueId);
-    console.log('Constructed Main SQL Query (baseSelect):');
-    console.log(baseSelect);
-    console.log('Parameters for Main SQL Query (finalQueryValuesForSelect):');
-    console.log(JSON.stringify(finalQueryValuesForSelect, null, 2));
-    console.log('Constructed Count SQL Query (countBaseQuery):');
-    console.log(countBaseQuery);
-    console.log('Parameters for Count SQL Query (countQueryValues):');
-    console.log(JSON.stringify(countQueryValues, null, 2));
-    console.log('--- END DEBUG: getAllProducts with optionValueId ---');
-  }
-  // --- END DEBUG LOGGING for optionValueId filter ---
 
   const productsResult = await db.query(baseSelect, finalQueryValuesForSelect);
   const countResult = await db.query(countBaseQuery, countQueryValues);

@@ -246,26 +246,6 @@ router.put(
         const updateQueryString = `UPDATE products SET ${setClauses.join(", ")} WHERE id = $${currentParamIndex} RETURNING id`;
         queryUpdateValues.push(productId);
 
-        // --- BEGIN DEBUG LOGGING ---
-        console.log('--- DEBUG: Product Update ---');
-        console.log('Timestamp:', new Date().toISOString());
-        console.log('Target Product ID:', productId);
-        console.log('Raw req.body:', JSON.stringify(req.body, null, 2));
-        console.log('Constructed SET Clauses:', setClauses.join(", "));
-        console.log('Values for SQL Query (queryUpdateValues):');
-        if (queryUpdateValues && Array.isArray(queryUpdateValues)) {
-          queryUpdateValues.forEach((value, index) => {
-            const correspondingClause = setClauses[index] ? setClauses[index].split('=')[0].trim() : 'UNKNOWN_FIELD';
-            // For the last value (productId for WHERE clause), adjust the clause display
-            const clauseToLog = index === queryUpdateValues.length -1 && index === setClauses.length ? `WHERE id` : correspondingClause;
-            console.log(`  ${clauseToLog} ($${index + 1}):`, value, `(JavaScript typeof: ${typeof value})`);
-          });
-        } else {
-          console.log('  queryUpdateValues is not an array or is undefined/null.');
-        }
-        console.log('--- END DEBUG: Product Update ---');
-        // --- END DEBUG LOGGING ---
-
         const updateResult = await client.query(updateQueryString, queryUpdateValues);
         if (updateResult.rowCount === 0) {
           await client.query('ROLLBACK');
