@@ -172,16 +172,19 @@ useHead({
 });
 
 const { $axios } = useNuxtApp();
+const toast = useToast(); // Import and use toast
 
 // Reactive State for Option Types
 const optionTypes = ref([]);
-const isLoading = ref(true);
-const error = ref(null);
+const isLoadingOptionTypes = ref(true); // Renamed for clarity
+const fetchOptionTypesError = ref(null); // Renamed for clarity
 const showAddEditOptionTypeModal = ref(false);
 const currentOptionType = ref({ id: null, name: '' });
 const isEditingOptionType = ref(false);
+const isSavingOptionType = ref(false); // Added
+const saveOptionTypeError = ref(null); // Added
 
-// Reactive State for Option Values
+// Reactive State for Option Values (Modal for managing values of a selected Option Type)
 const showManageValuesModal = ref(false);
 const selectedOptionTypeForValues = ref(null); // { id, name, values: [] }
 const isLoadingValues = ref(false);
@@ -191,16 +194,17 @@ const editingValue = ref(null); // { id, value } for editing a specific value
 
 // Fetch Option Types
 const fetchOptionTypes = async () => {
-  isLoading.value = true;
-  error.value = null;
+  isLoadingOptionTypes.value = true;
+  fetchOptionTypesError.value = null;
   try {
     const response = await $axios.get('/admin/options');
-    optionTypes.value = response.data.data || response.data; // Adapt to potential API structure
+    optionTypes.value = response.data.data || response.data || [];
   } catch (err) {
     console.error('Error fetching option types:', err);
-    error.value = err.response?.data?.message || err.message || 'Failed to load option types.';
+    fetchOptionTypesError.value = err.response?.data?.message || err.message || 'Failed to load option types.';
+    toast.error(fetchOptionTypesError.value);
   } finally {
-    isLoading.value = false;
+    isLoadingOptionTypes.value = false;
   }
 };
 
@@ -208,12 +212,14 @@ const fetchOptionTypes = async () => {
 const openAddOptionTypeModal = () => {
   isEditingOptionType.value = false;
   currentOptionType.value = { id: null, name: '' };
+  saveOptionTypeError.value = null; // Clear previous save errors
   showAddEditOptionTypeModal.value = true;
 };
 
 const openEditOptionTypeModal = (optionType) => {
   isEditingOptionType.value = true;
   currentOptionType.value = { ...optionType };
+  saveOptionTypeError.value = null; // Clear previous save errors
   showAddEditOptionTypeModal.value = true;
 };
 
@@ -222,48 +228,58 @@ const closeAddEditOptionTypeModal = () => {
 };
 
 // Save Option Type (Add/Edit)
-const saveOptionType = async () => {
-  error.value = null;
-  const payload = { name: currentOptionType.value.name };
+const handleSaveOptionType = async () => {
+  if (!currentOptionType.value.name || currentOptionType.value.name.trim().length < 2) {
+    saveOptionTypeError.value = "Option Type name must be at least 2 characters.";
+    toast.error(saveOptionTypeError.value);
+    return;
+  }
+  isSavingOptionType.value = true;
+  saveOptionTypeError.value = null;
+  fetchOptionTypesError.value = null; // Clear general page error
+
+  const payload = { name: currentOptionType.value.name.trim() };
   try {
     if (isEditingOptionType.value && currentOptionType.value.id) {
       await $axios.put(`/admin/options/${currentOptionType.value.id}`, payload);
-      // alert('Option type updated successfully!'); // Or use a toast
+      toast.success('Option type updated successfully!');
     } else {
       await $axios.post('/admin/options', payload);
-      // alert('Option type added successfully!'); // Or use a toast
+      toast.success('Option type added successfully!');
     }
     fetchOptionTypes();
     closeAddEditOptionTypeModal();
   } catch (err) {
-    console.error('Error saving option type:', err);
-    // Display error in modal or as a general error
-    error.value = err.response?.data?.message || err.message || 'Failed to save option type.';
-    // alert(`Error: ${error.value}`);
+    console.error('Error saving option type:', err.response?.data || err.message);
+    saveOptionTypeError.value = err.response?.data?.message || err.message || 'Failed to save option type.';
+    toast.error(saveOptionTypeError.value);
+  } finally {
+    isSavingOptionType.value = false;
   }
 };
 
 // Delete Option Type
-const confirmDeleteOptionType = (optionTypeId) => {
-  if (confirm('Are you sure you want to delete this option type? This might fail if it is currently in use by products.')) {
-    deleteOptionType(optionTypeId);
+const confirmDeleteOptionType = (optionTypeId, optionTypeName) => { // Added optionTypeName
+  if (confirm(`Are you sure you want to delete the option type '${optionTypeName}' (ID: ${optionTypeId})? This cannot be undone and might fail if the option type is in use.`)) {
+    deleteOptionType(optionTypeId, optionTypeName);
   }
 };
 
-const deleteOptionType = async (optionTypeId) => {
-  error.value = null;
+const deleteOptionType = async (optionTypeId, optionTypeName) => {
+  fetchOptionTypesError.value = null; // Clear general page error
   try {
     await $axios.delete(`/admin/options/${optionTypeId}`);
-    // alert('Option type deleted successfully!'); // Or use a toast
-    fetchOptionTypes();
+    toast.success(`Option type '${optionTypeName}' deleted successfully!`);
+    fetchOptionTypes(); // Refresh list
   } catch (err) {
-    console.error('Error deleting option type:', err);
-    error.value = err.response?.data?.message || err.message || 'Failed to delete option type. It might be in use.';
-    alert(`Error: ${error.value}`);
+    console.error('Error deleting option type:', err.response?.data || err.message);
+    const deleteError = err.response?.data?.message || `Failed to delete option type '${optionTypeName}'. It might be in use.`;
+    toast.error(deleteError);
+    fetchOptionTypesError.value = deleteError; // Show error on main page if needed
   }
 };
 
-// Manage Values Modal Logic
+// Manage Global Values Modal Logic (Button text can be "Manage Global Values")
 const openManageValuesModal = async (optionType) => {
   selectedOptionTypeForValues.value = { ...optionType, values: [] }; // Reset values initially
   showManageValuesModal.value = true;
