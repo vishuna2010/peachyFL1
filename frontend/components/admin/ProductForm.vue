@@ -58,8 +58,8 @@
     </div>
 
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
-        <!--/* Tax Class Selector - Placed within the form grid */-->
-        <div class="sm:col-span-2"> <!--/* Spanning full width like Tags input */-->
+        {{/* Tax Class Selector - Placed within the form grid */}}
+        <div class="sm:col-span-2"> {{/* Spanning full width like Tags input */}}
           <label for="product_tax_class_id" class="block text-sm font-medium text-gray-700 mb-1">Tax Class</label>
           <div v-if="props.isLoadingTaxClasses" class="mt-1 text-sm text-gray-500">Loading tax classes...</div>
           <div v-else-if="props.taxClassesError" class="mt-1 text-sm text-red-600">{{ props.taxClassesError }}</div>

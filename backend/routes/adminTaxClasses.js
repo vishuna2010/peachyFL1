@@ -281,31 +281,40 @@ router.get(
   async (req, res, next) => {
     const errors = validationResult(req);
     // LOG 1: Raw query
-    console.log('[adminTaxClasses GET /] Raw req.query: page=', req.query.page, ', limit=', req.query.limit);
+    const errors = validationResult(req);
 
-    if (!errors.isEmpty()) { // Should ideally not happen due to defaults and optional, but good practice
+    // Log actual req.query values as received by this point (could be strings)
+    console.log('[adminTaxClasses GET /] req.query upon entry to handler: page=', req.query.page, ', limit=', req.query.limit);
+
+    if (!errors.isEmpty()) {
+        console.log('[adminTaxClasses GET /] Validation errors found:', errors.array());
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { page: rawPageAfterValidation, limit: rawLimitAfterValidation } = req.query;
-    // Note: req.query contains values *after* express-validator's .toInt() and .default() if they ran.
+    // page and limit from req.query here have been processed by express-validator's
+    // .optional(), .isInt(), .toInt(), .default()
+    const { page, limit } = req.query;
 
-    // LOG 2: Values from req.query after validation result (these are used by safeguard)
-    console.log('[adminTaxClasses GET /] Values from req.query after validation (rawPage, rawLimit):', rawPageAfterValidation, rawLimitAfterValidation);
+    // Log values after express-validator processing (should be numbers or defaults)
+    console.log('[adminTaxClasses GET /] Values from req.query after validation (page, limit):', page, limit);
 
-    let validatedPage = parseInt(rawPageAfterValidation); // Validators should have already done toInt()
-    let validatedLimit = parseInt(rawLimit); // but we re-parse to be certain of number type for NaN check
+    let validatedPage = parseInt(page); // Re-parse, though validator's .toInt() should suffice. This handles if page was e.g. a string '1'
+    let validatedLimit = parseInt(limit); // Re-parse for same reason.
 
     if (isNaN(validatedPage) || validatedPage < 1) {
-      console.warn(`[adminTaxClasses] Invalid or NaN page value received: ${rawPage}. Defaulting to 1.`);
+      // This warning uses the 'page' variable which holds the value from req.query after validation/sanitization
+      console.warn(`[adminTaxClasses GET /] Invalid or NaN page value after validation: ${page}. Defaulting validatedPage to 1.`);
       validatedPage = 1;
     }
     if (isNaN(validatedLimit) || validatedLimit < 1) {
-      console.warn(`[adminTaxClasses] Invalid or NaN limit value received: ${rawLimit}. Defaulting to 10.`);
+      // This warning uses the 'limit' variable
+      console.warn(`[adminTaxClasses GET /] Invalid or NaN limit value after validation: ${limit}. Defaulting validatedLimit to 10.`);
       validatedLimit = 10;
     }
-    // The validator already handles max limit, but an additional Math.min could be added if desired:
-    // validatedLimit = Math.min(validatedLimit, 1000); // Ensure it doesn't exceed overall max
+    // Ensure validatedLimit does not exceed the specific maximum (e.g. 1000)
+    // The validator `max:1000` should already enforce this. This is an extra safeguard.
+    // validatedLimit = Math.min(validatedLimit, 1000);
+
     // LOG 3: After safeguards
     console.log('[adminTaxClasses GET /] Safeguarded values: validatedPage=', validatedPage, ', validatedLimit=', validatedLimit);
 
