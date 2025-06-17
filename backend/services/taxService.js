@@ -35,11 +35,11 @@ async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, dbClientOpt
   let taxRates = [];
   try {
     const sql = `
-      SELECT tr.id, tr.name, tr.rate_percentage, tr.type
+      SELECT tr.id, tr.name, tr.rate_percentage, tr.tax_type
       FROM tax_rates tr
       JOIN tax_class_rates tcr ON tr.id = tcr.tax_rate_id
       WHERE tcr.tax_class_id = $1 AND tr.is_active = TRUE
-      ORDER BY tr.priority ASC, tr.id ASC; -- Added order for consistent calculation if priority matters later
+      ORDER BY tr.priority ASC, tr.id ASC;
     `;
     const result = await queryRunner.query(sql, [taxClassId]);
     taxRates = result.rows;
