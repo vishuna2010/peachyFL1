@@ -53,6 +53,30 @@
         </div>
     </div>
 
+    <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+        {{/* Tax Class Selector - Placed within the form grid */}}
+        <div class="sm:col-span-2"> {{/* Spanning full width like Tags input */}}
+          <label for="product_tax_class_id" class="block text-sm font-medium text-gray-700 mb-1">Tax Class</label>
+          <div v-if="props.isLoadingTaxClasses" class="mt-1 text-sm text-gray-500">Loading tax classes...</div>
+          <div v-else-if="props.taxClassesError" class="mt-1 text-sm text-red-600">{{ props.taxClassesError }}</div>
+          <select
+            v-else
+            id="product_tax_class_id"
+            name="tax_class_id"
+            v-model="formData.tax_class_id"
+            class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+          >
+            <option :value="null">-- No Tax Class --</option>
+            <option v-for="taxClass in props.availableTaxClasses" :key="taxClass.id" :value="taxClass.id">
+              {{ taxClass.name }}
+            </option>
+          </select>
+          <p v-if="!props.isLoadingTaxClasses && props.availableTaxClasses.length === 0 && !props.taxClassesError" class="mt-1 text-xs text-gray-500">
+            No tax classes available.
+          </p>
+        </div>
+    </div>
+
     <div>
         <label for="tags" class="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated):</label>
         <input type="text" id="tags" v-model="tagsInput" placeholder="e.g., electronics, new, popular" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
@@ -137,6 +161,18 @@ const props = defineProps({
   apiError: {
     type: String,
     default: ''
+  },
+  availableTaxClasses: { // New
+    type: Array,
+    default: () => []
+  },
+  isLoadingTaxClasses: { // New
+    type: Boolean,
+    default: false
+  },
+  taxClassesError: { // New
+    type: String,
+    default: null
   }
 });
 
@@ -156,6 +192,7 @@ const initialFormData = {
   reorder_threshold: null,
   tags: [],
   image_url: null,
+  tax_class_id: null, // Add this line
   ...props.initialData // Spread initialData to overwrite defaults
 };
 const formData = reactive(initialFormData);
@@ -180,6 +217,7 @@ watch(() => props.initialData, (newData) => {
     formData.reorder_threshold = newData.reorder_threshold === undefined ? null : newData.reorder_threshold;
     formData.image_url = newData.image_url || null;
     formData.tags = newData.tags || []; // Ensure tags is an array
+    formData.tax_class_id = newData.tax_class_id === undefined ? null : newData.tax_class_id; // Update tax_class_id
 
     tagsInput.value = newData.tags ? newData.tags.join(', ') : '';
     selectedFile.value = null;
@@ -240,26 +278,31 @@ const handleSubmit = () => {
 
     let valueToAppend = processedFormData[key];
 
-    if (key === 'specifications') {
+    // Special handling for tax_class_id to send empty string for null
+    if (key === 'tax_class_id') {
+      if (valueToAppend === null) {
+        submissionData.append(key, '');
+      } else if (valueToAppend !== undefined) { // Only append if not undefined
+        submissionData.append(key, valueToAppend);
+      }
+      continue; // Done with tax_class_id for this iteration
+    }
+
+    if (key === 'specifications') { // Existing logic for specifications if any
       if (typeof valueToAppend === 'object' && valueToAppend !== null) {
         valueToAppend = JSON.stringify(valueToAppend);
       } else if (valueToAppend === undefined) {
-        // If undefined, and we want to skip appending, we can 'continue' here.
-        // Or if we need to send null as an empty string for FormData:
-        // valueToAppend = '';
-        // For now, if undefined, it will be skipped by the append logic below.
-        // If it's null or an empty string, it will be handled by the append logic.
+        continue; // Skip undefined specifications
       }
-      // If it's already a string (e.g., empty string, valid JSON string, or plain text) or null,
-      // it will be handled by the general append logic.
     }
 
     if (valueToAppend !== null && valueToAppend !== undefined) {
       submissionData.append(key, valueToAppend);
     } else if (key === 'image_url' && imageRemovalFlag.value) {
-      // This specific logic for image_url to send empty string for removal should be kept
       submissionData.append('image_url', '');
     }
+    // For other fields that are null/undefined and not image_url with removal flag, they are omitted.
+    // This is generally fine if backend treats missing optional fields as no-change.
     // Note: FormData converts null to the string "null". If the backend expects actual null
     // for empty optional fields and not the string "null", those fields should ideally be omitted
     // from appending if their value is null. The current backend PUT route handles empty strings as null for some fields.

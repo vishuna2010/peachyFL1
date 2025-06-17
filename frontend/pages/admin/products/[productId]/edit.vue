@@ -18,39 +18,15 @@
         :initial-data="productData"
         :categories="categories"
         :suppliers="suppliers"
+        :available-tax-classes="availableTaxClasses"
+        :is-loading-tax-classes="isLoadingTaxClasses"
+        :tax-classes-error="taxClassesError"
         :is-edit-mode="true"
         :is-submitting="isSubmittingProductForm"
         :api-error="productFormApiError"
         @submit="handleUpdateProduct"
         class="mb-10 bg-white shadow-md rounded-lg p-6"
       />
-
-      <!-- Tax Class Selector Section -->
-      <section class="bg-white shadow-md rounded-lg p-6 my-10">
-        <h3 class="text-xl font-semibold text-gray-700 mb-5 border-b pb-3">Tax Configuration</h3>
-        <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-          <div class="sm:col-span-3">
-            <label for="tax_class_id" class="block text-sm font-medium text-gray-700">Tax Class</label>
-            <div v-if="isLoadingTaxClasses" class="mt-1 text-sm text-gray-500">Loading tax classes...</div>
-            <div v-else-if="taxClassesError" class="mt-1 text-sm text-red-600">{{ taxClassesError }}</div>
-            <select
-              v-else
-              id="tax_class_id"
-              name="tax_class_id"
-              v-model="productData.tax_class_id"
-              class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            >
-              <option :value="null">-- No Tax Class --</option>
-              <option v-for="taxClass in availableTaxClasses" :key="taxClass.id" :value="taxClass.id">
-                {{ taxClass.name }}
-              </option>
-            </select>
-            <p v-if="!isLoadingTaxClasses && availableTaxClasses.length === 0 && !taxClassesError" class="mt-1 text-xs text-gray-500">
-              No tax classes available. You can create them in the Tax Management section.
-            </p>
-          </div>
-        </div>
-      </section>
 
       <section class="bg-white shadow-md rounded-lg p-6 my-10">
         <h3 class="text-xl font-semibold text-gray-700 mb-5 border-b pb-3">Product Specific Options</h3>
@@ -182,17 +158,8 @@ async function handleUpdateProduct(formData) {
   isSubmittingProductForm.value = true;
   productFormApiError.value = '';
 
-  // Add tax_class_id to the FormData object
-  if (productData.value && productData.value.tax_class_id !== undefined) {
-    if (productData.value.tax_class_id === null) {
-      formData.append('tax_class_id', ''); // Send empty string to be treated as NULL by backend
-    } else {
-      formData.append('tax_class_id', productData.value.tax_class_id);
-    }
-  }
-  // If productData.value.tax_class_id is undefined (e.g. if not loaded yet or error),
-  // it won't be appended, and backend will treat as no change unless field is required.
-  // The backend validator for tax_class_id is optional({nullable:true}), so not sending it is fine if no change.
+  // The ProductForm component now handles adding tax_class_id to the FormData it emits.
+  // So, no need to manually append it here.
 
   try {
     const response = await $axios.put(`/admin/products/${productId.value}`, formData);
