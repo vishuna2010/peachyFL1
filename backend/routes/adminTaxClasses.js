@@ -280,13 +280,20 @@ router.get(
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
+    // LOG 1: Raw query
+    console.log('[adminTaxClasses GET /] Raw req.query: page=', req.query.page, ', limit=', req.query.limit);
+
     if (!errors.isEmpty()) { // Should ideally not happen due to defaults and optional, but good practice
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { page: rawPage, limit: rawLimit } = req.query; // Get raw values after validator processing
+    const { page: rawPageAfterValidation, limit: rawLimitAfterValidation } = req.query;
+    // Note: req.query contains values *after* express-validator's .toInt() and .default() if they ran.
 
-    let validatedPage = parseInt(rawPage); // Validators should have already done toInt()
+    // LOG 2: Values from req.query after validation result (these are used by safeguard)
+    console.log('[adminTaxClasses GET /] Values from req.query after validation (rawPage, rawLimit):', rawPageAfterValidation, rawLimitAfterValidation);
+
+    let validatedPage = parseInt(rawPageAfterValidation); // Validators should have already done toInt()
     let validatedLimit = parseInt(rawLimit); // but we re-parse to be certain of number type for NaN check
 
     if (isNaN(validatedPage) || validatedPage < 1) {
@@ -299,15 +306,23 @@ router.get(
     }
     // The validator already handles max limit, but an additional Math.min could be added if desired:
     // validatedLimit = Math.min(validatedLimit, 1000); // Ensure it doesn't exceed overall max
+    // LOG 3: After safeguards
+    console.log('[adminTaxClasses GET /] Safeguarded values: validatedPage=', validatedPage, ', validatedLimit=', validatedLimit);
 
     const offset = (validatedPage - 1) * validatedLimit;
+    // LOG 4: Calculated offset
+    console.log('[adminTaxClasses GET /] Calculated offset:', offset);
 
     try {
       const dataQuery = 'SELECT * FROM tax_classes ORDER BY name ASC LIMIT $1 OFFSET $2;';
+      // LOG 5: Before data query
+      console.log(`[adminTaxClasses GET /] Executing dataQuery with limit: ${validatedLimit}, offset: ${offset}`);
       // Use the safeguarded values in the query
       const dataResult = await db.query(dataQuery, [validatedLimit, offset]);
 
       const countQuery = 'SELECT COUNT(*) FROM tax_classes;';
+      // LOG 6: Before count query
+      console.log(`[adminTaxClasses GET /] Executing countQuery.`);
       const countResult = await db.query(countQuery);
       const totalRecords = parseInt(countResult.rows[0].count, 10);
       const totalPages = Math.ceil(totalRecords / validatedLimit);
