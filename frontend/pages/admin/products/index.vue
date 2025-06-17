@@ -290,21 +290,32 @@ const handlePrintLabels = async () => {
   } catch (error) {
     console.error('Error fetching label PDF:', error);
     let errorMessage = 'Failed to download label PDF. Please try again.';
+
     if (error.response && error.response.data) {
-      // Try to read error message from blob data if it's a JSON error from API
+      // The response data for an error from an $axios request with responseType: 'blob'
+      // will itself be a Blob. We need to read it as text to parse as JSON.
       try {
-        const errorBlob = await error.response.data.text();
-        const errorJson = JSON.parse(errorBlob);
+        const errorText = await error.response.data.text();
+        const errorJson = JSON.parse(errorText);
+
         if (errorJson && errorJson.message) {
-          errorMessage = errorJson.message;
+          if (errorJson.message.includes("Variant with ID") && errorJson.message.includes("not found")) {
+            errorMessage = `Error: The selected variant could not be found for this product. It might have been recently changed or deleted. Please try selecting the variant again or refresh the product details. (Backend: ${errorJson.message})`;
+          } else {
+            errorMessage = errorJson.message; // Use the specific message from backend
+          }
         }
       } catch (e) {
-        // Could not parse error blob, stick to generic message
-        console.error('Could not parse error response blob:', e);
+        // Could not parse error blob or it wasn't JSON, stick to generic message
+        console.error('Could not parse error response blob as JSON:', e);
       }
+    } else if (error.message) {
+      // For non-Axios errors or network errors where error.response is not available
+      errorMessage = error.message;
     }
-    alert(errorMessage); // Replace with toast if available
-    showPrintLabelModal.value = false; // Still close modal on error
+
+    alert(errorMessage);
+    showPrintLabelModal.value = false;
   } finally {
     isPrintingLabel.value = false;
   }
