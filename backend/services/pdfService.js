@@ -64,10 +64,17 @@ function getProductLabelHtml(labelData, barcodeDataUrl, qrCodeDataUrl) {
 /**
  * Generates a product label PDF.
  * @param {object} productLabelData - Object containing data for the label.
+ * @param {number} count - Number of labels to generate.
  * @returns {Promise<Buffer>} A Promise that resolves with the PDF buffer.
  */
-async function generateProductLabelPdf(productLabelData) {
+async function generateProductLabelPdf(productLabelData, count = 1) {
   let browser = null;
+
+  function extractCoreLabelContent(htmlString) {
+    const bodyMatch = htmlString.match(/<body>([\s\S]*)<\/body>/);
+    return bodyMatch && bodyMatch[1] ? bodyMatch[1].trim() : '';
+  }
+
   try {
     const barcodeText = productLabelData.barcode_value;
     if (!barcodeText) {
@@ -80,7 +87,41 @@ async function generateProductLabelPdf(productLabelData) {
       ? await generateQrCodeDataURL(productLabelData.barcode_value)
       : null;
 
-    const htmlContent = getProductLabelHtml(productLabelData, barcodeDataUrl, qrCodeDataUrl);
+    const singleLabelHtml = getProductLabelHtml(productLabelData, barcodeDataUrl, qrCodeDataUrl);
+    const coreLabelHtml = extractCoreLabelContent(singleLabelHtml);
+
+    let allLabelsHtmlContent = '';
+    for (let i = 0; i < count; i++) {
+      allLabelsHtmlContent += `<div class="label-instance">${coreLabelHtml}</div>`;
+    }
+
+    const finalHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Product Labels</title>
+        <style>
+          body { margin: 0; font-family: Arial, sans-serif; }
+          .label-instance {
+            width: 300px; /* From original getProductLabelHtml */
+            padding: 10px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            page-break-after: always; /* Each label on a new page for simplicity */
+            /* To try multiple on one page, use: display: inline-block; margin: 5mm; page-break-inside: avoid; */
+          }
+          /* Copy styles from getProductLabelHtml and scope them to .label-instance */
+          .label-instance h1 { font-size: 18px; margin: 5px 0; word-wrap: break-word; text-align: center; }
+          .label-instance .sku { font-size: 12px; margin-bottom: 5px; text-align: center; }
+          .label-instance .price { font-size: 14px; margin-bottom: 3px; text-align: center; }
+          .label-instance .vat-price { font-size: 16px; font-weight: bold; margin-bottom: 8px; text-align: center; }
+          .label-instance img.barcode { display: block; margin: 0 auto 5px auto; max-width: 90%; height: auto; }
+          .label-instance img.qrcode { display: block; margin: 5px auto 0 auto; max-width: 35%; height: auto; }
+        </style>
+      </head>
+      <body>${allLabelsHtmlContent}</body>
+      </html>
+    `;
 
     // Launch Puppeteer
     // Note: In some environments (like certain Lambdas or containers), you might need
@@ -92,25 +133,16 @@ async function generateProductLabelPdf(productLabelData) {
     const page = await browser.newPage();
 
     // Set content to our generated HTML
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    await page.setContent(finalHtml, { waitUntil: 'networkidle0' });
 
     // Generate PDF
     // Common label sizes: e.g., 4x2 inches. Puppeteer uses points (72 DPI).
     // 3 inches width = 216 points. 1.5 inches height = 108 points.
     // These are approximate and depend on desired label output.
     const pdfBuffer = await page.pdf({
-      // width: '3in', // Example: 3 inches wide
-      // height: '1.5in', // Example: 1.5 inches tall
-      // Instead of fixed size, we can let it fit content or use a format like 'Letter' and scale.
-      // For a single label, fitting content is usually fine if HTML is styled to a fixed width.
-      printBackground: true, // If your HTML has background colors/images
-      // format: 'A7', // Small standard format, or omit for content-based size
-      margin: { // Minimal margins
-        top: '0.1in',
-        right: '0.1in',
-        bottom: '0.1in',
-        left: '0.1in',
-      }
+      printBackground: true,
+      margin: { top: '0.1in', right: '0.1in', bottom: '0.1in', left: '0.1in' }
+      // format: 'A4' // Optional: use if page-break-after doesn't give desired result without it
     });
 
     return pdfBuffer;

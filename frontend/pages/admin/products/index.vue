@@ -76,6 +76,12 @@
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button
+                  @click="openPrintLabelModal(product)"
+                  class="text-green-600 hover:text-green-900 mr-3"
+                >
+                  Print Labels
+                </button>
                 <NuxtLink
                   :to="`/admin/products/${product.id}/edit`"
                   class="text-indigo-600 hover:text-indigo-900 mr-3"
@@ -118,6 +124,42 @@
       </div>
     </div>
   </div>
+  <!-- Print Labels Modal -->
+  <div v-if="showPrintLabelModal && currentProductForLabel" class="fixed inset-0 z-50 overflow-y-auto bg-gray-600 bg-opacity-75 flex items-center justify-center p-4 transition-opacity duration-300 ease-in-out" :class="{'opacity-100': showPrintLabelModal, 'opacity-0 pointer-events-none': !showPrintLabelModal}">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md transform transition-all duration-300 ease-in-out" :class="{'scale-100 opacity-100': showPrintLabelModal, 'scale-95 opacity-0': !showPrintLabelModal}">
+      <div class="p-5 border-b border-gray-200 flex justify-between items-center">
+        <h3 class="text-lg leading-6 font-medium text-gray-900">Print Labels for: {{ currentProductForLabel.name }}</h3>
+        <button @click="showPrintLabelModal = false" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label for="label_quantity" class="block text-sm font-medium text-gray-700 mb-1">Number of labels to print:</label>
+          <input type="number" id="label_quantity" v-model.number="labelQuantity" min="1" max="200"
+                 class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <p v-if="labelQuantity < 1 || labelQuantity > 200" class="text-xs text-red-600">Please enter a number between 1 and 200.</p>
+      </div>
+      <div class="px-5 py-4 bg-gray-50 border-t border-gray-200 sm:flex sm:flex-row-reverse rounded-b-lg">
+        <button
+          type="button"
+          @click="handlePrintLabels"
+          :disabled="labelQuantity < 1 || labelQuantity > 200"
+          class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Print
+        </button>
+        <button
+          type="button"
+          @click="showPrintLabelModal = false"
+          class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -142,6 +184,40 @@ const totalPages = ref(1);
 const limit = ref(10); // Number of items per page
 const searchTerm = ref('');
 // const selectedCategory = ref(null); // For future filter extension
+
+const showPrintLabelModal = ref(false);
+const currentProductForLabel = ref(null);
+const labelQuantity = ref(1);
+
+const openPrintLabelModal = (product) => {
+  currentProductForLabel.value = product;
+  labelQuantity.value = 1; // Default quantity
+  showPrintLabelModal.value = true;
+};
+
+const handlePrintLabels = () => {
+  if (!currentProductForLabel.value || !currentProductForLabel.value.id) {
+    // console.error('Product ID is missing.');
+    alert('Error: Product information is missing. Cannot print labels.');
+    return;
+  }
+
+  const quantity = parseInt(labelQuantity.value);
+  if (isNaN(quantity) || quantity < 1 || quantity > 200) {
+    // console.error('Invalid label quantity.');
+    alert('Error: Invalid number of labels. Please enter a number between 1 and 200.');
+    return;
+  }
+
+  // Construct the URL for the label printing endpoint
+  const apiUrl = `/api/admin/products/${currentProductForLabel.value.id}/label?count=${quantity}`;
+
+  // Open the URL in a new tab. The browser will handle the PDF response.
+  window.open(apiUrl, '_blank');
+
+  // Close the modal after initiating the print/download
+  showPrintLabelModal.value = false;
+};
 
 const fetchProducts = async () => {
   isLoading.value = true;

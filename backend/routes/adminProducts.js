@@ -560,7 +560,8 @@ router.get(
   '/:id/label',
   [
     param('id').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt(),
-    query('variant_id').optional().isInt({ gt: 0 }).toInt().withMessage('Variant ID must be a positive integer if provided.')
+    query('variant_id').optional().isInt({ gt: 0 }).toInt().withMessage('Variant ID must be a positive integer if provided.'),
+    query('count').optional().isInt({ min: 1, max: 200 }).toInt().default(1) // Max 200 for safety
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -569,7 +570,7 @@ router.get(
     }
 
     const { id: productId } = req.params; // productId is now an integer
-    const { variant_id: requestedVariantId } = req.query; // requestedVariantId is int or undefined
+    const { variant_id: requestedVariantId, count } = req.query; // count is available here
 
     // Placeholders for currency and base URL - ensure consistency with /label-data or use a config service
     const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD';
@@ -639,7 +640,7 @@ router.get(
           throw new Error("Could not determine data for label due to an unexpected issue.");
       }
 
-      const pdfBuffer = await generateProductLabelPdf(labelDataItem);
+      const pdfBuffer = await generateProductLabelPdf(labelDataItem, count);
 
       res.setHeader('Content-Type', 'application/pdf');
       // Sanitize filename
