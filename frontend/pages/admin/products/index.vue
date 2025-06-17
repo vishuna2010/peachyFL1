@@ -209,7 +209,7 @@ const handlePrintLabels = async () => {
     return;
   }
 
-  const apiUrl = `/api/admin/products/${currentProductForLabel.value.id}/label?count=${quantity}`;
+  const apiUrl = `/admin/products/${currentProductForLabel.value.id}/label?count=${quantity}`;
   isPrintingLabel.value = true;
 
   try {
