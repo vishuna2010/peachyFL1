@@ -579,20 +579,22 @@ router.get(
     const { variant_id: requestedVariantId, count } = req.query; // count is available here
 
     // Placeholders for currency and base URL - ensure consistency with /label-data or use a config service
-    const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD';
-    const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$';
-    const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com';
+    // const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD'; // Defined inside try
+    // const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$'; // Defined inside try
+    // const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com'; // Defined inside try
 
     try {
-      const product = await productService.getProductById(productId); // This fetches full product details
+      const product = await productService.getProductById(productId); // productId is from req.params
       let labelDataItem = null;
 
+      // These constants should be defined within the try block or be accessible in this scope
       const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD';
       const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$';
       const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com';
+      // count is from req.query, requestedVariantId is from req.query.variant_id
 
       if (product.has_variants && requestedVariantId) {
-        // Product has variants, AND a specific variant_id was requested
+        // Case 1: Product has variants, AND a specific variant_id was requested.
         const variant = product.variants.find(v => v.id === requestedVariantId);
         if (!variant) {
           return res.status(404).json({ message: `Variant with ID ${requestedVariantId} not found for product ${productId}.` });
@@ -630,17 +632,16 @@ router.get(
         };
 
       } else {
-        // This block now handles:
-        // 1. Product has no variants.
-        // 2. Product has variants, but NO specific variant_id was requested (default to base product).
+        // Case 2: Handles multiple sub-cases:
+        //   a) Product has no variants (`!product.has_variants`).
+        //   b) Product has variants, but NO specific `requestedVariantId` was provided (default to base product).
 
-        // If it has variants but a variant_id was requested and NOT found, that's handled above.
-        // If it does NOT have variants but a variant_id was requested, that's an issue.
+        // Sub-case check: If product does NOT have variants, but a `requestedVariantId` was still sent. This is an error.
         if (!product.has_variants && requestedVariantId) {
-            return res.status(400).json({ message: `Product ID ${productId} does not have variants, variant_id parameter is not applicable.` });
+            return res.status(400).json({ message: `Product ID ${productId} does not have variants; variant_id parameter is not applicable.` });
         }
 
-        // Construct labelDataItem for the base product
+        // Proceed to construct labelDataItem for the base product for sub-cases 2a and 2b.
         labelDataItem = {
           product_id: product.id,
           variant_id: null,
@@ -658,24 +659,26 @@ router.get(
       }
 
       if (!labelDataItem) {
-        // This should ideally not be reached if logic is correct
-        console.error(`Label data item could not be constructed for product ${productId} and variant ${requestedVariantId}`);
-        throw new Error("Could not determine data for label due to an unexpected issue.");
+        // This condition should ideally not be met if the logic above is exhaustive.
+        console.error(`[Critical] Label data item could not be constructed for product ${productId}, variant ${requestedVariantId}`);
+        return next(new Error("Could not determine data for label due to an unexpected server issue."));
       }
 
-      const pdfBuffer = await generateProductLabelPdf(labelDataItem, count); // count comes from req.query
+      const pdfBuffer = await generateProductLabelPdf(labelDataItem, count); // count is from req.query
 
       res.setHeader('Content-Type', 'application/pdf');
-      // Sanitize filename
       const safeSku = (labelDataItem.sku || `product_${labelDataItem.product_id}`).replace(/[^a-z0-9_.-]/gi, '_');
       const fileName = `label_${safeSku}${labelDataItem.variant_id ? '_var_' + labelDataItem.variant_id : ''}.pdf`;
       res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
       res.send(pdfBuffer);
 
     } catch (error) {
+      // Existing catch block
       if (error instanceof NotFoundError) {
         return res.status(404).json({ message: error.message });
       }
+      // Log other errors for server-side inspection
+      console.error(`[Error in /:id/label for product ${productId}]:`, error);
       next(error); // Pass to global error handler
     }
   }
