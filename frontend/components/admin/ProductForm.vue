@@ -12,12 +12,12 @@
 
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
       <div>
-        <label for="price" class="block text-sm font-medium text-gray-700 mb-1">Price:</label>
+        <label for="price" class="block text-sm font-medium text-gray-700 mb-1">Selling Price:</label>
         <input type="number" id="price" v-model.number="formData.price" required min="0" step="0.01" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
       </div>
       <div>
-        <label for="stock_quantity" class="block text-sm font-medium text-gray-700 mb-1">Stock Quantity:</label>
-        <input type="number" id="stock_quantity" v-model.number="formData.stock_quantity" required min="0" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        <label for="cost_price" class="block text-sm font-medium text-gray-700 mb-1">Cost Price:</label>
+        <input type="number" id="cost_price" v-model.number="formData.cost_price" min="0" step="0.01" placeholder="0.00" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
       </div>
     </div>
 
@@ -42,20 +42,24 @@
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
-        <div>
+    <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
+        <div class="sm:col-span-2">
             <label for="sku" class="block text-sm font-medium text-gray-700 mb-1">SKU (Stock Keeping Unit):</label>
             <input type="text" id="sku" v-model="formData.sku" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
         </div>
-        <div>
+        <div class="sm:col-span-2">
+            <label for="stock_quantity" class="block text-sm font-medium text-gray-700 mb-1">Stock Quantity:</label>
+            <input type="number" id="stock_quantity" v-model.number="formData.stock_quantity" required min="0" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        </div>
+        <div class="sm:col-span-2">
             <label for="reorder_threshold" class="block text-sm font-medium text-gray-700 mb-1">Reorder Threshold (Optional):</label>
             <input type="number" id="reorder_threshold" v-model.number="formData.reorder_threshold" min="0" placeholder="Leave empty for no threshold" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
         </div>
     </div>
 
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
-        <!-- /* Tax Class Selector - Placed within the form grid */-->
-        <div class="sm:col-span-2"> <!-- /* Spanning full width like Tags input */-->
+        {{/* Tax Class Selector - Placed within the form grid */}}
+        <div class="sm:col-span-2"> {{/* Spanning full width like Tags input */}}
           <label for="product_tax_class_id" class="block text-sm font-medium text-gray-700 mb-1">Tax Class</label>
           <div v-if="props.isLoadingTaxClasses" class="mt-1 text-sm text-gray-500">Loading tax classes...</div>
           <div v-else-if="props.taxClassesError" class="mt-1 text-sm text-red-600">{{ props.taxClassesError }}</div>
@@ -192,7 +196,8 @@ const initialFormData = {
   reorder_threshold: null,
   tags: [],
   image_url: null,
-  tax_class_id: null, // Add this line
+  tax_class_id: null,
+  cost_price: null, // Add cost_price
   ...props.initialData // Spread initialData to overwrite defaults
 };
 const formData = reactive(initialFormData);
@@ -217,7 +222,8 @@ watch(() => props.initialData, (newData) => {
     formData.reorder_threshold = newData.reorder_threshold === undefined ? null : newData.reorder_threshold;
     formData.image_url = newData.image_url || null;
     formData.tags = newData.tags || []; // Ensure tags is an array
-    formData.tax_class_id = newData.tax_class_id === undefined ? null : newData.tax_class_id; // Update tax_class_id
+    formData.tax_class_id = newData.tax_class_id === undefined ? null : newData.tax_class_id;
+    formData.cost_price = newData.cost_price === undefined ? null : newData.cost_price; // Update cost_price
 
     tagsInput.value = newData.tags ? newData.tags.join(', ') : '';
     selectedFile.value = null;
@@ -278,14 +284,14 @@ const handleSubmit = () => {
 
     let valueToAppend = processedFormData[key];
 
-    // Special handling for tax_class_id to send empty string for null
-    if (key === 'tax_class_id') {
+    // Special handling for tax_class_id and cost_price to send empty string for null
+    if (key === 'tax_class_id' || key === 'cost_price') {
       if (valueToAppend === null) {
-        submissionData.append(key, '');
-      } else if (valueToAppend !== undefined) { // Only append if not undefined
+        submissionData.append(key, ''); // Backend may convert '' to null for numeric/date types if validator is set up
+      } else if (valueToAppend !== undefined) {
         submissionData.append(key, valueToAppend);
       }
-      continue; // Done with tax_class_id for this iteration
+      continue;
     }
 
     if (key === 'specifications') { // Existing logic for specifications if any
