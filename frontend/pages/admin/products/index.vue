@@ -145,10 +145,11 @@
         <button
           type="button"
           @click="handlePrintLabels"
-          :disabled="labelQuantity < 1 || labelQuantity > 200"
+          :disabled="labelQuantity < 1 || labelQuantity > 200 || isPrintingLabel"
           class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Print
+          <span v-if="isPrintingLabel">Printing...</span>
+          <span v-else>Print</span>
         </button>
         <button
           type="button"
@@ -188,6 +189,7 @@ const searchTerm = ref('');
 const showPrintLabelModal = ref(false);
 const currentProductForLabel = ref(null);
 const labelQuantity = ref(1);
+const isPrintingLabel = ref(false);
 
 const openPrintLabelModal = (product) => {
   currentProductForLabel.value = product;
@@ -195,28 +197,60 @@ const openPrintLabelModal = (product) => {
   showPrintLabelModal.value = true;
 };
 
-const handlePrintLabels = () => {
+const handlePrintLabels = async () => {
   if (!currentProductForLabel.value || !currentProductForLabel.value.id) {
-    // console.error('Product ID is missing.');
     alert('Error: Product information is missing. Cannot print labels.');
     return;
   }
 
   const quantity = parseInt(labelQuantity.value);
   if (isNaN(quantity) || quantity < 1 || quantity > 200) {
-    // console.error('Invalid label quantity.');
     alert('Error: Invalid number of labels. Please enter a number between 1 and 200.');
     return;
   }
 
-  // Construct the URL for the label printing endpoint
   const apiUrl = `/api/admin/products/${currentProductForLabel.value.id}/label?count=${quantity}`;
+  isPrintingLabel.value = true;
 
-  // Open the URL in a new tab. The browser will handle the PDF response.
-  window.open(apiUrl, '_blank');
+  try {
+    const response = await $axios.get(apiUrl, {
+      responseType: 'blob', // Important for file downloads
+    });
 
-  // Close the modal after initiating the print/download
-  showPrintLabelModal.value = false;
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const objectUrl = URL.createObjectURL(blob);
+
+    window.open(objectUrl, '_blank');
+
+    // Clean up the object URL after a short delay to allow the browser to initiate the download/display
+    // Some browsers might need more time, or this can be tied to an event if more robustness is needed.
+    setTimeout(() => {
+      URL.revokeObjectURL(objectUrl);
+    }, 1000); // Increased delay slightly
+
+    showPrintLabelModal.value = false;
+
+  } catch (error) {
+    console.error('Error fetching label PDF:', error);
+    let errorMessage = 'Failed to download label PDF. Please try again.';
+    if (error.response && error.response.data) {
+      // Try to read error message from blob data if it's a JSON error from API
+      try {
+        const errorBlob = await error.response.data.text();
+        const errorJson = JSON.parse(errorBlob);
+        if (errorJson && errorJson.message) {
+          errorMessage = errorJson.message;
+        }
+      } catch (e) {
+        // Could not parse error blob, stick to generic message
+        console.error('Could not parse error response blob:', e);
+      }
+    }
+    alert(errorMessage); // Replace with toast if available
+    showPrintLabelModal.value = false; // Still close modal on error
+  } finally {
+    isPrintingLabel.value = false;
+  }
 };
 
 const fetchProducts = async () => {
