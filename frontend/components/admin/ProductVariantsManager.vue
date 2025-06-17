@@ -425,10 +425,10 @@ async function fetchConfiguredProductOptions() {
         option_id: assignedOpt.global_option_id,          // This is product_options.id (the global option type)
         option_name: assignedOpt.global_option_name,
         // 'allowed_values' for the variant form should be the 'selected_values' from this product's specific configuration
-        allowed_values: assignedOpt.selected_values.map(val => ({
+        allowed_values: Array.isArray(assignedOpt.selected_values) ? assignedOpt.selected_values.map(val => ({
           value_id: val.id,      // This is product_option_values.id
           value_name: val.value  // This is product_option_values.value
-        }))
+        })) : []
       };
     });
 
