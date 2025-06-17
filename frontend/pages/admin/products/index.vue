@@ -140,12 +140,33 @@
                  class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
         </div>
         <p v-if="labelQuantity < 1 || labelQuantity > 200" class="text-xs text-red-600">Please enter a number between 1 and 200.</p>
+
+            <!-- New Variant Selection Section -->
+            <div v-if="currentProductForLabel && currentProductForLabel.has_variants" class="mt-4">
+              <div v-if="isLoadingProductDetails">
+                <p class="text-sm text-gray-500">Loading variant details...</p>
+                <div class="inline-block animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-indigo-500 mt-1"></div>
+              </div>
+              <div v-else-if="detailedProductForLabel && detailedProductForLabel.variants && detailedProductForLabel.variants.length > 0">
+                <label for="variant_selection" class="block text-sm font-medium text-gray-700 mb-1">Select Variant:</label>
+                <select id="variant_selection" v-model="selectedVariantIdForLabel"
+                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                  <option :value="null" disabled>-- Select a Variant --</option>
+                  <option v-for="variant in detailedProductForLabel.variants" :key="variant.id" :value="variant.id">
+                    {{ variant.sku || `Variant (ID: ${variant.id})` }}
+                  </option>
+                </select>
+              </div>
+              <div v-else-if="!isLoadingProductDetails && detailedProductForLabel && (!detailedProductForLabel.variants || detailedProductForLabel.variants.length === 0)">
+                <p class="text-sm text-yellow-600 bg-yellow-50 p-2 rounded-md">No variants found for this product.</p>
+              </div>
+            </div>
       </div>
       <div class="px-5 py-4 bg-gray-50 border-t border-gray-200 sm:flex sm:flex-row-reverse rounded-b-lg">
         <button
           type="button"
           @click="handlePrintLabels"
-          :disabled="labelQuantity < 1 || labelQuantity > 200 || isPrintingLabel"
+          :disabled="labelQuantity < 1 || labelQuantity > 200 || isPrintingLabel || (currentProductForLabel?.has_variants && (isLoadingProductDetails || !selectedVariantIdForLabel))"
           class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span v-if="isPrintingLabel">Printing...</span>
@@ -190,11 +211,37 @@ const showPrintLabelModal = ref(false);
 const currentProductForLabel = ref(null);
 const labelQuantity = ref(1);
 const isPrintingLabel = ref(false);
+const detailedProductForLabel = ref(null);
+const isLoadingProductDetails = ref(false);
+const selectedVariantIdForLabel = ref(null);
 
-const openPrintLabelModal = (product) => {
+const openPrintLabelModal = async (product) => {
   currentProductForLabel.value = product;
-  labelQuantity.value = 1; // Default quantity
+  labelQuantity.value = 1;
+  selectedVariantIdForLabel.value = null;
+  detailedProductForLabel.value = null;
+
   showPrintLabelModal.value = true;
+
+  if (product.has_variants) {
+    isLoadingProductDetails.value = true;
+    try {
+      const response = await $axios.get(`/admin/products/${product.id}`);
+      detailedProductForLabel.value = response.data.data;
+      if (!detailedProductForLabel.value && response.data) {
+         detailedProductForLabel.value = response.data;
+      }
+
+    } catch (err) {
+      console.error('Error fetching product details for labels:', err);
+      alert('Failed to load product details for variant selection. Please try again.');
+      showPrintLabelModal.value = false;
+    } finally {
+      isLoadingProductDetails.value = false;
+    }
+  } else {
+    isLoadingProductDetails.value = false;
+  }
 };
 
 const handlePrintLabels = async () => {
@@ -209,8 +256,18 @@ const handlePrintLabels = async () => {
     return;
   }
 
-  const apiUrl = `/admin/products/${currentProductForLabel.value.id}/label?count=${quantity}`;
+  // New check for variant selection if product has variants
+  if (currentProductForLabel.value.has_variants && !selectedVariantIdForLabel.value) {
+    alert('This product has variants. Please select a specific variant to print labels for.');
+    return;
+  }
+
   isPrintingLabel.value = true;
+  let apiUrl = `/admin/products/${currentProductForLabel.value.id}/label?count=${quantity}`;
+
+  if (selectedVariantIdForLabel.value) {
+    apiUrl += `&variant_id=${selectedVariantIdForLabel.value}`;
+  }
 
   try {
     const response = await $axios.get(apiUrl, {
