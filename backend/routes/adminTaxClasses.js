@@ -279,9 +279,7 @@ router.get(
     query('limit').optional().isInt({ min: 1, max: 1000 }).toInt().default(10) // max is now 1000
   ],
   async (req, res, next) => {
-    const errors = validationResult(req);
-    // LOG 1: Raw query
-    const errors = validationResult(req);
+    const errors = validationResult(req); // Only one declaration
 
     // Log actual req.query values as received by this point (could be strings)
     console.log('[adminTaxClasses GET /] req.query upon entry to handler: page=', req.query.page, ', limit=', req.query.limit);
