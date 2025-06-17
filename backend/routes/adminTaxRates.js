@@ -223,7 +223,7 @@ router.get(
   '/',
   [
     query('page').optional().isInt({ min: 1 }).toInt().default(1),
-    query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10),
+    query('limit').optional().isInt({ min: 1, max: 1000 }).toInt().default(10), // max is now 1000
     query('is_active').optional().isBoolean().toBoolean(),
     query('tax_type').optional().trim().isString(),
     query('jurisdiction').optional().trim().isString()
