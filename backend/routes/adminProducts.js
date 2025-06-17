@@ -627,9 +627,20 @@ router.get(
           currency_code: STORE_CURRENCY_CODE,
           currency_symbol: STORE_CURRENCY_SYMBOL,
           qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`
-          // Include other fields like vat_price, tax_amount etc. if they were present in the original logic
-          // For example, by copying from the /:productId/label-data route's item construction
         };
+
+        let taxDetailsVariant = { priceWithTax: parseFloat(variant.final_price), taxAmount: 0, appliedRates: [] };
+        if (product.tax_class_id) {
+          try {
+            taxDetailsVariant = await taxService.calculatePriceWithAppliedTaxes(parseFloat(variant.final_price), product.tax_class_id);
+          } catch (taxError) {
+            console.error(`Error calculating tax for variant ${variant.id}:`, taxError);
+            // Decide if you want to proceed without tax or throw error. For labels, proceeding without tax might be acceptable.
+          }
+        }
+        labelDataItem.price_incl_tax = parseFloat(taxDetailsVariant.priceWithTax).toFixed(2);
+        labelDataItem.tax_amount = parseFloat(taxDetailsVariant.taxAmount).toFixed(2);
+        // labelDataItem.selling_price should already be variant.final_price (base price for variant)
 
       } else {
         // Case 2: Handles multiple sub-cases:
@@ -654,8 +665,19 @@ router.get(
           currency_code: STORE_CURRENCY_CODE,
           currency_symbol: STORE_CURRENCY_SYMBOL,
           qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`
-          // Include other fields like vat_price, tax_amount etc. if they were present
         };
+
+        let taxDetailsBase = { priceWithTax: parseFloat(product.price), taxAmount: 0, appliedRates: [] };
+        if (product.tax_class_id) {
+          try {
+            taxDetailsBase = await taxService.calculatePriceWithAppliedTaxes(parseFloat(product.price), product.tax_class_id);
+          } catch (taxError) {
+            console.error(`Error calculating tax for product ${product.id}:`, taxError);
+          }
+        }
+        labelDataItem.price_incl_tax = parseFloat(taxDetailsBase.priceWithTax).toFixed(2);
+        labelDataItem.tax_amount = parseFloat(taxDetailsBase.taxAmount).toFixed(2);
+        // labelDataItem.selling_price should already be product.price
       }
 
       if (!labelDataItem) {

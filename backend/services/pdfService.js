@@ -30,30 +30,35 @@ function generateBarcodeDataURL(text, options = {}) {
  * @returns {string} HTML string for the label.
  */
 function getProductLabelHtml(labelData, barcodeDataUrl, qrCodeDataUrl) {
-  const sellingPrice = parseFloat(labelData.selling_price).toFixed(2);
+  const sellingPrice = parseFloat(labelData.selling_price).toFixed(2); // This is base price
+  const priceInclTax = labelData.price_incl_tax ? parseFloat(labelData.price_incl_tax).toFixed(2) : sellingPrice; // Default to sellingPrice if not present
+  const taxAmount = labelData.tax_amount ? parseFloat(labelData.tax_amount).toFixed(2) : null;
   const sku = labelData.sku || 'N/A';
   const displayName = labelData.full_display_name || 'N/A';
   const currencySymbol = labelData.currency_symbol || '$';
-  const vatPriceFormatted = labelData.vat_price ? parseFloat(labelData.vat_price).toFixed(2) : null;
-  // labelData.tax_amount and labelData.applied_tax_rates are available if needed for display
 
   return `
     <!DOCTYPE html>
     <html>
     <head><title>Product Label</title><style>
-      body { font-family: Arial, sans-serif; width: 300px; /* Approx 3 inches at 96-100 DPI */ padding: 10px; text-align: center; border: 1px solid #ccc; box-sizing: border-box; }
+      body { font-family: Arial, sans-serif; width: 300px; padding: 10px; text-align: center; border: 1px solid #ccc; box-sizing: border-box; }
       h1 { font-size: 18px; margin: 5px 0; word-wrap: break-word; }
-      .sku { font-size: 12px; margin-bottom: 5px; }
-      .price { font-size: 14px; margin-bottom: 3px; } /* Adjusted base price font size */
-      .vat-price { font-size: 16px; font-weight: bold; margin-bottom: 8px; } /* VAT price more prominent */
-      img.barcode { display: block; margin: 0 auto 5px auto; max-width: 90%; height: auto; }
+      .sku { font-size: 12px; margin-bottom: 8px; } /* Increased margin */
+      .price-section p { margin: 2px 0; } /* Reduced margin for price lines */
+      .base-price { font-size: 13px; }
+      .tax-amount { font-size: 11px; color: #555; }
+      .total-price { font-size: 16px; font-weight: bold; margin-top: 4px; } /* More prominent total */
+      img.barcode { display: block; margin: 8px auto 5px auto; max-width: 90%; height: auto; }
       img.qrcode { display: block; margin: 5px auto 0 auto; max-width: 35%; height: auto; }
     </style></head>
     <body>
       <h1>${displayName}</h1>
       <p class="sku">SKU: ${sku}</p>
-      <p class="price">Price: ${currencySymbol}${sellingPrice}</p>
-      ${vatPriceFormatted ? `<p class="price vat-price">VAT Price: ${currencySymbol}${vatPriceFormatted}</p>` : ''}
+      <div class="price-section">
+        <p class="base-price">Price: ${currencySymbol}${sellingPrice}</p>
+        ${taxAmount && parseFloat(taxAmount) > 0 ? `<p class="tax-amount">Tax: ${currencySymbol}${taxAmount}</p>` : ''}
+        ${(priceInclTax !== sellingPrice || (taxAmount && parseFloat(taxAmount) > 0)) ? `<p class="total-price">Total: ${currencySymbol}${priceInclTax}</p>` : ''}
+      </div>
       ${barcodeDataUrl ? `<img src="${barcodeDataUrl}" alt="Barcode for ${sku}" class="barcode" />` : '<p>No barcode.</p>'}
       ${qrCodeDataUrl ? `<img src="${qrCodeDataUrl}" alt="QR Code for ${labelData.barcode_value}" class="qrcode" />` : ''}
     </body>
