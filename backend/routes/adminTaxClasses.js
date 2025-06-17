@@ -284,27 +284,43 @@ router.get(
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { page, limit } = req.query;
-    const offset = (page - 1) * limit;
+    const { page: rawPage, limit: rawLimit } = req.query; // Get raw values after validator processing
+
+    let validatedPage = parseInt(rawPage); // Validators should have already done toInt()
+    let validatedLimit = parseInt(rawLimit); // but we re-parse to be certain of number type for NaN check
+
+    if (isNaN(validatedPage) || validatedPage < 1) {
+      console.warn(`[adminTaxClasses] Invalid or NaN page value received: ${rawPage}. Defaulting to 1.`);
+      validatedPage = 1;
+    }
+    if (isNaN(validatedLimit) || validatedLimit < 1) {
+      console.warn(`[adminTaxClasses] Invalid or NaN limit value received: ${rawLimit}. Defaulting to 10.`);
+      validatedLimit = 10;
+    }
+    // The validator already handles max limit, but an additional Math.min could be added if desired:
+    // validatedLimit = Math.min(validatedLimit, 1000); // Ensure it doesn't exceed overall max
+
+    const offset = (validatedPage - 1) * validatedLimit;
 
     try {
       const dataQuery = 'SELECT * FROM tax_classes ORDER BY name ASC LIMIT $1 OFFSET $2;';
-      const dataResult = await db.query(dataQuery, [limit, offset]);
+      // Use the safeguarded values in the query
+      const dataResult = await db.query(dataQuery, [validatedLimit, offset]);
 
       const countQuery = 'SELECT COUNT(*) FROM tax_classes;';
       const countResult = await db.query(countQuery);
       const totalRecords = parseInt(countResult.rows[0].count, 10);
-      const totalPages = Math.ceil(totalRecords / limit);
+      const totalPages = Math.ceil(totalRecords / validatedLimit);
 
       res.status(200).json({
         data: dataResult.rows,
         pagination: {
           total: totalRecords,
-          page,
-          limit,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPrevPage: page > 1
+          page: validatedPage, // Use safeguarded page
+          limit: validatedLimit, // Use safeguarded limit
+          totalPages, // totalPages calculation should also use validatedLimit
+          hasNextPage: validatedPage < totalPages,
+          hasPrevPage: validatedPage > 1
         }
       });
     } catch (error) {
