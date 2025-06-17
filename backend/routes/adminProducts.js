@@ -12,6 +12,12 @@ const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../service
 const { getOrCreateTagIds, getS3KeyFromUrl } = require('../utils/productHelpers'); // Corrected path
 
 
+// Middleware to log requests to this router
+router.use((req, res, next) => {
+  console.log(`[adminProductsRouter] Request received: ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 // Apply auth middleware to all routes in this router
 router.use(isAuthenticated, isAdmin);
 
