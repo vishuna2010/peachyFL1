@@ -25,7 +25,7 @@
         class="mb-10 bg-white shadow-md rounded-lg p-6"
       />
 
-       <!--Tax Class Selector Section-->
+      <!-- Tax Class Selector Section -->
       <section class="bg-white shadow-md rounded-lg p-6 my-10">
         <h3 class="text-xl font-semibold text-gray-700 mb-5 border-b pb-3">Tax Configuration</h3>
         <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
