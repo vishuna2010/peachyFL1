@@ -166,7 +166,7 @@
         <button
           type="button"
           @click="handlePrintLabels"
-          :disabled="labelQuantity < 1 || labelQuantity > 200 || isPrintingLabel || (currentProductForLabel?.has_variants && (isLoadingProductDetails || !selectedVariantIdForLabel))"
+          :disabled="labelQuantity < 1 || labelQuantity > 200 || isPrintingLabel || (currentProductForLabel?.has_variants && isLoadingProductDetails)"
           class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span v-if="isPrintingLabel">Printing...</span>
@@ -256,11 +256,11 @@ const handlePrintLabels = async () => {
     return;
   }
 
-  // New check for variant selection if product has variants
-  if (currentProductForLabel.value.has_variants && !selectedVariantIdForLabel.value) {
-    alert('This product has variants. Please select a specific variant to print labels for.');
-    return;
-  }
+  // New check for variant selection if product has variants -- REMOVED as per instruction
+  // if (currentProductForLabel.value.has_variants && !selectedVariantIdForLabel.value) {
+  //   alert('This product has variants. Please select a specific variant to print labels for.');
+  //   return;
+  // }
 
   isPrintingLabel.value = true;
   let apiUrl = `/admin/products/${currentProductForLabel.value.id}/label?count=${quantity}`;

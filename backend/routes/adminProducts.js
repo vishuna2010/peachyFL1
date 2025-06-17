@@ -584,25 +584,30 @@ router.get(
     const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com';
 
     try {
-      const product = await productService.getProductById(productId);
-
+      const product = await productService.getProductById(productId); // This fetches full product details
       let labelDataItem = null;
 
-      if (product.has_variants && product.variants && product.variants.length > 0) {
-        if (!requestedVariantId) {
-          return res.status(400).json({ message: 'This product has multiple variants. Please specify a variant_id query parameter to generate a label for a specific variant.' });
-        }
+      const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD';
+      const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$';
+      const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com';
+
+      if (product.has_variants && requestedVariantId) {
+        // Product has variants, AND a specific variant_id was requested
         const variant = product.variants.find(v => v.id === requestedVariantId);
         if (!variant) {
           return res.status(404).json({ message: `Variant with ID ${requestedVariantId} not found for product ${productId}.` });
         }
 
+        // Construct labelDataItem for the specific variant
         let suffixParts = [];
         if (product.available_options && variant.option_value_ids) {
           for (const valId of variant.option_value_ids) {
             for (const opt of product.available_options) {
               const foundValue = opt.values.find(v => v.value_id === valId);
-              if (foundValue) { suffixParts.push(`${opt.option_name}: ${foundValue.value_name}`); break; }
+              if (foundValue) {
+                suffixParts.push(`${opt.option_name}: ${foundValue.value_name}`);
+                break;
+              }
             }
           }
         }
@@ -611,21 +616,31 @@ router.get(
         labelDataItem = {
           product_id: product.id,
           variant_id: variant.id,
-          product_name: product.name, // Base product name
+          product_name: product.name,
           variant_name_suffix: constructed_suffix,
           full_display_name: `${product.name}${constructed_suffix}`,
-          sku: variant.sku || product.sku, // Prioritize variant SKU
-          barcode_value: variant.sku || product.sku || `${product.id}-${variant.id}`, // Unique barcode value
-          selling_price: parseFloat(variant.final_price).toFixed(2), // Already calculated in getProductById
+          sku: variant.sku || product.sku,
+          barcode_value: variant.sku || product.sku || `${product.id}-${variant.id}`,
+          selling_price: parseFloat(variant.final_price).toFixed(2),
           currency_code: STORE_CURRENCY_CODE,
           currency_symbol: STORE_CURRENCY_SYMBOL,
           qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`
+          // Include other fields like vat_price, tax_amount etc. if they were present in the original logic
+          // For example, by copying from the /:productId/label-data route's item construction
         };
 
-      } else { // Base product or product treated as having no distinct variants for labeling
-        if (requestedVariantId) {
+      } else {
+        // This block now handles:
+        // 1. Product has no variants.
+        // 2. Product has variants, but NO specific variant_id was requested (default to base product).
+
+        // If it has variants but a variant_id was requested and NOT found, that's handled above.
+        // If it does NOT have variants but a variant_id was requested, that's an issue.
+        if (!product.has_variants && requestedVariantId) {
             return res.status(400).json({ message: `Product ID ${productId} does not have variants, variant_id parameter is not applicable.` });
         }
+
+        // Construct labelDataItem for the base product
         labelDataItem = {
           product_id: product.id,
           variant_id: null,
@@ -638,15 +653,17 @@ router.get(
           currency_code: STORE_CURRENCY_CODE,
           currency_symbol: STORE_CURRENCY_SYMBOL,
           qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`
+          // Include other fields like vat_price, tax_amount etc. if they were present
         };
       }
 
-      if (!labelDataItem) { // Should be caught by logic above, but as a safeguard
-          // This path should ideally not be reached if logic is correct
-          throw new Error("Could not determine data for label due to an unexpected issue.");
+      if (!labelDataItem) {
+        // This should ideally not be reached if logic is correct
+        console.error(`Label data item could not be constructed for product ${productId} and variant ${requestedVariantId}`);
+        throw new Error("Could not determine data for label due to an unexpected issue.");
       }
 
-      const pdfBuffer = await generateProductLabelPdf(labelDataItem, count);
+      const pdfBuffer = await generateProductLabelPdf(labelDataItem, count); // count comes from req.query
 
       res.setHeader('Content-Type', 'application/pdf');
       // Sanitize filename
