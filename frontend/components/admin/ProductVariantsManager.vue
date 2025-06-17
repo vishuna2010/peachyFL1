@@ -418,7 +418,7 @@ async function fetchConfiguredProductOptions() {
       // The 'selected_values' array from the backend IS the list of allowed values for this product's option assignment.
       // These are global product_option_values that have been specifically chosen for this product-option link.
       if (!assignedOpt.selected_values || assignedOpt.selected_values.length === 0) {
-        toast.warn(`Option type "${assignedOpt.global_option_name}" has no specific values configured for this product. Variants cannot be created with it until values are selected.`);
+        toast.warning(`Option type "${assignedOpt.global_option_name}" has no specific values configured for this product. Variants cannot be created with it until values are selected.`);
       }
       return {
         assigned_option_id: assignedOpt.assigned_option_id, // This is product_assigned_options.id
