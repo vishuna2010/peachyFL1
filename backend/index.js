@@ -15,6 +15,7 @@ const adminPurchaseOrderRoutes = require('./routes/adminPurchaseOrders'); // Imp
 const adminStockMovementLogsRoutes = require('./routes/adminStockMovementLogs');
 const adminInventoryBatchesRoutes = require('./routes/adminInventoryBatches'); // Added this line
 const adminReportRoutes = require('./routes/adminReports'); // Import admin report routes
+const adminAssignedOptionsRouter = require('./routes/adminAssignedOptions');
 const adminProductSpecificOptionsRoutes = require('./routes/adminProductSpecificOptions'); // Import product-specific option config routes
 const adminOptionManagementRoutes = require('./routes/adminOptionManagement'); // Import admin option management routes
 const adminProductVariantsRoutes = require('./routes/adminProductVariants.js'); // Import admin product variants routes
@@ -96,6 +97,7 @@ app.use('/api/admin/purchase-orders', adminPurchaseOrderRoutes);
 app.use('/api/admin/stock-movement-logs', adminStockMovementLogsRoutes);
 app.use('/api/admin/inventory-batches', adminInventoryBatchesRoutes); // Added this line
 app.use('/api/admin/reports', adminReportRoutes);
+app.use('/api/admin/assigned-options', adminAssignedOptionsRouter);
 app.use('/api/admin/stock-adjustments', adminStockAdjustmentsRoutes);
 app.use('/api/admin/returns', adminReturnsRoutes);
 app.use('/api/admin/tax-classes', adminTaxClassesRoutes);

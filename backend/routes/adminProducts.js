@@ -1051,42 +1051,36 @@ router.get(
         return next(new NotFoundError(`Product with ID ${productId} not found.`));
       }
 
-      // Fetch assigned options for the product
-      const assignedOptionsQuery = `
+      // Fetch assigned options and their selected values in a single query
+      const optimizedQuery = `
         SELECT
           pao.id AS assigned_option_id,
           pao.option_id AS global_option_id,
           po.name AS global_option_name,
           pao.created_at,
-          pao.updated_at
+          pao.updated_at,
+          COALESCE(
+            (
+              SELECT json_agg(json_build_object('id', pov.id, 'value', pov.value) ORDER BY pov.value ASC)
+              FROM product_assigned_option_specific_values paosv
+              JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
+              WHERE paosv.product_assigned_option_id = pao.id
+            ),
+            '[]'::json
+          ) AS selected_values
         FROM product_assigned_options pao
         JOIN product_options po ON pao.option_id = po.id
         WHERE pao.product_id = $1
         ORDER BY po.name;
       `;
-      const assignedOptionsResult = await db.query(assignedOptionsQuery, [productId]);
-      const assignedOptions = assignedOptionsResult.rows;
+      const result = await db.query(optimizedQuery, [productId]);
 
-      // For each assigned option, fetch its specifically selected/allowed values
-      const augmentedAssignedOptions = [];
-      for (const assignedOpt of assignedOptions) {
-        const selectedValuesQuery = `
-          SELECT pov.id, pov.value
-          FROM product_option_values pov
-          JOIN product_assigned_option_specific_values paosv ON pov.id = paosv.product_option_value_id
-          WHERE paosv.product_assigned_option_id = $1
-          ORDER BY pov.value ASC;
-        `;
-        const selectedValuesResult = await db.query(selectedValuesQuery, [assignedOpt.assigned_option_id]);
-        augmentedAssignedOptions.push({
-          ...assignedOpt,
-          selected_values: selectedValuesResult.rows
-        });
-      }
-
-      res.status(200).json(augmentedAssignedOptions); // Frontend expects array directly in response.data
+      // The 'selected_values' field is already an array of objects due to json_agg and json_build_object.
+      // The frontend expects this array directly.
+      res.status(200).json(result.rows);
 
     } catch (error) {
+      console.error(`Error fetching assigned options for product ID ${productId}:`, error);
       next(error);
     }
   }
