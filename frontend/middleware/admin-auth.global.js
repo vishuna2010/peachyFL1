@@ -3,44 +3,53 @@ import { useAuth } from '~/composables/useAuth';
 export default defineNuxtRouteMiddleware(async (to, from) => {
   const { authToken, authUser, fetchUser, isAuthInitialized } = useAuth();
 
-  // On client-side, if auth is not yet initialized, do nothing and allow rendering.
-  // useAuth will update reactively, and this middleware will run again if needed.
+  // Added detailed diagnostic logs
+  console.log(`Admin Auth RUNNING for path: ${to.path}`);
+  console.log(`  isAuthInitialized: ${isAuthInitialized.value}`);
+  console.log(`  authToken present: ${!!authToken.value}`);
+  console.log(`  authToken value: ${authToken.value}`); // Log the actual token value
+  console.log(`  authUser present: ${!!authUser.value}`);
+  if (authUser.value) {
+    console.log(`  authUser content: ${JSON.stringify(authUser.value)}`); // Log full user object
+    console.log(`  authUser.role: ${authUser.value.role}`);
+  } else {
+    console.log('  authUser content: null');
+  }
+
   if (process.client && !isAuthInitialized.value) {
-    // console.log(`Admin Auth (path: ${to.path}): Waiting for auth initialization...`);
+    console.log(`Admin Auth (path: ${to.path}): Waiting for auth initialization... Middleware returned early.`);
     return;
   }
 
-  // The rest of the logic applies only to /admin routes AND after auth is initialized (on client) or immediately (on server)
   if (!to.path.startsWith('/admin')) {
     return;
   }
 
-  // At this point, on client, isAuthInitialized.value is true.
-  // On server, localStorage isn't used, so direct checks are fine.
+  console.log(`Admin Auth (path: ${to.path}): Past initialization checks, proceeding with admin route logic.`);
 
   if (!authToken.value) {
-    // console.log(`Admin Auth (path: ${to.path}): No token. Redirecting to login.`);
+    console.log(`Admin Auth (path: ${to.path}): No token after init. Redirecting to login.`);
     return navigateTo('/login?redirect=' + to.path);
   }
 
-  // If token exists but user details (especially role) are missing, fetch them.
-  // This is crucial for SSR or if authUser wasn't fully populated from localStorage.
-  if (!authUser.value || authUser.value.role === undefined) { // Added check for role presence
-    // console.log(`Admin Auth (path: ${to.path}): Token exists, but user details (or role) missing. Fetching user...`);
-    await fetchUser(); // fetchUser now gets role from /api/auth/me
+  if (!authUser.value || authUser.value.role === undefined) {
+    console.log(`Admin Auth (path: ${to.path}): Token exists, but user details (or role) missing after init. Fetching user...`);
+    await fetchUser();
+    // Log authUser again after fetchUser
+    if(authUser.value) {
+        console.log(`Admin Auth (path: ${to.path}): authUser after fetchUser: ${JSON.stringify(authUser.value)}`);
+    } else {
+        console.log(`Admin Auth (path: ${to.path}): authUser is null after fetchUser.`);
+    }
   }
 
-  // Final check: if still no user or role is not admin, redirect.
   if (!authUser.value || authUser.value.role !== 'admin') {
-    // console.log(`Admin Auth (path: ${to.path}): User role is "${authUser.value?.role}". Not admin or user is null. Redirecting.`);
-    // If authUser is null (e.g., fetchUser failed and logged out), redirect to login.
-    // If authUser exists but role is not admin, redirect to home.
-    if (!authUser.value) {
+    console.log(`Admin Auth (path: ${to.path}): User role is "${authUser.value?.role}" or user is null. Redirecting.`);
+    if (!authUser.value) { // This implies fetchUser failed or resulted in logout
       return navigateTo('/login?redirect=' + to.path);
     }
     return navigateTo('/'); // User is known, but not an admin
   }
 
-  // console.log(`Admin Auth (path: ${to.path}): User is admin. Access granted.`);
-  // Allow navigation
+  console.log(`Admin Auth (path: ${to.path}): User is admin. Access granted.`);
 });
