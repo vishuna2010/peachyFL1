@@ -5,6 +5,13 @@ const { param, body, validationResult } = require('express-validator'); // Needs
 const { NotFoundError } = require('../utils/AppError');
 
 const router = express.Router();
+
+// New router-level middleware for logging all requests to this router
+router.use((req, res, next) => {
+  console.log(`[adminAssignedOptionsRouter] Request received for path: ${req.originalUrl} with method: ${req.method}`);
+  next();
+});
+
 router.use(isAuthenticated); // Protect all routes (temporarily removed isAdmin for diagnostics)
 
 // GET /api/admin/assigned-options/:assignedOptionId/values
