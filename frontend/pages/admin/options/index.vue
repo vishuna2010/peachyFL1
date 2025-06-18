@@ -177,7 +177,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useNuxtApp, definePageMeta, useHead } from '#app'; // Use #app for Nuxt 3 auto-imports
+import { useNuxtApp, useHead } from '#app'; // Use #app for Nuxt 3 auto-imports
 import { useToast } from 'vue-toastification';
 
 definePageMeta({
