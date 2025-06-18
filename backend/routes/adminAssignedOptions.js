@@ -65,7 +65,7 @@ router.get(
       // 4. Combine all_possible_values with selection status (Explicit Mapping)
       const combinedValues = allPossibleValuesFromDB.map(dbRow => {
         // Log each row from the database to see its exact structure
-        // console.log('Processing dbRow:', dbRow);
+        console.log('Processing dbRow:', dbRow);
         return {
           id: dbRow.id,
           value_name: dbRow.value_name, // Explicitly access value_name which should be aliased from pov.value
@@ -74,7 +74,7 @@ router.get(
       });
 
       // Optional: Log the final combinedValues to see what's being sent
-      // console.log('Final combinedValues for frontend:', combinedValues);
+      console.log('Final combinedValues for frontend:', combinedValues);
 
       res.status(200).json({
         data: {
