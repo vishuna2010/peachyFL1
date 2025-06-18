@@ -40,7 +40,16 @@ const globalErrorHandler = require('./middleware/errorHandler'); // Import globa
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors()); // Enable CORS for all routes
+// Commented out specific options for diagnostics
+// const corsOptions = {
+//   origin: 'http://localhost:3001',
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+//   credentials: true
+// };
+// app.use(cors(corsOptions));
+
+app.use(cors()); // Enable CORS for all routes with defaults
 app.use(express.json()); // Middleware to parse JSON bodies
 app.use(helmet()); // Use Helmet for security headers
 
