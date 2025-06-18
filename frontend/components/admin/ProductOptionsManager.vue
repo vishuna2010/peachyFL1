@@ -20,7 +20,7 @@
         <ul v-else class="space-y-3">
           <li v-for="assignedOpt in assignedProductOptions" :key="assignedOpt.id" class="p-3 bg-white rounded-md border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between sm:items-center gap-2">
             <div>
-              <div class="font-semibold text-gray-800">{{ assignedOpt.option_name }}</div>
+              <div class="font-semibold text-gray-800">{{ assignedOpt.global_option_name }}</div>
               <div class="text-xs text-gray-500">Global Option ID: {{ assignedOpt.option_id }} <span class="text-gray-300 mx-1">|</span> Assigned ID: {{ assignedOpt.id }}</div>
             </div>
             <div class="flex items-center space-x-2 flex-shrink-0 mt-2 sm:mt-0">
