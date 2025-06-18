@@ -123,8 +123,13 @@
                 </select>
               </div>
             </div>
-            <div v-else class="text-sm text-gray-600 bg-yellow-50 p-3 rounded-md border border-yellow-200">
-              No options configured for this product. Please configure options first before adding variants.
+            <div v-else class="text-sm p-3 rounded-md border"> {{-- This outer div is shown when configuredProductOptions.length === 0 --}}
+              <p v-if="isEditingVariant" class="text-gray-700 bg-blue-50 border-blue-300 p-3 rounded-md">
+                This product's current option setup is incomplete for directly modifying this variant's options (e.g., Color, Size) using the dropdowns below. You can still update other fields like SKU, price, and stock. To change the variant's actual option combination, please ensure the product's options are fully configured with specific, selectable values via the 'Product Specific Options' manager first.
+              </p>
+              <p v-else class="text-gray-600 bg-yellow-50 border-yellow-300 p-3 rounded-md">
+                No options configured for this product with selectable values. Please assign options and select their allowed values for this product first (via 'Product Specific Options' manager) before adding new variants.
+              </p>
             </div>
 
             <div>
