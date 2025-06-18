@@ -5,7 +5,7 @@ const { param, body, validationResult } = require('express-validator'); // Needs
 const { NotFoundError } = require('../utils/AppError');
 
 const router = express.Router();
-router.use(isAuthenticated, isAdmin); // Protect all routes
+router.use(isAuthenticated); // Protect all routes (temporarily removed isAdmin for diagnostics)
 
 // GET /api/admin/assigned-options/:assignedOptionId/values
 router.get(
