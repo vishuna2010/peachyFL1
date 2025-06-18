@@ -102,7 +102,7 @@ const toast = useToast();
 const formData = ref({
   name: '',
   rate_percentage: null, // User enters as percentage, e.g., 7 for 7%
-  jurisdiction_code: '', // Changed from 'jurisdiction' to match backend expectation
+  jurisdiction: '', // Changed from jurisdiction_code to jurisdiction
   tax_type: '',
   tax_code: '',
   is_active: true,
@@ -130,7 +130,7 @@ const handleSubmit = async () => {
     isLoading.value = false;
     return;
   }
-  if (!formData.value.jurisdiction_code.trim()) {
+  if (!formData.value.jurisdiction.trim()) {
     toast.error('Jurisdiction Code is required.');
     isLoading.value = false;
     return;
@@ -152,7 +152,7 @@ const handleSubmit = async () => {
   const payload = {
     name: formData.value.name.trim(),
     rate_percentage: rateForBackend,
-    jurisdiction_code: formData.value.jurisdiction_code.trim(),
+    jurisdiction: formData.value.jurisdiction.trim(), // Changed from jurisdiction_code to jurisdiction
     tax_type: formData.value.tax_type.trim(),
     tax_code: formData.value.tax_code.trim() || null,
     is_active: formData.value.is_active,
