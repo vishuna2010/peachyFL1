@@ -14,8 +14,11 @@ router.get(
     param('assignedOptionId').isInt({ gt: 0 }).withMessage('Assigned Option ID must be a positive integer.')
   ],
   async (req, res, next) => {
+    console.log(`[adminAssignedOptions GET /:assignedOptionId/values] Handler entered for assignedOptionId: ${req.params.assignedOptionId}`); // <<< NEW LOG
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('[adminAssignedOptions GET /:assignedOptionId/values] Validation errors:', errors.array()); // Log validation errors
       return res.status(400).json({ errors: errors.array() });
     }
 
