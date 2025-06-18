@@ -306,15 +306,32 @@ async function handleVariantFormSubmit() {
     }
   }
 
-  // Prepare Payload (common for both add and edit)
-  const option_value_ids = Object.values(newVariantForm.selected_option_values).filter(id => id !== null && id !== undefined);
+  // Prepare Payload
+  const calculated_option_value_ids = Object.values(newVariantForm.selected_option_values).filter(id => id !== null && id !== undefined);
+
   const payload = {
     sku: newVariantForm.sku || null,
     price_modifier: newVariantForm.price_modifier,
     stock_quantity: newVariantForm.stock_quantity,
-    image_url: newVariantForm.image_url || null,
-    option_value_ids: option_value_ids
+    image_url: newVariantForm.image_url || null
+    // cost_price and wholesale_price_modifier would be added here if they were part of newVariantForm
   };
+
+  if (isEditingVariant.value) {
+    // Only send option_value_ids if there were configured options to select from.
+    // This implies if configuredProductOptions is empty, the user couldn't have changed options,
+    // so we don't send option_value_ids, meaning "no change to options".
+    if (configuredProductOptions.value.length > 0) {
+      // Client-side validation (loop over configuredProductOptions) should ensure
+      // that calculated_option_value_ids is non-empty here because all available options must be selected.
+      payload.option_value_ids = calculated_option_value_ids;
+    }
+    // If configuredProductOptions.value.length is 0, option_value_ids is NOT added to payload.
+  } else {
+    // ADD MODE: option_value_ids are mandatory.
+    // Client-side validation (loop over configuredProductOptions) ensures selections are made.
+    payload.option_value_ids = calculated_option_value_ids;
+  }
 
   isSubmittingNewVariant.value = true;
 
