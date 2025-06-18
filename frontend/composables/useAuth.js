@@ -100,28 +100,33 @@ export const useAuth = () => {
   };
 
   const fetchUser = async () => {
-    if (!authToken.value) return; // No token, no user to fetch
+    if (!authToken.value) {
+      // console.log('fetchUser: No auth token found.');
+      return; // No token, no user to fetch
+    }
+    // console.log('fetchUser: Attempting to fetch user data from /api/auth/me');
     try {
-      // This endpoint doesn't exist yet, we'd need to create it.
-      // It would typically validate the token and return user info.
-      // For now, we can simulate or decode from token if it's simple enough.
-      // Or, if login returned user info, we'd use that.
-      // Let's assume for now the backend /auth/login returns user or we add a /auth/me
-      // For this example, let's try to extract basic info if the token is a simple JWT
-      // THIS IS NOT SECURE FOR REAL APPS if the payload is not verified.
-      // A /me endpoint is the correct approach.
-      const payload = JSON.parse(atob(authToken.value.split('.')[1]));
-      if (payload && payload.email) {
-        setUser({ email: payload.email, id: payload.userId });
+      const response = await $axios.get('/api/auth/me'); // Use $axios from useNuxtApp()
+      if (response.data && response.data.user) {
+        setUser(response.data.user); // The /me endpoint returns { user: { id, email, role, ... } }
+        // console.log('fetchUser: User data fetched and set:', response.data.user);
       } else {
-        // Placeholder if token doesn't have email directly (which it should for this example)
-        // setUser({ email: 'User' }); // Or fetch from a /api/auth/me endpoint
-        console.warn("User data not found in token, consider a /api/auth/me endpoint.");
+        // This case might indicate an issue with the /me endpoint's response structure
+        // or if the token is valid but user data can't be retrieved for some reason.
+        console.warn('fetchUser: User data not found in /api/auth/me response, or response structure is unexpected.');
+        // Potentially clear user state if response is malformed or indicates an issue
+        // setUser(null); // Or handle as an error state
       }
     } catch (error) {
-      console.error('Error fetching user data (or decoding token):', error);
-      // Could be an invalid token, so log out
-      // logout();
+      console.error('fetchUser: Error fetching user data from /api/auth/me:', error.response?.data?.message || error.message);
+      // If the error is 401 (Unauthorized) or similar, it means the token is invalid or expired.
+      // In this case, we should log the user out.
+      if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+        console.log('fetchUser: Unauthorized or invalid token. Logging out.');
+        logout(); // Call the logout function from useAuth
+      }
+      // Do not call setUser(null) here if logout() already does it, to avoid duplicate actions.
+      // logout() should handle clearing token and user state.
     }
   };
 

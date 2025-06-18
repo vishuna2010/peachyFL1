@@ -316,4 +316,35 @@ router.post('/change-password', authService.isAuthenticated, changePasswordLimit
   }
 });
 
+// GET /api/auth/me - Get current authenticated user's details
+router.get('/me', authService.isAuthenticated, async (req, res) => {
+  // authService.isAuthenticated populates req.user with the JWT payload
+  // The payload should contain id (as userId), email, and role, as set during JWT generation.
+  if (!req.user) {
+    // This case should ideally not be reached if isAuthenticated middleware works correctly
+    return res.status(401).json({ message: 'Authentication error: User not found in request.' });
+  }
+
+  // Construct user details to return.
+  // Ensure we only pick necessary and safe fields.
+  // The JWT payload from generateJwt(user) in authService.js would contain:
+  // { userId: user.id, email: user.email, role: user.role }
+  // So, req.user will reflect these.
+  const userDetails = {
+    id: req.user.userId, // map userId from token to id
+    email: req.user.email,
+    role: req.user.role
+    // Add any other safe fields that are in the JWT payload and needed by the frontend
+    // e.g., is_two_fa_enabled, if that's part of the JWT payload.
+    // For now, let's assume the JWT has what's needed for basic authUser state.
+  };
+
+  // Example: If you also put is_two_fa_enabled into the JWT payload (e.g. in authService.generateJwt)
+  // if (typeof req.user.is_two_fa_enabled !== 'undefined') {
+  //   userDetails.is_two_fa_enabled = req.user.is_two_fa_enabled;
+  // }
+
+  res.status(200).json({ user: userDetails });
+});
+
 module.exports = router;
