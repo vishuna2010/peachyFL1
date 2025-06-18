@@ -154,7 +154,7 @@
             <div class="pt-4 border-t border-gray-200 sm:flex sm:flex-row-reverse">
               <button
                 type="submit"
-                :disabled="isSubmittingNewVariant || configuredProductOptions.length === 0"
+                :disabled="isSubmittingNewVariant || (!isEditingVariant && configuredProductOptions.length === 0)"
                 class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {{ isSubmittingNewVariant ? (isEditingVariant ? 'Saving...' : 'Adding...') : (isEditingVariant ? 'Save Changes' : 'Add Variant') }}
