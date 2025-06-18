@@ -51,7 +51,7 @@ router.get(
         ORDER BY pov.value ASC;
       `;
       const allPossibleValuesResult = await db.query(allPossibleValuesQuery, [globalOptionId]);
-      const allPossibleValues = allPossibleValuesResult.rows;
+      const allPossibleValuesFromDB = allPossibleValuesResult.rows;
 
       // 3. Fetch the IDs of currently selected values for this specific assigned option
       const selectedValueIdsQuery = `
@@ -62,11 +62,19 @@ router.get(
       const selectedValueIdsResult = await db.query(selectedValueIdsQuery, [assignedOptionId]);
       const selectedValueIds = new Set(selectedValueIdsResult.rows.map(row => row.product_option_value_id));
 
-      // 4. Combine all_possible_values with selection status
-      const combinedValues = allPossibleValues.map(value => ({
-        ...value,
-        is_selected: selectedValueIds.has(value.id)
-      }));
+      // 4. Combine all_possible_values with selection status (Explicit Mapping)
+      const combinedValues = allPossibleValuesFromDB.map(dbRow => {
+        // Log each row from the database to see its exact structure
+        // console.log('Processing dbRow:', dbRow);
+        return {
+          id: dbRow.id,
+          value_name: dbRow.value_name, // Explicitly access value_name which should be aliased from pov.value
+          is_selected: selectedValueIds.has(dbRow.id)
+        };
+      });
+
+      // Optional: Log the final combinedValues to see what's being sent
+      // console.log('Final combinedValues for frontend:', combinedValues);
 
       res.status(200).json({
         data: {
