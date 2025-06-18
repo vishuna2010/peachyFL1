@@ -76,6 +76,7 @@ app.use('/api/admin/categories', adminCategoryRoutes); // Mount admin category r
 app.use('/api/admin/stats', adminStatsRoutes); // Mount admin statistics routes
 app.use('/api/admin/options', adminOptionManagementRoutes.optionsRouter); // Mount global options API
 app.use('/api/admin/option-values', adminOptionManagementRoutes.optionValuesRouter); // Mount global option values API
+app.use('/api/admin/assigned-options', adminAssignedOptionsRouter); // Moved earlier
 app.use('/api/admin', adminProductSpecificOptionsRoutes); // Mount product-specific option config routes
 app.use('/api/admin', adminProductVariantsRoutes); // Mount product variants routes (e.g., /products/:productId/variants and /variants/:variantId)
 app.use('/api/admin/reviews', adminReviewRoutes); // Mount admin review management routes
@@ -106,7 +107,7 @@ app.use('/api/admin/purchase-orders', adminPurchaseOrderRoutes);
 app.use('/api/admin/stock-movement-logs', adminStockMovementLogsRoutes);
 app.use('/api/admin/inventory-batches', adminInventoryBatchesRoutes); // Added this line
 app.use('/api/admin/reports', adminReportRoutes);
-app.use('/api/admin/assigned-options', adminAssignedOptionsRouter);
+// adminAssignedOptionsRouter was here, moved earlier
 app.use('/api/admin/stock-adjustments', adminStockAdjustmentsRoutes);
 app.use('/api/admin/returns', adminReturnsRoutes);
 app.use('/api/admin/tax-classes', adminTaxClassesRoutes);
