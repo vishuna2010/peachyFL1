@@ -26,31 +26,36 @@
 
           <!-- Utility Navigation - hidden on mobile, visible on md and up -->
           <ul class="hidden md:flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
-            <!-- Admin Link -->
-            <li v-if="isAdminUser"><NuxtLink to="/admin/users" class="text-sm font-medium text-text-secondary hover:text-brand-primary hidden sm:block px-3 py-2 rounded-md hover:bg-neutral-light transition-colors duration-150">Admin</NuxtLink></li>
+            <ClientOnly>
+              <li v-if="isAdminUser"><NuxtLink to="/admin/users" class="text-sm font-medium text-text-secondary hover:text-brand-primary hidden sm:block px-3 py-2 rounded-md hover:bg-neutral-light transition-colors duration-150">Admin</NuxtLink></li>
 
-            <!-- User / Auth Links -->
-            <template v-if="!isAuthenticated">
-              <li>
-                <NuxtLink to="/login" title="Login / Register" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150">
-                  <UserIcon class="w-6 h-6" />
-                </NuxtLink>
-              </li>
-            </template>
-            <template v-else>
-              <li>
-                <NuxtLink to="/profile" title="My Profile" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150">
-                  <UserIcon class="w-6 h-6" />
-                </NuxtLink>
-              </li>
-              <li>
-                <button @click="handleLogout" title="Logout" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150">
-                  <LogoutIcon class="w-6 h-6" />
-                </button>
-              </li>
-            </template>
+              <template v-if="!isAuthenticated">
+                <li>
+                  <NuxtLink to="/login" title="Login / Register" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150">
+                    <UserIcon class="w-6 h-6" />
+                  </NuxtLink>
+                </li>
+              </template>
+              <template v-else>
+                <li>
+                  <NuxtLink to="/profile" title="My Profile" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150">
+                    <UserIcon class="w-6 h-6" />
+                  </NuxtLink>
+                </li>
+                <li>
+                  <button @click="handleLogout" title="Logout" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150">
+                    <LogoutIcon class="w-6 h-6" />
+                  </button>
+                </li>
+              </template>
+              <li v-if="user" class="text-sm text-text-secondary hidden lg:block ml-2">Hello, {{ user.email }} ({{ user.role }})</li>
+              <template #fallback>
+                <!-- Optional: Placeholder for auth links while client loads -->
+                <li class="h-8 w-24 rounded-md bg-gray-200 animate-pulse"></li> <!-- Example placeholder -->
+              </template>
+            </ClientOnly>
 
-            <!-- Cart Link -->
+            <!-- Cart Link - Assumed okay for now, or could also be wrapped if cartTotalItems causes issues -->
             <li class="relative">
               <NuxtLink to="/cart" title="Shopping Cart" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150 block">
                 <CartIcon class="w-6 h-6" />
@@ -59,11 +64,6 @@
                   {{ cartTotalItems }}
                 </span>
               </NuxtLink>
-            </li>
-
-            <!-- User Greeting -->
-            <li v-if="user" class="text-sm text-text-secondary hidden lg:block ml-2">
-              Hello, {{ user.email }} ({{ user.role }})
             </li>
           </ul>
         </div>
@@ -79,17 +79,23 @@
         <!-- Divider (optional) -->
         <hr class="my-2 border-neutral-medium" />
 
-        <template v-if="!isAuthenticated">
-          <NuxtLink to="/login" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">Login</NuxtLink>
-          <NuxtLink to="/register" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">Register</NuxtLink>
-        </template>
-        <template v-else>
-          <NuxtLink to="/profile" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">My Profile</NuxtLink>
-          <NuxtLink v-if="isAdminUser" to="/admin/users" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">Admin</NuxtLink>
-          <button @click="handleLogout" class="w-full text-left block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">
-            Logout
-          </button>
-        </template>
+        <ClientOnly>
+          <template v-if="!isAuthenticated">
+            <NuxtLink to="/login" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">Login</NuxtLink>
+            <NuxtLink to="/register" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">Register</NuxtLink>
+          </template>
+          <template v-else>
+            <NuxtLink to="/profile" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">My Profile</NuxtLink>
+            <NuxtLink v-if="isAdminUser" to="/admin/users" @click="toggleMobileMenu" class="block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">Admin</NuxtLink>
+            <button @click="handleLogout" class="w-full text-left block rounded-md px-3 py-2 text-base font-medium text-text-primary hover:bg-neutral-light hover:text-brand-primary">
+              Logout
+            </button>
+          </template>
+          <template #fallback>
+            <!-- Optional: Placeholder for mobile auth links -->
+            <div class="block rounded-md px-3 py-2 h-10 bg-gray-200 animate-pulse mt-1"></div>
+          </template>
+        </ClientOnly>
       </div>
     </div>
 
