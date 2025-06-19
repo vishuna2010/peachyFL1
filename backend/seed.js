@@ -978,24 +978,53 @@ async function seedSuppliers(client, seededDataIds) {
 
 async function seedCategories(client) {
   const sampleCategories = [
-    'Apparel', 'Accessories', 'Electronics', 'Footwear',
-    'Home Goods', 'Books', 'Beauty', 'Sports & Outdoors', 'Digital Music', 'Toys & Games'
+    { name: 'Apparel', description: 'Clothing items including shirts, pants, and dresses.' },
+    { name: 'Accessories', description: 'Fashion accessories like belts, scarves, and hats.' },
+    { name: 'Electronics', description: 'Consumer electronics, gadgets, and related accessories.' },
+    { name: 'Footwear', description: 'Shoes, boots, sandals, and other types of footwear.' },
+    { name: 'Home Goods', description: 'Items for home decoration, kitchenware, and utilities.' },
+    { name: 'Books', description: 'Various genres of books, both fiction and non-fiction.' },
+    { name: 'Beauty', description: 'Cosmetics, skincare, and personal care products.' },
+    { name: 'Sports & Outdoors', description: 'Equipment and apparel for sports and outdoor activities.' },
+    { name: 'Digital Music', description: 'Music albums and tracks available for digital download or streaming.' },
+    { name: 'Toys & Games', description: 'Toys, board games, puzzles, and video games for all ages.' }
   ];
 
   console.log('Seeding categories...');
   try {
-    for (const categoryName of sampleCategories) {
+    for (const category of sampleCategories) { // Iterate over objects
       const result = await client.query(
-        'INSERT INTO categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING RETURNING id',
-        [categoryName]
+        'INSERT INTO categories (name, description) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, updated_at = CURRENT_TIMESTAMP RETURNING id',
+        [category.name, category.description] // Pass both name and description
       );
       if (result.rowCount > 0) {
-        console.log(`Category "${categoryName}" seeded successfully.`);
+        // This means a new row was inserted OR an existing row was updated by the DO UPDATE clause
+        // and RETURNING id gave back the ID.
+        // To distinguish, we could check if the returned ID was already known, or if description changed.
+        // For simplicity here, we'll just log generic success or check if it was an update.
+        // A more precise way: check if result.rows[0].id implies new or updated.
+        // If the `xmin` system column value changes after an UPDATE, it means the row was updated.
+        // However, RETURNING id is simpler. If ID is returned, it was either inserted or updated.
+        console.log(`Category "${category.name}" seeded/updated successfully with description.`);
       } else {
-        console.log(`Category "${categoryName}" already exists or conflict occurred. Skipped.`);
+        // This block should ideally not be reached if ON CONFLICT DO UPDATE is used,
+        // as it should always either insert or update (and thus return a row).
+        // If ON CONFLICT DO NOTHING was used, this block would mean "already exists".
+        // For robust logging with DO UPDATE, we might need to see if the value *actually* changed.
+        const existing = await client.query('SELECT id, description FROM categories WHERE name = $1', [category.name]);
+        if (existing.rows.length > 0 && existing.rows[0].description !== category.description) {
+             // This case is tricky because the INSERT...ON CONFLICT...DO UPDATE should have handled it.
+             // This log might indicate that the rowCount was 0 but an update still happened (unlikely for RETURNING id).
+             console.log(`Category "${category.name}" already existed, description was updated (confirmation via separate select).`);
+        } else if (existing.rows.length > 0) {
+            console.log(`Category "${category.name}" already exists with the same description or was just inserted and result.rowCount was unexpectedly 0.`);
+        } else {
+            // Should not happen if INSERT worked or found a conflict
+            console.warn(`Category "${category.name}" was not inserted and not found after attempting seed.`);
+        }
       }
     }
-    console.log('Category seeding completed.');
+    console.log('Category seeding complete.');
   } catch (error) {
     console.error('Error seeding categories:', error);
     throw error;
