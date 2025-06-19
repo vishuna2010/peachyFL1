@@ -12,7 +12,7 @@ const router = express.Router();
 //   next();
 // });
 
-router.use(isAuthenticated, isAdmin); // Restored isAdmin
+router.use(isAuthenticated, isAdmin); // Protect all routes
 
 // GET /api/admin/assigned-options/:assignedOptionId/values
 router.get(
