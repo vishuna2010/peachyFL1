@@ -1037,6 +1037,8 @@ router.get(
     param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt()
   ],
   async (req, res, next) => {
+    // console.log('>>> DEBUG: INSIDE GET /:productId/assigned-options - Product ID:', req.params.productId, 'Timestamp:', Date.now()); // This line can be kept or removed for this pass. Let's keep it.
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -1052,11 +1054,12 @@ router.get(
       }
 
       // Fetch assigned options and their selected values in a single query
+      // Ensure this query uses 'global_option_name_DEBUGTEST'
       const optimizedQuery = `
         SELECT
           pao.id AS assigned_option_id,
           pao.option_id AS global_option_id,
-          po.name AS global_option_name_DEBUGTEST,
+          po.name AS global_option_name_DEBUGTEST, // <<< DIAGNOSTIC ALIAS
           pao.created_at,
           pao.updated_at,
           COALESCE(
@@ -1075,8 +1078,6 @@ router.get(
       `;
       const result = await db.query(optimizedQuery, [productId]);
 
-      // The 'selected_values' field is already an array of objects due to json_agg and json_build_object.
-      // The frontend expects this array directly.
       res.status(200).json(result.rows);
 
     } catch (error) {
