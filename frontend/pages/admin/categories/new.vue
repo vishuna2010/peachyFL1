@@ -46,7 +46,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import { useRouter, useNuxtApp, definePageMeta, useHead } from '#app';
+import { useRouter, useNuxtApp, useHead } from '#app'; // Using #app for Nuxt 3 imports
 import { useToast } from 'vue-toastification';
 
 definePageMeta({

@@ -57,7 +57,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useRouter, useRoute, useNuxtApp, definePageMeta, useHead } from '#app';
+import { useRouter, useRoute, useNuxtApp, useHead } from '#app'; // Using #app for Nuxt 3 imports
 import { useToast } from 'vue-toastification';
 
 definePageMeta({
