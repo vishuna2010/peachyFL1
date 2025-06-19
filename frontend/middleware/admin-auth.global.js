@@ -6,7 +6,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   // On client-side, if auth is not yet initialized, do nothing and allow rendering.
   // useAuth will update reactively, and this middleware will run again if needed.
   if (process.client && !isAuthInitialized.value) {
-    // console.log(`Admin Auth (path: ${to.path}): Waiting for auth initialization...`); // Optional: keep for debugging if issues persist
+    // console.log(`Admin Auth (path: ${to.path}): Client-side, auth not initialized. Waiting...`); // Optional: keep for subtle debugging
     return;
   }
 
@@ -19,20 +19,20 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   // On server, localStorage isn't used, so direct checks are fine.
 
   if (!authToken.value) {
-    // console.log(`Admin Auth (path: ${to.path}): No token. Redirecting to login.`);
+    // console.log(`Admin Auth (path: ${to.path}): No token after init/on server. Redirecting to login.`);
     return navigateTo('/login?redirect=' + to.path);
   }
 
   // If token exists but user details (especially role) are missing, fetch them.
   // This is crucial for SSR or if authUser wasn't fully populated from localStorage.
   if (!authUser.value || authUser.value.role === undefined) {
-    // console.log(`Admin Auth (path: ${to.path}): Token exists, but user details (or role) missing. Fetching user...`);
+    // console.log(`Admin Auth (path: ${to.path}): Token exists, but user details (or role) missing after init/on server. Fetching user...`);
     await fetchUser(); // fetchUser now gets role from /api/auth/me
   }
 
   // Final check: if still no user or role is not admin, redirect.
   if (!authUser.value || authUser.value.role !== 'admin') {
-    // console.log(`Admin Auth (path: ${to.path}): User role is "${authUser.value?.role}". Not admin or user is null. Redirecting.`);
+    // console.log(`Admin Auth (path: ${to.path}): User role is "${authUser.value?.role}" or user is null after init/fetch or on server. Redirecting.`);
     if (!authUser.value) { // If fetchUser failed and resulted in logout (authUser became null)
       return navigateTo('/login?redirect=' + to.path);
     }
