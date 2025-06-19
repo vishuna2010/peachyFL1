@@ -94,10 +94,10 @@ router.get('/', validatePaginationParams, async (req, res, next) => {
 
   try {
     const categoriesQuery = `
-      SELECT c.id, c.name, c.description, c.parent_category_id, COUNT(p.id) AS product_count
+      SELECT c.id, c.name, c.description, c.parent_category_id, c.updated_at, COUNT(p.id) AS product_count
       FROM categories c
       LEFT JOIN products p ON c.id = p.category_id
-      GROUP BY c.id, c.name, c.description, c.parent_category_id
+      GROUP BY c.id, c.name, c.description, c.parent_category_id, c.updated_at
       ORDER BY c.name ASC
       LIMIT $1 OFFSET $2;
     `;
