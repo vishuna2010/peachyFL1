@@ -15,6 +15,7 @@ const adminPurchaseOrderRoutes = require('./routes/adminPurchaseOrders'); // Imp
 const adminStockMovementLogsRoutes = require('./routes/adminStockMovementLogs');
 const adminInventoryBatchesRoutes = require('./routes/adminInventoryBatches'); // Added this line
 const adminReportRoutes = require('./routes/adminReports'); // Import admin report routes
+const adminAuditLogsRouter = require('./routes/adminAuditLogs');
 const adminAssignedOptionsRouter = require('./routes/adminAssignedOptions');
 console.log('>>> adminAssignedOptionsRouter type:', typeof adminAssignedOptionsRouter, 'Is function:', adminAssignedOptionsRouter instanceof Function);
 const adminProductSpecificOptionsRoutes = require('./routes/adminProductSpecificOptions'); // Import product-specific option config routes
@@ -110,6 +111,7 @@ app.use('/api/admin/purchase-orders', adminPurchaseOrderRoutes);
 app.use('/api/admin/stock-movement-logs', adminStockMovementLogsRoutes);
 app.use('/api/admin/inventory-batches', adminInventoryBatchesRoutes); // Added this line
 app.use('/api/admin/reports', adminReportRoutes);
+app.use('/api/admin/audit-logs', adminAuditLogsRouter);
 // adminAssignedOptionsRouter was here, moved earlier
 app.use('/api/admin/stock-adjustments', adminStockAdjustmentsRoutes);
 app.use('/api/admin/returns', adminReturnsRoutes);

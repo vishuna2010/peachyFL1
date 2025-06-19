@@ -160,6 +160,7 @@ const reportItems = ref([
     { name: 'Low Stock', href: '/admin/reports/low-stock', iconSvg: iconReportSubItem },
     { name: 'Sales', href: '/admin/reports/sales', iconSvg: iconReportSubItem },
     { name: 'Best Sellers', href: '/admin/reports/best-sellers', iconSvg: iconReportSubItem },
+    { name: 'Audit Logs', href: '/admin/reports/audit-logs', iconSvg: iconReportSubItem },
 ]);
 
 const inventorySubmenuOpen = ref(false);
