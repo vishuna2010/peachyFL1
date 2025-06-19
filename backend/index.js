@@ -16,6 +16,7 @@ const adminStockMovementLogsRoutes = require('./routes/adminStockMovementLogs');
 const adminInventoryBatchesRoutes = require('./routes/adminInventoryBatches'); // Added this line
 const adminReportRoutes = require('./routes/adminReports'); // Import admin report routes
 const adminAssignedOptionsRouter = require('./routes/adminAssignedOptions');
+console.log('>>> adminAssignedOptionsRouter type:', typeof adminAssignedOptionsRouter, 'Is function:', adminAssignedOptionsRouter instanceof Function);
 const adminProductSpecificOptionsRoutes = require('./routes/adminProductSpecificOptions'); // Import product-specific option config routes
 const adminOptionManagementRoutes = require('./routes/adminOptionManagement'); // Import admin option management routes
 const adminProductVariantsRoutes = require('./routes/adminProductVariants.js'); // Import admin product variants routes
@@ -76,7 +77,9 @@ app.use('/api/admin/categories', adminCategoryRoutes); // Mount admin category r
 app.use('/api/admin/stats', adminStatsRoutes); // Mount admin statistics routes
 app.use('/api/admin/options', adminOptionManagementRoutes.optionsRouter); // Mount global options API
 app.use('/api/admin/option-values', adminOptionManagementRoutes.optionValuesRouter); // Mount global option values API
+console.log('>>> Mounting /api/admin/assigned-options NOW');
 app.use('/api/admin/assigned-options', adminAssignedOptionsRouter); // Moved earlier
+console.log('>>> MOUNTED /api/admin/assigned-options');
 app.use('/api/admin', adminProductSpecificOptionsRoutes); // Mount product-specific option config routes
 app.use('/api/admin', adminProductVariantsRoutes); // Mount product variants routes (e.g., /products/:productId/variants and /variants/:variantId)
 app.use('/api/admin/reviews', adminReviewRoutes); // Mount admin review management routes
