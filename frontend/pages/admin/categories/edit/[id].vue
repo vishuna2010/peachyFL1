@@ -32,6 +32,21 @@
               placeholder="e.g., Electronics"
             />
           </div>
+          <div>
+            <label for="categoryDescription" class="block text-sm font-medium text-gray-700 mb-1">
+              Description (Optional)
+            </label>
+            <div class="mt-1">
+              <textarea
+                id="categoryDescription"
+                v-model="categoryDescription"
+                rows="3"
+                :disabled="isLoading"
+                class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-50 disabled:bg-gray-100"
+                placeholder="Enter a brief description for the category."
+              ></textarea>
+            </div>
+          </div>
         </div>
 
         <div class="mt-6 flex items-center justify-end space-x-4">
@@ -43,7 +58,7 @@
           </NuxtLink>
           <button
             type="submit"
-            :disabled="isLoading || categoryName.trim() === originalCategoryName.trim()"
+            :disabled="isLoading || (categoryName.trim() === originalCategoryName.trim() && categoryDescription.trim() === originalCategoryDescription.trim())"
             class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span v-if="isLoading" class="animate-pulse">Updating...</span>
@@ -66,6 +81,8 @@ definePageMeta({
 
 const categoryName = ref('');
 const originalCategoryName = ref('');
+const categoryDescription = ref('');
+const originalCategoryDescription = ref('');
 const isLoading = ref(false); // For form submission
 const isFetching = ref(true); // For initial data load
 const fetchError = ref(null);
@@ -88,11 +105,13 @@ const fetchCategoryData = async () => {
     const response = await $axios.get(`/admin/categories/${categoryId}`);
     // The API returns the category object directly, not nested like { category: ... }
     // And it includes product_count, which we don't need for the form, but name is what we need.
-    if (response.data && response.data.name) {
-      categoryName.value = response.data.name;
-      originalCategoryName.value = response.data.name;
+    if (response.data) { // Ensure response.data itself is not null
+        categoryName.value = response.data.name || ''; // Fallback to empty string if name is null
+        originalCategoryName.value = response.data.name || '';
+        categoryDescription.value = response.data.description || ''; // Populate description
+        originalCategoryDescription.value = response.data.description || '';
     } else {
-      throw new Error('Invalid category data received from API.');
+        throw new Error('Invalid category data structure received from API.');
     }
   } catch (error) {
     console.error('Error fetching category data:', error);
@@ -122,16 +141,26 @@ const handleUpdate = async () => {
     toast.error('Category name must be at least 2 characters long.');
     return;
   }
-  if (categoryName.value.trim() === originalCategoryName.value.trim()) {
-    toast.info('No changes made to the category name.');
-    // Optionally, navigate back or just do nothing.
-    // router.push('/admin/categories');
+
+  const nameChanged = categoryName.value.trim() !== originalCategoryName.value.trim();
+  const descriptionChanged = categoryDescription.value.trim() !== originalCategoryDescription.value.trim();
+
+  if (!nameChanged && !descriptionChanged) {
+    toast.info('No changes made to the category name or description.');
     return;
   }
 
   isLoading.value = true;
   try {
-    await $axios.put(`/admin/categories/${categoryId}`, { name: categoryName.value.trim() });
+    const payload = {};
+    if (nameChanged) {
+        payload.name = categoryName.value.trim();
+    }
+    if (descriptionChanged) {
+        payload.description = categoryDescription.value.trim() || null;
+    }
+
+    await $axios.put(`/admin/categories/${categoryId}`, payload);
     toast.success('Category updated successfully!');
     router.push('/admin/categories');
   } catch (error) {

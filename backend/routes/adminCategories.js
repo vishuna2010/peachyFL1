@@ -71,7 +71,7 @@ router.post('/', validateCreateCategory, async (req, res, next) => {
 
   try {
     const result = await db.query(
-      'INSERT INTO categories (name) VALUES ($1) RETURNING *',
+      'INSERT INTO categories (name, description, parent_category_id) VALUES ($1, $2, $3) RETURNING *',
       [name, description, parent_category_id]
     );
     res.status(201).json(result.rows[0]);

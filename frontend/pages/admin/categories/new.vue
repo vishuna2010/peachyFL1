@@ -21,6 +21,21 @@
               placeholder="e.g., Electronics"
             />
           </div>
+          <div>
+            <label for="categoryDescription" class="block text-sm font-medium text-gray-700 mb-1">
+              Description (Optional)
+            </label>
+            <div class="mt-1">
+              <textarea
+                id="categoryDescription"
+                v-model="categoryDescription"
+                rows="3"
+                :disabled="isLoading"
+                class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-50 disabled:bg-gray-100"
+                placeholder="Enter a brief description for the category."
+              ></textarea>
+            </div>
+          </div>
         </div>
 
         <div class="mt-6 flex items-center justify-end space-x-4">
@@ -58,6 +73,7 @@ useHead({
 });
 
 const categoryName = ref('');
+const categoryDescription = ref('');
 const isLoading = ref(false);
 const router = useRouter();
 const toast = useToast();
@@ -76,7 +92,11 @@ const handleSubmit = async () => {
 
   isLoading.value = true;
   try {
-    await $axios.post('/admin/categories', { name: categoryName.value.trim() });
+    const payload = {
+      name: categoryName.value.trim(),
+      description: categoryDescription.value.trim() || null // Send null if empty
+    };
+    await $axios.post('/admin/categories', payload);
     toast.success('Category added successfully!');
     router.push('/admin/categories');
   } catch (error) {
