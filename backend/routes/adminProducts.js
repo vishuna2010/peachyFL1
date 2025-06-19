@@ -1056,7 +1056,7 @@ router.get(
         SELECT
           pao.id AS assigned_option_id,
           pao.option_id AS global_option_id,
-          po.name AS global_option_name,
+          po.name AS global_option_name_DEBUGTEST,
           pao.created_at,
           pao.updated_at,
           COALESCE(
