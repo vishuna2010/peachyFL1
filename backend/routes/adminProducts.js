@@ -77,6 +77,62 @@ router.get('/', validateGetProductsParams, async (req, res, next) => {
   }
 });
 
+// GET /api/admin/products/:productId/assigned-options - List options assigned to a product, with their selected values
+router.get(
+  '/:productId/assigned-options',
+  [
+    param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt()
+  ],
+  async (req, res, next) => {
+    // Optional: A log to confirm entry if debugging is still needed by the user later
+    // console.log(`Executing GET /:productId/assigned-options for Product ID: ${req.params.productId}`);
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { productId } = req.params;
+
+    try {
+      // Check if product exists
+      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+      if (productCheck.rows.length === 0) {
+        return next(new NotFoundError(`Product with ID ${productId} not found.`));
+      }
+
+      const optimizedQuery = `
+        SELECT
+          pao.id AS assigned_option_id,
+          pao.option_id AS global_option_id,
+          po.name AS global_option_name, // Intended final field name
+          pao.created_at,
+          pao.updated_at,
+          COALESCE(
+            (
+              SELECT json_agg(json_build_object('id', pov.id, 'value', pov.value) ORDER BY pov.value ASC)
+              FROM product_assigned_option_specific_values paosv
+              JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
+              WHERE paosv.product_assigned_option_id = pao.id
+            ),
+            '[]'::json
+          ) AS selected_values
+        FROM product_assigned_options pao
+        JOIN product_options po ON pao.option_id = po.id
+        WHERE pao.product_id = $1
+        ORDER BY po.name;
+      `;
+      const result = await db.query(optimizedQuery, [productId]);
+
+      res.status(200).json(result.rows);
+
+    } catch (error) {
+      console.error(`Error fetching assigned options for product ID ${productId}:`, error);
+      next(error);
+    }
+  }
+);
+
 // GET /api/admin/products/:productId - Get a single product by ID (admin)
 router.get(
   '/:productId',
@@ -1029,62 +1085,5 @@ router.get(
     }
   }
 );
-
-// GET /api/admin/products/:productId/assigned-options - List options assigned to a product, with their selected values
-router.get(
-  '/:productId/assigned-options',
-  [
-    param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt()
-  ],
-  async (req, res, next) => {
-    // Optional: A log to confirm entry if debugging is still needed by the user later
-    // console.log(`Executing GET /:productId/assigned-options for Product ID: ${req.params.productId}`);
-
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { productId } = req.params;
-
-    try {
-      // Check if product exists
-      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
-      if (productCheck.rows.length === 0) {
-        return next(new NotFoundError(`Product with ID ${productId} not found.`));
-      }
-
-      const optimizedQuery = `
-        SELECT
-          pao.id AS assigned_option_id,
-          pao.option_id AS global_option_id,
-          po.name AS global_option_name, // Intended final field name
-          pao.created_at,
-          pao.updated_at,
-          COALESCE(
-            (
-              SELECT json_agg(json_build_object('id', pov.id, 'value', pov.value) ORDER BY pov.value ASC)
-              FROM product_assigned_option_specific_values paosv
-              JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
-              WHERE paosv.product_assigned_option_id = pao.id
-            ),
-            '[]'::json
-          ) AS selected_values
-        FROM product_assigned_options pao
-        JOIN product_options po ON pao.option_id = po.id
-        WHERE pao.product_id = $1
-        ORDER BY po.name;
-      `;
-      const result = await db.query(optimizedQuery, [productId]);
-
-      res.status(200).json(result.rows);
-
-    } catch (error) {
-      console.error(`Error fetching assigned options for product ID ${productId}:`, error);
-      next(error);
-    }
-  }
-);
-
 
 module.exports = router;
