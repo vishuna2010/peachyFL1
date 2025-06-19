@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
+const auditLogService = require('../services/auditLogService');
 const { AppError, BadRequestError, NotFoundError, ConflictError } = require('../utils/AppError');
 const { body, param, query, validationResult } = require('express-validator');
 
@@ -74,7 +75,22 @@ router.post('/', validateCreateCategory, async (req, res, next) => {
       'INSERT INTO categories (name, description, parent_category_id) VALUES ($1, $2, $3) RETURNING *',
       [name, description, parent_category_id]
     );
-    res.status(201).json(result.rows[0]);
+    if (result.rows.length > 0) {
+      const newCategory = result.rows[0];
+      auditLogService.recordAuditEvent(
+        'CREATE_CATEGORY',
+        { userId: req.user.userId, userEmail: req.user.email }, // actor from isAuthenticated
+        { resourceType: 'CATEGORY', resourceId: newCategory.id },
+        { name: newCategory.name, description: newCategory.description, parent_category_id: newCategory.parent_category_id }, // details: new category data
+        req
+      ).catch(err => console.error('Audit log failed for CREATE_CATEGORY:', err));
+      res.status(201).json(newCategory);
+    } else {
+      // Fallback if RETURNING * somehow didn't return the row, though it should on success.
+      // Or if an error occurred that didn't throw but resulted in no rows.
+      // This path is less likely with current DB logic.
+      return next(new AppError('Category creation succeeded but failed to return data.', 500));
+    }
   } catch (error) {
     if (error.code === '23505' && error.constraint === 'categories_name_key') {
       return next(new ConflictError(`A category with the name "${name}" already exists.`));
@@ -189,7 +205,20 @@ router.put('/:id', validateCategoryIdParam, validateUpdateCategory, async (req, 
       return next(new NotFoundError(`Category with ID ${categoryId} not found. Update failed.`));
     }
 
-    res.status(200).json(result.rows[0]);
+    const updatedCategory = result.rows[0];
+    const changes = {};
+    if (req.body.hasOwnProperty('name')) changes.name = updatedCategory.name;
+    if (req.body.hasOwnProperty('description')) changes.description = updatedCategory.description;
+    if (req.body.hasOwnProperty('parent_category_id')) changes.parent_category_id = updatedCategory.parent_category_id;
+
+    auditLogService.recordAuditEvent(
+      'UPDATE_CATEGORY',
+      { userId: req.user.userId, userEmail: req.user.email },
+      { resourceType: 'CATEGORY', resourceId: updatedCategory.id },
+      { updatedFields: req.body, newData: changes }, // Log what was attempted and the result
+      req
+    ).catch(err => console.error('Audit log failed for UPDATE_CATEGORY:', err));
+    res.status(200).json(updatedCategory);
   } catch (error) {
     if (error.code === '23505' && error.constraint === 'categories_name_key') {
       return next(new ConflictError(`A category with the name "${name}" already exists.`));
@@ -222,6 +251,15 @@ router.delete('/:id', validateCategoryIdParam, async (req, res, next) => {
     if (result.rowCount === 0) {
       return next(new NotFoundError(`Category with ID ${categoryId} not found.`));
     }
+
+    // If deletion was successful (rowCount > 0)
+    auditLogService.recordAuditEvent(
+      'DELETE_CATEGORY',
+      { userId: req.user.userId, userEmail: req.user.email },
+      { resourceType: 'CATEGORY', resourceId: categoryId }, // categoryId from req.params
+      { message: `Category ID ${categoryId} deleted.` },
+      req
+    ).catch(err => console.error('Audit log failed for DELETE_CATEGORY:', err));
 
     res.status(204).send();
   } catch (error) {

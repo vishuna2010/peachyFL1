@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
 const productService = require('../services/productService');
+const auditLogService = require('../services/auditLogService');
 const { query, param, body, validationResult } = require('express-validator'); // Added body
 const { NotFoundError } = require('../utils/AppError');
 const { generateProductLabelPdf } = require('../services/pdfService'); // Ensured at top
@@ -346,6 +347,31 @@ router.put(
 
       // Fetch the updated product with all necessary details for the response
       const updatedProduct = await productService.getProductById(productId); // Uses its own client connection
+
+      // Prepare details for audit log
+      const fieldsAttemptedToUpdate = { ...req.body };
+      // Remove sensitive or very large data not suitable for a summary audit log, if necessary.
+      // For example, if req.body might contain uploaded file objects or very large text fields:
+      // delete fieldsAttemptedToUpdate.file; // Example if 'file' was a field
+      // delete fieldsAttemptedToUpdate.description; // Example if description is too long for audit 'details' summary
+
+      // It's also good to remove the password if it were ever part of a user update DTO,
+      // though this is a product update. For products, most fields are probably fine.
+
+      auditLogService.recordAuditEvent(
+        'UPDATE_PRODUCT',
+        { userId: req.user.userId, userEmail: req.user.email }, // actor from isAuthenticated
+        { resourceType: 'PRODUCT', resourceId: productId }, // productId from req.params
+        {
+          message: `Product ID ${productId} updated.`,
+          // Log only the keys of attempted changes to keep audit log concise,
+          // or log the actual values if they are not too large.
+          // For this iteration, let's log the keys that were part of the update request.
+          updatedFields: Object.keys(fieldsAttemptedToUpdate)
+        },
+        req // requestContext for IP/User-Agent
+      ).catch(err => console.error(`Audit log failed for UPDATE_PRODUCT (ID: ${productId}):`, err));
+
       res.status(200).json({ data: updatedProduct });
 
     } catch (error) {

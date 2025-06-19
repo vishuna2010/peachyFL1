@@ -752,6 +752,43 @@ async function createSchema(client) {
     await client.query(`ALTER TABLE product_cost_history ADD COLUMN IF NOT EXISTS exchange_rate_at_receipt NUMERIC(12, 6) NULL;`);
     console.log('All columns for "product_cost_history" table ensured/checked (basic existence).');
 
+    // Audit Logs Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        user_email VARCHAR(255),
+        action_type VARCHAR(50) NOT NULL,
+        resource_type VARCHAR(100),
+        resource_id INTEGER,
+        details JSONB,
+        ip_address VARCHAR(50),
+        user_agent TEXT,
+        timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+      );
+    `);
+    console.log('Table "audit_logs" checked/created.');
+
+    // Ensure all columns exist for audit_logs
+    await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+    await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_email VARCHAR(255);`);
+    await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS action_type VARCHAR(50);`);
+    await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource_type VARCHAR(100);`);
+    await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS resource_id INTEGER;`);
+    await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS details JSONB;`);
+    await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(50);`);
+    await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;`);
+    await client.query(`ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS timestamp TIMESTAMPTZ;`);
+    console.log('All columns for "audit_logs" table ensured/checked (basic existence).');
+
+    // Add Indexes
+    await client.query('CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_audit_logs_user_email ON audit_logs(user_email);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_audit_logs_action_type ON audit_logs(action_type);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_audit_logs_resource_type_id ON audit_logs(resource_type, resource_id);');
+    console.log('Indexes for "audit_logs" checked/created.');
+
     console.log('Schema creation process completed.');
   } catch (error) {
     console.error('Error creating schema:', error);
