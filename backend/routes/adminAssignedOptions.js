@@ -1,18 +1,18 @@
 const express = require('express');
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
-const { param, body, validationResult } = require('express-validator'); // Needs body for PUT
+const { param, body, validationResult } = require('express-validator');
 const { NotFoundError } = require('../utils/AppError');
 
 const router = express.Router();
 
-// New router-level middleware for logging all requests to this router
+// Router-level logging (added in a previous step)
 router.use((req, res, next) => {
   console.log(`[adminAssignedOptionsRouter] Request received for path: ${req.originalUrl} with method: ${req.method}`);
   next();
 });
 
-router.use(isAuthenticated); // Protect all routes (temporarily removed isAdmin for diagnostics)
+router.use(isAuthenticated); // Temporarily removed isAdmin
 
 // GET /api/admin/assigned-options/:assignedOptionId/values
 router.get(
@@ -21,49 +21,34 @@ router.get(
     param('assignedOptionId').isInt({ gt: 0 }).withMessage('Assigned Option ID must be a positive integer.')
   ],
   async (req, res, next) => {
-    console.log(`[adminAssignedOptions GET /:assignedOptionId/values] Handler entered for assignedOptionId: ${req.params.assignedOptionId}`); // <<< NEW LOG
-
+    console.log(`[adminAssignedOptions GET /:assignedOptionId/values] Handler entered for assignedOptionId: ${req.params.assignedOptionId}`);
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log('[adminAssignedOptions GET /:assignedOptionId/values] Validation errors:', errors.array()); // Log validation errors
+      console.log('[adminAssignedOptions GET /:assignedOptionId/values] Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
-
     const { assignedOptionId } = req.params;
-
     try {
-      // 1. Fetch the product_assigned_options record and the global option name
       const assignedOptionQuery = `
-        SELECT
-          pao.id AS assigned_option_id,
-          pao.product_id,
-          pao.option_id AS global_option_id,
-          po.name AS global_option_name
+        SELECT pao.id AS assigned_option_id, pao.product_id, pao.option_id AS global_option_id, po.name AS global_option_name
         FROM product_assigned_options pao
         JOIN product_options po ON pao.option_id = po.id
         WHERE pao.id = $1;
       `;
       const assignedOptionResult = await db.query(assignedOptionQuery, [assignedOptionId]);
-
       if (assignedOptionResult.rows.length === 0) {
         return next(new NotFoundError(`Assigned option with ID ${assignedOptionId} not found.`));
       }
       const assignedOptionDetails = assignedOptionResult.rows[0];
       const globalOptionId = assignedOptionDetails.global_option_id;
-
-      // 2. Fetch all global values for the associated global option type
       const allPossibleValuesQuery = `
-        SELECT
-          pov.id,
-          pov.value AS value_name -- Frontend expects value_name
+        SELECT pov.id, pov.value AS value_name
         FROM product_option_values pov
         WHERE pov.product_option_id = $1
         ORDER BY pov.value ASC;
       `;
       const allPossibleValuesResult = await db.query(allPossibleValuesQuery, [globalOptionId]);
       const allPossibleValuesFromDB = allPossibleValuesResult.rows;
-
-      // 3. Fetch the IDs of currently selected values for this specific assigned option
       const selectedValueIdsQuery = `
         SELECT product_option_value_id
         FROM product_assigned_option_specific_values
@@ -71,30 +56,23 @@ router.get(
       `;
       const selectedValueIdsResult = await db.query(selectedValueIdsQuery, [assignedOptionId]);
       const selectedValueIds = new Set(selectedValueIdsResult.rows.map(row => row.product_option_value_id));
-
-      // 4. Combine all_possible_values with selection status (Explicit Mapping)
       const combinedValues = allPossibleValuesFromDB.map(dbRow => {
-        // Log each row from the database to see its exact structure
         console.log('Processing dbRow:', dbRow);
         return {
           id: dbRow.id,
-          value_name: dbRow.value_name, // Explicitly access value_name which should be aliased from pov.value
+          value_name: dbRow.value_name,
           is_selected: selectedValueIds.has(dbRow.id)
         };
       });
-
-      // Optional: Log the final combinedValues to see what's being sent
       console.log('Final combinedValues for frontend:', combinedValues);
-
       res.status(200).json({
         data: {
           assigned_option_id: assignedOptionDetails.assigned_option_id,
           global_option_name: assignedOptionDetails.global_option_name,
-          product_id: assignedOptionDetails.product_id, // Potentially useful for frontend context
+          product_id: assignedOptionDetails.product_id,
           all_possible_values: combinedValues
         }
       });
-
     } catch (error) {
       console.error(`Error fetching values for assigned option ID ${assignedOptionId}:`, error);
       next(error);
@@ -113,48 +91,27 @@ router.delete(
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-
     const { assignedOptionId } = req.params;
     const client = await db.pool.connect();
-
     try {
       await client.query('BEGIN');
-
-      // First, delete associated specific values (child table)
-      // This is crucial if there's no ON DELETE CASCADE from product_assigned_options to these.
-      // If ON DELETE CASCADE is set up, this explicit delete is not strictly necessary but is safer.
       await client.query(
         'DELETE FROM product_assigned_option_specific_values WHERE product_assigned_option_id = $1',
         [assignedOptionId]
       );
-
-      // Then, delete the product_assigned_options record itself
       const deleteAssignedOptionResult = await client.query(
         'DELETE FROM product_assigned_options WHERE id = $1 RETURNING id',
         [assignedOptionId]
       );
-
       if (deleteAssignedOptionResult.rowCount === 0) {
         await client.query('ROLLBACK');
-        // This means the assigned option was not found, potentially already deleted or invalid ID.
         return next(new NotFoundError(`Assigned option with ID ${assignedOptionId} not found.`));
       }
-
-      // Also consider impact on product_variants. If variants are defined by combinations of
-      // assigned option values, deleting an assignment might require variants to be updated or deleted.
-      // The current frontend message "may affect variants" suggests this.
-      // For now, this backend operation only deletes the assignment and its specific values.
-      // A more robust solution might involve a service layer function that handles cascading impacts on variants.
-      // However, the immediate request is to make the "Remove" button functional for the assignment itself.
-
       await client.query('COMMIT');
-      res.status(204).send(); // Standard success response for DELETE with no content
-
+      res.status(204).send();
     } catch (error) {
       await client.query('ROLLBACK');
       console.error(`Error deleting assigned option ID ${assignedOptionId}:`, error);
-      // Check for specific errors, e.g., if it's referenced by another table that prevents deletion
-      // For example, if product_variant_option_values directly referenced product_assigned_options (unlikely).
       next(error);
     } finally {
       client.release();
@@ -171,8 +128,12 @@ router.put(
     body('value_ids.*').isInt({ gt: 0 }).withMessage('Each value_id must be a positive integer.')
   ],
   async (req, res, next) => {
+    console.log(`[adminAssignedOptions PUT /:assignedOptionId/values] Handler entered for assignedOptionId: ${req.params.assignedOptionId}`);
+    console.log(`  Received value_ids: ${JSON.stringify(req.body.value_ids)}`);
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('[adminAssignedOptions PUT /:assignedOptionId/values] Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -182,44 +143,49 @@ router.put(
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
+      console.log(`  Transaction started for assignedOptionId: ${assignedOptionId}.`);
 
-      // Check if the assigned option ID exists
       const assignedOptionCheck = await client.query(
-        'SELECT id FROM product_assigned_options WHERE id = $1',
+        'SELECT id, product_id, option_id FROM product_assigned_options WHERE id = $1', // Fetch more info for logging
         [assignedOptionId]
       );
       if (assignedOptionCheck.rows.length === 0) {
         await client.query('ROLLBACK');
+        console.log(`  Assigned option with ID ${assignedOptionId} not found. Rollback.`);
         return next(new NotFoundError(`Assigned option with ID ${assignedOptionId} not found.`));
       }
+      console.log(`  Checked assigned option ID ${assignedOptionId}: Product ID ${assignedOptionCheck.rows[0].product_id}, Global Option ID ${assignedOptionCheck.rows[0].option_id}`);
 
-      // Delete existing specific values for this assigned option
-      await client.query(
+      const deleteResult = await client.query(
         'DELETE FROM product_assigned_option_specific_values WHERE product_assigned_option_id = $1',
         [assignedOptionId]
       );
+      console.log(`  Deleted ${deleteResult.rowCount} existing specific values for assignedOptionId: ${assignedOptionId}.`);
 
-      // Insert new specific values
       if (value_ids && value_ids.length > 0) {
-        // Optional: Validate that all value_ids belong to the correct global_option_id
-        // For simplicity, this is omitted here but would be good for robustness.
-
+        console.log(`  Attempting to insert ${value_ids.length} new specific values.`);
         const insertPromises = value_ids.map(valueId => {
           return client.query(
-            'INSERT INTO product_assigned_option_specific_values (product_assigned_option_id, product_option_value_id) VALUES ($1, $2)',
+            'INSERT INTO product_assigned_option_specific_values (product_assigned_option_id, product_option_value_id) VALUES ($1, $2) RETURNING *', // RETURNING * for logging
             [assignedOptionId, valueId]
           );
         });
-        await Promise.all(insertPromises);
+        const insertedResults = await Promise.all(insertPromises);
+        insertedResults.forEach((result, index) => {
+          console.log(`    Inserted specific value: ${JSON.stringify(result.rows[0])} (for input value_id: ${value_ids[index]})`);
+        });
+      } else {
+        console.log(`  No new specific values to insert (value_ids array is empty or null).`);
       }
 
       await client.query('COMMIT');
+      console.log(`  Transaction committed for assignedOptionId: ${assignedOptionId}.`);
       res.status(200).json({ message: 'Assigned option values updated successfully.' });
 
     } catch (error) {
       await client.query('ROLLBACK');
-      console.error(`Error updating values for assigned option ID ${assignedOptionId}:`, error);
-      // Check for foreign key constraint errors if a value_id is invalid
+      console.error(`[adminAssignedOptions PUT /:assignedOptionId/values] Error for assignedOptionId ${assignedOptionId}:`, error);
+      console.log(`  Transaction rolled back for assignedOptionId: ${assignedOptionId}.`);
       if (error.code === '23503') { // foreign_key_violation
           return res.status(400).json({ message: 'One or more option value IDs are invalid or do not belong to the correct option type.' });
       }
