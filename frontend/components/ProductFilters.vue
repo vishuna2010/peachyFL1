@@ -16,7 +16,7 @@
           :value="localSearchTerm"
           @input="localSearchTerm = $event.target.value"
           placeholder="Product name..."
-          class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary"
         />
       </div>
 
@@ -26,7 +26,7 @@
         <select
           id="filter-category"
           v-model="localSelectedCategoryId"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white pr-8"
+          class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary bg-white pr-8"
         >
           <option :value="null">All Categories</option>
           <option v-for="category in categories" :key="category.id" :value="category.id">
@@ -49,9 +49,9 @@
             type="button"
             @click="selectColor(colorValObj.id)"
             :class="[
-              'p-1.5 border rounded-lg flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-150',
+              'p-1.5 border rounded-lg flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary/50 transition-all duration-150',
               localSelectedColorValueId === colorValObj.id
-                ? 'border-indigo-600 ring-2 ring-indigo-400 shadow-md'
+                ? 'border-brand-primary ring-2 ring-brand-primary/50 shadow-md'
                 : 'border-gray-300 hover:border-gray-400 hover:shadow-sm'
             ]"
             :aria-pressed="localSelectedColorValueId === colorValObj.id"
@@ -77,7 +77,7 @@
               placeholder="Min"
               min="0"
               step="0.01"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary"
             />
             <span class="text-gray-500">-</span>
             <input
@@ -87,7 +87,7 @@
               placeholder="Max"
               min="0"
               step="0.01"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary"
             />
         </div>
         <p v-if="priceError" class="text-xs text-red-500 mt-1">{{ priceError }}</p>
@@ -99,7 +99,7 @@
         <select
             id="filter-sortby"
             v-model="localSortBy"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white pr-8"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary bg-white pr-8"
         >
               <option value="created_at_desc">Newest</option>
               <option value="created_at_asc">Oldest</option>
@@ -113,7 +113,7 @@
       <div class="pt-2 space-y-3">
         <button
           @click="handleApplyFilters"
-          class="w-full px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          class="w-full px-4 py-2 bg-brand-primary text-white text-sm font-medium rounded-md hover:bg-brand-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary"
         >
           Apply Filters
         </button>

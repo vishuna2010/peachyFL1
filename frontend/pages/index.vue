@@ -9,7 +9,7 @@
       <div class="lg:hidden mb-4 text-center">
         <button
           @click="toggleMobileFilters"
-          class="inline-flex items-center justify-center px-6 py-3 border border-neutral-dark rounded-md shadow-sm text-base font-medium text-text-primary bg-white hover:bg-neutral-light focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary"
+          class="inline-flex items-center justify-center px-6 py-3 border border-neutral-dark rounded-md shadow-sm text-base font-medium text-text-primary bg-white hover:bg-neutral-light focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary transition-colors duration-200"
           aria-label="Show filters"
           :aria-expanded="isMobileFiltersOpen.toString()"
         >
@@ -73,7 +73,7 @@
           </div>
           <div v-else-if="fetchError" class="text-center py-10">
             <p class="text-lg text-red-600">Error fetching products: {{ fetchError.message || 'Unknown error' }}</p>
-            <button @click="() => fetchProducts(currentPage)" class="mt-4 px-4 py-2 bg-brand-primary text-white rounded hover:bg-opacity-90">Try Again</button>
+            <button @click="() => fetchProducts(currentPage)" class="mt-4 px-4 py-2 bg-brand-primary text-white rounded hover:bg-opacity-90 font-semibold transition-all duration-200 ease-in-out hover:scale-105 transform">Try Again</button>
           </div>
           <div v-else-if="!products.length" class="text-center py-10">
             <p class="text-lg text-text-secondary">No products found matching your criteria.</p>
@@ -86,7 +86,7 @@
             <button
               @click="changePage(currentPage - 1)"
               :disabled="!paginationData.hasPrevPage"
-              class="px-4 py-2 border border-neutral-dark rounded-md text-sm font-medium hover:bg-neutral-light disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-4 py-2 border border-neutral-dark rounded-md text-sm font-medium hover:bg-neutral-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             >
               Previous
             </button>
@@ -96,7 +96,7 @@
             <button
               @click="changePage(currentPage + 1)"
               :disabled="!paginationData.hasNextPage"
-              class="px-4 py-2 border border-neutral-dark rounded-md text-sm font-medium hover:bg-neutral-light disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-4 py-2 border border-neutral-dark rounded-md text-sm font-medium hover:bg-neutral-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             >
               Next
             </button>
@@ -129,7 +129,7 @@ const heroData = ref({
   subtitle: 'Discover the latest trends and refresh your wardrobe.',
   buttonText: 'Shop Now',
   buttonLink: '#products',
-  imageUrl: 'https://via.placeholder.com/1200x500.png?text=Dynamic+Hero+Image'
+  imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1200&q=80'
 });
 
 const products = ref([]);

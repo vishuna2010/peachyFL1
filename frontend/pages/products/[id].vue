@@ -19,7 +19,7 @@
             v-if="selectedImage && selectedImage.value?.url"
             :src="selectedImage.value.url"
             :alt="selectedImage.value.alt_text || product.name"
-            class="w-full h-auto object-contain rounded-lg shadow-lg max-h-[550px] aspect-[4/5] cursor-zoom-in"
+            class="w-full h-auto object-contain rounded-lg shadow-lg max-h-[550px] aspect-[4/5] cursor-zoom-in hover:opacity-90 transition-opacity duration-200"
             key="selected-image"
           />
           <div v-if="!selectedImage || !selectedImage.value?.url" class="w-full h-[400px] md:h-[550px] flex items-center justify-center bg-neutral-medium rounded-lg text-text-secondary">No Image Available</div>
@@ -30,7 +30,7 @@
             <button
               v-if="galleryImages.length > 5"
               @click="scrollThumbnails('prev')"
-              class="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-gray-700 bg-opacity-50 hover:bg-opacity-75 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+              class="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-neutral-dark/70 hover:bg-brand-primary text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-colors duration-200"
               :disabled="isPrevDisabled"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
@@ -43,8 +43,8 @@
                 :src="imageItem.url"
                 @click="selectedImage.value = imageItem"
                 :alt="imageItem.alt_text || product.name + ' thumbnail ' + imageItem.id"
-                class="h-16 w-16 sm:h-20 sm:w-20 object-cover rounded-md border-2 cursor-pointer transition-all duration-200 ease-in-out hover:border-gray-400 flex-shrink-0"
-                :class="selectedImage?.value?.url === imageItem.url ? 'border-indigo-500 ring-2 ring-indigo-300 ring-offset-1' : 'border-transparent'"
+                class="h-16 w-16 sm:h-20 sm:w-20 object-cover rounded-md border-2 cursor-pointer transition-all duration-200 ease-in-out flex-shrink-0"
+                :class="selectedImage?.value?.url === imageItem.url ? 'border-indigo-500 ring-2 ring-indigo-300 ring-offset-1' : 'border-transparent hover:border-brand-primary/70 hover:scale-105'"
               />
             </div>
 
@@ -52,7 +52,7 @@
             <button
               v-if="galleryImages.length > 5"
               @click="scrollThumbnails('next')"
-              class="absolute right-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-gray-700 bg-opacity-50 hover:bg-opacity-75 text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed"
+              class="absolute right-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-neutral-dark/70 hover:bg-brand-primary text-white rounded-full disabled:opacity-30 disabled:cursor-not-allowed transition-colors duration-200"
               :disabled="isNextDisabled"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
@@ -116,10 +116,12 @@
                     :class="[
                       'p-1.5 border rounded-lg flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-1 transition-all duration-150',
                       selectedOptions[option_type.option_id] === valueDetail.value_id
-                        ? 'border-indigo-600 ring-2 ring-indigo-500 shadow-md' // Selected
+                        ? 'border-brand-primary ring-2 ring-brand-primary/50 shadow-md' // Selected
                         : !valueDetail.isPotentiallyAvailable
                           ? 'border-gray-200 opacity-40 cursor-not-allowed' // Fully unavailable
-                          : 'border-gray-300 hover:border-gray-400 focus:ring-indigo-500', // Available (stock hint by text/icon)
+                          : valueDetail.anyResultingVariantInStock
+                            ? 'border-gray-300 hover:border-neutral-dark focus:ring-brand-primary/50' // Available and in stock
+                            : 'border-yellow-300 hover:border-yellow-400 focus:ring-yellow-500/50', // Available but OOS
                        // Add a subtle indicator for OOS if it's not selected but available
                       valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id ? 'bg-yellow-50' : ''
                     ]"
@@ -160,12 +162,12 @@
                     :class="[
                       'px-3 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors duration-150',
                       selectedOptions[option_type.option_id] === valueDetail.value_id
-                        ? 'bg-indigo-600 text-white border-indigo-600 focus:ring-indigo-500' // Selected
+                        ? 'bg-brand-primary text-white border-brand-primary focus:ring-brand-primary/50' // Selected
                         : !valueDetail.isPotentiallyAvailable
                           ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-75 cursor-not-allowed line-through' // Fully unavailable
                           : !valueDetail.anyResultingVariantInStock
                             ? 'bg-yellow-50 text-yellow-700 border-yellow-300 hover:bg-yellow-100 focus:ring-yellow-500' // Available, but leads to OOS
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400 focus:ring-indigo-500' // Available and in stock
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-neutral-dark focus:ring-brand-primary/50' // Available and in stock
                     ]"
                     :aria-pressed="selectedOptions[option_type.option_id] === valueDetail.value_id"
                     :title="valueDetail.isPotentiallyAvailable
@@ -190,11 +192,14 @@
 
           <div class="flex items-center gap-4 my-6">
             <input type="number" v-model.number="quantity" min="1" :max="displayStock > 0 ? displayStock : 1" :disabled="addToCartDisabled" class="w-20 p-2 border border-neutral-medium rounded-md text-center focus:ring-1 focus:ring-brand-primary focus:border-brand-primary" />
-            <button @click="handleAddToCart" class="flex-grow bg-brand-primary text-white font-semibold py-3 px-6 rounded-lg hover:bg-opacity-80 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed" :disabled="addToCartDisabled">
-              {{ (displayStock <= 0 ? 'Out of Stock' : 'Add to Cart') }}
+            <button @click="handleAddToCart" class="flex-grow bg-brand-primary text-white font-bold py-3.5 px-6 rounded-lg hover:bg-opacity-80 hover:scale-105 transform transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-neutral-medium disabled:text-neutral-dark flex items-center justify-center" :disabled="addToCartDisabled">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              <span>{{ (displayStock <= 0 ? 'Out of Stock' : 'Add to Cart') }}</span>
             </button>
           </div>
-          <NuxtLink to="/" class="inline-block mt-6 text-brand-primary hover:underline">&larr; Back to all products</NuxtLink>
+          <NuxtLink to="/" class="inline-block mt-6 text-brand-primary hover:underline transition-colors duration-200 ease-in-out hover:text-brand-primary/80">&larr; Back to all products</NuxtLink>
         </div>
       </div>
 
@@ -202,7 +207,7 @@
       <div v-if="product && !pending && !fetchError" class="mt-12">
         <div class="border-b border-gray-200">
           <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-            <button v-for="tab in tabs" :key="tab.key" @click="selectTab(tab.key)" :class="[activeTab === tab.key ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300', 'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none']">
+            <button v-for="tab in tabs" :key="tab.key" @click="selectTab(tab.key)" :class="[activeTab === tab.key ? 'border-brand-primary text-brand-primary' : 'border-transparent text-gray-500 hover:text-neutral-dark hover:border-neutral-medium', 'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors duration-200 ease-in-out']">
               {{ tab.label }}
             </button>
           </nav>
@@ -223,7 +228,7 @@
           <div v-if="activeTab === 'reviews'">
             <h3 class="sr-only">Customer Reviews</h3>
             <div class="mb-8 p-4 border border-gray-200 rounded-lg bg-gray-50">
-              <div v-if="!isLoggedIn" class="text-center"><p class="text-gray-700">Please <NuxtLink to="/login" class="text-indigo-600 hover:underline font-medium">login</NuxtLink> to write a review.</p></div>
+              <div v-if="!isLoggedIn" class="text-center"><p class="text-gray-700">Please <NuxtLink to="/login" class="text-brand-primary hover:underline font-medium">login</NuxtLink> to write a review.</p></div>
               <div v-else>
                 <div v-if="isLoadingUserReview" class="text-center text-gray-600"><p>Loading your review status...</p><div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-500 mt-2"></div></div>
                 <div v-else-if="userHasReviewed && userReview">
@@ -238,7 +243,7 @@
                 <div v-else-if="!showReviewForm" class="text-center"><button @click="openReviewForm" class="px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition-colors">Write a Review</button></div>
                 <div v-if="showReviewForm && !userHasReviewed">
                   <ReviewForm :product-id="product.id" @review-submitted-successfully="handleReviewSubmittedSuccessfully" />
-                  <button @click="showReviewForm = false" class="mt-2 w-full text-center px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md">Cancel</button>
+                  <button @click="showReviewForm = false" class="mt-2 w-full text-center px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors duration-200">Cancel</button>
                 </div>
               </div>
             </div>
@@ -250,7 +255,7 @@
               <ul v-else class="space-y-6">
                 <li v-for="review in productPublicReviews" :key="review.id" class="pb-6 border-b border-gray-100 last:border-b-0">
                   <div class="flex items-start space-x-3">
-                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-semibold">{{ review.user_name ? review.user_name.charAt(0).toUpperCase() : 'U' }}</div>
+                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-brand-secondary flex items-center justify-center text-brand-primary font-semibold">{{ review.user_name ? review.user_name.charAt(0).toUpperCase() : 'U' }}</div>
                     <div class="flex-1">
                       <div class="flex items-center justify-between"><p class="text-sm font-medium text-gray-900">{{ review.user_name || 'Anonymous User' }}</p><p class="text-xs text-gray-500">{{ new Date(review.created_at).toLocaleDateString() }}</p></div>
                       <div class="flex items-center mt-1"><span v-for="i in 5" :key="`pub-star-${review.id}-${i}`" class="h-4 w-4" :class="getPublicReviewStarClass(review.rating, i)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg></span></div>
@@ -261,9 +266,9 @@
                 </li>
               </ul>
               <div class="mt-8 flex justify-center items-center space-x-3" v-if="reviewPaginationData && reviewPaginationData.totalPages > 1">
-                <button @click="currentPublicReviewsPage = reviewPaginationData.currentPage - 1" :disabled="reviewPaginationData.currentPage <= 1" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+                <button @click="currentPublicReviewsPage = reviewPaginationData.currentPage - 1" :disabled="reviewPaginationData.currentPage <= 1" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200">Previous</button>
                 <span class="text-sm text-gray-700">Page {{ reviewPaginationData.currentPage }} of {{ reviewPaginationData.totalPages }}</span>
-                <button @click="currentPublicReviewsPage = reviewPaginationData.currentPage + 1" :disabled="reviewPaginationData.currentPage >= reviewPaginationData.totalPages" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+                <button @click="currentPublicReviewsPage = reviewPaginationData.currentPage + 1" :disabled="reviewPaginationData.currentPage >= reviewPaginationData.totalPages" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200">Next</button>
               </div>
             </div>
           </div>
