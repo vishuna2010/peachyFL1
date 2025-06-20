@@ -78,12 +78,12 @@ router.post('/', validateCreateCategory, async (req, res, next) => {
     if (result.rows.length > 0) {
       const newCategory = result.rows[0];
       auditLogService.recordAuditEvent(
-        'CREATE_CATEGORY',
-        { userId: req.user.userId, userEmail: req.user.email }, // actor from isAuthenticated
+        'CATEGORY_CREATE_SUCCESS',
+        { userId: req.user.userId, userEmail: req.user.email },
         { resourceType: 'CATEGORY', resourceId: newCategory.id },
-        { name: newCategory.name, description: newCategory.description, parent_category_id: newCategory.parent_category_id }, // details: new category data
+        { createdData: { name: newCategory.name, description: newCategory.description, parent_category_id: newCategory.parent_category_id } },
         req
-      ).catch(err => console.error('Audit log failed for CREATE_CATEGORY:', err));
+      ).catch(err => console.error('Audit log failed for CATEGORY_CREATE_SUCCESS:', err));
       res.status(201).json(newCategory);
     } else {
       // Fallback if RETURNING * somehow didn't return the row, though it should on success.
@@ -212,12 +212,12 @@ router.put('/:id', validateCategoryIdParam, validateUpdateCategory, async (req, 
     if (req.body.hasOwnProperty('parent_category_id')) changes.parent_category_id = updatedCategory.parent_category_id;
 
     auditLogService.recordAuditEvent(
-      'UPDATE_CATEGORY',
+      'CATEGORY_UPDATE_SUCCESS',
       { userId: req.user.userId, userEmail: req.user.email },
       { resourceType: 'CATEGORY', resourceId: updatedCategory.id },
-      { updatedFields: req.body, newData: changes }, // Log what was attempted and the result
+      { inputData: req.body, updatedData: { name: updatedCategory.name, description: updatedCategory.description, parent_category_id: updatedCategory.parent_category_id } },
       req
-    ).catch(err => console.error('Audit log failed for UPDATE_CATEGORY:', err));
+    ).catch(err => console.error('Audit log failed for CATEGORY_UPDATE_SUCCESS:', err));
     res.status(200).json(updatedCategory);
   } catch (error) {
     if (error.code === '23505' && error.constraint === 'categories_name_key') {
@@ -254,12 +254,12 @@ router.delete('/:id', validateCategoryIdParam, async (req, res, next) => {
 
     // If deletion was successful (rowCount > 0)
     auditLogService.recordAuditEvent(
-      'DELETE_CATEGORY',
+      'CATEGORY_DELETE_SUCCESS',
       { userId: req.user.userId, userEmail: req.user.email },
-      { resourceType: 'CATEGORY', resourceId: categoryId }, // categoryId from req.params
-      { message: `Category ID ${categoryId} deleted.` },
+      { resourceType: 'CATEGORY', resourceId: categoryId },
+      { deletedDataIdentifier: { id: categoryId } },
       req
-    ).catch(err => console.error('Audit log failed for DELETE_CATEGORY:', err));
+    ).catch(err => console.error('Audit log failed for CATEGORY_DELETE_SUCCESS:', err));
 
     res.status(204).send();
   } catch (error) {

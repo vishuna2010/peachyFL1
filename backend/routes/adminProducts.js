@@ -359,18 +359,22 @@ router.put(
       // though this is a product update. For products, most fields are probably fine.
 
       auditLogService.recordAuditEvent(
-        'UPDATE_PRODUCT',
-        { userId: req.user.userId, userEmail: req.user.email }, // actor from isAuthenticated
-        { resourceType: 'PRODUCT', resourceId: productId }, // productId from req.params
+        'PRODUCT_UPDATE_SUCCESS',
+        { userId: req.user.userId, userEmail: req.user.email },
+        { resourceType: 'PRODUCT', resourceId: productId },
         {
-          message: `Product ID ${productId} updated.`,
-          // Log only the keys of attempted changes to keep audit log concise,
-          // or log the actual values if they are not too large.
-          // For this iteration, let's log the keys that were part of the update request.
-          updatedFields: Object.keys(fieldsAttemptedToUpdate)
+          inputData: fieldsAttemptedToUpdate,
+          updatedDataSnapshot: {
+              name: updatedProduct.name,
+              description: updatedProduct.description,
+              price: updatedProduct.price,
+              sku: updatedProduct.sku,
+              stock_quantity: updatedProduct.stock_quantity,
+              product_status: updatedProduct.product_status
+          }
         },
-        req // requestContext for IP/User-Agent
-      ).catch(err => console.error(`Audit log failed for UPDATE_PRODUCT (ID: ${productId}):`, err));
+        req
+      ).catch(err => console.error(`Audit log failed for PRODUCT_UPDATE_SUCCESS (ID: ${productId}):`, err));
 
       res.status(200).json({ data: updatedProduct });
 

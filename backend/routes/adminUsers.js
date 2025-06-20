@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
+const auditLogService = require('../services/auditLogService');
 const { body, param, validationResult } = require('express-validator');
 const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppError');
 
@@ -69,7 +70,18 @@ router.put('/:id/role', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'User not found.' });
     }
-    res.status(200).json({ message: 'User role updated successfully.', user: result.rows[0] });
+    const updatedUser = result.rows[0];
+    auditLogService.recordAuditEvent(
+      'USER_ROLE_UPDATE_SUCCESS',
+      { userId: req.user.userId, userEmail: req.user.email },
+      { resourceType: 'USER', resourceId: updatedUser.id },
+      {
+        message: `User ID ${updatedUser.id} role updated to ${updatedUser.role}.`,
+        updated_role: updatedUser.role
+      },
+      req
+    ).catch(err => console.error('Audit log failed for USER_ROLE_UPDATE_SUCCESS:', err));
+    res.status(200).json({ message: 'User role updated successfully.', user: updatedUser });
   } catch (error) {
     console.error(`Error updating role for user ${id}:`, error);
     res.status(500).json({ message: 'Error updating user role.' });
@@ -151,9 +163,30 @@ router.put(
 
       const updateQuery = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING id, name, email, role, is_tax_exempt, tax_exemption_certificate_id, tax_exemption_notes, created_at, updated_at;`;
       const result = await client.query(updateQuery, values);
+      const finalUpdatedUser = result.rows[0];
 
       await client.query('COMMIT');
-      res.status(200).json(result.rows[0]);
+
+      const attemptedChanges = { ...updates };
+      // Clean up sensitive fields if necessary, e.g. delete attemptedChanges.password;
+
+      auditLogService.recordAuditEvent(
+        'USER_UPDATE_SUCCESS',
+        { userId: req.user.userId, userEmail: req.user.email },
+        { resourceType: 'USER', resourceId: finalUpdatedUser.id },
+        {
+          message: `User ID ${finalUpdatedUser.id} details updated by admin.`,
+          inputData: attemptedChanges,
+          updatedSnapshot: {
+              name: finalUpdatedUser.name,
+              email: finalUpdatedUser.email,
+              role: finalUpdatedUser.role,
+              is_tax_exempt: finalUpdatedUser.is_tax_exempt
+          }
+        },
+        req
+      ).catch(err => console.error('Audit log failed for USER_UPDATE_SUCCESS:', err));
+      res.status(200).json(finalUpdatedUser);
 
     } catch (error) {
       await client.query('ROLLBACK');
@@ -187,7 +220,15 @@ router.delete('/:id', async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'User not found.' });
     }
-    res.status(200).json({ message: 'User deleted successfully.', user: result.rows[0] });
+    const deletedUserInfo = result.rows[0];
+    auditLogService.recordAuditEvent(
+      'USER_DELETE_SUCCESS',
+      { userId: req.user.userId, userEmail: req.user.email },
+      { resourceType: 'USER', resourceId: deletedUserInfo.id },
+      { deletedUserEmail: deletedUserInfo.email },
+      req
+    ).catch(err => console.error('Audit log failed for USER_DELETE_SUCCESS:', err));
+    res.status(200).json({ message: 'User deleted successfully.', user: deletedUserInfo });
   } catch (error) {
     console.error(`Error deleting user ${id}:`, error);
     // Check for foreign key constraint violations if user is referenced elsewhere

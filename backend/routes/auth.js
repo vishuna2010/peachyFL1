@@ -68,12 +68,12 @@ router.post('/login', loginLimiter, async (req, res) => {
 
   if (!loginResult.success) {
     auditLogService.recordAuditEvent(
-      'LOGIN_FAILURE',
-      { userId: null, userEmail: email }, // actor (userId is unknown)
-      { resourceType: 'AUTH_ATTEMPT' }, // resource
-      { message: loginResult.message, reason: 'Invalid credentials' }, // details
-      req // requestContext
-    ).catch(err => console.error('Audit log failed for LOGIN_FAILURE:', err));
+      'USER_LOGIN_FAILURE',
+      { userId: null, userEmail: req.body.email },
+      { resourceType: 'AUTH_ATTEMPT' },
+      { message: loginResult.message, reason: 'Invalid credentials' },
+      req
+    ).catch(err => console.error('Audit log failed for USER_LOGIN_FAILURE:', err));
     return res.status(401).json({ message: loginResult.message });
   }
 
@@ -93,12 +93,12 @@ router.post('/login', loginLimiter, async (req, res) => {
     // Exclude sensitive fields from user object returned to client
     const { two_fa_secret: _, ...userResponse } = user;
     auditLogService.recordAuditEvent(
-      'LOGIN_SUCCESS',
-      { userId: user.id, userEmail: user.email }, // actor
-      { resourceType: 'USER', resourceId: user.id }, // resource (user themselves)
-      { message: 'User logged in successfully without 2FA.' }, // details
-      req // requestContext for IP/User-Agent
-    ).catch(err => console.error('Audit log failed for LOGIN_SUCCESS:', err));
+      'USER_LOGIN_SUCCESS',
+      { userId: user.id, userEmail: user.email },
+      { resourceType: 'USER', resourceId: user.id },
+      { message: 'User logged in successfully without 2FA.' },
+      req
+    ).catch(err => console.error('Audit log failed for USER_LOGIN_SUCCESS:', err));
     return res.status(200).json({
       success: true,
       twoFactorRequired: false,
@@ -282,12 +282,12 @@ router.post('/2fa/login-verify', loginLimiter, async (req, res) => {
       // Exclude sensitive fields from user object returned to client
       const { two_fa_secret: _, password: __, ...userResponse } = user;
       auditLogService.recordAuditEvent(
-        'LOGIN_SUCCESS_2FA',
-        { userId: user.id, userEmail: user.email }, // actor
-        { resourceType: 'USER', resourceId: user.id }, // resource
-        { message: 'User logged in successfully with 2FA.' }, // details
-        req // requestContext
-      ).catch(err => console.error('Audit log failed for LOGIN_SUCCESS_2FA:', err));
+        'USER_LOGIN_SUCCESS_2FA',
+        { userId: user.id, userEmail: user.email },
+        { resourceType: 'USER', resourceId: user.id },
+        { message: 'User logged in successfully with 2FA.' },
+        req
+      ).catch(err => console.error('Audit log failed for USER_LOGIN_SUCCESS_2FA:', err));
       return res.status(200).json({
         success: true,
         token: jwtToken,
@@ -295,12 +295,12 @@ router.post('/2fa/login-verify', loginLimiter, async (req, res) => {
       });
     } else {
       auditLogService.recordAuditEvent(
-        'LOGIN_FAILURE_2FA',
-        { userId: user.id, userEmail: user.email }, // actor (userId is known here)
-        { resourceType: 'AUTH_ATTEMPT', resourceId: user.id }, // resource
-        { message: 'Invalid 2FA code.' }, // details
-        req // requestContext
-      ).catch(err => console.error('Audit log failed for LOGIN_FAILURE_2FA:', err));
+        'USER_LOGIN_FAILURE_2FA',
+        { userId: user.id, userEmail: user.email },
+        { resourceType: 'AUTH_ATTEMPT', resourceId: user.id },
+        { message: 'Invalid 2FA code.' },
+        req
+      ).catch(err => console.error('Audit log failed for USER_LOGIN_FAILURE_2FA:', err));
       return res.status(401).json({ success: false, message: 'Invalid 2FA code.' });
     }
   } catch (error) {
