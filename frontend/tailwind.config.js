@@ -12,18 +12,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        'brand-primary': '#6b46c1', // Example: A purple shade
-        'brand-secondary': '#f0e6ff', // Example: A light purple/lavender
-        'brand-accent': '#ff8c00',   // Example: Dark orange for accents
-        'neutral-light': '#f7fafc',
-        'neutral-medium': '#e2e8f0',
-        'neutral-dark': '#a0aec0',
-        'text-primary': '#2d3748',
-        'text-secondary': '#4a5568',
+        'venus-background': '#ffffff',
+        'venus-text-primary': '#1a1a1a',
+        'venus-text-secondary': '#555555',
+        'venus-accent-gold': '#b08d57',
+        'venus-accent-sale': '#e73387',
+        'venus-neutral-light': '#f5f5f5',
+        'venus-neutral-medium': '#e0e0e0',
+        'venus-neutral-dark': '#333333',
       },
-    },
-    fontFamily: {
-      sans: ['Poppins', ...defaultTheme.fontFamily.sans],
+      fontFamily: {
+        sans: ['Lato', 'Poppins', ...defaultTheme.fontFamily.sans],
+        serif: ['Playfair Display', ...defaultTheme.fontFamily.serif],
+      },
     },
   },
   plugins: [],

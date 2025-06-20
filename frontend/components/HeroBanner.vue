@@ -12,7 +12,7 @@
 
     <!-- Content -->
     <div class="relative z-20 text-center p-6 md:p-8">
-      <h1 ref="titleRef" class="text-4xl sm:text-5xl md:text-6xl font-bold mb-4 leading-tight opacity-0 translate-y-5 transition-all duration-1000 ease-in-out" v-if="title">
+      <h1 ref="titleRef" class="text-4xl sm:text-5xl md:text-6xl font-bold font-serif mb-4 leading-tight opacity-0 translate-y-5 transition-all duration-1000 ease-in-out" v-if="title">
         {{ title }}
       </h1>
       <p ref="subtitleRef" class="text-lg sm:text-xl md:text-2xl text-neutral-light mb-8 max-w-2xl mx-auto opacity-0 translate-y-5 transition-all duration-1000 ease-in-out delay-300" v-if="subtitle">
@@ -22,7 +22,7 @@
         ref="buttonRef"
         v-if="buttonText && buttonLink"
         :to="buttonLink"
-        class="bg-brand-primary hover:bg-opacity-80 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors duration-300 shadow-lg hover:shadow-xl opacity-0 translate-y-5 transition-all duration-1000 ease-in-out delay-500"
+        class="bg-venus-text-primary text-white hover:bg-venus-accent-gold font-sans font-semibold py-3 px-8 rounded-sm text-base transition-colors duration-300 shadow-md hover:shadow-lg opacity-0 translate-y-5 transition-all duration-1000 ease-in-out delay-500"
       >
         {{ buttonText }}
       </NuxtLink>

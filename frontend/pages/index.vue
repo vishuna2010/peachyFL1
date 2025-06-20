@@ -2,8 +2,63 @@
   <div class="pb-8">
     <HeroBanner v-bind="heroData" />
 
+    <div class="py-6 bg-venus-background">
+      <div class="container mx-auto space-y-4 px-4">
+        <PromotionalBanner
+          mainText="IT'S ALL ON SALE! Extra 35% off sale & outlet w/"
+          linkText="HURRYANDSHOP"
+          linkUrl="/sale?code=HURRYANDSHOP" <!-- Example link -->
+          type="primary"
+        />
+        <PromotionalBanner
+          title="FREE SHIPPING OVER $75+"
+          mainText="No Code, Just Shop!"
+          type="secondary"
+        />
+      </div>
+    </div>
+
+    <section class="py-12 bg-venus-background">
+      <div class="container mx-auto px-4">
+        <h2 class="text-3xl font-serif text-venus-text-primary text-center mb-8">Shop By Category</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
+          <CategoryHighlightCard
+            categoryName="Dresses"
+            imageUrl="https://images.unsplash.com/photo-1595991209266-5ff5a3a2f020?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80"
+            categoryLink="/categories/dresses"
+          />
+          <CategoryHighlightCard
+            categoryName="The Swim Shop"
+            imageUrl="https://images.unsplash.com/photo-1500304400269-bac1eda94035?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80"
+            categoryLink="/categories/swim"
+          />
+          <CategoryHighlightCard
+            categoryName="New Arrivals"
+            imageUrl="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1170&q=80"
+            categoryLink="/new"
+          />
+        </div>
+      </div>
+    </section>
+
+    <section class="py-12 bg-venus-neutral-light"> <!-- Using a slightly different bg for visual separation -->
+      <div class="container mx-auto px-4">
+        <h2 class="text-3xl font-serif text-venus-text-primary text-center mb-8">Best Sellers</h2>
+        <div class="text-center text-venus-text-secondary">
+          <p>Our most loved looks - this section is under construction!</p>
+          <!-- Placeholder for a grid of product cards later -->
+          <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6 opacity-50">
+            <div class="h-64 bg-venus-neutral-medium rounded-sm animate-pulse"></div>
+            <div class="h-64 bg-venus-neutral-medium rounded-sm animate-pulse"></div>
+            <div class="h-64 bg-venus-neutral-medium rounded-sm animate-pulse md:block hidden"></div>
+            <div class="h-64 bg-venus-neutral-medium rounded-sm animate-pulse lg:block hidden"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <div class="p-4 md:p-8">
-      <h1 class="text-3xl font-bold text-text-primary mb-8 text-center" id="products">Featured Products</h1>
+      <h1 class="text-3xl font-serif text-venus-text-primary mb-8 text-center" id="products">Featured Products</h1>
 
       <!-- Mobile Filters Toggle Button -->
       <div class="lg:hidden mb-4 text-center">
@@ -37,12 +92,12 @@
         <!-- Mobile Filter Modal/Drawer -->
         <div v-if="isMobileFiltersOpen" class="fixed inset-0 z-40 flex lg:hidden" role="dialog" aria-modal="true">
           <div class="fixed inset-0 bg-black bg-opacity-50" @click="isMobileFiltersOpen = false" aria-hidden="true"></div>
-          <div class="relative flex-1 flex flex-col max-w-xs w-full bg-white shadow-xl transform transition-transform duration-300 ease-in-out"
+          <div class="relative flex-1 flex flex-col max-w-xs w-full bg-venus-background shadow-2xl transform transition-transform duration-300 ease-in-out"
                :class="isMobileFiltersOpen ? 'translate-x-0' : '-translate-x-full'">
             <div class="absolute top-0 right-0 -mr-12 pt-2 z-50">
               <button
                 type="button"
-                class="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white text-white hover:text-gray-200"
+                class="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-venus-accent-gold/50 text-venus-text-primary hover:text-venus-accent-gold"
                 @click="isMobileFiltersOpen = false"
                 aria-label="Close filter panel"
               >
@@ -68,7 +123,7 @@
         </div>
 
         <div class="lg:col-span-3">
-          <div v-if="isLoading" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div v-if="isLoading" class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6">
             <ProductCardSkeleton v-for="n in limit" :key="`skeleton-${n}`" />
           </div>
           <div v-else-if="fetchError" class="text-center py-10">
@@ -76,9 +131,9 @@
             <button @click="() => fetchProducts(currentPage)" class="mt-4 px-4 py-2 bg-brand-primary text-white rounded hover:bg-opacity-90 font-semibold transition-all duration-200 ease-in-out hover:scale-105 transform">Try Again</button>
           </div>
           <div v-else-if="!products.length" class="text-center py-10">
-            <p class="text-lg text-text-secondary">No products found matching your criteria.</p>
+            <p class="text-lg text-venus-text-secondary">No products found matching your criteria.</p>
           </div>
-          <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div v-else class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6">
             <ProductCard v-for="product in products" :key="product.id" :product="product" />
           </div>
 
@@ -86,17 +141,17 @@
             <button
               @click="changePage(currentPage - 1)"
               :disabled="!paginationData.hasPrevPage"
-              class="px-4 py-2 border border-neutral-dark rounded-md text-sm font-medium hover:bg-neutral-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+              class="px-4 py-2 border border-venus-neutral-medium text-venus-text-secondary hover:bg-venus-neutral-light hover:text-venus-text-primary rounded-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 ease-in-out"
             >
               Previous
             </button>
-            <span class="text-sm text-text-secondary">
+            <span class="text-sm text-venus-text-secondary">
               Page {{ paginationData.page }} of {{ paginationData.totalPages }}
             </span>
             <button
               @click="changePage(currentPage + 1)"
               :disabled="!paginationData.hasNextPage"
-              class="px-4 py-2 border border-neutral-dark rounded-md text-sm font-medium hover:bg-neutral-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+              class="px-4 py-2 border border-venus-neutral-medium text-venus-text-secondary hover:bg-venus-neutral-light hover:text-venus-text-primary rounded-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 ease-in-out"
             >
               Next
             </button>
@@ -115,6 +170,8 @@ import ProductCard from '~/components/ProductCard.vue';
 import ProductCardSkeleton from '~/components/ProductCardSkeleton.vue';
 import ProductFilters from '~/components/ProductFilters.vue';
 import HeroBanner from '~/components/HeroBanner.vue';
+import PromotionalBanner from '~/components/PromotionalBanner.vue';
+import CategoryHighlightCard from '~/components/CategoryHighlightCard.vue';
 import FilterIcon from '~/components/icons/FilterIcon.vue';
 import CloseIcon from '~/components/icons/CloseIcon.vue';
 
@@ -125,11 +182,11 @@ const runtimeConfig = useRuntimeConfig();
 const { addToCart } = useCart();
 
 const heroData = ref({
-  title: 'Summer Collection is Here!',
-  subtitle: 'Discover the latest trends and refresh your wardrobe.',
-  buttonText: 'Shop Now',
-  buttonLink: '#products',
-  imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1200&q=80'
+  title: 'Golden Hour Glow', // Example from venus.com text
+  subtitle: 'Sunset pinks, vibrant oranges, brand-new styles. Summer nights just met their match.',
+  buttonText: 'SHOP NEW ARRIVALS',
+  buttonLink: '/new', // Assuming a "/new" route exists
+  imageUrl: 'https://images.unsplash.com/photo-1508427953056-b00b8d78ebf5?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80' // A fashion/summer vibe image
 });
 
 const products = ref([]);

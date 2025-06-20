@@ -1,32 +1,32 @@
 <template>
   <div class="p-4 lg:p-0"> {/* Adjusted padding for desktop vs mobile use */}
     <h3
-      class="text-lg font-semibold text-gray-800 mb-4 lg:mb-3"
-      :class="{'sticky top-0 bg-white py-3 border-b border-gray-200 px-4 -mx-4 z-10': isMobile }"
+      class="text-lg font-semibold font-serif text-venus-text-primary mb-4 lg:mb-3"
+      :class="{'sticky top-0 bg-venus-background py-3 border-b border-venus-neutral-medium px-4 -mx-4 z-10': isMobile }"
     >
       Filters
     </h3>
     <div class="space-y-6">
       <!-- Search Term (Placeholder for now, will be added from index.vue) -->
       <div>
-        <label for="filter-search" class="block text-sm font-medium text-gray-700 mb-1">Search</label>
+        <label for="filter-search" class="block text-sm font-medium text-venus-text-primary mb-1">Search</label>
         <input
           type="text"
           id="filter-search"
           :value="localSearchTerm"
           @input="localSearchTerm = $event.target.value"
           placeholder="Product name..."
-          class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary"
+          class="w-full px-3 py-2 border border-venus-neutral-medium text-venus-text-secondary rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold"
         />
       </div>
 
       <!-- Category Filter -->
       <div>
-        <label for="filter-category" class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+        <label for="filter-category" class="block text-sm font-medium text-venus-text-primary mb-1">Category</label>
         <select
           id="filter-category"
           v-model="localSelectedCategoryId"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary bg-white pr-8"
+          class="w-full px-3 py-2 border border-venus-neutral-medium text-venus-text-secondary rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold bg-venus-background pr-8"
         >
           <option :value="null">All Categories</option>
           <option v-for="category in categories" :key="category.id" :value="category.id">
@@ -37,11 +37,11 @@
 
       <!-- Color Swatch Filter -->
       <div v-if="isLoadingOptions">
-        <label class="block text-sm font-medium text-gray-700 mb-1">Color</label>
+        <label class="block text-sm font-medium text-venus-text-primary mb-1">Color</label>
         <div class="h-8 bg-gray-200 rounded w-full animate-pulse"></div>
       </div>
       <div v-else-if="colorOption && colorOptionValues.length > 0">
-        <label class="block text-sm font-medium text-gray-700 mb-1">{{ colorOption.name }}</label>
+        <label class="block text-sm font-medium text-venus-text-primary mb-1">{{ colorOption.name }}</label>
         <div class="flex flex-wrap gap-2 mt-1">
           <button
             v-for="colorValObj in colorOptionValues"
@@ -49,10 +49,10 @@
             type="button"
             @click="selectColor(colorValObj.id)"
             :class="[
-              'p-1.5 border rounded-lg flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary/50 transition-all duration-150',
+              'p-1.5 border flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-venus-accent-gold/50 transition-all duration-150 rounded-md', // Base classes, added rounded-md here
               localSelectedColorValueId === colorValObj.id
-                ? 'border-brand-primary ring-2 ring-brand-primary/50 shadow-md'
-                : 'border-gray-300 hover:border-gray-400 hover:shadow-sm'
+                ? 'border-venus-accent-gold ring-2 ring-venus-accent-gold/50 shadow-md' // Selected state
+                : 'border-venus-neutral-medium hover:border-gray-400 hover:shadow-sm' // Default state for non-selected
             ]"
             :aria-pressed="localSelectedColorValueId === colorValObj.id"
           >
@@ -61,14 +61,14 @@
               :style="{ backgroundColor: colorValObj.value.toLowerCase() }"
               :title="`Select ${colorOption.name}: ${colorValObj.value}`"
             ></span>
-            <span class="text-sm text-gray-700 pr-1">{{ colorValObj.value }}</span>
+            <span class="text-sm text-venus-text-secondary pr-1">{{ colorValObj.value }}</span>
           </button>
         </div>
       </div>
 
       <!-- Price Range -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Price Range</label>
+        <label class="block text-sm font-medium text-venus-text-primary mb-1">Price Range</label>
         <div class="flex items-center space-x-2">
             <input
               type="number"
@@ -77,7 +77,7 @@
               placeholder="Min"
               min="0"
               step="0.01"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary"
+              class="w-full px-3 py-2 border border-venus-neutral-medium text-venus-text-secondary rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold"
             />
             <span class="text-gray-500">-</span>
             <input
@@ -87,7 +87,7 @@
               placeholder="Max"
               min="0"
               step="0.01"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary"
+              class="w-full px-3 py-2 border border-venus-neutral-medium text-venus-text-secondary rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold"
             />
         </div>
         <p v-if="priceError" class="text-xs text-red-500 mt-1">{{ priceError }}</p>
@@ -95,11 +95,11 @@
 
       <!-- Sort By -->
       <div>
-        <label for="filter-sortby" class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+        <label for="filter-sortby" class="block text-sm font-medium text-venus-text-primary mb-1">Sort By</label>
         <select
             id="filter-sortby"
             v-model="localSortBy"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary bg-white pr-8"
+            class="w-full px-3 py-2 border border-venus-neutral-medium text-venus-text-secondary rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold bg-venus-background pr-8"
         >
               <option value="created_at_desc">Newest</option>
               <option value="created_at_asc">Oldest</option>
@@ -113,13 +113,13 @@
       <div class="pt-2 space-y-3">
         <button
           @click="handleApplyFilters"
-          class="w-full px-4 py-2 bg-brand-primary text-white text-sm font-medium rounded-md hover:bg-brand-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary"
+          class="w-full px-4 py-2 bg-venus-text-primary text-white text-sm font-medium rounded-sm hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-venus-accent-gold/50"
         >
           Apply Filters
         </button>
         <button
           @click="handleResetFilters"
-          class="w-full px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          class="w-full px-4 py-2 bg-venus-neutral-light text-venus-text-secondary text-sm font-medium rounded-sm hover:bg-venus-neutral-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-venus-accent-gold/50 border border-venus-neutral-medium"
         >
           Reset Filters
         </button>
