@@ -7,7 +7,7 @@
         <PromotionalBanner
           mainText="IT'S ALL ON SALE! Extra 35% off sale & outlet w/"
           linkText="HURRYANDSHOP"
-          linkUrl="/sale?code=HURRYANDSHOP" <!-- Example link -->
+          linkUrl="/sale?code=HURRYANDSHOP"
           type="primary"
         />
         <PromotionalBanner
