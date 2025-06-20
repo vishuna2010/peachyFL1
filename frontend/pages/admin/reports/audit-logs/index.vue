@@ -152,7 +152,7 @@ const fetchAuditLogs = async (page = pagination.currentPage) => {
       }
     }
 
-    const response = await $axios.get('/api/admin/audit-logs', { params });
+        const response = await $axios.get('admin/audit-logs', { params });
     auditLogs.value = response.data.data;
     pagination.currentPage = response.data.pagination.currentPage;
     pagination.totalPages = response.data.pagination.totalPages;
