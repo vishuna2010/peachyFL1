@@ -71,9 +71,9 @@ onMounted(() => {
       subtitleRef.value.classList.remove('opacity-0', 'translate-y-5');
       subtitleRef.value.classList.add('opacity-100', 'translate-y-0');
     }
-    if (buttonRef.value) {
-      buttonRef.value.classList.remove('opacity-0', 'translate-y-5');
-      buttonRef.value.classList.add('opacity-100', 'translate-y-0');
+    if (buttonRef.value && buttonRef.value.$el) { // Check for buttonRef.value and its $el for NuxtLink
+      buttonRef.value.$el.classList.remove('opacity-0', 'translate-y-5');
+      buttonRef.value.$el.classList.add('opacity-100', 'translate-y-0');
     }
     if (backgroundImageRef.value) {
       backgroundImageRef.value.classList.remove('scale-110');

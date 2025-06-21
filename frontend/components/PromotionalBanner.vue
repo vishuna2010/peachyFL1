@@ -14,6 +14,7 @@ import { computed } from 'vue';
 
 const props = defineProps({
   title: { type: String, default: '' },
+  subtitle: { type: String, default: '' }, // Added subtitle prop
   mainText: { type: String, required: true },
   linkText: { type: String, default: '' },
   linkUrl: { type: String, default: '#' },

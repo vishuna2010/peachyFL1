@@ -8,11 +8,11 @@
 
       <!-- Navigation Links (Placeholders) -->
       <nav class="hidden md:flex space-x-6 items-center">
-        <NuxtLink to="/new" class="text-venus-text-primary hover:text-venus-accent-gold font-medium transition-colors duration-200 ease-in-out">New</NuxtLink>
-        <NuxtLink to="/tops" class="text-venus-text-primary hover:text-venus-accent-gold font-medium transition-colors duration-200 ease-in-out">Tops</NuxtLink>
-        <NuxtLink to="/dresses" class="text-venus-text-primary hover:text-venus-accent-gold font-medium transition-colors duration-200 ease-in-out">Dresses</NuxtLink>
-        <NuxtLink to="/swim" class="text-venus-text-primary hover:text-venus-accent-gold font-medium transition-colors duration-200 ease-in-out">Swim</NuxtLink>
-        <NuxtLink to="/sale" class="text-venus-text-primary hover:text-venus-accent-sale font-bold transition-colors duration-200 ease-in-out">Sale</NuxtLink>
+        <NuxtLink to="#" class="text-venus-text-primary hover:text-venus-accent-gold font-medium transition-colors duration-200 ease-in-out">New</NuxtLink>
+        <NuxtLink to="#" class="text-venus-text-primary hover:text-venus-accent-gold font-medium transition-colors duration-200 ease-in-out">Tops</NuxtLink>
+        <NuxtLink to="#" class="text-venus-text-primary hover:text-venus-accent-gold font-medium transition-colors duration-200 ease-in-out">Dresses</NuxtLink>
+        <NuxtLink to="#" class="text-venus-text-primary hover:text-venus-accent-gold font-medium transition-colors duration-200 ease-in-out">Swim</NuxtLink>
+        <NuxtLink to="#" class="text-venus-text-primary hover:text-venus-accent-sale font-bold transition-colors duration-200 ease-in-out">Sale</NuxtLink>
       </nav>
 
       <!-- Action Icons (Placeholders) -->

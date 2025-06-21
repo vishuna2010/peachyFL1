@@ -754,7 +754,8 @@ watch(currentPublicReviewsPage, (newPage, oldPage) => {
 });
 
 async function checkUserReviewStatus() {
-  if (!isLoggedIn.value || !product.value?.id) {
+  // Guard against isLoggedIn or product not being fully initialized yet
+  if (typeof isLoggedIn === 'undefined' || !isLoggedIn.value || !product.value?.id) {
     userHasReviewed.value = false; userReview.value = null;
     showReviewForm.value = false;
     return;
