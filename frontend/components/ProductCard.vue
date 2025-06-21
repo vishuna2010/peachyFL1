@@ -81,28 +81,36 @@ const props = defineProps({
 });
 
 const formattedPrice = computed(() => {
-  // Try to use final_price if available (often set by backend for variants/sales on list views)
-  // Otherwise, fall back to product.price
-  const priceToFormat = typeof props.product.final_price === 'number'
-    ? props.product.final_price
-    : typeof props.product.price === 'number'
-      ? props.product.price
-      : null;
+  let priceToParse = null;
 
-  if (priceToFormat !== null) {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(priceToFormat);
+  if (props.product.final_price !== undefined && props.product.final_price !== null) {
+    priceToParse = props.product.final_price;
+  } else if (props.product.price !== undefined && props.product.price !== null) {
+    priceToParse = props.product.price;
   }
-  return '$0.00'; // Fallback for invalid price
+
+  const numericPrice = parseFloat(priceToParse);
+
+  if (!isNaN(numericPrice)) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(numericPrice);
+  }
+  return '$0.00'; // Fallback for invalid or missing price
 });
 
 const handleAddToCart = () => {
-  if (props.product && !props.product.has_variants && props.product.stock_quantity && props.product.stock_quantity > 0) {
+  const priceForCart = parseFloat(
+    (props.product.final_price !== undefined && props.product.final_price !== null)
+    ? props.product.final_price
+    : props.product.price
+  );
+
+  if (props.product && !props.product.has_variants && props.product.stock_quantity && props.product.stock_quantity > 0 && !isNaN(priceForCart)) {
     const cartItemData = {
       id: props.product.id, // Use product ID as item ID if no variants
       product_id: props.product.id,
       variant_id: null,
       name: props.product.name,
-      price: parseFloat(typeof props.product.final_price === 'number' ? props.product.final_price : props.product.price),
+      price: priceForCart,
       sku: props.product.sku,
       image_url: props.product.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image',
       type: 'product',
