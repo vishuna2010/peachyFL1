@@ -267,7 +267,7 @@ This section outlines the primary driver for future backend development, based o
 
 ### II.J Tax Management UI (New Section)
 *   `[X] Admin Sidebar Menu: "Tax Management" collapsible menu with links to Tax Overview, Tax Classes, Tax Rates.`
-*   `[ ] Tax Overview Page (`/admin/taxes/index.vue`): Placeholder created.`
+*   `[X] Tax Overview Page (`/admin/taxes/index.vue`): Placeholder created.`
 *   `[X] Tax Classes Pages (`/admin/taxes/classes/...`): Full CRUD UI for Tax Classes (list, new, edit). Edit page includes functionality to list, link, and unlink Tax Rates to/from a Tax Class. (Backend API: `GET /api/admin/tax-classes`, `POST /api/admin/tax-classes`, `GET /api/admin/tax-classes/:id`, `PUT /api/admin/tax-classes/:id`, `DELETE /api/admin/tax-classes/:id`, plus rate linking endpoints).`
 *   `[X] Tax Rates Pages (`/admin/taxes/rates/...`): Full CRUD UI for Tax Rates (list, new, edit). (Backend API: `GET /api/admin/tax-rates`, `POST /api/admin/tax-rates`, `GET /api/admin/tax-rates/:id`, `PUT /api/admin/tax-rates/:id`, `DELETE /api/admin/tax-rates/:id`).`
 
