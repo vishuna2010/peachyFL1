@@ -29,7 +29,21 @@ const loadCartFromLocalStorage = () => {
   if (process.client) {
     const storedCart = localStorage.getItem(CART_STORAGE_KEY);
     if (storedCart) {
-      cartItems.value = JSON.parse(storedCart);
+      try {
+        const parsedCart = JSON.parse(storedCart);
+        // Basic validation: check if it's an array (or an object if your cart structure is different)
+        if (Array.isArray(parsedCart)) {
+          cartItems.value = parsedCart;
+        } else {
+          console.warn('Stored cart data is not an array, resetting cart:', parsedCart);
+          cartItems.value = []; // Reset to empty if structure is unexpected
+          localStorage.removeItem(CART_STORAGE_KEY); // Remove invalid cart data
+        }
+      } catch (error) {
+        console.error('Error parsing cart from localStorage:', error);
+        cartItems.value = []; // Reset to empty cart on parsing error
+        localStorage.removeItem(CART_STORAGE_KEY); // Remove corrupted cart data
+      }
     }
   }
 };
