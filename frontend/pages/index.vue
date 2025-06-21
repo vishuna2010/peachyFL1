@@ -156,12 +156,20 @@
                     {{ new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(productForQuickView.price) }}
                   </p>
                   <p v-if="productForQuickView.sku" class="text-sm text-venus-text-secondary mb-1">SKU: {{ productForQuickView.sku }}</p>
-                  <p v-if="productForQuickView.category_name" class="text-sm text-venus-text-secondary mb-3">Category: {{ productForQuickView.category_name }}</p>
+                  <p v-if="productForQuickView.category_name" class="text-sm text-venus-text-secondary mb-1">Category: {{ productForQuickView.category_name }}</p>
+
+                  <div v-if="productForQuickView.has_variants" class="my-3 p-2 bg-blue-50 border border-blue-200 rounded-sm text-sm text-blue-700">
+                    This product has other options (e.g., size, color). View full details to select.
+                  </div>
 
                   <!-- Placeholder for variant selection / add to cart form -->
-                  <button class="w-full mt-4 bg-venus-text-primary text-white py-2.5 px-4 rounded-sm hover:bg-opacity-80 transition-colors">
+                  <NuxtLink
+                    :to="`/products/${productForQuickView.id}`"
+                    @click="closeQuickViewModal"
+                    class="block w-full mt-4 bg-venus-text-primary text-white text-center py-2.5 px-4 rounded-sm hover:bg-opacity-80 transition-colors"
+                  >
                     View Full Details
-                  </button>
+                  </NuxtLink>
                    <p class="text-xs text-center mt-2 text-venus-text-secondary">(Full add to cart / variant selection in actual modal)</p>
                 </div>
               </div>
