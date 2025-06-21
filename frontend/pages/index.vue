@@ -7,7 +7,7 @@
         <PromotionalBanner
           mainText="IT'S ALL ON SALE! Extra 35% off sale & outlet w/"
           linkText="HURRYANDSHOP"
-          linkUrl="/sale?code=HURRYANDSHOP"
+          linkUrl="#"
           type="primary"
         />
         <PromotionalBanner
@@ -25,17 +25,17 @@
           <CategoryHighlightCard
             categoryName="Dresses"
             imageUrl="https://images.unsplash.com/photo-1595991209266-5ff5a3a2f020?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80"
-            categoryLink="/categories/dresses"
+            categoryLink="#"
           />
           <CategoryHighlightCard
             categoryName="The Swim Shop"
             imageUrl="https://images.unsplash.com/photo-1500304400269-bac1eda94035?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80"
-            categoryLink="/categories/swim"
+            categoryLink="#"
           />
           <CategoryHighlightCard
             categoryName="New Arrivals"
             imageUrl="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1170&q=80"
-            categoryLink="/new"
+            categoryLink="#"
           />
         </div>
       </div>
@@ -185,7 +185,7 @@ const heroData = ref({
   title: 'Golden Hour Glow', // Example from venus.com text
   subtitle: 'Sunset pinks, vibrant oranges, brand-new styles. Summer nights just met their match.',
   buttonText: 'SHOP NEW ARRIVALS',
-  buttonLink: '/new', // Assuming a "/new" route exists
+  buttonLink: '#', // Assuming a "/new" route exists
   imageUrl: 'https://images.unsplash.com/photo-1508427953056-b00b8d78ebf5?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80' // A fashion/summer vibe image
 });
 

@@ -735,8 +735,9 @@ watch(product, (newProduct) => {
   }
 }, { deep: true });
 
-watch(isLoggedIn, (newValue, oldValue) => {
-  if (newValue !== oldValue) {
+watch(() => isLoggedIn?.value, (newValue, oldValue) => {
+  // Ensure isLoggedIn itself is defined before proceeding, newValue checks its .value
+  if (typeof isLoggedIn !== 'undefined' && newValue !== oldValue) {
     checkUserReviewStatus();
   }
 });
