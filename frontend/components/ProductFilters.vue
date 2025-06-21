@@ -206,37 +206,44 @@ const selectColor = (valueId) => {
 };
 
 async function fetchGlobalOptionsAndColorValues() {
+  // For now, we will not fetch global options from an admin endpoint
+  // in a public component. This prevents 401 errors for non-admin users.
+  // A proper public API for filterable options should be created.
   isLoadingOptions.value = true;
   optionsFetchError.value = null;
   try {
-    // Fetch all global option types
-    const optionsResponse = await $axios.get('/admin/options'); // Assuming admin endpoint lists all global options
-    allGlobalOptions.value = optionsResponse.data.data || [];
+    // Placeholder: In the future, this should call a public API endpoint
+    // that provides filterable options like "Color" and its values.
+    // For example:
+    // const response = await $axios.get('/api/public/filter-options');
+    // const allPublicOptions = response.data.data || [];
+    // const foundColorOption = allPublicOptions.find(opt => opt.name.toLowerCase() === 'color');
+    // if (foundColorOption) {
+    //   colorOption.value = { id: foundColorOption.id, name: foundColorOption.name };
+    //   colorOptionValues.value = foundColorOption.values || [];
+    // } else {
+    //   console.warn('Public "Color" option type not found.');
+    //   colorOptionValues.value = [];
+    // }
+    console.warn('ProductFilters: Admin API call for global options skipped. A public API is needed.');
+    colorOption.value = null; // Explicitly set to null or a default state
+    colorOptionValues.value = []; // Ensure it's empty
+    allGlobalOptions.value = [];
 
-    // Find the "Color" option
-    const foundColorOption = allGlobalOptions.value.find(
-      opt => opt.name.toLowerCase() === 'color'
-    );
-
-    if (foundColorOption) {
-      colorOption.value = foundColorOption;
-      // Fetch values for the "Color" option
-      const valuesResponse = await $axios.get(`/admin/options/${colorOption.value.id}/values`);
-      colorOptionValues.value = valuesResponse.data.data || [];
-    } else {
-      console.warn('Global "Color" option type not found.');
-      colorOptionValues.value = []; // Ensure it's empty if color option doesn't exist
-    }
   } catch (err) {
-    console.error('Error fetching global options or color values:', err);
+    // This catch block might be for a future public API call
+    console.error('Error fetching public filter options:', err);
     optionsFetchError.value = err.response?.data?.message || err.message || 'Failed to load filter options.';
-    toast.error(optionsFetchError.value); // Notify user
+    // toast.error(optionsFetchError.value); // Optionally notify user if public API fails
   } finally {
     isLoadingOptions.value = false;
   }
 }
 
 onMounted(() => {
+  // Categories are passed via props.
+  // Fetching global options like color is currently problematic as it uses an admin endpoint.
+  // We will call the modified function which now avoids the admin endpoint.
   fetchGlobalOptionsAndColorValues();
 });
 
