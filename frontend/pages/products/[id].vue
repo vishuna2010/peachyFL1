@@ -280,8 +280,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch, reactive, useHead, nextTick } from 'vue';
-import { useRoute, useNuxtApp } from '#app';
+import { ref, onMounted, computed, watch, reactive, nextTick } from 'vue';
+import { useRoute, useNuxtApp, useHead } from '#app';
 import { useCart } from '~/composables/useCart';
 import { useAuth } from '~/composables/useAuth';
 import { useToast } from 'vue-toastification';
