@@ -822,6 +822,40 @@ const getPublicReviewStarClass = (rating, starIndex) => {
   return starIndex <= rating ? 'text-yellow-400' : 'text-gray-300';
 };
 
+async function fetchPublicProductReviews(page = 1) {
+  if (!product.value || !product.value.id) {
+    // Should not happen if called from watchers correctly, but good guard
+    productPublicReviews.value = [];
+    return;
+  }
+  isLoadingPublicReviews.value = true;
+  publicReviewsError.value = null;
+  try {
+    const response = await $axios.get(`/products/${product.value.id}/reviews`, {
+      params: {
+        page: page,
+        limit: reviewPaginationData.value.pageSize || 5, // Use a default limit
+      },
+    });
+    productPublicReviews.value = response.data.reviews || [];
+    if (response.data.pagination) {
+      reviewPaginationData.value = {
+        currentPage: response.data.pagination.currentPage,
+        totalPages: response.data.pagination.totalPages,
+        totalItems: response.data.pagination.totalItems,
+        pageSize: response.data.pagination.pageSize,
+      };
+    }
+  } catch (error) {
+    console.error('Error fetching public reviews:', error);
+    publicReviewsError.value = error.response?.data?.message || error.message || 'Could not load reviews.';
+    productPublicReviews.value = []; // Clear reviews on error
+    // toast.error(publicReviewsError.value); // Optional: notify user via toast
+  } finally {
+    isLoadingPublicReviews.value = false;
+  }
+}
+
 useHead({
   title: computed(() => product.value ? product.value.name : 'Product Details'),
 });
