@@ -134,7 +134,38 @@
             <p class="text-lg text-venus-text-secondary">No products found matching your criteria.</p>
           </div>
           <div v-else class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6">
-            <ProductCard v-for="product in products" :key="product.id" :product="product" />
+            <ProductCard v-for="product in products" :key="product.id" :product="product" @open-quick-view="openQuickViewModal" />
+          </div>
+
+          <!-- Basic QuickView Modal Placeholder -->
+          <div v-if="isQuickViewModalVisible && productForQuickView" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[100]">
+            <div class="bg-white p-6 rounded-lg shadow-xl max-w-xl w-full mx-4">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-serif text-venus-text-primary">{{ productForQuickView.name }}</h3>
+                <button @click="closeQuickViewModal" aria-label="Close quick view" class="text-venus-text-secondary hover:text-venus-text-primary">
+                  <CloseIcon class="w-6 h-6" />
+                </button>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <img :src="productForQuickView.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'" :alt="productForQuickView.name" class="w-full h-auto object-contain rounded-md max-h-80">
+                </div>
+                <div>
+                  <p class="text-venus-text-secondary mb-2 line-clamp-3">{{ productForQuickView.description }}</p>
+                  <p class="text-2xl font-semibold text-venus-text-primary my-3">
+                    {{ new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(productForQuickView.price) }}
+                  </p>
+                  <p v-if="productForQuickView.sku" class="text-sm text-venus-text-secondary mb-1">SKU: {{ productForQuickView.sku }}</p>
+                  <p v-if="productForQuickView.category_name" class="text-sm text-venus-text-secondary mb-3">Category: {{ productForQuickView.category_name }}</p>
+
+                  <!-- Placeholder for variant selection / add to cart form -->
+                  <button class="w-full mt-4 bg-venus-text-primary text-white py-2.5 px-4 rounded-sm hover:bg-opacity-80 transition-colors">
+                    View Full Details
+                  </button>
+                   <p class="text-xs text-center mt-2 text-venus-text-secondary">(Full add to cart / variant selection in actual modal)</p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="mt-8 flex justify-center items-center space-x-3" v-if="!isLoading && !fetchError && products.length > 0 && paginationData.totalPages > 1">
@@ -216,6 +247,22 @@ const fetchError = ref(null);
 const isMobileFiltersOpen = ref(false);
 const toggleMobileFilters = () => {
   isMobileFiltersOpen.value = !isMobileFiltersOpen.value;
+};
+
+// QuickView Modal State
+const productForQuickView = ref(null);
+const isQuickViewModalVisible = ref(false);
+
+const openQuickViewModal = (product) => {
+  productForQuickView.value = product;
+  isQuickViewModalVisible.value = true;
+  // Optional: Disable body scroll here
+};
+
+const closeQuickViewModal = () => {
+  isQuickViewModalVisible.value = false;
+  productForQuickView.value = null;
+  // Optional: Enable body scroll here
 };
 
 async function fetchCategories() {
