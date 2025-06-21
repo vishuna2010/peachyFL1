@@ -735,12 +735,18 @@ watch(product, (newProduct) => {
   }
 }, { deep: true });
 
-watch(() => isLoggedIn?.value, (newValue, oldValue) => {
-  // Ensure isLoggedIn itself is defined before proceeding, newValue checks its .value
-  if (typeof isLoggedIn !== 'undefined' && newValue !== oldValue) {
+// Watch for changes in the user object to infer login/logout status
+watch(user, (newUser, oldUser) => {
+  // A simple check: if user object reference changes, it might indicate login/logout.
+  // More sophisticated checks could compare newUser?.id with oldUser?.id.
+  // This also runs when the component mounts if `user` is already populated.
+  const wasLoggedIn = oldUser && oldUser.id;
+  const nowLoggedIn = newUser && newUser.id;
+
+  if (wasLoggedIn !== nowLoggedIn) {
     checkUserReviewStatus();
   }
-});
+}, { deep: true }); // deep watch might be useful if properties within user object change without the object itself changing instance
 
 watch(activeTab, (newTab) => {
   if (newTab === 'reviews' && product.value?.id && (!productPublicReviews.value || productPublicReviews.value.length === 0) && !isLoadingPublicReviews.value && !publicReviewsError.value) {
