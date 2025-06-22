@@ -1,18 +1,83 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isAuthenticated } = require('../auth');
+const { isAuthenticated } = require('../auth'); // We might replace this with a tryAuthenticate or handle manually
 const { sendEmail, getOrderConfirmationHtml, getOrderConfirmationText } = require('../services/emailService');
-const { NotFoundError, BadRequestError } = require('../utils/AppError');
-const taxService = require('../services/taxService'); // Import taxService
+const { NotFoundError, BadRequestError, ConflictError } = require('../utils/AppError'); // Added ConflictError
+const taxService = require('../services/taxService');
+const bcrypt = require('bcrypt'); // Added bcrypt
 
 // POST /api/orders - Create a new order
-router.post('/', isAuthenticated, async (req, res) => {
-  const { cart, shippingAddress, billingAddress, discount_code } = req.body;
-  const userId = req.user.userId;
+router.post('/', async (req, res, next) => { // Removed isAuthenticated, added next
+  const { cart, shippingAddress, billingAddress, discount_code, guestDetails } = req.body;
+  let userId;
+  let userEmailForOrder;
+  let userNameForOrder;
+  let userIsTaxExempt = false; // Default for guests or if not set
 
-  // --- 1. Validate input ---
-  if (!cart || !Array.isArray(cart) || cart.length === 0) {
+  const client = await db.pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    if (req.user && req.user.userId) { // User is logged in
+      userId = req.user.userId;
+      const userResult = await client.query('SELECT email, name, is_tax_exempt FROM users WHERE id = $1', [userId]);
+      if (userResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        // This indicates a serious issue if an authenticated user ID isn't found
+        return next(new NotFoundError('Authenticated user record not found.'));
+      }
+      userEmailForOrder = userResult.rows[0].email;
+      userNameForOrder = userResult.rows[0].name;
+      userIsTaxExempt = userResult.rows[0].is_tax_exempt || false;
+    } else { // Guest checkout or unauthenticated user
+      if (!guestDetails || !guestDetails.email || !guestDetails.firstName || !guestDetails.lastName) {
+        await client.query('ROLLBACK');
+        return next(new BadRequestError('Guest email and name are required for guest checkout.'));
+      }
+      if (!shippingAddress || !shippingAddress.line1 || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
+        await client.query('ROLLBACK');
+        return next(new BadRequestError('Complete shipping address is required for guest checkout.'));
+      }
+      userEmailForOrder = guestDetails.email.trim().toLowerCase();
+      userNameForOrder = `${guestDetails.firstName.trim()} ${guestDetails.lastName.trim()}`;
+
+      const existingUserCheck = await client.query('SELECT id, role, is_tax_exempt FROM users WHERE email = $1', [userEmailForOrder]);
+      if (existingUserCheck.rows.length > 0) {
+        if (existingUserCheck.rows[0].role !== 'guest') {
+          await client.query('ROLLBACK');
+          return next(new ConflictError('An account with this email already exists. Please log in to continue or use a different email.'));
+        } else {
+          // Existing guest user
+          userId = existingUserCheck.rows[0].id;
+          userIsTaxExempt = existingUserCheck.rows[0].is_tax_exempt || false;
+          // Optionally update guest user's name if it has changed
+          if (userNameForOrder !== existingUserCheck.rows[0].name) {
+             await client.query('UPDATE users SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [userNameForOrder, userId]);
+          }
+        }
+      } else {
+        // Create new guest user
+        const tempPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10); // More secure placeholder
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(tempPassword, saltRounds);
+
+        const guestUserInsertResult = await client.query(
+          'INSERT INTO users (name, email, password, role, is_tax_exempt) VALUES ($1, $2, $3, $4, $5) RETURNING id, is_tax_exempt',
+          [userNameForOrder, userEmailForOrder, hashedPassword, 'guest', false] // Guests are not tax-exempt by default
+        );
+        userId = guestUserInsertResult.rows[0].id;
+        userIsTaxExempt = guestUserInsertResult.rows[0].is_tax_exempt; // will be false from insert
+      }
+    }
+
+    // --- 1. Validate input (cart and addresses, now using finalShippingAddress) ---
+    const finalShippingAddress = shippingAddress; // shippingAddress is from req.body
+    const finalBillingAddress = (billingAddress && billingAddress.line1 && billingAddress.city && billingAddress.postalCode && billingAddress.country) ? billingAddress : finalShippingAddress;
+
+    if (!cart || !Array.isArray(cart) || cart.length === 0) {
+      await client.query('ROLLBACK');
     return res.status(400).json({ message: 'Cart is required and cannot be empty.' });
   }
   if (!shippingAddress || !shippingAddress.line1 || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
@@ -184,8 +249,9 @@ router.post('/', isAuthenticated, async (req, res) => {
 
     const taxCalculationResult = await taxService.calculateTaxForCartItems(
         cartItemsForTaxCalc,
-        userId,
-        addressForTaxCalculation, // Pass the correct address object
+        userId, // This is now correctly set for logged-in or guest users
+        addressForTaxCalculation,
+        userIsTaxExempt, // Pass the determined tax exemption status
         client
     );
 
@@ -322,27 +388,14 @@ router.post('/', isAuthenticated, async (req, res) => {
     };
     res.status(201).json({ message: 'Order created successfully.', order: createdOrderDetails });
 
-    // Email Sending Logic
-    let customerEmail = req.user.email;
-    let customerName = req.user.name;
-
-    if (!customerEmail || !customerName) {
-        try {
-            const userResult = await db.query('SELECT email, name FROM users WHERE id = $1', [userId]);
-            if (userResult.rows.length > 0) {
-                if (!customerEmail) customerEmail = userResult.rows[0].email;
-                if (!customerName) customerName = userResult.rows[0].name;
-            }
-        } catch (userFetchError) { console.error("Error fetching user details for order confirmation:", userFetchError); }
-    }
-
-    if (customerEmail) {
+    // Email Sending Logic - uses userEmailForOrder and userNameForOrder determined earlier
+    if (userEmailForOrder) {
       const emailOrderData = {
-          ...newOrder, // Contains DB accurate totals, including original_total_amount (now exclusive subtotal)
-          user: { name: customerName, email: customerEmail },
-          shippingAddress: req.body.shippingAddress, // Use original input for addresses display
-          billingAddress: finalBillingAddress,        // Use final billing for display
-          items: orderItemsToInsert.map((item, idx) => ({ // Use original items for display price consistency
+          ...newOrder,
+          user: { name: userNameForOrder, email: userEmailForOrder }, // Use determined name and email
+          shippingAddress: finalShippingAddress, // Use final addresses determined earlier
+          billingAddress: finalBillingAddress,
+          items: orderItemsToInsert.map((item, idx) => ({
               name: item.product_name,
               quantity: item.quantity,
               price_at_purchase: item.priceAtPurchase, // This is the original listed price

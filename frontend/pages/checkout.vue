@@ -4,18 +4,15 @@
 
     <div v-if="isLoadingAuthOrCart" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow text-venus-text-secondary">Loading checkout...</div>
 
-    <div v-else-if="!isAuthenticated" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
-      <p class="text-lg text-venus-text-secondary mb-4">You need to be logged in to proceed to checkout.</p>
-      <NuxtLink :to="`/login?redirect=${encodeURIComponent('/checkout')}`" class="mt-4 inline-block px-6 py-3 bg-venus-text-primary text-white font-medium rounded-sm hover:bg-opacity-80 transition-colors duration-200 ease-in-out">Login</NuxtLink>
-    </div>
-
-    <div v-else-if="cartItems.length === 0" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
-      <p class="text-lg text-venus-text-secondary mb-4">Your cart is empty. Please add items to your cart before proceeding to checkout.</p>
+    <div v-else-if="!isCartStoreInitialized.value || cartItems.length === 0" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
+      <p v-if="!isCartStoreInitialized.value" class="text-lg text-venus-text-secondary mb-4">Initializing cart...</p>
+      <p v-else class="text-lg text-venus-text-secondary mb-4">Your cart is empty. Please add items to your cart before proceeding to checkout.</p>
       <NuxtLink to="/" class="mt-4 inline-block px-6 py-3 bg-venus-text-primary text-white font-medium rounded-sm hover:bg-opacity-80 transition-colors duration-200 ease-in-out">Continue Shopping</NuxtLink>
     </div>
 
     <div v-else class="lg:grid lg:grid-cols-5 lg:gap-x-8 xl:gap-x-12 mt-6">
-      <div class="lg:col-span-2 order-first lg:order-last p-6 bg-venus-neutral-light rounded-sm shadow-md border-venus-neutral-medium h-fit lg:sticky lg:top-24">
+      <!-- Order Summary (Right Column on Desktop, First on Mobile) -->
+      <div class="lg:col-span-2 lg:order-last p-6 bg-venus-neutral-light rounded-sm shadow-md border-venus-neutral-medium h-fit lg:sticky lg:top-24">
         <h3 class="text-xl font-serif text-venus-text-primary mb-6">Order Summary</h3>
         <ul class="list-none p-0 m-0 space-y-3">
           <li v-for="item in cartItems" :key="item.productId" class="flex justify-between items-center text-sm">
@@ -40,9 +37,37 @@
       </div>
 
       <form @submit.prevent="handlePlaceOrder" class="lg:col-span-3 mt-8 lg:mt-0">
+        <!-- Guest Details Form -->
+        <div v-if="!isAuthenticated" class="mb-8 p-6 bg-white border border-gray-200 rounded-md shadow-sm">
+          <h3 class="text-xl font-serif text-venus-text-primary mb-4">Guest Information</h3>
+          <p class="text-sm text-venus-text-secondary mb-4">
+            Already have an account? <NuxtLink :to="`/login?redirect=${encodeURIComponent('/checkout')}`" class="text-venus-accent-gold hover:underline font-medium">Log In</NuxtLink>
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="mb-4">
+              <label for="guest-firstName" class="block text-sm font-medium text-venus-text-primary mb-1">First Name:</label>
+              <input type="text" id="guest-firstName" v-model="guestDetails.firstName" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold" />
+            </div>
+            <div class="mb-4">
+              <label for="guest-lastName" class="block text-sm font-medium text-venus-text-primary mb-1">Last Name:</label>
+              <input type="text" id="guest-lastName" v-model="guestDetails.lastName" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold" />
+            </div>
+          </div>
+          <div class="mb-4">
+            <label for="guest-email" class="block text-sm font-medium text-venus-text-primary mb-1">Email Address:</label>
+            <input type="email" id="guest-email" v-model="guestDetails.email" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold" />
+          </div>
+        </div>
+
+        <div v-else class="mb-8 p-6 bg-white border border-gray-200 rounded-md shadow-sm">
+           <h3 class="text-xl font-serif text-venus-text-primary mb-2">Welcome back, {{ authUser?.name || authUser?.email }}!</h3>
+           <p class="text-sm text-venus-text-secondary">You are checking out as a logged-in user.</p>
+        </div>
+
         <h3 class="text-xl font-serif text-venus-text-primary mb-6 mt-8 first:mt-0">Shipping Address</h3>
-        <div class="mb-4">
-          <label for="sa-line1" class="block text-sm font-medium text-venus-text-primary mb-1">Address Line 1:</label>
+        <div class="p-6 bg-white border border-gray-200 rounded-md shadow-sm">
+          <div class="mb-4">
+            <label for="sa-line1" class="block text-sm font-medium text-venus-text-primary mb-1">Address Line 1:</label>
           <input type="text" id="sa-line1" v-model="shippingAddress.line1" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
         </div>
         <div class="mb-4">
@@ -67,8 +92,10 @@
           <label for="sameAsShipping" class="text-sm text-venus-text-primary cursor-pointer">Billing address is the same as shipping address</label>
         </div>
 
-        <template v-if="!sameAsShipping">
-          <h3 class="text-xl font-serif text-venus-text-primary mb-6 mt-8 first:mt-0">Billing Address</h3>
+        </template>
+
+        <div v-if="!sameAsShipping" class="p-6 bg-white border border-gray-200 rounded-md shadow-sm mt-8">
+          <h3 class="text-xl font-serif text-venus-text-primary mb-6">Billing Address</h3>
           <div class="mb-4">
             <label for="ba-line1" class="block text-sm font-medium text-venus-text-primary mb-1">Address Line 1:</label>
             <input type="text" id="ba-line1" v-model="billingAddress.line1" :required="!sameAsShipping" class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
@@ -128,42 +155,33 @@ const shippingAddress = reactive({
 const billingAddress = reactive({
   line1: '', line2: '', city: '', postalCode: '', country: ''
 });
+const guestDetails = reactive({ // For guest checkout
+  email: '', firstName: '', lastName: ''
+});
 const sameAsShipping = ref(true);
 const isSubmitting = ref(false);
 const submissionError = ref('');
 
-onMounted(async () => {
-  await nextTick();
 
-  const updateLoadingState = () => {
-      const authReady = typeof isAuthInitialized === 'undefined' ? true : isAuthInitialized.value;
-      const cartReady = isCartStoreInitialized.value;
+// Watchers for auth and cart initialization
+watchEffect(() => {
+    const authReady = typeof isAuthInitialized === 'undefined' ? true : isAuthInitialized.value;
+    const cartReady = isCartStoreInitialized.value;
 
-      if (authReady && cartReady) {
-          isLoadingAuthOrCart.value = false;
-          isAuthenticated.value = !!authToken.value;
-          if (!isAuthenticated.value) {
-              router.replace(`/login?redirect=${encodeURIComponent('/checkout')}`);
-          } else if (cartItems.value.length === 0) {
-              router.replace('/cart');
-          }
-      }
-  };
+    if (authReady && cartReady) {
+        isLoadingAuthOrCart.value = false;
+        isAuthenticated.value = !!authToken.value; // Update isAuthenticated based on actual token
 
-  if (typeof isAuthInitialized !== 'undefined') {
-    watchEffect(() => {
-      if (isAuthInitialized.value && isCartStoreInitialized.value) {
-        updateLoadingState();
-      }
-    });
-  }
-   watchEffect(() => {
-      if (isCartStoreInitialized.value && (typeof isAuthInitialized === 'undefined' || isAuthInitialized.value)) {
-        updateLoadingState();
-      }
-  });
-
-  updateLoadingState();
+        if (isAuthenticated.value && cartItems.value.length === 0) {
+            console.log("User is authenticated but cart is empty. Redirecting to /cart");
+            router.replace('/cart');
+        } else if (!isAuthenticated.value && cartItems.value.length === 0) {
+            // If guest and cart becomes empty (e.g. cleared on another tab and then nav here)
+            console.log("User is guest and cart is empty. Redirecting to /cart");
+            router.replace('/cart');
+        }
+        // No automatic redirect to login if not authenticated, allow guest form to show
+    }
 });
 
 
@@ -171,15 +189,30 @@ const handlePlaceOrder = async () => {
   isSubmitting.value = true;
   submissionError.value = '';
 
-  const orderPayload = {
+  let orderPayload = {
     cart: cartItems.value.map(item => ({
-      productId: item.productId,
+      // Ensure all necessary item fields are sent, e.g., product_id, variant_id, quantity
+      // The backend currently expects productId, productVariantId, quantity from the original cart structure.
+      // Let's assume cartItems from useCart provides these.
+      productId: item.productId, // Base product ID
+      productVariantId: item.variantId || null, // Actual variant ID
       quantity: item.quantity,
+      // Price is not sent; backend recalculates. Tax class will be fetched by backend.
     })),
     shippingAddress: { ...shippingAddress },
     billingAddress: sameAsShipping.value ? { ...shippingAddress } : { ...billingAddress },
     discount_code: appliedDiscount.value?.code || undefined,
   };
+
+  if (!isAuthenticated.value) {
+    // Add guest details if not authenticated
+    if (!guestDetails.email || !guestDetails.firstName || !guestDetails.lastName) {
+      submissionError.value = "Please fill in all guest information fields.";
+      isSubmitting.value = false;
+      return;
+    }
+    orderPayload.guestDetails = { ...guestDetails };
+  }
 
   try {
     const response = await $axios.post('/orders', orderPayload);
