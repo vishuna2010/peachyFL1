@@ -88,15 +88,21 @@ router.post('/', async (req, res, next) => { // Removed isAuthenticated, added n
       return res.status(400).json({ message: 'Each cart item must have a valid base productId and a positive quantity.' });
     }
     if (item.productVariantId && typeof item.productVariantId !== 'number') {
-        return res.status(400).json({ message: `Invalid productVariantId format for product ${item.productId}.`});
+        // This validation block is part of the older structure.
+        // The newer validation for cart and addresses should ideally be consolidated
+        // after user/guest identification and after finalShippingAddress/finalBillingAddress are set.
+        // For now, this specific item validation can remain here, but the overall validation flow needs review.
+        await client.query('ROLLBACK'); // Rollback if client was defined and transaction started
+        return next(new BadRequestError(`Invalid productVariantId format for product ${item.productId}.`));
     }
   }
 
-  const finalBillingAddress = billingAddress && billingAddress.line1 ? billingAddress : shippingAddress;
-  const client = await db.pool.connect();
+  // Ensure this block is not reached if validation above failed and returned/called next.
+  // const finalBillingAddress = billingAddress && billingAddress.line1 ? billingAddress : shippingAddress; // REMOVE THIS LINE
+  // const client = await db.pool.connect(); // REMOVE THIS LINE (client is already connected at the top of the main try block)
 
-  try {
-    await client.query('BEGIN');
+  // try { // This try block is redundant if the main try block at the function start is used.
+    // await client.query('BEGIN'); // BEGIN was already called.
 
     let subtotalForItems = 0;
     const orderItemsToInsert = [];
