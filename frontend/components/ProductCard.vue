@@ -9,8 +9,13 @@
         />
       </NuxtLink>
       <button
-        @click.stop="handleOpenQuickView"
-        class="absolute bottom-4 left-1/2 -translate-x-1/2 w-10/12 bg-white text-venus-text-primary text-sm font-semibold px-4 py-2.5 rounded-sm shadow-md opacity-0 group-hover:opacity-100 transition-all duration-300 ease-in-out hover:bg-venus-neutral-light focus:outline-none focus:ring-2 focus:ring-venus-accent-gold"
+       @click.stop="handleOpenQuickView"
+class="absolute bottom-4 left-1/2 -translate-x-1/2 w-10/12
+       bg-white text-peach-pink border border-peach-pink text-sm font-semibold px-4 py-2.5
+       rounded-md shadow-md opacity-0 group-hover:opacity-100
+       transition-all duration-300 ease-in-out
+       hover:bg-peach-pink hover:text-white
+       focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink"
       >
         Quick View
       </button>
