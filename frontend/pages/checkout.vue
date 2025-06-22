@@ -86,14 +86,14 @@
           <label for="sa-country" class="block text-sm font-medium text-venus-text-primary mb-1">Country:</label>
           <input type="text" id="sa-country" v-model="shippingAddress.country" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
         </div>
+        </div> <!-- Closing the div for shipping address fields -->
 
         <div class="flex items-center gap-2 my-5">
           <input type="checkbox" id="sameAsShipping" v-model="sameAsShipping" class="h-4 w-4 text-venus-accent-gold border-venus-neutral-medium rounded-sm focus:ring-1 focus:ring-venus-accent-gold focus:ring-offset-0" />
           <label for="sameAsShipping" class="text-sm text-venus-text-primary cursor-pointer">Billing address is the same as shipping address</label>
         </div>
 
-        </template>
-
+        <!-- Billing Address Section -->
         <div v-if="!sameAsShipping" class="p-6 bg-white border border-gray-200 rounded-md shadow-sm mt-8">
           <h3 class="text-xl font-serif text-venus-text-primary mb-6">Billing Address</h3>
           <div class="mb-4">
@@ -116,7 +116,7 @@
             <label for="ba-country" class="block text-sm font-medium text-venus-text-primary mb-1">Country:</label>
             <input type="text" id="ba-country" v-model="billingAddress.country" :required="!sameAsShipping" class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
           </div>
-        </template>
+        </div> <!-- Closing the div for billing address section -->
 
         <div v-if="submissionError" class="mt-4 p-4 text-sm text-red-700 bg-red-50 border border-red-300 rounded-sm">{{ submissionError }}</div>
 
