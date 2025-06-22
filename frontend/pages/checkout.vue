@@ -1,5 +1,5 @@
 <template>
-  <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-[calc(100vh-theme(spacing.16))]">
+  <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen"> {/* Simplified min-h class for debugging */}
     <h2 class="text-3xl font-serif text-venus-text-primary mb-8 text-center">Checkout</h2>
     <ClientOnly>
       <div v-if="isLoadingAuthOrCart" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-md shadow text-venus-text-secondary">Loading checkout...</div>
