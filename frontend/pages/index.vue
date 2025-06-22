@@ -138,35 +138,34 @@
           </div>
 
           <!-- Basic QuickView Modal Placeholder -->
-          <div v-if="isQuickViewModalVisible && productForQuickView" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[100]">
-            <div class="bg-white p-6 rounded-lg shadow-xl max-w-xl w-full mx-4">
+          <div v-if="isQuickViewModalVisible && productForQuickView" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[100] p-4">
+            <div class="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full mx-auto overflow-y-auto max-h-[90vh]"> {/* Adjusted max-w and mx for centering, added overflow and max-h */}
               <div class="flex justify-between items-center mb-4">
-                <h3 class="text-2xl font-serif text-venus-text-primary">{{ productForQuickView.name }}</h3>
-                <button @click="closeQuickViewModal" aria-label="Close quick view" class="text-venus-text-secondary hover:text-venus-text-primary">
+                <h3 class="text-2xl font-serif text-peach-pink">{{ productForQuickView.name }}</h3>
+                <button @click="closeQuickViewModal" aria-label="Close quick view" class="text-gray-500 hover:text-peach-pink transition-colors duration-150">
                   <CloseIcon class="w-6 h-6" />
                 </button>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <img :src="productForQuickView.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'" :alt="productForQuickView.name" class="w-full h-auto object-contain rounded-md max-h-80">
+                  <img :src="productForQuickView.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'" :alt="productForQuickView.name" class="w-full h-auto object-contain rounded-md max-h-80 md:max-h-96"> {/* Increased max-h slightly for larger modal */}
                 </div>
                 <div>
                   <p class="text-venus-text-secondary mb-2 line-clamp-3">{{ productForQuickView.description }}</p>
-                  <p class="text-2xl font-semibold text-venus-text-primary my-3">
+                  <p class="text-2xl font-semibold text-orange-gold my-3"> {/* Price color updated */}
                     {{ new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(productForQuickView.price) }}
                   </p>
                   <p v-if="productForQuickView.sku" class="text-sm text-venus-text-secondary mb-1">SKU: {{ productForQuickView.sku }}</p>
                   <p v-if="productForQuickView.category_name" class="text-sm text-venus-text-secondary mb-1">Category: {{ productForQuickView.category_name }}</p>
 
-                  <div v-if="productForQuickView.has_variants" class="my-3 p-2 bg-blue-50 border border-blue-200 rounded-sm text-sm text-blue-700">
+                  <div v-if="productForQuickView.has_variants" class="my-3 p-3 bg-sky-blue bg-opacity-10 border border-sky-blue border-opacity-30 rounded-md text-sm text-sky-blue"> {/* Info message styling updated */}
                     This product has other options (e.g., size, color). View full details to select.
                   </div>
 
-                  <!-- Placeholder for variant selection / add to cart form -->
                   <NuxtLink
                     :to="`/products/${productForQuickView.id}`"
                     @click="closeQuickViewModal"
-                    class="block w-full mt-4 bg-venus-text-primary text-white text-center py-2.5 px-4 rounded-sm hover:bg-opacity-80 transition-colors"
+                    class="block w-full mt-4 bg-peach-pink text-white text-center py-2.5 px-4 rounded-md hover:bg-opacity-90 transition-colors duration-200"
                   >
                     View Full Details
                   </NuxtLink>
