@@ -165,7 +165,7 @@
                   <NuxtLink
                     :to="`/products/${productForQuickView.id}`"
                     @click="closeQuickViewModal"
-                    class="block w-full mt-4 bg-peach-pink text-white text-center py-2.5 px-4 rounded-md hover:bg-opacity-90 transition-colors duration-200" /* Button styling updated */
+                    class="block w-full mt-4 bg-peach-pink text-white text-center py-2.5 px-4 rounded-md hover:bg-opacity-90 transition-colors duration-200"
                   >
                     View Full Details
                   </NuxtLink>
