@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
-const JsBarcode = require('jsbarcode');
-const { createCanvas } = require('canvas'); // Node canvas for jsbarcode
+// const JsBarcode = require('jsbarcode'); // Commented out
+// const { createCanvas } = require('canvas'); // Commented out
 const qrcode = require('qrcode');
 
 /**
@@ -10,15 +10,17 @@ const qrcode = require('qrcode');
  * @returns {string} The barcode image as a data URL (PNG).
  */
 function generateBarcodeDataURL(text, options = {}) {
-  const canvas = createCanvas(200, 100); // Dimensions can be adjusted
-  JsBarcode(canvas, text, {
-    format: 'CODE128', // Common format, can be changed
-    displayValue: true, // Display the text below the barcode
-    fontSize: 18,
-    margin: 10,
-    ...options,
-  });
-  return canvas.toDataURL('image/png');
+  // const canvas = createCanvas(200, 100); // Commented out
+  // JsBarcode(canvas, text, { // Commented out
+  //   format: 'CODE128',
+  //   displayValue: true,
+  //   fontSize: 18,
+  //   margin: 10,
+  //   ...options,
+  // });
+  // return canvas.toDataURL('image/png'); // Commented out
+  console.warn("Barcode generation (JsBarcode/Canvas) is currently disabled.");
+  return null; // Return null as canvas is not available
 }
 
 /**

@@ -17,16 +17,23 @@
         <div class="lg:col-span-2 lg:order-last p-6 bg-venus-neutral-light rounded-sm shadow-md border-venus-neutral-medium h-fit lg:sticky lg:top-24">
         <h3 class="text-xl font-serif text-venus-text-primary mb-6">Order Summary</h3>
         <ul class="list-none p-0 m-0 space-y-3">
-          <li v-for="item in cartItems" :key="item.productId" class="flex justify-between items-center text-sm">
-            <span class="text-venus-text-secondary pr-2">{{ item.name }} ({{ item.quantity }} x ${{ item.price.toFixed(2) }})</span>
-            <span class="font-medium text-venus-text-primary whitespace-nowrap">${{ (item.price * item.quantity).toFixed(2) }}</span>
+          <li v-for="item in cartItems" :key="item.cartItemId" class="text-sm pb-3 mb-3 border-b border-venus-neutral-medium last:border-b-0 last:pb-0 last:mb-0">
+            <div class="flex justify-between items-start">
+              <div class="pr-2">
+                <span class="font-medium text-venus-text-primary">{{ item.name }}</span>
+                <p v-if="item.tax_class_id" class="text-xs text-venus-text-secondary/80 mt-0.5">
+                  (Tax ID: {{ item.tax_class_id }}) {/* Placeholder, ideally show name if available */}
+                </p>
+              </div>
+              <span class="font-medium text-venus-text-primary whitespace-nowrap">${{ (item.price * item.quantity).toFixed(2) }}</span>
+            </div>
+            <p class="text-xs text-venus-text-secondary mt-1">{{ item.quantity }} x ${{ item.price.toFixed(2) }}</p>
           </li>
         </ul>
         <p class="flex justify-between text-base text-venus-text-secondary mt-6 pt-4 border-t border-venus-neutral-medium">
           <span>Subtotal:</span>
           <span class="font-semibold text-venus-text-primary">${{ cartSubtotal.toFixed(2) }}</span>
         </p>
-        </div>
         <div v-if="appliedDiscount" class="mt-1 text-sm text-venus-accent-sale">
           <p class="flex justify-between text-sm text-venus-accent-sale mt-2">
             <span>Discount ({{ appliedDiscount.code }}):</span>

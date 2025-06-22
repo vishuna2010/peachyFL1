@@ -96,27 +96,17 @@ async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, dbClientOpt
 }
 
 // New function to calculate taxes for an entire cart
-async function calculateTaxForCartItems(cartItems, userId, shippingAddress, dbClientOptional) {
+async function calculateTaxForCartItems(cartItems, userId, addressForTaxCalculation, userIsTaxExempt, dbClientOptional) {
   const queryRunner = dbClientOptional || db;
   const line_items_with_tax_details = [];
   let overall_total_tax_amount = 0;
   const tax_summary_details = {}; // Example: { "CA Sales Tax": { total_taxable_amount: X, total_tax_collected: Y } }
 
-  // Fetch user's tax exemption status
-  let userIsTaxExempt = false;
-  if (userId) {
-    try {
-      const userResult = await queryRunner.query('SELECT is_tax_exempt FROM users WHERE id = $1', [userId]);
-      if (userResult.rows.length > 0) {
-        userIsTaxExempt = userResult.rows[0].is_tax_exempt;
-      }
-    } catch (userError) {
-      console.error(`Error fetching user tax exemption status for user ID ${userId}:`, userError);
-      // Decide if this should throw or proceed without exemption
-    }
-  }
+  // userIsTaxExempt is now passed as a parameter.
+  // The internal fetch for user's tax exemption status is removed as orders.js handles it.
 
   if (userIsTaxExempt) {
+    console.log(`User ID ${userId} is tax exempt. Applying zero tax to cart items.`);
     // If user is exempt, all tax amounts are zero
     for (const item of cartItems) {
       line_items_with_tax_details.push({
