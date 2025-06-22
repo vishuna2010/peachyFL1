@@ -255,19 +255,23 @@ router.get(
           p.name as product_name,
           p.sku as product_sku,
           pv.sku as variant_sku,
-          oi.tax_class_id_at_purchase, -- Added
-          tc.name AS tax_class_name_at_purchase -- Added
+          oi.tax_class_id_at_purchase,
+          tc.name AS tax_class_name_at_purchase,
+          oi.line_item_tax_amount, -- Added for invoice
+          oi.applied_tax_rate_percentage -- Added for invoice
         FROM order_items oi
         JOIN products p ON oi.product_id = p.id
         LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id
-        LEFT JOIN tax_classes tc ON oi.tax_class_id_at_purchase = tc.id -- Added Join
+        LEFT JOIN tax_classes tc ON oi.tax_class_id_at_purchase = tc.id
         WHERE oi.order_id = $1
         ORDER BY oi.id ASC;
       `;
       const itemsResult = await db.query(itemsQuery, [orderId]);
       orderDataFromDb.items = itemsResult.rows.map(item => ({
         ...item,
-        price_at_purchase: parseFloat(item.price_at_purchase), // Ensure numeric
+        price_at_purchase: parseFloat(item.price_at_purchase),
+        line_item_tax_amount: item.line_item_tax_amount ? parseFloat(item.line_item_tax_amount) : 0, // Ensure numeric, default to 0
+        applied_tax_rate_percentage: item.applied_tax_rate_percentage ? parseFloat(item.applied_tax_rate_percentage) : null, // Ensure numeric or null
         display_sku: item.variant_sku || item.product_sku || 'N/A'
       }));
 

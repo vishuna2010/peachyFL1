@@ -27,21 +27,42 @@
               </div>
               <span class="font-medium text-venus-text-primary whitespace-nowrap">${{ (item.price * item.quantity).toFixed(2) }}</span>
             </div>
-            <p class="text-xs text-venus-text-secondary mt-1">{{ item.quantity }} x ${{ item.price.toFixed(2) }}</p>
+            <p class="text-xs text-venus-text-secondary mt-1">{{ item.quantity }} x ${{ item.price.toFixed(2) }} (Unit Price)</p>
+            <p v-if="getLineItemTaxCheckout(item) !== null && !isFetchingTaxDetails" class="text-xs text-venus-text-secondary/90 mt-0.5">
+                Item Tax: ${{ getLineItemTaxCheckout(item) }}
+            </p>
+            <p v-if="isFetchingTaxDetails && !getLineItemTaxCheckout(item)" class="text-xs text-venus-text-secondary/70 animate-pulse mt-0.5">Calculating item tax...</p>
           </li>
         </ul>
-        <p class="flex justify-between text-base text-venus-text-secondary mt-6 pt-4 border-t border-venus-neutral-medium">
-          <span>Subtotal:</span>
-          <span class="font-semibold text-venus-text-primary">${{ cartSubtotal.toFixed(2) }}</span>
-        </p>
-        <div v-if="appliedDiscount" class="mt-1 text-sm text-venus-accent-sale">
-          <p class="flex justify-between text-sm text-venus-accent-sale mt-2">
-            <span>Discount ({{ appliedDiscount.code }}):</span>
-            <span class="font-medium"><strong>-${{ parseFloat(appliedDiscount.calculated_discount_amount_for_cart).toFixed(2) }}</strong></span>
-          </p>
+
+        <div class="mt-6 pt-4 border-t border-venus-neutral-medium space-y-1 text-sm">
+            <p class="flex justify-between text-venus-text-secondary">
+              <span>Subtotal:</span>
+              <span class="font-medium text-venus-text-primary">${{ cartSubtotal.toFixed(2) }}</span>
+            </p>
+            <div v-if="appliedDiscount" class="text-venus-accent-sale">
+              <p class="flex justify-between">
+                <span>Discount ({{ appliedDiscount.code }}):</span>
+                <span class="font-medium">-${{ calculatedDiscountAmount.toFixed(2) }}</span>
+              </p>
+            </div>
+            <div v-if="isFetchingTaxDetails" class="text-venus-text-secondary animate-pulse">
+                <p class="flex justify-between"><span>Tax:</span><span>Calculating...</span></p>
+            </div>
+            <div v-else-if="taxCalculationError">
+                <p class="flex justify-between text-red-600"><span>Tax:</span><span>Error</span></p>
+                <p class="text-xs text-red-500 text-right">{{ taxCalculationError }}</p>
+            </div>
+            <div v-else-if="cartItems.length > 0">
+                 <p class="flex justify-between text-venus-text-secondary">
+                    <span>Total Tax:</span>
+                    <span class="font-medium text-venus-text-primary">${{ cartTotalTax }}</span>
+                </p>
+            </div>
         </div>
+
         <p class="flex justify-between text-xl font-bold text-venus-text-primary mt-4 pt-4 border-t-2 border-venus-accent-gold">
-          <span>Final Total:</span>
+          <span>Grand Total:</span>
           <span>${{ cartFinalTotalPrice.toFixed(2) }}</span>
         </p>
       </div>
@@ -153,7 +174,13 @@ const {
   appliedDiscount,
   clearCart,
   isCartInitialized: isCartStoreInitialized,
-  initCart // Added initCart here
+  initCart,
+  // Tax-related properties from useCart
+  cartTotalTax,
+  cartLineItemsWithTaxDetails,
+  isFetchingTaxDetails, // To potentially show loading if taxes are being recalculated
+  taxCalculationError,  // To show error if tax calculation failed
+  calculatedDiscountAmount
 } = useCart();
 const { authToken, authUser, isAuthInitialized } = useAuth();
 const { $axios } = useNuxtApp();
@@ -178,9 +205,22 @@ const submissionError = ref('');
 console.log('[checkout.vue setup] Initial isCartStoreInitialized.value:', isCartStoreInitialized.value);
 
 const showInitializingMessage = computed(() => {
-  console.log('[checkout.vue computed showInitializingMessage] isCartStoreInitialized.value is:', isCartStoreInitialized.value);
+  // console.log('[checkout.vue computed showInitializingMessage] isCartStoreInitialized.value is:', isCartStoreInitialized.value);
   return !isCartStoreInitialized.value;
 });
+
+// Helper function to find tax details for a specific cart item (similar to cart.vue)
+const getLineItemTaxCheckout = (cartItem) => {
+  if (!cartLineItemsWithTaxDetails.value || cartLineItemsWithTaxDetails.value.length === 0) {
+    return null;
+  }
+  const taxDetail = cartLineItemsWithTaxDetails.value.find(taxItem =>
+    taxItem.product_id === cartItem.productId &&
+    (taxItem.variant_id === cartItem.variantId || (taxItem.variant_id === null && cartItem.variantId === null))
+  );
+  return taxDetail ? parseFloat(taxDetail.line_item_tax_amount).toFixed(2) : null;
+};
+
 
 // Watchers for auth and cart initialization
 watchEffect(() => {

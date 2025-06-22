@@ -1,22 +1,34 @@
-import { ref, computed, watch } from 'vue';
-import { useToast } from 'vue-toastification'; // Added import
+import { ref, computed, watch, onMounted } from 'vue';
+import { useToast } from 'vue-toastification';
+import { useAuth } from '~/composables/useAuth'; // Import useAuth to get user ID
 
-// Cart item structure:
+// Cart item structure (persisted in localStorage)
 // {
-//   cartItemId: 'prod123-variant456', // or 'prod123-base'
-//   productId: '123', // Base Product ID
-//   productVariantId: '456', // or null
-//   name: 'Awesome T-Shirt', // Base Product Name
+//   cartItemId: 'variant-VID' or 'product-PID',
+//   productId: 'PID', // Base Product ID
+//   variantId: 'VID', // or null
+//   name: 'Product Name (with variant info)',
 //   quantity: 1,
-//   price: 29.99, // Final price of this item (variant or base)
-//   image_url: 'path/to/variant_or_base_image.jpg',
-//   sku: 'SKU-RED-L', // Variant or base SKU
-//   selectedVariantDescription: 'Color: Red, Size: Large' // or empty string/null
+//   price: 29.99, // Unit price (pre-tax)
+//   image_url: 'path/to/image.jpg',
+//   sku: 'SKU-123',
+//   type: 'variant' or 'product',
+//   tax_class_id: 'TCID1', // Stored at time of adding to cart
+//   tax_class_name: 'Standard Rate', // Stored at time of adding to cart
 // }
 const cartItems = ref([]);
 const isCartInitialized = ref(false);
-
 const CART_STORAGE_KEY = 'myNuxtEcommerceCart';
+
+// For discount state (remains global to this composable instance)
+const appliedDiscount = ref(null);
+const discountValidationError = ref('');
+
+// New state for tax calculation results
+const cartTaxDetails = ref(null); // Will store { line_items_with_tax_details, total_tax_amount, tax_summary_details }
+const isFetchingTaxDetails = ref(false);
+const taxCalculationError = ref('');
+
 
 // --- Persistence ---
 const saveCartToLocalStorage = () => {
@@ -31,118 +43,153 @@ const loadCartFromLocalStorage = () => {
     if (storedCart) {
       try {
         const parsedCart = JSON.parse(storedCart);
-        // Basic validation: check if it's an array (or an object if your cart structure is different)
         if (Array.isArray(parsedCart)) {
           cartItems.value = parsedCart;
         } else {
-          console.warn('Stored cart data is not an array, resetting cart:', parsedCart);
-          cartItems.value = []; // Reset to empty if structure is unexpected
-          localStorage.removeItem(CART_STORAGE_KEY); // Remove invalid cart data
+          console.warn('Stored cart data is not an array, resetting cart.');
+          cartItems.value = [];
+          localStorage.removeItem(CART_STORAGE_KEY);
         }
       } catch (error) {
         console.error('Error parsing cart from localStorage:', error);
-        cartItems.value = []; // Reset to empty cart on parsing error
-        localStorage.removeItem(CART_STORAGE_KEY); // Remove corrupted cart data
+        cartItems.value = [];
+        localStorage.removeItem(CART_STORAGE_KEY);
       }
     }
   }
 };
 
-const appliedDiscount = ref(null);
-const discountValidationError = ref('');
-
-watch(cartItems, (newCart) => {
-  if (isCartInitialized.value) {
-    saveCartToLocalStorage();
-    if (newCart.length === 0) {
-        clearAppliedDiscountGlobal(); // Use a global-scoped clear if needed
-    }
-  }
-}, { deep: true });
-
-// Helper function to clear discount if cartItems is watched directly
-// This needs to be outside useCart if cartItems is a true global singleton.
-// For now, assuming cartItems is managed within the scope of useCart instances,
-// so clearAppliedDiscount from useCart context is fine.
-// If cartItems were a global useState, this would be:
+// This function is outside 'export const useCart' because appliedDiscount is also global here.
+// If these were part of the returned object from useCart, this wouldn't be necessary.
 function clearAppliedDiscountGlobal() {
     appliedDiscount.value = null;
     discountValidationError.value = '';
 }
 
-
 export const useCart = () => {
   const { $axios } = useNuxtApp();
-  const toast = useToast(); // Initialize toast
+  const toast = useToast();
+  const { authUser, isAuthenticated } = useAuth(); // Get user details
 
+  // --- Tax Calculation Function ---
+  const fetchCartTaxDetails = async (currentCartItems, currentUserId, shippingAddressForTax = null) => {
+    if (!currentCartItems || currentCartItems.length === 0) {
+      cartTaxDetails.value = null; // Clear tax details if cart is empty
+      taxCalculationError.value = '';
+      return;
+    }
+    isFetchingTaxDetails.value = true;
+    taxCalculationError.value = '';
+    try {
+      // Prepare payload for the backend
+      // Backend expects: { productId, variantId, quantity, price }
+      const itemsToTax = currentCartItems.map(item => ({
+        productId: item.productId,
+        variantId: item.variantId || null,
+        quantity: item.quantity,
+        price: item.price // This is the unit price
+      }));
+
+      const payload = {
+        cartItems: itemsToTax,
+        userId: currentUserId || null, // Send null if no user
+        // shippingAddress: shippingAddressForTax // Optional: for tax estimation based on a specific address
+                                              // For now, we can omit it, and backend will use user's default or require it for guests.
+      };
+       // For cart/checkout, we might not pass a shippingAddress explicitly here,
+      // letting the backend decide based on user profile or requiring it if guest.
+      // The backend /calculate-taxes endpoint was designed to take an optional shippingAddress.
+      // If not provided, it uses the user's default (if logged in) or might error if guest and no address.
+      // For initial cart display, we might not have a shipping address yet.
+      // Let's assume for now, the backend handles this (e.g., by applying no tax or default tax if address is missing).
+      // Or, we could pass a default/placeholder if needed by the backend for guests.
+
+
+      const response = await $axios.post('/cart/calculate-taxes', payload);
+      cartTaxDetails.value = response.data;
+      console.log('Tax details fetched:', response.data);
+    } catch (error) {
+      console.error('Error fetching cart tax details:', error);
+      const message = error.response?.data?.message || 'Failed to calculate taxes.';
+      taxCalculationError.value = message;
+      // toast.error(message); // Optionally show toast, or let UI handle taxCalculationError
+      cartTaxDetails.value = null; // Clear previous tax details on error
+    } finally {
+      isFetchingTaxDetails.value = false;
+    }
+  };
+
+
+  // --- Cart Initialization ---
   const initCart = () => {
     if (process.client && !isCartInitialized.value) {
       loadCartFromLocalStorage();
       isCartInitialized.value = true;
-      console.log('Cart initialized from localStorage.');
+      console.log('Cart initialized from localStorage. Cart items count:', cartItems.value.length);
+      // Fetch tax details once cart is loaded if items exist
+      if (cartItems.value.length > 0) {
+        fetchCartTaxDetails(cartItems.value, isAuthenticated.value ? authUser.value?.id : null);
+      }
     }
   };
 
+  // Ensure initCart is called when the composable is first used client-side
+  if (process.client) {
+      onMounted(() => {
+          initCart();
+      });
+  }
+
+
+  // --- Cart Item Management ---
   const addToCart = (itemDetails, quantityToAdd = 1) => {
-    if (!itemDetails || !itemDetails.id) { // itemDetails.id is now variant_id or product_id
+    if (!itemDetails || !itemDetails.id) {
       console.error('Invalid itemDetails passed to addToCart', itemDetails);
-      toast.error("Could not add item to cart due to invalid product data.");
+      toast.error("Could not add item to cart: Invalid product data.");
       return;
     }
-    if (!isCartInitialized.value && process.client) {
-        initCart();
-    }
+    if (!isCartInitialized.value && process.client) initCart();
 
-    // Generate a unique cartItemId: 'variant-VID' or 'product-PID'
     const cartItemId = itemDetails.type === 'variant'
       ? `variant-${itemDetails.variant_id}`
       : `product-${itemDetails.product_id}`;
-
     const existingItem = cartItems.value.find(item => item.cartItemId === cartItemId);
 
     if (existingItem) {
       existingItem.quantity += quantityToAdd;
-      toast.info(`Quantity of "${existingItem.name}" updated to ${existingItem.quantity} in cart.`);
+      toast.info(`Quantity of "${existingItem.name}" updated to ${existingItem.quantity}.`);
     } else {
       const newItem = {
-        cartItemId: cartItemId, // Unique ID for the cart line item
-        id: itemDetails.id, // Original product or variant ID
-        productId: itemDetails.product_id, // Base product ID
-        variantId: itemDetails.variant_id || null, // Actual variant ID, if applicable
-        name: itemDetails.name, // Descriptive name (e.g., "Product - Red, Large")
-        price: parseFloat(itemDetails.price),
+        cartItemId,
+        id: itemDetails.id,
+        productId: itemDetails.product_id,
+        variantId: itemDetails.variant_id || null,
+        name: itemDetails.name,
+        price: parseFloat(itemDetails.price), // Unit price
         image_url: itemDetails.image_url || null,
         sku: itemDetails.sku || null,
-        type: itemDetails.type, // 'product' or 'variant'
-        tax_class_id: itemDetails.tax_class_id || null,       // Added tax_class_id
-        tax_class_name: itemDetails.tax_class_name || null,   // Added tax_class_name
-        // selectedVariantDescription could be derived from name or passed if needed explicitly
+        type: itemDetails.type,
+        tax_class_id: itemDetails.tax_class_id || null,
+        tax_class_name: itemDetails.tax_class_name || null,
         quantity: quantityToAdd,
       };
       cartItems.value.push(newItem);
-      console.log('useCart: Adding item to cart:', JSON.parse(JSON.stringify(newItem))); // DEBUG LOG
       toast.success(`"${newItem.name}" (Qty: ${quantityToAdd}) added to cart!`);
     }
-    // console.log('Cart operation:', itemDetails.name, 'Type:', itemDetails.type, 'ID:', itemDetails.id, 'Quantity after op:', existingItem ? existingItem.quantity : quantityToAdd);
   };
 
   const removeFromCart = (cartItemIdToRemove) => {
-     if (!isCartInitialized.value && process.client) {
-        initCart();
-    }
+    if (!isCartInitialized.value && process.client) initCart();
     const itemIndex = cartItems.value.findIndex(item => item.cartItemId === cartItemIdToRemove);
     if (itemIndex > -1) {
-        const removedItemName = cartItems.value[itemIndex].name;
-        cartItems.value.splice(itemIndex, 1);
-        toast.info(`"${removedItemName}" removed from cart.`);
-        console.log('Removed from cart, cartItemId:', cartItemIdToRemove);
+      const removedItemName = cartItems.value[itemIndex].name;
+      cartItems.value.splice(itemIndex, 1);
+      toast.info(`"${removedItemName}" removed from cart.`);
     }
   };
 
   const updateQuantity = (cartItemIdToUpdate, newQuantity) => {
-    if (!isCartInitialized.value && process.client) {
-        initCart();
-    }
+    if (!isCartInitialized.value && process.client) initCart();
     const item = cartItems.value.find(item => item.cartItemId === cartItemIdToUpdate);
     if (item) {
       if (newQuantity <= 0) {
@@ -152,16 +199,17 @@ export const useCart = () => {
         toast.info(`Quantity of "${item.name}" updated to ${newQuantity}.`);
       }
     }
-    console.log('Updated quantity for cartItemId:', cartItemIdToUpdate, 'New Quantity:', newQuantity);
   };
 
   const clearCart = () => {
     cartItems.value = [];
-    clearAppliedDiscount();
+    clearAppliedDiscount(); // This will also trigger tax recalc via watch
+    cartTaxDetails.value = null; // Explicitly clear tax details
+    taxCalculationError.value = '';
     toast.info("Cart cleared.");
-    console.log('Cart cleared.');
   };
 
+  // --- Discount Management ---
   async function applyDiscountCode(codeToApply) {
     if (!codeToApply || codeToApply.trim() === '') {
       discountValidationError.value = 'Please enter a discount code.';
@@ -170,61 +218,103 @@ export const useCart = () => {
       return;
     }
     discountValidationError.value = '';
-    appliedDiscount.value = null;
+    // appliedDiscount.value = null; // Clearing here might cause a flicker if validation fails but a previous discount was valid
 
-    const subtotal = cartSubtotal.value;
+    const subtotal = cartSubtotal.value; // Tax is usually applied on pre-discount subtotal
 
     try {
       const response = await $axios.post('/cart/validate-discount', {
         discount_code: codeToApply.trim().toUpperCase(),
-        cart_subtotal: subtotal
+        cart_subtotal: subtotal // Send current cart subtotal for validation
       });
-      appliedDiscount.value = response.data;
+      appliedDiscount.value = response.data; // Store the whole discount object
       toast.success(`Discount "${response.data.code}" applied!`);
-      console.log('Discount applied:', response.data);
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Invalid or expired discount code.';
-      console.error('Error applying discount code:', errorMessage);
       discountValidationError.value = errorMessage;
-      appliedDiscount.value = null;
+      appliedDiscount.value = null; // Clear discount on error
       toast.error(errorMessage);
     }
   }
 
   function clearAppliedDiscount() {
-    if(appliedDiscount.value) { // Only show toast if a discount was actually cleared
+    if(appliedDiscount.value) {
         toast.info(`Discount "${appliedDiscount.value.code}" removed.`);
     }
     appliedDiscount.value = null;
     discountValidationError.value = '';
-    console.log('Applied discount cleared.');
+    // Tax recalculation will be handled by the watcher on cartItems/appliedDiscount
   }
 
+
+  // --- Computed Properties ---
   const cartSubtotal = computed(() => {
-    if (!isCartInitialized.value && process.client && cartItems.value.length > 0) {
+    return parseFloat(cartItems.value.reduce((total, item) => total + (item.price * item.quantity), 0).toFixed(2));
+  });
+
+  const cartTotalTax = computed(() => {
+    return parseFloat(cartTaxDetails.value?.total_tax_amount || 0).toFixed(2);
+  });
+
+  const cartLineItemsWithTaxDetails = computed(() => {
+    return cartTaxDetails.value?.line_items_with_tax_details || [];
+  });
+
+  const calculatedDiscountAmount = computed(() => {
+    if (appliedDiscount.value && appliedDiscount.value.calculated_discount_amount_for_cart) {
+        return parseFloat(appliedDiscount.value.calculated_discount_amount_for_cart);
     }
-    const total = cartItems.value.reduce((total, item) => total + (item.price * item.quantity), 0);
-    return parseFloat(total.toFixed(2));
+    return 0;
   });
 
   const cartFinalTotalPrice = computed(() => {
-    if (appliedDiscount.value && appliedDiscount.value.calculated_discount_amount_for_cart) {
-      const finalTotal = cartSubtotal.value - parseFloat(appliedDiscount.value.calculated_discount_amount_for_cart);
-      return parseFloat(Math.max(0, finalTotal).toFixed(2));
-    }
-    return cartSubtotal.value;
+    const subtotalAfterDiscount = cartSubtotal.value - calculatedDiscountAmount.value;
+    const totalWithTax = subtotalAfterDiscount + parseFloat(cartTotalTax.value);
+    return parseFloat(Math.max(0, totalWithTax).toFixed(2));
   });
 
   const cartTotalItems = computed(() => {
     return cartItems.value.reduce((total, item) => total + item.quantity, 0);
   });
 
+  // --- Watchers ---
+  // Watch for changes in cart items to save to localStorage and refetch tax details
+  watch(cartItems, (newCartItems, oldCartItems) => {
+    if (isCartInitialized.value) {
+      saveCartToLocalStorage();
+      // Only fetch if items actually changed in a meaningful way for tax (e.g. content, not just order if that could happen)
+      // A deep watch ensures this triggers on quantity changes too.
+      fetchCartTaxDetails(newCartItems, isAuthenticated.value ? authUser.value?.id : null);
+
+      if (newCartItems.length === 0) {
+        clearAppliedDiscountGlobal(); // Clears discount if cart becomes empty
+      }
+    }
+  }, { deep: true });
+
+  // Watch for changes in applied discount to refetch tax details
+  // (though current backend tax logic is on pre-discount price, this is good practice if tax rules change)
+  // This might be redundant if fetchCartTaxDetails is already called by cartItems watcher which implicitly covers discount changes affecting final price.
+  // However, if discount application itself needs to trigger a specific type of tax re-evaluation (e.g. tax on discounted amount), this would be useful.
+  // For now, the main trigger is cartItems change.
+  // watch(appliedDiscount, () => {
+  //   if (isCartInitialized.value && cartItems.value.length > 0) {
+  //     fetchCartTaxDetails(cartItems.value, isAuthenticated.value ? authUser.value?.id : null);
+  //   }
+  // });
+
 
   return {
+    // State
     cartItems: computed(() => cartItems.value),
     isCartInitialized: computed(() => isCartInitialized.value),
     appliedDiscount: computed(() => appliedDiscount.value),
     discountValidationError: computed(() => discountValidationError.value),
+    cartTaxDetails: computed(() => cartTaxDetails.value),
+    isFetchingTaxDetails: computed(() => isFetchingTaxDetails.value),
+    taxCalculationError: computed(() => taxCalculationError.value),
+
+    // Actions
     initCart,
     addToCart,
     removeFromCart,
@@ -232,8 +322,14 @@ export const useCart = () => {
     clearCart,
     applyDiscountCode,
     clearAppliedDiscount,
+    fetchCartTaxDetails, // Expose if manual refresh is needed from UI
+
+    // Computed Getters
     cartTotalItems,
     cartSubtotal,
+    cartTotalTax,
+    cartLineItemsWithTaxDetails, // Expose for itemized tax display
     cartFinalTotalPrice,
+    calculatedDiscountAmount: calculatedDiscountAmount, // Expose calculated discount amount
   };
 };

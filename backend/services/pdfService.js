@@ -218,10 +218,15 @@ function getInvoiceHtml(orderDetails) {
   let calculatedSubtotal = 0;
   if (orderDetails.items && orderDetails.items.length > 0) {
     orderDetails.items.forEach(item => {
-      const unitPrice = parseFloat(item.price_at_purchase);
+      const unitPrice = parseFloat(item.price_at_purchase); // This is pre-tax unit price
       const quantity = parseInt(item.quantity);
-      const lineTotal = unitPrice * quantity;
-      calculatedSubtotal += lineTotal;
+      const lineItemTaxAmount = parseFloat(item.line_item_tax_amount || 0);
+      const appliedTaxRatePercentage = item.applied_tax_rate_percentage ? parseFloat(item.applied_tax_rate_percentage) : null;
+
+      // Line total should be pre-tax for subtotal calculation, tax is added separately
+      const lineSubtotal = unitPrice * quantity;
+      calculatedSubtotal += lineSubtotal;
+
       itemsHtml += `
         <tr>
           <td>
@@ -229,24 +234,39 @@ function getInvoiceHtml(orderDetails) {
             ${item.display_sku ? `<br><small style="font-size: 0.8em; color: #555;">SKU: ${item.display_sku}</small>` : ''}
           </td>
           <td>${item.tax_class_name_at_purchase || (item.tax_class_id_at_purchase ? `ID: ${item.tax_class_id_at_purchase}` : 'N/A')}</td>
+          <td class="text-right">${appliedTaxRatePercentage !== null ? `${appliedTaxRatePercentage.toFixed(2)}%` : 'N/A'}</td>
           <td>${quantity}</td>
           <td class="text-right">${unitPrice.toFixed(2)}</td>
-          <td class="text-right">${lineTotal.toFixed(2)}</td>
+          <td class="text-right">${lineItemTaxAmount.toFixed(2)}</td>
+          <td class="text-right">${lineSubtotal.toFixed(2)}</td>
         </tr>
       `;
     });
   }
-  calculatedSubtotal = parseFloat(calculatedSubtotal.toFixed(2));
+  // calculatedSubtotal is the sum of (unitPrice * quantity) for all items, which is correct for a pre-tax subtotal.
+  // The `orderDetails.original_total_amount` from the DB already represents this pre-discount, pre-tax subtotal.
+  // So we can use `orderDetails.original_total_amount` directly.
 
-  // --- Totals ---
-  // Use original_total_amount if available (pre-discount subtotal), else use calculated or total_amount
-  const subtotal = orderDetails.original_total_amount
-    ? parseFloat(orderDetails.original_total_amount)
-    : (orderDetails.discount_amount_applied ? parseFloat(orderDetails.total_amount) + parseFloat(orderDetails.discount_amount_applied) : parseFloat(orderDetails.total_amount));
+  const subtotalForDisplay = parseFloat(orderDetails.original_total_amount || calculatedSubtotal).toFixed(2);
 
-  const discountHtml = orderDetails.discount_amount_applied && parseFloat(orderDetails.discount_amount_applied) > 0
-    ? `<tr><td colspan="3" class="text-right">Discount ${orderDetails.discount_code_applied ? `(${orderDetails.discount_code_applied})` : ''}:</td><td>-${parseFloat(orderDetails.discount_amount_applied).toFixed(2)}</td></tr>`
+  const discountAmount = orderDetails.discount_amount_applied ? parseFloat(orderDetails.discount_amount_applied) : 0;
+  const discountHtml = discountAmount > 0
+    ? `<tr><td colspan="2"></td><td colspan="4" class="text-right strong">Discount ${orderDetails.discount_code_applied ? `(${orderDetails.discount_code_applied})` : ''}:</td><td class="text-right strong">-${discountAmount.toFixed(2)}</td></tr>`
     : '';
+
+  const totalTaxAmount = orderDetails.total_tax_amount ? parseFloat(orderDetails.total_tax_amount) : 0;
+  const taxHtml = `<tr><td colspan="2"></td><td colspan="4" class="text-right strong">Total Tax:</td><td class="text-right strong">${totalTaxAmount.toFixed(2)}</td></tr>`;
+
+  // Tax summary details (optional display)
+  let taxSummaryHtml = '';
+  if (orderDetails.tax_summary_details && typeof orderDetails.tax_summary_details === 'object' && Object.keys(orderDetails.tax_summary_details).length > 0) {
+    taxSummaryHtml += '<tr><td colspan="7" style="padding-top: 10px; text-align: right;"><strong>Tax Breakdown:</strong></td></tr>';
+    for (const taxName in orderDetails.tax_summary_details) {
+        const detail = orderDetails.tax_summary_details[taxName];
+        taxSummaryHtml += `<tr><td colspan="2"></td><td colspan="4" class="text-right">${taxName}:</td><td class="text-right">${parseFloat(detail.total_tax_collected || 0).toFixed(2)}</td></tr>`;
+    }
+  }
+
 
   const grandTotal = parseFloat(orderDetails.total_amount).toFixed(2);
 
@@ -321,9 +341,11 @@ function getInvoiceHtml(orderDetails) {
             <tr>
               <th>Item</th>
               <th>Tax Class</th>
-              <th>Qty</th>
+              <th class="text-right">Tax Rate</th>
+              <th class="text-right">Qty</th>
               <th class="text-right">Unit Price</th>
-              <th class="text-right">Line Total</th>
+              <th class="text-right">Line Tax</th>
+              <th class="text-right">Line Subtotal</th>
             </tr>
           </thead>
           <tbody>
@@ -332,18 +354,21 @@ function getInvoiceHtml(orderDetails) {
         </table>
 
         <section class="totals-section">
-          <table>
+          <table style="width: 100%;">
             <tr>
-              <td>Subtotal:</td>
-              <td class="text-right">${subtotal.toFixed(2)}</td>
+              <td colspan="2"></td> <td colspan="4" class="text-right">Subtotal:</td>
+              <td class="text-right">${subtotalForDisplay}</td>
             </tr>
             ${discountHtml}
+            ${taxHtml}
+            ${taxSummaryHtml}
             <tr class="grand-total">
-              <td>Grand Total:</td>
-              <td class="text-right">${grandTotal}</td>
+             <td colspan="2"></td> <td colspan="4" class="text-right strong">Grand Total:</td>
+              <td class="text-right strong">${grandTotal}</td>
             </tr>
           </table>
         </section>
+        <div style="clear: both;"></div>
 
         <footer>
           <p>Thank you for your business!</p>

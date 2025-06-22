@@ -23,7 +23,13 @@
             <h3 class="text-lg font-semibold text-venus-text-primary mb-1">{{ item.name }}</h3>
             <p v-if="item.selectedVariantDescription" class="text-sm text-venus-text-secondary mb-1">{{ item.selectedVariantDescription }}</p>
             <p v-if="item.sku" class="text-xs text-venus-text-secondary mb-1">SKU: {{ item.sku }}</p>
-            <p class="text-sm text-venus-text-secondary">Price: ${{ item.price.toFixed(2) }}</p>
+            <p class="text-sm text-venus-text-secondary">Unit Price: ${{ item.price.toFixed(2) }}</p>
+            <p v-if="item.tax_class_name" class="text-xs text-venus-text-secondary mt-0.5">
+              Tax Class: {{ item.tax_class_name }}
+            </p>
+            <p v-else-if="item.tax_class_id" class="text-xs text-venus-text-secondary mt-0.5">
+              Tax Class ID: {{ item.tax_class_id }}
+            </p>
             <div class="item-quantity my-2">
               <label :for="`quantity-${item.cartItemId}`" class="text-sm mr-2">Quantity:</label>
               <input
@@ -35,7 +41,15 @@
                 class="quantity-input w-16 px-2 py-1 border border-venus-neutral-medium rounded-sm text-sm text-center focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold"
               />
             </div>
-            <p class="font-medium text-venus-text-primary mt-auto pt-1">Item Total: ${{ (item.price * item.quantity).toFixed(2) }}</p>
+            <div class="mt-auto pt-1">
+              <p v-if="getLineItemTax(item) !== null && !isFetchingTaxDetails" class="text-xs text-venus-text-secondary">
+                Item Tax: ${{ getLineItemTax(item) }}
+              </p>
+               <p v-if="isFetchingTaxDetails && !getLineItemTax(item)" class="text-xs text-venus-text-secondary animate-pulse">Calculating tax...</p>
+              <p class="font-medium text-venus-text-primary">
+                Subtotal for item: ${{ (item.price * item.quantity).toFixed(2) }}
+              </p>
+            </div>
           </div>
           <button @click="removeItem(item.cartItemId)" class="remove-item-button absolute top-2 right-2 text-red-600 hover:text-red-800 transition-colors duration-200 ease-in-out p-1">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
@@ -70,7 +84,7 @@
           <div v-if="appliedDiscount" class="mt-2 p-2 bg-venus-accent-sale/10 text-venus-accent-sale rounded-sm text-sm border border-venus-accent-sale/20">
             <div class="flex justify-between items-center">
               <span>
-                Discount: <strong>{{ appliedDiscount.code }}</strong> (-${{ parseFloat(appliedDiscount.calculated_discount_amount_for_cart).toFixed(2) }})
+                Discount: <strong>{{ appliedDiscount.code }}</strong> (-${{ calculatedDiscountAmount.toFixed(2) }})
               </span>
               <button @click="handleRemoveDiscount" class="text-venus-accent-sale hover:opacity-70 transition-opacity duration-200 ease-in-out text-xs underline disabled:opacity-60" :disabled="applyingDiscount">Remove</button>
             </div>
@@ -78,8 +92,18 @@
           </div>
         </div>
 
-        <p class="flex justify-between text-xl font-bold text-venus-text-primary my-3">
-          <span>Final Total:</span>
+        <!-- Tax Information -->
+        <div class="tax-info py-4 border-b border-venus-neutral-medium">
+          <p v-if="isFetchingTaxDetails" class="text-sm text-venus-text-secondary animate-pulse">Calculating taxes...</p>
+          <p v-if="taxCalculationError && !isFetchingTaxDetails" class="text-sm text-red-600">Error calculating tax: {{ taxCalculationError }}</p>
+          <p v-if="!isFetchingTaxDetails && !taxCalculationError && cartItems.length > 0" class="flex justify-between text-venus-text-secondary">
+            <span>Total Tax:</span>
+            <span class="font-medium">${{ cartTotalTax }}</span>
+          </p>
+        </div>
+
+        <p class="flex justify-between text-xl font-bold text-venus-text-primary my-3 pt-3 border-t-2 border-venus-accent-gold">
+          <span>Grand Total:</span>
           <span>${{ cartFinalTotalPrice.toFixed(2) }}</span>
         </p>
         <div class="cart-actions mt-6 space-y-3">
@@ -119,14 +143,35 @@ const {
   cartTotalItems,
   cartSubtotal,
   cartFinalTotalPrice,
-  applyDiscountCode,     // Added back
-  clearAppliedDiscount,  // Added back
-  appliedDiscount,       // Added back
-  discountValidationError// Added back
+  applyDiscountCode,
+  clearAppliedDiscount,
+  appliedDiscount,
+  discountValidationError,
+  // Tax related properties from useCart
+  cartTotalTax,
+  cartLineItemsWithTaxDetails,
+  isFetchingTaxDetails,
+  taxCalculationError,
+  calculatedDiscountAmount // To display the actual discount value
 } = useCart();
 
-const discountCodeInput = ref('');    // Added back
-const applyingDiscount = ref(false); // Added back
+const discountCodeInput = ref('');
+const applyingDiscount = ref(false);
+
+// Helper function to find tax details for a specific cart item
+const getLineItemTax = (cartItem) => {
+  if (!cartLineItemsWithTaxDetails.value || cartLineItemsWithTaxDetails.value.length === 0) {
+    return null;
+  }
+  // The cartItem from cartItems ref has productId and variantId.
+  // The items in cartLineItemsWithTaxDetails have product_id and variant_id.
+  const taxDetail = cartLineItemsWithTaxDetails.value.find(taxItem =>
+    taxItem.product_id === cartItem.productId &&
+    (taxItem.variant_id === cartItem.variantId || (taxItem.variant_id === null && cartItem.variantId === null))
+  );
+  return taxDetail ? parseFloat(taxDetail.line_item_tax_amount).toFixed(2) : null;
+};
+
 
 onMounted(() => {
   // Ensure cart initialization logic is run when cart page is mounted,
