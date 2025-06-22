@@ -768,12 +768,18 @@ watch(currentPublicReviewsPage, (newPage, oldPage) => {
 });
 
 async function checkUserReviewStatus() {
-  // Guard against isLoggedIn or product not being fully initialized yet
-  if (typeof isLoggedIn === 'undefined' || !isLoggedIn.value || !product.value?.id) {
-    userHasReviewed.value = false; userReview.value = null;
+  // More robust guard for isLoggedIn and product.value
+  const loggedIn = (typeof isLoggedIn?.value === 'boolean') ? isLoggedIn.value : false;
+  const currentProductId = product.value?.id;
+
+  if (!loggedIn || !currentProductId) {
+    userHasReviewed.value = false;
+    userReview.value = null;
     showReviewForm.value = false;
+    // console.log(`[checkUserReviewStatus] Bailing out: isLoggedInVal: ${loggedIn}, currentProductId: ${currentProductId}`);
     return;
   }
+  // console.log(`[checkUserReviewStatus] Proceeding: isLoggedInVal: ${loggedIn}, currentProductId: ${currentProductId}`);
   isLoadingUserReview.value = true;
   try {
     const response = await $axios.get(`/products/${product.value.id}/reviews/my-review`);
