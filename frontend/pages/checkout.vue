@@ -137,6 +137,7 @@
     </div> <!-- End of lg:grid -->
     </div> <!-- Closing tag for <div v-else> associated with isLoadingAuthOrCart -->
   </ClientOnly> <!-- End of ClientOnly -->
+</div> <!-- Missing closing tag for the root container div -->
 </template>
 
 <script setup>
