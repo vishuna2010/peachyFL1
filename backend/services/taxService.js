@@ -95,6 +95,129 @@ async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, dbClientOpt
   };
 }
 
+// New function to calculate taxes for an entire cart
+async function calculateTaxForCartItems(cartItems, userId, shippingAddress, dbClientOptional) {
+  const queryRunner = dbClientOptional || db;
+  const line_items_with_tax_details = [];
+  let overall_total_tax_amount = 0;
+  const tax_summary_details = {}; // Example: { "CA Sales Tax": { total_taxable_amount: X, total_tax_collected: Y } }
+
+  // Fetch user's tax exemption status
+  let userIsTaxExempt = false;
+  if (userId) {
+    try {
+      const userResult = await queryRunner.query('SELECT is_tax_exempt FROM users WHERE id = $1', [userId]);
+      if (userResult.rows.length > 0) {
+        userIsTaxExempt = userResult.rows[0].is_tax_exempt;
+      }
+    } catch (userError) {
+      console.error(`Error fetching user tax exemption status for user ID ${userId}:`, userError);
+      // Decide if this should throw or proceed without exemption
+    }
+  }
+
+  if (userIsTaxExempt) {
+    // If user is exempt, all tax amounts are zero
+    for (const item of cartItems) {
+      line_items_with_tax_details.push({
+        ...item, // Spread original item details like product_id, variant_id, quantity
+        calculated_exclusive_unit_price: parseFloat(item.unit_price).toFixed(2), // Assuming unit_price is pre-tax
+        line_item_tax_amount: 0,
+        applied_tax_rate_percentage: 0,
+        tax_class_id_at_purchase: null, // Tax class ID might still be relevant for records, even if no tax applied
+        applied_rates: []
+      });
+    }
+    return {
+      line_items_with_tax_details,
+      total_tax_amount: 0,
+      tax_summary_details: { general_exemption: { total_taxable_amount: cartItems.reduce((sum, item) => sum + (item.unit_price * item.quantity),0), total_tax_collected: 0 } }
+    };
+  }
+
+  for (const item of cartItems) {
+    let productTaxClassId = null;
+    try {
+      // Fetch product's tax_class_id
+      // Ensure product_id is used if variant_id is not present or if tax class is always on base product
+      const productInfoQuery = await queryRunner.query(
+        'SELECT tax_class_id FROM products WHERE id = $1',
+        [item.product_id] // item.product_id should be the base product ID
+      );
+      if (productInfoQuery.rows.length > 0) {
+        productTaxClassId = productInfoQuery.rows[0].tax_class_id;
+      }
+    } catch (productError) {
+      console.error(`Error fetching tax_class_id for product ID ${item.product_id}:`, productError);
+      // Continue, will result in no tax for this item if taxClassId remains null
+    }
+
+    // Assuming item.unit_price is the pre-tax price
+    const basePriceForItem = parseFloat(item.unit_price);
+    let itemTaxDetails;
+
+    if (productTaxClassId) {
+      // Call the existing function for individual item tax calculation
+      // Note: calculatePriceWithAppliedTaxes expects basePrice for a single unit.
+      // The total line item tax will be quantity * taxAmountPerUnit.
+      const singleItemTaxCalc = await calculatePriceWithAppliedTaxes(basePriceForItem, productTaxClassId, queryRunner);
+      itemTaxDetails = {
+        calculated_exclusive_unit_price: parseFloat(singleItemTaxCalc.basePrice).toFixed(2),
+        line_item_tax_amount: parseFloat(singleItemTaxCalc.taxAmount) * item.quantity,
+        // For simplicity, let's find the primary rate or sum percentages if multiple apply.
+        // This part needs refinement based on how applied_tax_rate_percentage should be stored.
+        // For now, if multiple rates, we can sum them or pick the first one.
+        // Or, store the full appliedRates array if the DB schema for order_items allows.
+        applied_tax_rate_percentage: singleItemTaxCalc.appliedRates.length > 0
+            ? singleItemTaxCalc.appliedRates.reduce((sum, rate) => sum + rate.rate_percentage, 0) // Example: sum of rates
+            : 0,
+        applied_rates_summary: singleItemTaxCalc.appliedRates, // Keep the detailed breakdown
+        tax_class_id_at_purchase: productTaxClassId // Store the tax class ID used
+      };
+    } else {
+      // No tax class ID found or applicable
+      itemTaxDetails = {
+        calculated_exclusive_unit_price: basePriceForItem.toFixed(2),
+        line_item_tax_amount: 0,
+        applied_tax_rate_percentage: 0,
+        applied_rates_summary: [],
+        tax_class_id_at_purchase: null
+      };
+    }
+
+    line_items_with_tax_details.push({
+      ...item, // Original item properties (product_id, variant_id, quantity, unit_price)
+      ...itemTaxDetails
+    });
+    overall_total_tax_amount += itemTaxDetails.line_item_tax_amount;
+
+    // Populate tax_summary_details (simplified example)
+    itemTaxDetails.applied_rates_summary.forEach(rate => {
+        if (!tax_summary_details[rate.name]) {
+            tax_summary_details[rate.name] = { total_taxable_amount: 0, total_tax_collected: 0 };
+        }
+        // Assuming basePriceForItem * item.quantity is the taxable amount for this rate
+        tax_summary_details[rate.name].total_taxable_amount += (basePriceForItem * item.quantity);
+        tax_summary_details[rate.name].total_tax_collected += (parseFloat(rate.amount) * item.quantity);
+    });
+  }
+
+  // Ensure totals are correctly formatted
+  for (const key in tax_summary_details) {
+      tax_summary_details[key].total_taxable_amount = parseFloat(tax_summary_details[key].total_taxable_amount.toFixed(2));
+      tax_summary_details[key].total_tax_collected = parseFloat(tax_summary_details[key].total_tax_collected.toFixed(2));
+  }
+
+
+  return {
+    line_items_with_tax_details,
+    total_tax_amount: parseFloat(overall_total_tax_amount.toFixed(2)),
+    tax_summary_details
+  };
+}
+
+
 module.exports = {
   calculatePriceWithAppliedTaxes,
+  calculateTaxForCartItems, // Export the new function
 };

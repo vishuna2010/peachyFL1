@@ -94,14 +94,25 @@ router.get('/orders/:id', async (req, res) => {
     const itemsQuery = `
       SELECT
         oi.id as order_item_id, oi.quantity, oi.price_at_purchase,
-        p.id as product_id, p.name as product_name, p.image_url as product_image_url
+        oi.tax_class_id_at_purchase, -- Added
+        tc.name as tax_class_name_at_purchase, -- Added
+        p.id as product_id, p.name as product_name, p.image_url as product_image_url,
+        pv.sku as variant_sku, -- Added for better item identification
+        p.sku as base_product_sku -- Added for better item identification
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
+      LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id -- Join for variant SKU
+      LEFT JOIN tax_classes tc ON oi.tax_class_id_at_purchase = tc.id -- Added Join for tax class name
       WHERE oi.order_id = $1
       ORDER BY oi.id ASC;
     `;
     const itemsResult = await db.query(itemsQuery, [id]);
-    order.items = itemsResult.rows;
+    order.items = itemsResult.rows.map(item => ({
+      ...item,
+      price_at_purchase: parseFloat(item.price_at_purchase), // Ensure numeric
+      // Construct a display SKU
+      display_sku: item.variant_sku || item.base_product_sku || 'N/A'
+    }));
 
     // Exclude user password if it was somehow fetched (it's not in this query)
     if (order.user_password) delete order.user_password;
@@ -242,16 +253,23 @@ router.get(
           oi.quantity,
           oi.price_at_purchase,
           p.name as product_name,
-          p.sku as product_sku,     -- Added base product SKU
-          pv.sku as variant_sku     -- Added variant SKU
+          p.sku as product_sku,
+          pv.sku as variant_sku,
+          oi.tax_class_id_at_purchase, -- Added
+          tc.name AS tax_class_name_at_purchase -- Added
         FROM order_items oi
         JOIN products p ON oi.product_id = p.id
-        LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id -- Added LEFT JOIN
+        LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id
+        LEFT JOIN tax_classes tc ON oi.tax_class_id_at_purchase = tc.id -- Added Join
         WHERE oi.order_id = $1
         ORDER BY oi.id ASC;
       `;
       const itemsResult = await db.query(itemsQuery, [orderId]);
-      orderDataFromDb.items = itemsResult.rows;
+      orderDataFromDb.items = itemsResult.rows.map(item => ({
+        ...item,
+        price_at_purchase: parseFloat(item.price_at_purchase), // Ensure numeric
+        display_sku: item.variant_sku || item.product_sku || 'N/A'
+      }));
 
     // Generate QR Code URL
     const token = crypto.randomBytes(8).toString('hex');

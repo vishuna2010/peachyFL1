@@ -222,10 +222,14 @@ function getInvoiceHtml(orderDetails) {
       calculatedSubtotal += lineTotal;
       itemsHtml += `
         <tr>
-          <td>${item.product_name || 'N/A'}</td>
+          <td>
+            ${item.product_name || 'N/A'}
+            ${item.display_sku ? `<br><small style="font-size: 0.8em; color: #555;">SKU: ${item.display_sku}</small>` : ''}
+          </td>
+          <td>${item.tax_class_name_at_purchase || (item.tax_class_id_at_purchase ? `ID: ${item.tax_class_id_at_purchase}` : 'N/A')}</td>
           <td>${quantity}</td>
-          <td>${unitPrice.toFixed(2)}</td>
-          <td>${lineTotal.toFixed(2)}</td>
+          <td class="text-right">${unitPrice.toFixed(2)}</td>
+          <td class="text-right">${lineTotal.toFixed(2)}</td>
         </tr>
       `;
     });
@@ -314,6 +318,7 @@ function getInvoiceHtml(orderDetails) {
           <thead>
             <tr>
               <th>Item</th>
+              <th>Tax Class</th>
               <th>Qty</th>
               <th class="text-right">Unit Price</th>
               <th class="text-right">Line Total</th>

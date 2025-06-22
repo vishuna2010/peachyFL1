@@ -95,10 +95,11 @@
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Name</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price at Purchase</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Line Total</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product Details</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Class</th>
+                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Line Total</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -108,10 +109,16 @@
                        class="w-16 h-16 rounded-md object-cover bg-gray-100">
                   <div v-else class="w-16 h-16 rounded-md bg-gray-100 flex items-center justify-center text-xs text-gray-400">No Image</div>
                 </td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ item.product_name }} (ID: {{ item.product_id }})</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                  <div>{{ item.product_name }} (ID: {{ item.product_id }})</div>
+                  <div v-if="item.display_sku" class="text-xs text-gray-500">SKU: {{ item.display_sku }}</div>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                  {{ item.tax_class_name_at_purchase || (item.tax_class_id_at_purchase ? `ID: ${item.tax_class_id_at_purchase}` : 'N/A') }}
+                </td>
                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-center">{{ item.quantity }}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ formatCurrency(item.price_at_purchase) }}</td>
-                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ formatCurrency(parseFloat(item.price_at_purchase) * item.quantity) }}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right">{{ formatCurrency(item.price_at_purchase) }}</td>
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right">{{ formatCurrency(parseFloat(item.price_at_purchase) * item.quantity) }}</td>
               </tr>
             </tbody>
           </table>
