@@ -92,18 +92,24 @@ export const useCart = () => {
 
       const payload = {
         cartItems: itemsToTax,
-        userId: currentUserId || null, // Send null if no user
-        // shippingAddress: shippingAddressForTax // Optional: for tax estimation based on a specific address
-                                              // For now, we can omit it, and backend will use user's default or require it for guests.
+        userId: currentUserId || null,
       };
-       // For cart/checkout, we might not pass a shippingAddress explicitly here,
-      // letting the backend decide based on user profile or requiring it if guest.
-      // The backend /calculate-taxes endpoint was designed to take an optional shippingAddress.
-      // If not provided, it uses the user's default (if logged in) or might error if guest and no address.
-      // For initial cart display, we might not have a shipping address yet.
-      // Let's assume for now, the backend handles this (e.g., by applying no tax or default tax if address is missing).
-      // Or, we could pass a default/placeholder if needed by the backend for guests.
 
+      // If guest user (currentUserId is null), add a placeholder shipping address
+      // The backend requires a country for tax calculation for guests.
+      if (!currentUserId) {
+        payload.shippingAddress = shippingAddressForTax || {
+          country: 'US', // Default placeholder country
+          // state_province_region: null, // Optional based on backend needs
+          // postalCode: null // Optional
+        };
+        console.log('Guest user detected for tax calculation, using shippingAddress:', payload.shippingAddress);
+      } else if (shippingAddressForTax) {
+        // If logged-in user AND a specific address is provided for estimation (e.g. from checkout page)
+        payload.shippingAddress = shippingAddressForTax;
+         console.log('Logged-in user, explicit shippingAddress provided for tax calculation:', payload.shippingAddress);
+      }
+      // If logged-in user and no shippingAddressForTax is provided, the backend will use the user's default.
 
       const response = await $axios.post('/cart/calculate-taxes', payload);
       cartTaxDetails.value = response.data;
