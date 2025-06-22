@@ -24,14 +24,11 @@ const props = defineProps({
 const bannerClasses = computed(() => {
   let classes = 'text-sm ';
   if (props.type === 'primary') {
-    // Use fresh-green for primary promotional banners
-    classes += 'bg-fresh-green text-white';
-  } else if (props.type === 'secondary') {
-    // Use sky-blue for secondary promotional banners
-    classes += 'bg-sky-blue text-white';
-  } else {
-    // Default to a neutral or less prominent style if type is not recognized
-    classes += 'bg-venus-neutral-light text-venus-text-primary';
+    // Example: Gold background with dark text
+    classes += 'bg-venus-accent-gold text-venus-text-primary';
+  } else { // secondary
+    // Example: Dark background with white text (like the existing top bar)
+    classes += 'bg-venus-neutral-dark text-white';
   }
   return classes;
 });

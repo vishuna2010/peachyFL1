@@ -98,6 +98,10 @@
             </span>
           </div>
 
+          <p v-if="product.tax_class_name || product.tax_class_id" class="text-sm text-venus-text-secondary mb-4">
+            <strong>Tax Class:</strong> {{ product.tax_class_name || (product.tax_class_id ? 'ID: ' + product.tax_class_id : 'N/A') }}
+          </p>
+
           <div v-if="product.has_variants && product.available_options && product.available_options.length > 0" class="space-y-4 mb-6">
             <div v-for="option_type in product.available_options" :key="option_type.option_id">
               <label :for="`option-${option_type.option_id}`" class="block text-sm font-medium text-venus-text-primary mb-1">
@@ -686,6 +690,11 @@ const handleAddToCart = () => {
   if (quantity.value <= 0) { toast.error("Please enter a valid quantity."); return; }
   if (quantity.value > stockAvailable) { toast.error(`Cannot add ${quantity.value} items. Only ${stockAvailable} left in stock.`); return; }
 
+  console.log('PDP: product.value before creating cartItemData:', JSON.parse(JSON.stringify(product.value))); // DEBUG LOG
+  if(currentVariant.value) {
+    console.log('PDP: currentVariant.value before creating cartItemData:', JSON.parse(JSON.stringify(currentVariant.value))); // DEBUG LOG
+  }
+
   let cartItemData;
   if (currentVariant.value) {
     let variantOptionString = "";
@@ -739,18 +748,16 @@ watch(product, (newProduct) => {
   }
 }, { deep: true });
 
-// Watch for changes in the user object to infer login/logout status
-watch(user, (newUser, oldUser) => {
-  // A simple check: if user object reference changes, it might indicate login/logout.
-  // More sophisticated checks could compare newUser?.id with oldUser?.id.
-  // This also runs when the component mounts if `user` is already populated.
-  const wasLoggedIn = oldUser && oldUser.id;
-  const nowLoggedIn = newUser && newUser.id;
-
-  if (wasLoggedIn !== nowLoggedIn) {
+// Watch for changes in isLoggedIn status
+watch(isLoggedIn, (newIsLoggedIn, oldIsLoggedIn) => {
+  // This watcher specifically reacts to changes in the login status.
+  // checkUserReviewStatus has internal guards for product.value.id
+  if (newIsLoggedIn !== oldIsLoggedIn) {
+    console.log(`[PDP] isLoggedIn status changed from ${oldIsLoggedIn} to ${newIsLoggedIn}. Re-checking user review status.`);
     checkUserReviewStatus();
   }
-}, { deep: true }); // deep watch might be useful if properties within user object change without the object itself changing instance
+});
+// The watcher for `product` already calls checkUserReviewStatus when a product loads.
 
 watch(activeTab, (newTab) => {
   if (newTab === 'reviews' && product.value?.id && (!productPublicReviews.value || productPublicReviews.value.length === 0) && !isLoadingPublicReviews.value && !publicReviewsError.value) {

@@ -36,7 +36,6 @@ const userRoutes = require('./routes/users'); // Import user profile routes
 const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
 const cartRoutes = require('./routes/cart'); // Import cart routes
-const settingsRoutes = require('./routes/settings'); // Import settings routes
 const path = require('path'); // Import path module
 const globalErrorHandler = require('./middleware/errorHandler'); // Import global error handler
 
@@ -131,9 +130,6 @@ app.use('/api/cart', cartRoutes);
 
 // --- Public Order Routes (e.g., for user to create their own order) ---
 app.use('/api/orders', orderRoutes);
-
-// --- Public Settings Route ---
-app.use('/api/settings', settingsRoutes); // Mount settings routes
 
 
 // Ensure DB connection is attempted and tables are created when server starts
