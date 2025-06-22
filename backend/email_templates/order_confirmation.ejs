@@ -21,6 +21,11 @@
 <body>
     <div class="container">
         <div class="header">
+            <% if (site.logoUrl && site.logoUrl !== '/assets/placeholder_logo.svg') { %>
+                <img src="<%= site.logoUrl %>" alt="<%= site.name %> Logo" style="max-height: 70px; max-width: 200px; margin-bottom: 10px;">
+            <% } else if (site.logoUrl === '/assets/placeholder_logo.svg' && site.name) { %>
+                <h1><%= site.name %></h1>
+            <% } %>
             <h1>Order Confirmation</h1>
         </div>
 
@@ -111,7 +116,7 @@
 
         <div class="footer">
             <p>If you have any questions, please contact our support team.</p>
-            <p>&copy; <%= new Date().getFullYear() %> Your Company Name</p>
+            <p>&copy; <%= new Date().getFullYear() %> <%= site.name || 'Your Company Name' %></p>
         </div>
     </div>
 </body>

@@ -8,21 +8,21 @@
       class="absolute inset-0 w-full h-full object-cover z-0 scale-110 transform transition-transform duration-[7000ms] ease-out"
     />
     <!-- Overlay for contrast -->
-    <div class="absolute inset-0 bg-black bg-opacity-50 z-10"></div>
+    <div class="absolute inset-0 bg-black bg-opacity-30 z-10"></div> <!-- Slightly reduced opacity for better color pop -->
 
     <!-- Content -->
     <div class="relative z-20 text-center p-6 md:p-8">
-      <h1 ref="titleRef" class="text-4xl sm:text-5xl md:text-6xl font-bold font-serif mb-4 leading-tight opacity-0 translate-y-5 transition-all duration-1000 ease-in-out" v-if="title">
+      <h1 ref="titleRef" class="text-4xl sm:text-5xl md:text-6xl font-bold font-serif mb-4 leading-tight opacity-0 translate-y-5 transition-all duration-1000 ease-in-out text-white" v-if="title">
         {{ title }}
       </h1>
-      <p ref="subtitleRef" class="text-lg sm:text-xl md:text-2xl text-neutral-light mb-8 max-w-2xl mx-auto opacity-0 translate-y-5 transition-all duration-1000 ease-in-out delay-300" v-if="subtitle">
+      <p ref="subtitleRef" class="text-lg sm:text-xl md:text-2xl text-venus-neutral-light mb-8 max-w-2xl mx-auto opacity-0 translate-y-5 transition-all duration-1000 ease-in-out delay-300" v-if="subtitle">
         {{ subtitle }}
       </p>
       <NuxtLink
         ref="buttonRef"
         v-if="buttonText && buttonLink"
         :to="buttonLink"
-        class="bg-venus-text-primary text-white hover:bg-venus-accent-gold font-sans font-semibold py-3 px-8 rounded-sm text-base transition-colors duration-300 shadow-md hover:shadow-lg opacity-0 translate-y-5 transition-all duration-1000 ease-in-out delay-500"
+        class="bg-peach-pink text-white hover:bg-opacity-90 font-sans font-semibold py-3 px-8 rounded-md text-base transition-colors duration-300 shadow-md hover:shadow-lg opacity-0 translate-y-5 transition-all duration-1000 ease-in-out delay-500"
       >
         {{ buttonText }}
       </NuxtLink>

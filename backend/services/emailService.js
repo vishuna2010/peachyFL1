@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const ejs = require('ejs');
 const fs = require('fs');
 const path = require('path');
+const config = require('../config'); // Import centralized configuration
 
 // --- Transporter Setup ---
 // This is an async function because createTestAccount is async
@@ -115,6 +116,10 @@ async function getOrderConfirmationHtml(orderData, customerEmail) {
             },
             customer: {
                 name: customerName
+            },
+            site: { // Add site-specific data for the template
+                logoUrl: config.siteLogoUrl,
+                name: config.siteName || 'Your Awesome Store'
             }
         };
 

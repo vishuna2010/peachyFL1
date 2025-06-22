@@ -26,26 +26,26 @@
     </div>
 
     <div>
-      <label for="reviewTitle" class="block text-sm font-medium text-gray-700 mb-1">Review Title (Optional)</label>
+      <label for="reviewTitle" class="block text-sm font-medium text-venus-text-primary mb-1">Review Title (Optional)</label>
       <input
         type="text"
         id="reviewTitle"
         v-model="title"
         :disabled="isSubmitting"
-        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-50 disabled:bg-gray-100"
+        class="mt-1 block w-full px-3 py-2 border border-venus-neutral-medium rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:opacity-50 disabled:bg-gray-100"
         placeholder="e.g., Great product!"
       />
     </div>
 
     <div>
-      <label for="reviewComment" class="block text-sm font-medium text-gray-700 mb-1">Your Review <span class="text-red-500">*</span></label>
+      <label for="reviewComment" class="block text-sm font-medium text-venus-text-primary mb-1">Your Review <span class="text-red-500">*</span></label>
       <textarea
         id="reviewComment"
         v-model="comment"
         rows="4"
         required
         :disabled="isSubmitting"
-        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-50 disabled:bg-gray-100"
+        class="mt-1 block w-full px-3 py-2 border border-venus-neutral-medium rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:opacity-50 disabled:bg-gray-100"
         placeholder="Tell us what you think..."
       ></textarea>
     </div>
@@ -58,7 +58,7 @@
       <button
         type="submit"
         :disabled="isSubmitting || rating === 0"
-        class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-peach-pink hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <span v-if="isSubmitting" class="animate-pulse">Submitting...</span>
         <span v-else>Submit Review</span>
@@ -109,9 +109,9 @@ const resetHoverRating = () => {
 const getStarClass = (starIndex) => {
   const effectiveRating = currentHoverRating.value || rating.value;
   if (starIndex <= effectiveRating) {
-    return 'text-yellow-400 hover:text-yellow-500';
+    return 'text-lemon-yellow hover:text-opacity-80'; // Star color
   }
-  return 'text-gray-300 hover:text-yellow-400';
+  return 'text-gray-300 hover:text-lemon-yellow hover:text-opacity-60'; // Star hover color
 };
 
 const handleSubmitReview = async () => {
