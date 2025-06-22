@@ -282,9 +282,15 @@ export const useCart = () => {
   watch(cartItems, (newCartItems, oldCartItems) => {
     if (isCartInitialized.value) {
       saveCartToLocalStorage();
-      // Only fetch if items actually changed in a meaningful way for tax (e.g. content, not just order if that could happen)
-      // A deep watch ensures this triggers on quantity changes too.
-      fetchCartTaxDetails(newCartItems, isAuthenticated.value ? authUser.value?.id : null);
+
+      // Defensively get user ID for tax calculation
+      let userIdForTax = null;
+      if (isAuthenticated && typeof isAuthenticated.value === 'boolean' && isAuthenticated.value) {
+        if (authUser && typeof authUser.value === 'object' && authUser.value !== null && typeof authUser.value.id !== 'undefined') {
+          userIdForTax = authUser.value.id;
+        }
+      }
+      fetchCartTaxDetails(newCartItems, userIdForTax);
 
       if (newCartItems.length === 0) {
         clearAppliedDiscountGlobal(); // Clears discount if cart becomes empty
