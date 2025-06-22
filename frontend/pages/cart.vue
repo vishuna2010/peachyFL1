@@ -1,9 +1,8 @@
 <template>
   <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-[calc(100vh-theme(spacing.16))]">
     <h2 class="text-3xl font-serif text-venus-text-primary mb-8 text-center">Your Shopping Cart</h2>
-    <!-- Debug: isCartInitialized in template = {{ isCartInitialized }} -->
     <div v-if="!isCartInitialized" class="text-center py-8 px-4 bg-venus-neutral-light rounded-sm">
-      Initializing cart... (isCartInitialized from template: {{ isCartInitialized }})
+      Initializing cart...
     </div>
     <div v-else-if="cartItems.length === 0" class="text-center py-10 px-4 bg-venus-neutral-light rounded-sm">
       <p class="text-xl text-venus-text-secondary mb-4">Your cart is empty.</p>
@@ -110,8 +109,6 @@ import { useHead } from '#app';
 // CloseIcon import can be removed if SVG is directly in template for remove button
 // import CloseIcon from '~/components/icons/CloseIcon.vue';
 
-console.log('--- CART.VUE SCRIPT SETUP EXECUTED (Restored Phase 3 - Discounts) ---');
-
 const {
   initCart,
   cartItems,
@@ -131,14 +128,11 @@ const {
 const discountCodeInput = ref('');    // Added back
 const applyingDiscount = ref(false); // Added back
 
-console.log('[cart.vue setup Phase 3] Initial isCartInitialized.value:', isCartInitialized.value);
-
-watchEffect(() => {
-  console.log('[cart.vue watchEffect Phase 3] isCartInitialized.value changed to:', isCartInitialized.value);
-});
-
 onMounted(() => {
-  console.log('[cart.vue onMounted Phase 3] Component mounted. Current isCartInitialized.value:', isCartInitialized.value);
+  // Ensure cart initialization logic is run when cart page is mounted,
+  // especially for client-side navigations if app.vue's onMounted
+  // doesn't cover all scenarios or if there's a reactivity lag.
+  // initCart() has an internal guard so it only runs fully once.
   initCart();
 });
 
