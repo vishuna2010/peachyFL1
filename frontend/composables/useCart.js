@@ -118,6 +118,7 @@ export const useCart = () => {
         quantity: quantityToAdd,
       };
       cartItems.value.push(newItem);
+      console.log('useCart: Adding item to cart:', JSON.parse(JSON.stringify(newItem))); // DEBUG LOG
       toast.success(`"${newItem.name}" (Qty: ${quantityToAdd}) added to cart!`);
     }
     // console.log('Cart operation:', itemDetails.name, 'Type:', itemDetails.type, 'ID:', itemDetails.id, 'Quantity after op:', existingItem ? existingItem.quantity : quantityToAdd);

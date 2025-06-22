@@ -1,20 +1,20 @@
 <template>
   <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-[calc(100vh-theme(spacing.16))]">
     <h2 class="text-3xl font-serif text-venus-text-primary mb-8 text-center">Checkout</h2>
+    <ClientOnly>
+      <div v-if="isLoadingAuthOrCart" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow text-venus-text-secondary">Loading checkout...</div>
 
-    <div v-if="isLoadingAuthOrCart" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow text-venus-text-secondary">Loading checkout...</div>
-
-    <div v-else> <!-- Main content wrapper when not loading auth/cart -->
-      <div v-if="showInitializingMessage" class="text-center py-8 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
-        <p class="text-lg text-venus-text-secondary mb-4">Initializing cart... (computed: {{ showInitializingMessage }})</p>
-      </div>
-      <div v-else-if="cartItems.length === 0" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
-        <p class="text-lg text-venus-text-secondary mb-4">Your cart is empty. Please add items to your cart before proceeding to checkout.</p>
-        <NuxtLink to="/" class="mt-4 inline-block px-6 py-3 bg-venus-text-primary text-white font-medium rounded-sm hover:bg-opacity-80 transition-colors duration-200 ease-in-out">Continue Shopping</NuxtLink>
-      </div>
-      <div v-else class="lg:grid lg:grid-cols-5 lg:gap-x-8 xl:gap-x-12 mt-6">
-        <!-- Order Summary (Right Column on Desktop, First on Mobile) -->
-        <div class="lg:col-span-2 lg:order-last p-6 bg-venus-neutral-light rounded-sm shadow-md border-venus-neutral-medium h-fit lg:sticky lg:top-24">
+      <div v-else> <!-- Main content wrapper when not loading auth/cart -->
+        <div v-if="showInitializingMessage" class="text-center py-8 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
+          <p class="text-lg text-venus-text-secondary mb-4">Initializing cart... (computed: {{ showInitializingMessage }})</p>
+        </div>
+        <div v-else-if="cartItems.length === 0" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
+          <p class="text-lg text-venus-text-secondary mb-4">Your cart is empty. Please add items to your cart before proceeding to checkout.</p>
+          <NuxtLink to="/" class="mt-4 inline-block px-6 py-3 bg-venus-text-primary text-white font-medium rounded-sm hover:bg-opacity-80 transition-colors duration-200 ease-in-out">Continue Shopping</NuxtLink>
+        </div>
+        <div v-else class="lg:grid lg:grid-cols-5 lg:gap-x-8 xl:gap-x-12 mt-6">
+          <!-- Order Summary (Right Column on Desktop, First on Mobile) -->
+          <div class="lg:col-span-2 lg:order-last p-6 bg-venus-neutral-light rounded-sm shadow-md border-venus-neutral-medium h-fit lg:sticky lg:top-24">
         <h3 class="text-xl font-serif text-venus-text-primary mb-6">Order Summary</h3>
         <ul class="list-none p-0 m-0 space-y-3">
           <li v-for="item in cartItems" :key="item.cartItemId" class="text-sm pb-3 mb-3 border-b border-venus-neutral-medium last:border-b-0 last:pb-0 last:mb-0">
@@ -134,10 +134,8 @@
           {{ isSubmitting ? 'Placing Order...' : 'Place Order' }}
         </button>
       </form>
-    </div>
-  </div>
-    </div> <!-- End of main content wrapper -->
-
+    </div> <!-- End of lg:grid -->
+  </ClientOnly> <!-- End of ClientOnly -->
 </template>
 
 <script setup>
