@@ -26,6 +26,7 @@
           <span>Subtotal:</span>
           <span class="font-semibold text-venus-text-primary">${{ cartSubtotal.toFixed(2) }}</span>
         </p>
+        </div>
         <div v-if="appliedDiscount" class="mt-1 text-sm text-venus-accent-sale">
           <p class="flex justify-between text-sm text-venus-accent-sale mt-2">
             <span>Discount ({{ appliedDiscount.code }}):</span>
