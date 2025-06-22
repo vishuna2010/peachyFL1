@@ -136,6 +136,8 @@
       </form>
     </div>
   </div>
+    </div> <!-- End of main content wrapper -->
+
 </template>
 
 <script setup>
