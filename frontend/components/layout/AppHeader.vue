@@ -2,8 +2,9 @@
   <header class="bg-white shadow-md sticky top-0 z-50">
     <div class="container mx-auto px-4 py-4 flex items-center justify-between">
       <!-- Logo -->
-      <NuxtLink to="/" class="text-2xl font-serif text-peach-pink">
-        YOUR_LOGO <!-- Placeholder for actual logo/name -->
+      <NuxtLink to="/" class="text-2xl font-serif text-peach-pink flex items-center">
+        <img v-if="logoUrl" :src="logoUrl" alt="Site Logo" class="h-10 mr-2" />
+        <span v-else>YOUR_LOGO</span> <!-- Fallback text if logo URL isn't loaded -->
       </NuxtLink>
 
       <!-- Navigation Links -->
@@ -46,5 +47,40 @@
   </header>
 </template>
 <script setup>
-// No complex script needed for this simplified version
+import { ref, onMounted } from 'vue';
+import { useNuxtApp } from '#app';
+
+const { $axios } = useNuxtApp();
+const logoUrl = ref(null);
+const siteName = ref('Venus'); // Default site name, can also be fetched if needed
+
+onMounted(async () => {
+  try {
+    const response = await $axios.get('/settings/logo');
+    if (response.data && response.data.logoUrl) {
+      logoUrl.value = response.data.logoUrl;
+    } else {
+      console.warn('Logo URL not found in API response, using default or placeholder text.');
+      // Optionally set a local placeholder if the API fails or S3 URL is invalid
+      // logoUrl.value = '/path/to/local/placeholder_logo.svg';
+    }
+  } catch (error) {
+    console.error('Failed to fetch logo URL:', error);
+    // Optionally set a local placeholder on error
+    // logoUrl.value = '/path/to/local/placeholder_logo.svg';
+  }
+});
+
+// You can also fetch other settings like siteName if you add them to the /api/settings/all endpoint
+// onMounted(async () => {
+//   try {
+//     const response = await $axios.get('/settings/all'); // Example if you have an /all endpoint
+//     if (response.data) {
+//       logoUrl.value = response.data.logoUrl;
+//       siteName.value = response.data.siteName || 'My Store';
+//     }
+//   } catch (error) {
+//     console.error('Failed to fetch settings:', error);
+//   }
+// });
 </script>
