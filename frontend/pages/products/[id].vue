@@ -98,6 +98,10 @@
             </span>
           </div>
 
+          <p v-if="product.tax_class_name || product.tax_class_id" class="text-sm text-venus-text-secondary mb-4">
+            <strong>Tax Class:</strong> {{ product.tax_class_name || (product.tax_class_id ? 'ID: ' + product.tax_class_id : 'N/A') }}
+          </p>
+
           <div v-if="product.has_variants && product.available_options && product.available_options.length > 0" class="space-y-4 mb-6">
             <div v-for="option_type in product.available_options" :key="option_type.option_id">
               <label :for="`option-${option_type.option_id}`" class="block text-sm font-medium text-venus-text-primary mb-1">
