@@ -295,11 +295,7 @@ import ReviewForm from '~/components/reviews/ReviewForm.vue';
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
-const product = ref(null);
-const pending = ref(true);
-const fetchError = ref(null);
 const toast = useToast();
-
 const { addToCart } = useCart();
 const { isLoggedIn, user } = useAuth();
 
@@ -632,48 +628,71 @@ function updateCurrentVariant() {
   quantity.value = 1;
 }
 
-async function fetchProduct() {
-  const productId = route.params.id;
-  pending.value = true;
-  fetchError.value = null;
-  Object.keys(selectedOptions).forEach(key => delete selectedOptions[key]);
-  currentVariant.value = null;
-  galleryImages.value = [];
-  selectedImage.value = null; // Initialize selectedImage
-  productPublicReviews.value = [];
-  currentPublicReviewsPage.value = 1;
-
-  try {
-    const response = await $axios.get(`/products/${productId}`);
-    product.value = response.data;
-    if (product.value) {
-      // Use gallery_images from product data
-      galleryImages.value = product.value.gallery_images || [];
-
-      initializeSelections();
-
-      // Initialize selectedImage based on the new galleryImages or product.image_url
-      if (galleryImages.value.length > 0) {
-        selectedImage.value = galleryImages.value[0];
-      } else if (product.value.image_url) {
-        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
-      } else {
-        selectedImage.value = null;
-      }
-    } else {
-      fetchError.value = { message: "Product data is invalid or not found." };
-       toast.error(fetchError.value.message);
+// SSR-friendly data fetching using useAsyncData
+const productId = route.params.id;
+const { data: productData, pending, error: fetchError, refresh } = await useAsyncData(
+  `product-${productId}`,
+  async () => {
+    try {
+      const response = await $axios.get(`/products/${productId}`);
+      return response.data;
+    } catch (err) {
+      console.error(`Failed to fetch product ${productId}:`, err);
+      // Throw an error that useAsyncData can catch and put into its 'error' ref
+      // This helps in displaying a proper error page or message.
+      // Consider creating a custom error object or using one from Nuxt if available.
+      const statusCode = err.response?.status || 500;
+      const message = err.response?.data?.message || err.message || "Unknown error occurred";
+      throw createError({ statusCode, statusMessage: message, fatal: false }); // fatal: false for non-blocking error page
     }
-  } catch (err) {
-    console.error(`Failed to fetch product ${productId}:`, err);
-    fetchError.value = err.response?.data || { message: err.message || "Unknown error occurred" };
-    toast.error(fetchError.value.message || "Failed to load product.");
-  } finally {
-    pending.value = false;
+  },
+  {
+    watch: [() => route.params.id] // Re-fetch if route.params.id changes (e.g. navigating between product pages)
   }
-}
+);
+
+// Assign the fetched data to a local ref 'product' for easier use in the component
+// This also allows watchers on 'product' to work as before.
+const product = ref(null);
+
+watch(productData, (newProductData) => {
+  if (newProductData) {
+    product.value = newProductData;
+    // Initialize states that depend on product data
+    galleryImages.value = newProductData.gallery_images || [];
+    if (galleryImages.value.length > 0) {
+      selectedImage.value = galleryImages.value[0];
+    } else if (newProductData.image_url) {
+      selectedImage.value = { url: newProductData.image_url, alt_text: newProductData.name, id: 'product_primary_' + newProductData.id };
+    } else {
+      selectedImage.value = null;
+    }
+    initializeSelections(); // This will also call updateCurrentVariant
+
+    // Reset review related states when product changes
+    userHasReviewed.value = false;
+    userReview.value = null;
+    showReviewForm.value = false;
+    productPublicReviews.value = [];
+    currentPublicReviewsPage.value = 1;
+    // checkUserReviewStatus(); // This will be triggered by its own watchEffect if product.id is now set
+    // fetchPublicProductReviews(1); // This will be triggered by its own watcher if tab is active
+  } else if (fetchError.value) {
+    // If there was an error fetching, product.value should reflect that (e.g. by being null)
+    product.value = null;
+    // Display toast for error if not already handled by a global error page
+    if (fetchError.value.statusMessage && process.client) { // Show toast only on client after hydration
+        toast.error(fetchError.value.statusMessage || "Failed to load product.");
+    }
+  }
+}, { immediate: true }); // immediate: true to run the watcher once on setup with initial productData
+
 
 const handleAddToCart = () => {
+  if (!product.value) { // Guard against product not being loaded
+    toast.error("Product data is not available. Please try again.");
+    return;
+  }
   const stockAvailable = displayStock.value;
   if (product.value.has_variants && !currentVariant.value && Object.keys(selectedOptions).length === (product.value.available_options?.length || 0) ) {
     toast.error("This combination of options is unavailable.");
@@ -733,37 +752,53 @@ const handleAddToCart = () => {
   addToCart(cartItemData, quantity.value);
 };
 
-onMounted(() => {
-  fetchProduct();
-});
+// REMOVED: onMounted(() => { fetchProduct(); });
+// The data fetching is now handled by useAsyncData
 
-watch(product, (newProduct) => {
-  if (newProduct && newProduct.id) {
-    checkUserReviewStatus();
-    productPublicReviews.value = [];
-    currentPublicReviewsPage.value = 1;
-    if (activeTab.value === 'reviews') {
-      fetchPublicProductReviews(1);
+// Watchers that depend on `product.value` being available
+watch(product, (newProductValue) => {
+  if (newProductValue && newProductValue.id) {
+    // These actions should only run client-side or if product data is present.
+    // `useAsyncData` ensures product.value is populated before these watchers run effectively on client after SSR.
+    if (process.client) { // Explicitly run these on client, or ensure they are SSR safe
+        checkUserReviewStatus(); // This function has its own guards now.
+
+        // Reset and fetch reviews if tab is active
+        productPublicReviews.value = [];
+        currentPublicReviewsPage.value = 1;
+        if (activeTab.value === 'reviews') {
+            fetchPublicProductReviews(1);
+        }
     }
   }
-}, { deep: true });
+}, { deep: true }); // deep might be intensive if product object is huge, consider specific properties if needed.
 
 // This watchEffect will re-run whenever isLoggedIn.value or product.value (specifically product.value.id) changes.
-// checkUserReviewStatus has internal guards to only proceed if both are available.
+// `checkUserReviewStatus` has internal guards.
 watchEffect(() => {
-  console.log(`[PDP watchEffect for review status] isLoggedIn: ${isLoggedIn.value}, product ID: ${product.value?.id}`);
-  checkUserReviewStatus();
+  if (process.client) { // Defer to client-side
+    // console.log(`[PDP watchEffect for review status CLIENT] isLoggedIn: ${isLoggedIn.value}, product ID: ${product.value?.id}`);
+    if (product.value?.id) { // Still ensure product is loaded before checking review status
+      checkUserReviewStatus();
+    }
+  }
 });
 
 watch(activeTab, (newTab) => {
-  if (newTab === 'reviews' && product.value?.id && (!productPublicReviews.value || productPublicReviews.value.length === 0) && !isLoadingPublicReviews.value && !publicReviewsError.value) {
-    fetchPublicProductReviews(currentPublicReviewsPage.value);
+  if (newTab === 'reviews' && product.value?.id &&
+      (!productPublicReviews.value || productPublicReviews.value.length === 0) &&
+      !isLoadingPublicReviews.value && !publicReviewsError.value) {
+    if (process.client) { // Defer to client-side
+        fetchPublicProductReviews(currentPublicReviewsPage.value);
+    }
   }
 });
 
 watch(currentPublicReviewsPage, (newPage, oldPage) => {
     if (newPage !== oldPage && activeTab.value === 'reviews' && product.value?.id) {
-        fetchPublicProductReviews(newPage);
+        if (process.client) { // Defer to client-side
+            fetchPublicProductReviews(newPage);
+        }
     }
 });
 
