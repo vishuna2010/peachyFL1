@@ -709,12 +709,14 @@ const handleAddToCart = () => {
       name: `${product.value.name}${variantOptionString ? ` - ${variantOptionString}` : ''}`,
       price: parseFloat(currentVariant.value.final_price), sku: currentVariant.value.sku || product.value.sku,
       image_url: selectedImage.value?.url || product.value.image_url, type: 'variant',
+      tax_class_id: product.value.tax_class_id || null, // Add tax_class_id from parent product
     };
   } else {
     cartItemData = {
       id: product.value.id, product_id: product.value.id, variant_id: null,
       name: product.value.name, price: parseFloat(product.value.price), sku: product.value.sku,
       image_url: selectedImage.value?.url || product.value.image_url, type: 'product',
+      tax_class_id: product.value.tax_class_id || null, // Add tax_class_id
     };
   }
   addToCart(cartItemData, quantity.value);

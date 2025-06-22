@@ -24,8 +24,11 @@
           {{ product.name }}
         </h3>
       </NuxtLink>
-      <p v-if="product.category_name" class="text-xs text-venus-text-secondary mb-2 truncate">
-        {{ product.category_name }}
+      <p v-if="product.category_name" class="text-xs text-venus-text-secondary mb-1 truncate">
+        Category: {{ product.category_name }}
+      </p>
+      <p v-if="product.tax_class_name" class="text-xs text-venus-text-secondary mb-2 truncate">
+        Tax: {{ product.tax_class_name }}
       </p>
       <p class="font-sans text-base text-venus-text-primary font-semibold mt-auto pt-2">
         {{ formattedPrice }}
@@ -114,6 +117,7 @@ const handleAddToCart = () => {
       sku: props.product.sku,
       image_url: props.product.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image',
       type: 'product',
+      tax_class_id: props.product.tax_class_id || null, // Add tax_class_id
     };
     addToCart(cartItemData, 1); // Add 1 quantity
     toast.success(`${props.product.name} added to cart!`);

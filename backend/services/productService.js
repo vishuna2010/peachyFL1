@@ -36,6 +36,7 @@ async function getAllProducts({
     p.id, p.name, p.description, p.price, p.category_id, p.image_url,
     p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold,
     p.has_variants, p.average_rating, p.review_count, p.product_status,
+    p.tax_class_id, -- Added tax_class_id
     p.created_at, p.updated_at
   `;
   // Note: p.product_status is added
@@ -83,10 +84,12 @@ async function getAllProducts({
     LEFT JOIN product_tags pt ON p.id = pt.product_id
     LEFT JOIN tags t ON pt.tag_id = t.id
     LEFT JOIN product_effective_stock pes ON p.id = pes.product_id
+    LEFT JOIN tax_classes tc ON p.tax_class_id = tc.id -- Added join for tax_classes
   `;
 
   let selectColumns = `${productColumns},
     c.name as category_name, s.name as supplier_name,
+    tc.name as tax_class_name, -- Added tax_class_name
     COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags,
     pes.effective_stock_quantity, pes.is_low_stock`;
 
@@ -218,7 +221,7 @@ async function getAllProducts({
   // Group by for main query if not using DISTINCT ON or if other aggregations are added
   // For DISTINCT ON (p.id) to work, p.id must be the first item in ORDER BY
   // If using array_agg, GROUP BY is necessary.
-  const groupByColumns = `${productColumns}, c.name, s.name, pes.effective_stock_quantity, pes.is_low_stock`;
+  const groupByColumns = `${productColumns}, c.name, s.name, tc.name, pes.effective_stock_quantity, pes.is_low_stock`; // Added tc.name
   baseSelect += ` GROUP BY ${groupByColumns} `;
   if (include_total_stock) { // Already covered by pes.effective_stock_quantity
       // baseSelect += `, total_stock_display`; // No, total_stock_display is from pes
@@ -299,15 +302,17 @@ async function getProductById(productId) {
       SELECT p.*,
              c.name as category_name,
              s.name as supplier_name,
+             tc.name as tax_class_name, -- Added tax_class_name
              COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       LEFT JOIN suppliers s ON p.supplier_id = s.id
+      LEFT JOIN tax_classes tc ON p.tax_class_id = tc.id -- Added join for tax_classes
       LEFT JOIN product_tags pt ON p.id = pt.product_id
       LEFT JOIN tags t ON pt.tag_id = t.id
       WHERE p.id = $1
-      GROUP BY p.id, c.name, s.name;
-    `; // p.has_variants is selected via p.*
+      GROUP BY p.id, c.name, s.name, tc.name; -- Added tc.name to GROUP BY
+    `; // p.has_variants and p.tax_class_id are selected via p.*
     const productResult = await client.query(productQuery, [productId]);
 
     if (productResult.rows.length === 0) {
