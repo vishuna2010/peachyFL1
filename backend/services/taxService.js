@@ -67,14 +67,16 @@ async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, dbClientOpt
         console.warn(`Invalid rate_percentage for tax rate ID ${rate.id}: ${rate.rate_percentage}`);
         continue; // Skip this tax rate
     }
-    // Simple summation of tax amounts based on the initial base price
-    const currentRateTax = numericBasePrice * (ratePercentage / 100);
+    // The `ratePercentage` is already the decimal factor (e.g., 0.0825 for 8.25%)
+    // as it's fetched directly from `rate.rate_percentage` which should be stored as such.
+    // The seed script was updated to store it as a decimal (e.g., 8.25 / 100 = 0.0825).
+    const currentRateTax = numericBasePrice * ratePercentage;
     totalTaxAmount += currentRateTax;
     appliedRatesDetailed.push({
       id: rate.id,
       name: rate.name,
-      rate_percentage: ratePercentage, // Store as number
-      amount: parseFloat(currentRateTax.toFixed(4)), // Store tax amount with more precision initially
+      rate_percentage: ratePercentage, // This is the decimal factor, e.g., 0.0825
+      amount: parseFloat(currentRateTax.toFixed(4)),
     });
   }
 
