@@ -181,18 +181,23 @@ async function calculateTaxForCartItems(cartItems, userId, addressForTaxCalculat
     });
     overall_total_tax_amount += itemTaxDetails.line_item_tax_amount;
 
-    // Populate tax_summary_details (simplified example)
+    // Populate tax_summary_details
     itemTaxDetails.applied_rates_summary.forEach(rate => {
-        if (!tax_summary_details[rate.name]) {
-            tax_summary_details[rate.name] = { total_taxable_amount: 0, total_tax_collected: 0 };
+      if (rate && typeof rate.name === 'string' && rate.name.trim() !== '') {
+        const rateNameKey = rate.name.trim();
+        if (!tax_summary_details[rateNameKey]) {
+          tax_summary_details[rateNameKey] = { total_taxable_amount: 0, total_tax_collected: 0, rate_percentage: rate.rate_percentage };
         }
-        // Assuming basePriceForItem * item.quantity is the taxable amount for this rate
-        tax_summary_details[rate.name].total_taxable_amount += (basePriceForItem * item.quantity);
-        tax_summary_details[rate.name].total_tax_collected += (parseFloat(rate.amount) * item.quantity);
+        // Assuming basePriceForItem * item.quantity is the taxable amount for this rate component
+        tax_summary_details[rateNameKey].total_taxable_amount += (basePriceForItem * item.quantity);
+        tax_summary_details[rateNameKey].total_tax_collected += (parseFloat(rate.amount) * item.quantity);
+      } else {
+        console.warn('Skipping tax rate in summary due to missing or invalid name:', rate);
+      }
     });
   }
 
-  // Ensure totals are correctly formatted
+  // Ensure totals are correctly formatted and round taxable amounts appropriately
   for (const key in tax_summary_details) {
       tax_summary_details[key].total_taxable_amount = parseFloat(tax_summary_details[key].total_taxable_amount.toFixed(2));
       tax_summary_details[key].total_tax_collected = parseFloat(tax_summary_details[key].total_tax_collected.toFixed(2));
