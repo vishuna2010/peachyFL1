@@ -1,43 +1,45 @@
 const AWS = require('aws-sdk');
 
 // --- AWS S3 Configuration ---
-const config = require('../config'); // Import centralized configuration
+// These environment variables are CRUCIAL for S3 operations.
+// Ensure they are set in your deployment environment.
+// For local development, you might use a .env file (ensure it's in .gitignore)
+// or configure AWS shared credentials (~/.aws/credentials).
 
-// --- AWS S3 Configuration ---
-// Fetched from the central config module.
-
-const AWS_ACCESS_KEY_ID = config.awsAccessKeyId;
-const AWS_SECRET_ACCESS_KEY = config.awsSecretAccessKey;
-const AWS_S3_BUCKET_NAME = config.awsS3BucketName;
-const AWS_REGION = config.awsRegion;
+const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
+const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
+const AWS_S3_BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME;
+const AWS_REGION = process.env.AWS_REGION;
 
 let s3;
 
 if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY || !AWS_S3_BUCKET_NAME || !AWS_REGION) {
   console.warn(
-    'S3Service: AWS S3 environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET_NAME, AWS_REGION) are not fully configured via config.js. ' +
+    'AWS S3 environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET_NAME, AWS_REGION) are not fully configured. ' +
     'S3 functionality will be disabled or may fail. This is expected if not using S3 for uploads.'
   );
+  // Optionally, you could have a fallback storage mechanism or disable S3 features.
+  // For this service, we'll let it attempt to initialize, and calls will fail if not configured.
 } else {
-    console.log(`S3Service: Initializing S3 client for region ${AWS_REGION} and bucket ${AWS_S3_BUCKET_NAME}.`);
+    console.log(`S3 Service: Initializing S3 client for region ${AWS_REGION} and bucket ${AWS_S3_BUCKET_NAME}.`);
 }
 
+// Initialize S3 client
+// The SDK will automatically pick up credentials from environment variables if set,
+// or from shared credentials files, or IAM roles if running on EC2/ECS.
+// Explicitly passing them is also an option but generally less secure if hardcoded.
+// We rely on the environment variables being set.
 try {
-    // Only initialize if essential params are present
-    if (AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY && AWS_REGION && AWS_S3_BUCKET_NAME) {
-        s3 = new AWS.S3({
-            accessKeyId: AWS_ACCESS_KEY_ID,
-            secretAccessKey: AWS_SECRET_ACCESS_KEY,
-            region: AWS_REGION,
-        });
-        console.log("S3Service: S3 client initialized successfully.");
-    } else {
-        s3 = null;
-        console.log("S3Service: S3 client not initialized due to missing configuration.");
-    }
+    s3 = new AWS.S3({
+        accessKeyId: AWS_ACCESS_KEY_ID,         // Optional if using other auth methods like IAM roles
+        secretAccessKey: AWS_SECRET_ACCESS_KEY, // Optional if using other auth methods
+        region: AWS_REGION,
+        // signatureVersion: 'v4' // Often recommended for security
+    });
+    console.log("S3 client initialized successfully.");
 } catch (error) {
-    console.error("S3Service: Error initializing S3 client:", error);
-    s3 = null;
+    console.error("Error initializing S3 client:", error);
+    s3 = null; // Ensure s3 is null if initialization fails
 }
 
 
@@ -51,13 +53,16 @@ try {
  */
 async function uploadFileToS3(fileBuffer, fileName, mimeType) {
   if (!s3) {
-    console.error('S3Service: S3 client not initialized. Upload aborted. Check AWS configuration via config.js.');
+    console.error('S3 client not initialized. Upload aborted. Check AWS configuration.');
     throw new Error('S3 client not initialized. Cannot upload file.');
   }
-  // AWS_S3_BUCKET_NAME is already checked during s3 initialization effectively
+  if (!AWS_S3_BUCKET_NAME) {
+    console.error('AWS_S3_BUCKET_NAME is not configured. Upload aborted.');
+    throw new Error('S3 bucket name not configured.');
+  }
 
   const params = {
-    Bucket: AWS_S3_BUCKET_NAME, // This comes from config now
+    Bucket: AWS_S3_BUCKET_NAME,
     Key: fileName, // File name to save as in S3 (e.g., product-images/image.jpg)
     Body: fileBuffer,
     ContentType: mimeType,

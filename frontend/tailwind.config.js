@@ -12,17 +12,14 @@ export default {
   theme: {
     extend: {
       colors: {
-        'peach-pink': '#FC7099',
-        'sky-blue': '#26A7E2',
-        'lemon-yellow': '#F9D849',
-        'fresh-green': '#5BAA41',
-        'orange-gold': '#F6A03C',
-        'venus-background': '#FFF5F8', // Using light pastel pink as suggested
-        'venus-text-primary': '#1a1a1a', // Keeping existing text colors for now
-        'venus-text-secondary': '#555555', // Keeping existing text colors for now
-        'venus-neutral-light': '#FAFAFA', // Using suggested neutral
-        'venus-neutral-medium': '#e0e0e0', // Keeping for now, can be reviewed
-        'venus-neutral-dark': '#333333', // Keeping for now, can be reviewed
+        'venus-background': '#ffffff',
+        'venus-text-primary': '#1a1a1a',
+        'venus-text-secondary': '#555555',
+        'venus-accent-gold': '#b08d57',
+        'venus-accent-sale': '#e73387',
+        'venus-neutral-light': '#f5f5f5',
+        'venus-neutral-medium': '#e0e0e0',
+        'venus-neutral-dark': '#333333',
       },
       fontFamily: {
         sans: ['Lato', 'Poppins', ...defaultTheme.fontFamily.sans],

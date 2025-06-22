@@ -191,14 +191,11 @@ async function generateQrCodeDataURL(text) {
   }
 }
 
-// Import the global config
-const config = require('../config');
-
 function getInvoiceHtml(orderDetails) {
   // --- Company Details (Placeholders or from orderDetails if available) ---
-  const companyName = orderDetails.company_name || config.siteName || 'Your Awesome Store'; // Use siteName from config if available
-  const companyAddress = orderDetails.company_address || '123 Commerce St, Business City, BC 12345'; // Placeholder
-  const companyLogoUrl = config.siteLogoUrl; // Use siteLogoUrl from global config
+  const companyName = orderDetails.company_name || 'Your Awesome Store';
+  const companyAddress = orderDetails.company_address || '123 Commerce St, Business City, BC 12345';
+  const companyLogoUrl = orderDetails.company_logo_url || null; // e.g., 'https://yourstore.com/logo.png'
 
   // --- Format Dates ---
   const orderDate = new Date(orderDetails.created_at).toLocaleDateString();
@@ -394,8 +391,8 @@ async function generateOrderInvoicePdf(orderDetails) {
 // --- Packing Slip Generation ---
 
 function getPackingSlipHtml(packingSlipData) {
-  const companyName = packingSlipData.company_name || config.siteName || 'Your Awesome Store'; // Use siteName from config
-  const companyLogoUrl = config.siteLogoUrl; // Use siteLogoUrl from global config
+  const companyName = packingSlipData.company_name || 'Your Awesome Store';
+  const companyLogoUrl = packingSlipData.company_logo_url || null;
   const orderDate = new Date(packingSlipData.order_date).toLocaleDateString();
 
   const formatAddress = (addr, type) => {

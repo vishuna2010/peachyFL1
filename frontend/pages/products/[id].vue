@@ -745,17 +745,18 @@ watch(product, (newProduct) => {
 }, { deep: true });
 
 // Watch for changes in the user object to infer login/logout status
-watch(user, (newUser, oldUser) => {
-  // A simple check: if user object reference changes, it might indicate login/logout.
-  // More sophisticated checks could compare newUser?.id with oldUser?.id.
-  // This also runs when the component mounts if `user` is already populated.
-  const wasLoggedIn = oldUser && oldUser.id;
-  const nowLoggedIn = newUser && newUser.id;
+watch(() => user.value, (newUserInfo, oldUserInfo) => {
+  // This watcher triggers when the user.value object itself changes (e.g., login/logout)
+  // or if deep properties change (due to deep: true).
+  // We are primarily interested in login/logout status change.
+  const wasLoggedIn = oldUserInfo && oldUserInfo.id;
+  const nowLoggedIn = newUserInfo && newUserInfo.id;
 
   if (wasLoggedIn !== nowLoggedIn) {
+    console.log('[PDP] User login state changed, re-checking user review status.');
     checkUserReviewStatus();
   }
-}, { deep: true }); // deep watch might be useful if properties within user object change without the object itself changing instance
+}, { deep: true });
 
 watch(activeTab, (newTab) => {
   if (newTab === 'reviews' && product.value?.id && (!productPublicReviews.value || productPublicReviews.value.length === 0) && !isLoadingPublicReviews.value && !publicReviewsError.value) {
