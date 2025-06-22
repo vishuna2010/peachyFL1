@@ -158,7 +158,6 @@
     </div> <!-- End of lg:grid -->
     </div> <!-- Closing tag for <div v-else> associated with isLoadingAuthOrCart -->
   </ClientOnly> <!-- End of ClientOnly -->
-<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen">
 </template>
 
 <script setup>
