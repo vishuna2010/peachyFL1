@@ -135,6 +135,7 @@
         </button>
       </form>
     </div> <!-- End of lg:grid -->
+    </div> <!-- Closing tag for <div v-else> associated with isLoadingAuthOrCart -->
   </ClientOnly> <!-- End of ClientOnly -->
 </template>
 
