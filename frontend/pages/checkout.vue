@@ -4,15 +4,17 @@
 
     <div v-if="isLoadingAuthOrCart" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow text-venus-text-secondary">Loading checkout...</div>
 
-    <div v-else-if="!isCartStoreInitialized.value || cartItems.length === 0" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
-      <p v-if="!isCartStoreInitialized.value" class="text-lg text-venus-text-secondary mb-4">Initializing cart...</p>
-      <p v-else class="text-lg text-venus-text-secondary mb-4">Your cart is empty. Please add items to your cart before proceeding to checkout.</p>
-      <NuxtLink to="/" class="mt-4 inline-block px-6 py-3 bg-venus-text-primary text-white font-medium rounded-sm hover:bg-opacity-80 transition-colors duration-200 ease-in-out">Continue Shopping</NuxtLink>
-    </div>
-
-    <div v-else class="lg:grid lg:grid-cols-5 lg:gap-x-8 xl:gap-x-12 mt-6">
-      <!-- Order Summary (Right Column on Desktop, First on Mobile) -->
-      <div class="lg:col-span-2 lg:order-last p-6 bg-venus-neutral-light rounded-sm shadow-md border-venus-neutral-medium h-fit lg:sticky lg:top-24">
+    <div v-else> <!-- Main content wrapper when not loading auth/cart -->
+      <div v-if="showInitializingMessage" class="text-center py-8 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
+        <p class="text-lg text-venus-text-secondary mb-4">Initializing cart... (computed: {{ showInitializingMessage }})</p>
+      </div>
+      <div v-else-if="cartItems.length === 0" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
+        <p class="text-lg text-venus-text-secondary mb-4">Your cart is empty. Please add items to your cart before proceeding to checkout.</p>
+        <NuxtLink to="/" class="mt-4 inline-block px-6 py-3 bg-venus-text-primary text-white font-medium rounded-sm hover:bg-opacity-80 transition-colors duration-200 ease-in-out">Continue Shopping</NuxtLink>
+      </div>
+      <div v-else class="lg:grid lg:grid-cols-5 lg:gap-x-8 xl:gap-x-12 mt-6">
+        <!-- Order Summary (Right Column on Desktop, First on Mobile) -->
+        <div class="lg:col-span-2 lg:order-last p-6 bg-venus-neutral-light rounded-sm shadow-md border-venus-neutral-medium h-fit lg:sticky lg:top-24">
         <h3 class="text-xl font-serif text-venus-text-primary mb-6">Order Summary</h3>
         <ul class="list-none p-0 m-0 space-y-3">
           <li v-for="item in cartItems" :key="item.productId" class="flex justify-between items-center text-sm">
@@ -140,7 +142,8 @@ const {
   cartFinalTotalPrice,
   appliedDiscount,
   clearCart,
-  isCartInitialized: isCartStoreInitialized
+  isCartInitialized: isCartStoreInitialized,
+  initCart // Added initCart here
 } = useCart();
 const { authToken, authUser, isAuthInitialized } = useAuth();
 const { $axios } = useNuxtApp();
@@ -163,6 +166,11 @@ const isSubmitting = ref(false);
 const submissionError = ref('');
 
 console.log('[checkout.vue setup] Initial isCartStoreInitialized.value:', isCartStoreInitialized.value);
+
+const showInitializingMessage = computed(() => {
+  console.log('[checkout.vue computed showInitializingMessage] isCartStoreInitialized.value is:', isCartStoreInitialized.value);
+  return !isCartStoreInitialized.value;
+});
 
 // Watchers for auth and cart initialization
 watchEffect(() => {
