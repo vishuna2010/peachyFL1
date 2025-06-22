@@ -114,6 +114,8 @@ export const useCart = () => {
         image_url: itemDetails.image_url || null,
         sku: itemDetails.sku || null,
         type: itemDetails.type, // 'product' or 'variant'
+        tax_class_id: itemDetails.tax_class_id || null,       // Added tax_class_id
+        tax_class_name: itemDetails.tax_class_name || null,   // Added tax_class_name
         // selectedVariantDescription could be derived from name or passed if needed explicitly
         quantity: quantityToAdd,
       };

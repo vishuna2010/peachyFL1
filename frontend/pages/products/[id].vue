@@ -748,16 +748,12 @@ watch(product, (newProduct) => {
   }
 }, { deep: true });
 
-// Watch for changes in isLoggedIn status
-watch(isLoggedIn, (newIsLoggedIn, oldIsLoggedIn) => {
-  // This watcher specifically reacts to changes in the login status.
-  // checkUserReviewStatus has internal guards for product.value.id
-  if (newIsLoggedIn !== oldIsLoggedIn) {
-    console.log(`[PDP] isLoggedIn status changed from ${oldIsLoggedIn} to ${newIsLoggedIn}. Re-checking user review status.`);
-    checkUserReviewStatus();
-  }
+// This watchEffect will re-run whenever isLoggedIn.value or product.value (specifically product.value.id) changes.
+// checkUserReviewStatus has internal guards to only proceed if both are available.
+watchEffect(() => {
+  console.log(`[PDP watchEffect for review status] isLoggedIn: ${isLoggedIn.value}, product ID: ${product.value?.id}`);
+  checkUserReviewStatus();
 });
-// The watcher for `product` already calls checkUserReviewStatus when a product loads.
 
 watch(activeTab, (newTab) => {
   if (newTab === 'reviews' && product.value?.id && (!productPublicReviews.value || productPublicReviews.value.length === 0) && !isLoadingPublicReviews.value && !publicReviewsError.value) {
