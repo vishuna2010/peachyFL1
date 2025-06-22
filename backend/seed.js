@@ -129,31 +129,42 @@ async function createSchema(client) {
       CREATE TABLE IF NOT EXISTS tax_rates (
           id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
-          rate_percentage NUMERIC(6, 4) NOT NULL CHECK (rate_percentage >= 0 AND rate_percentage <= 1),
-          jurisdiction TEXT NOT NULL,
-          tax_type VARCHAR(50) NOT NULL,
-          tax_code VARCHAR(50) NULL,
+          rate_percentage NUMERIC(6, 4) NOT NULL CHECK (rate_percentage >= 0 AND rate_percentage <= 100.0000), -- Allow up to 100%
+          jurisdiction TEXT NOT NULL, -- Consider more structured fields like country, state, postal_code if needed for complex rules
+          tax_type VARCHAR(50) NOT NULL, -- e.g., SALES, VAT, GST
+          tax_code VARCHAR(50) NULL, -- External tax system reference
           is_active BOOLEAN DEFAULT TRUE NOT NULL,
+          priority INTEGER DEFAULT 0 NOT NULL, -- For compounding or selection order
           valid_from DATE NULL,
           valid_until DATE NULL,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
-          CONSTRAINT uq_tax_rate_name UNIQUE (name)
+          CONSTRAINT uq_tax_rate_name_jurisdiction_type UNIQUE (name, jurisdiction, tax_type) -- Make uniqueness more specific
       );
     `);
     console.log('Table "tax_rates" checked/created.');
 
-    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS name VARCHAR(255);`);
-    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS rate_percentage NUMERIC(6, 4);`);
-    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS jurisdiction TEXT;`);
-    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS tax_type VARCHAR(50);`);
+    // Ensure all columns exist, especially if table pre-existed
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS name VARCHAR(255) NOT NULL;`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS rate_percentage NUMERIC(6, 4) NOT NULL DEFAULT 0;`);
+    // Update check constraint if it was too restrictive (e.g. rate_percentage <= 1)
+    await client.query(`ALTER TABLE tax_rates DROP CONSTRAINT IF EXISTS tax_rates_rate_percentage_check;`); // Drop old if exists
+    await client.query(`ALTER TABLE tax_rates ADD CONSTRAINT tax_rates_rate_percentage_check CHECK (rate_percentage >= 0 AND rate_percentage <= 100.0000);`);
+
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS jurisdiction TEXT NOT NULL DEFAULT 'GLOBAL';`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS tax_type VARCHAR(50) NOT NULL DEFAULT 'SALES';`);
     await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS tax_code VARCHAR(50) NULL;`);
-    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS is_active BOOLEAN;`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS priority INTEGER NOT NULL DEFAULT 0;`); // Ensure priority column
     await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS valid_from DATE NULL;`);
     await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS valid_until DATE NULL;`);
-    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
-    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
-    console.log('All columns for "tax_rates" table ensured/checked (basic existence).');
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;`);
+    await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;`);
+
+    // Adjust unique constraint: name alone might not be unique if rates differ by jurisdiction/type
+    await client.query(`ALTER TABLE tax_rates DROP CONSTRAINT IF EXISTS uq_tax_rate_name;`);
+    await client.query(`ALTER TABLE tax_rates ADD CONSTRAINT uq_tax_rate_name_jurisdiction_type UNIQUE (name, jurisdiction, tax_type);`);
+    console.log('All columns and constraints for "tax_rates" table ensured/checked.');
 
     await client.query(`CREATE INDEX IF NOT EXISTS idx_tax_rates_jurisdiction ON tax_rates(jurisdiction);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_tax_rates_tax_type ON tax_rates(tax_type);`);
@@ -1544,11 +1555,11 @@ async function seedTaxConfiguration(client, seededDataIds) {
   ];
 
   const taxRatesToSeed = [
-    { name: "CA Sales Tax", rate_percentage: 0.0825, jurisdiction: "US-CA", type: "SALES", tax_code: "CA-SALES-STD", is_active: true, valid_from: "2023-01-01", valid_until: null },
-    { name: "NY Sales Tax", rate_percentage: 0.08875, jurisdiction: "US-NY", type: "SALES", tax_code: "NY-SALES-STD", is_active: true, valid_from: "2023-01-01", valid_until: null },
-    { name: "TX Sales Tax - Exempt", rate_percentage: 0.00, jurisdiction: "US-TX", type: "SALES", tax_code: "TX-SALES-EXEMPT", is_active: true, valid_from: "2023-01-01", valid_until: null },
-    { name: "Federal GST (Canada)", rate_percentage: 0.05, jurisdiction: "CA", type: "GST", tax_code: "CA-GST", is_active: true, valid_from: "2023-01-01", valid_until: null },
-    { name: "Reduced CA Sales Tax", rate_percentage: 0.0250, jurisdiction: "US-CA", type: "SALES", tax_code: "CA-SALES-RED", is_active: true, valid_from: "2023-01-01", valid_until: null }
+    { name: "CA Sales Tax", rate_percentage: 8.25, jurisdiction: "US-CA", type: "SALES", tax_code: "CA-SALES-STD", priority: 0, is_active: true, valid_from: "2023-01-01", valid_until: null },
+    { name: "NY Sales Tax", rate_percentage: 8.875, jurisdiction: "US-NY", type: "SALES", tax_code: "NY-SALES-STD", priority: 0, is_active: true, valid_from: "2023-01-01", valid_until: null },
+    { name: "TX Sales Tax - Exempt", rate_percentage: 0.00, jurisdiction: "US-TX", type: "SALES", tax_code: "TX-SALES-EXEMPT", priority: 0, is_active: true, valid_from: "2023-01-01", valid_until: null },
+    { name: "Federal GST (Canada)", rate_percentage: 5.00, jurisdiction: "CA", type: "GST", tax_code: "CA-GST", priority: 0, is_active: true, valid_from: "2023-01-01", valid_until: null },
+    { name: "Reduced CA Sales Tax", rate_percentage: 2.50, jurisdiction: "US-CA", type: "SALES", tax_code: "CA-SALES-RED", priority: 1, is_active: true, valid_from: "2023-01-01", valid_until: null }
   ];
 
   try {
@@ -1565,20 +1576,24 @@ async function seedTaxConfiguration(client, seededDataIds) {
 
     // Seed Tax Rates
     for (const tr of taxRatesToSeed) {
+      // Convert rate_percentage from whole number (e.g., 8.25 for 8.25%) to decimal for storage (e.g., 0.0825)
+      const rateForDb = tr.rate_percentage / 100;
+
       const result = await client.query(
-        `INSERT INTO tax_rates (name, rate_percentage, jurisdiction, tax_type, tax_code, is_active, valid_from, valid_until)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (name) DO UPDATE SET
+        `INSERT INTO tax_rates (name, rate_percentage, jurisdiction, tax_type, tax_code, priority, is_active, valid_from, valid_until)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (name, jurisdiction, tax_type) DO UPDATE SET
            rate_percentage = EXCLUDED.rate_percentage,
-           jurisdiction = EXCLUDED.jurisdiction,
-           tax_type = EXCLUDED.tax_type,
+           -- jurisdiction = EXCLUDED.jurisdiction, -- Part of conflict target, no need to update explicitly
+           -- tax_type = EXCLUDED.tax_type, -- Part of conflict target
            tax_code = EXCLUDED.tax_code,
+           priority = EXCLUDED.priority,
            is_active = EXCLUDED.is_active,
            valid_from = EXCLUDED.valid_from,
            valid_until = EXCLUDED.valid_until,
            updated_at = CURRENT_TIMESTAMP
          RETURNING id;`,
-        [tr.name, tr.rate_percentage, tr.jurisdiction, tr.type, tr.tax_code, tr.is_active, tr.valid_from, tr.valid_until]
+        [tr.name, rateForDb, tr.jurisdiction, tr.type, tr.tax_code, tr.priority, tr.is_active, tr.valid_from, tr.valid_until]
       );
       const key = tr.name.toLowerCase().replace(/ /g, '_').replace(/[^\w]/g, ''); // Sanitize key
       seededDataIds.taxRates[key] = result.rows[0].id;
