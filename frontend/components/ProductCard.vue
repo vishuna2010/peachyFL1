@@ -27,7 +27,7 @@
       <p v-if="product.category_name" class="text-xs text-venus-text-secondary mb-1 truncate">
         Category: {{ product.category_name }}
       </p>
-      <p v-if="product.tax_class_name" class="text-xs text-venus-text-secondary mb-2 truncate">
+      <p v-if="product.tax_class_name" class="text-xs text-venus-text-secondary mb-1 truncate"> {/* Changed mb-2 to mb-1 */}
         Tax: {{ product.tax_class_name }}
       </p>
       <p class="font-sans text-base text-venus-text-primary font-semibold mt-auto pt-2">
