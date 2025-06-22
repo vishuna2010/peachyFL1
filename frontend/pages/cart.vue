@@ -101,10 +101,11 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useCart } from '~/composables/useCart';
 
 const {
+  initCart, // Import initCart
   cartItems,
   isCartInitialized,
   updateQuantity,
@@ -160,6 +161,14 @@ const checkCartEmptyBeforeCheckout = (event) => {
 
 useHead({
   title: 'Shopping Cart',
+});
+
+onMounted(() => {
+  // Ensure cart initialization logic is run when cart page is mounted,
+  // especially for client-side navigations if app.vue's onMounted
+  // doesn't cover all scenarios or if there's a reactivity lag.
+  // initCart() has an internal guard so it only runs fully once.
+  initCart();
 });
 </script>
 <!-- <style scoped> block removed -->
