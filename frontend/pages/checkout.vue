@@ -21,8 +21,8 @@
             <div class="flex justify-between items-start">
               <div class="pr-2">
                 <span class="font-medium text-venus-text-primary">{{ item.name }}</span>
-                <p v-if="item.tax_class_id" class="text-xs text-venus-text-secondary/80 mt-0.5">
-                  (Tax ID: {{ item.tax_class_id }}) {/* Placeholder, ideally show name if available */}
+                <p v-if="item.tax_class_name || item.tax_class_id" class="text-xs text-venus-text-secondary/80 mt-0.5">
+                  Tax Class: {{ item.tax_class_name || (item.tax_class_id ? `ID: ${item.tax_class_id}` : 'N/A') }}
                 </p>
               </div>
               <span class="font-medium text-venus-text-primary whitespace-nowrap">${{ (item.price * item.quantity).toFixed(2) }}</span>
@@ -136,7 +136,6 @@
       </form>
     </div>
   </div>
-
 </template>
 
 <script setup>

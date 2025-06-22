@@ -117,7 +117,8 @@ const handleAddToCart = () => {
       sku: props.product.sku,
       image_url: props.product.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image',
       type: 'product',
-      tax_class_id: props.product.tax_class_id || null, // Add tax_class_id
+      tax_class_id: props.product.tax_class_id || null,
+      tax_class_name: props.product.tax_class_name || null, // Add tax_class_name
     };
     addToCart(cartItemData, 1); // Add 1 quantity
     toast.success(`${props.product.name} added to cart!`);
