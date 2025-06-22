@@ -686,6 +686,11 @@ const handleAddToCart = () => {
   if (quantity.value <= 0) { toast.error("Please enter a valid quantity."); return; }
   if (quantity.value > stockAvailable) { toast.error(`Cannot add ${quantity.value} items. Only ${stockAvailable} left in stock.`); return; }
 
+  console.log('PDP: product.value before creating cartItemData:', JSON.parse(JSON.stringify(product.value))); // DEBUG LOG
+  if(currentVariant.value) {
+    console.log('PDP: currentVariant.value before creating cartItemData:', JSON.parse(JSON.stringify(currentVariant.value))); // DEBUG LOG
+  }
+
   let cartItemData;
   if (currentVariant.value) {
     let variantOptionString = "";
