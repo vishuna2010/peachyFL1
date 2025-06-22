@@ -1,5 +1,5 @@
 <template>
-<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen">
+  <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-[calc(100vh-theme(spacing.16))]">
     <h2 class="text-3xl font-serif text-venus-text-primary mb-8 text-center">Checkout</h2>
     <ClientOnly>
       <div v-if="isLoadingAuthOrCart" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow text-venus-text-secondary">Loading checkout...</div>
@@ -137,7 +137,7 @@
     </div> <!-- End of lg:grid -->
     </div> <!-- Closing tag for <div v-else> associated with isLoadingAuthOrCart -->
   </ClientOnly> <!-- End of ClientOnly -->
-<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen">
+  </div> <!-- Closing tag for the root container div -->
 </template>
 
 <script setup>
