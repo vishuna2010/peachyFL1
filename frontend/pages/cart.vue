@@ -50,9 +50,33 @@
         <p class="flex justify-between text-venus-text-secondary"><span>Total Items:</span> <span>{{ cartTotalItems }}</span></p>
         <p class="flex justify-between text-venus-text-secondary mb-2"><span>Subtotal:</span> <span>${{ cartSubtotal.toFixed(2) }}</span></p>
 
-        <!-- Discount section will be added back later -->
-        <div class="my-4 py-4 border-t border-b border-venus-neutral-medium text-center text-venus-text-secondary">
-            (Discount section placeholder)
+        <div class="discount-section my-4 py-4 border-t border-b border-venus-neutral-medium">
+          <div class="discount-form flex gap-2 mb-2">
+            <input
+              type="text"
+              v-model="discountCodeInput"
+              placeholder="Discount code"
+              class="discount-input flex-grow px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold"
+              :disabled="applyingDiscount"
+            />
+            <button
+              @click="handleApplyDiscount"
+              :disabled="applyingDiscount || !discountCodeInput"
+              class="apply-discount-button px-4 py-2 bg-venus-accent-gold text-white text-sm font-medium rounded-sm shadow-sm hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-venus-accent-gold/70 disabled:opacity-60 transition-colors duration-200 ease-in-out"
+            >
+              {{ applyingDiscount ? 'Applying...' : 'Apply' }}
+            </button>
+          </div>
+          <p v-if="discountValidationError" class="text-sm text-red-600 mt-1">{{ discountValidationError }}</p>
+          <div v-if="appliedDiscount" class="mt-2 p-2 bg-venus-accent-sale/10 text-venus-accent-sale rounded-sm text-sm border border-venus-accent-sale/20">
+            <div class="flex justify-between items-center">
+              <span>
+                Discount: <strong>{{ appliedDiscount.code }}</strong> (-${{ parseFloat(appliedDiscount.calculated_discount_amount_for_cart).toFixed(2) }})
+              </span>
+              <button @click="handleRemoveDiscount" class="text-venus-accent-sale hover:opacity-70 transition-opacity duration-200 ease-in-out text-xs underline disabled:opacity-60" :disabled="applyingDiscount">Remove</button>
+            </div>
+            <p v-if="appliedDiscount.description" class="text-xs mt-1">{{ appliedDiscount.description }}</p>
+          </div>
         </div>
 
         <p class="flex justify-between text-xl font-bold text-venus-text-primary my-3">
@@ -80,12 +104,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, watchEffect } from 'vue';
+import { ref, computed, onMounted, watchEffect } from 'vue';
 import { useCart } from '~/composables/useCart';
 import { useHead } from '#app';
-import CloseIcon from '~/components/icons/CloseIcon.vue'; // Assuming this was used in original, if not remove
+// CloseIcon import can be removed if SVG is directly in template for remove button
+// import CloseIcon from '~/components/icons/CloseIcon.vue';
 
-console.log('--- CART.VUE SCRIPT SETUP EXECUTED (Restored Phase 2) ---');
+console.log('--- CART.VUE SCRIPT SETUP EXECUTED (Restored Phase 3 - Discounts) ---');
 
 const {
   initCart,
@@ -97,26 +122,28 @@ const {
   cartTotalItems,
   cartSubtotal,
   cartFinalTotalPrice,
-  // Not adding discount related things back yet:
-  // applyDiscountCode,
-  // clearAppliedDiscount,
-  // appliedDiscount,
-  // discountValidationError
+  applyDiscountCode,     // Added back
+  clearAppliedDiscount,  // Added back
+  appliedDiscount,       // Added back
+  discountValidationError// Added back
 } = useCart();
 
-console.log('[cart.vue setup Phase 2] Initial isCartInitialized.value:', isCartInitialized.value);
+const discountCodeInput = ref('');    // Added back
+const applyingDiscount = ref(false); // Added back
+
+console.log('[cart.vue setup Phase 3] Initial isCartInitialized.value:', isCartInitialized.value);
 
 watchEffect(() => {
-  console.log('[cart.vue watchEffect Phase 2] isCartInitialized.value changed to:', isCartInitialized.value);
+  console.log('[cart.vue watchEffect Phase 3] isCartInitialized.value changed to:', isCartInitialized.value);
 });
 
 onMounted(() => {
-  console.log('[cart.vue onMounted Phase 2] Component mounted. Current isCartInitialized.value:', isCartInitialized.value);
+  console.log('[cart.vue onMounted Phase 3] Component mounted. Current isCartInitialized.value:', isCartInitialized.value);
   initCart();
 });
 
 const updateItemQuantity = (cartItemId, quantity) => {
-  if (isNaN(quantity) || quantity < 0) return; // Prevent negative or NaN quantities, allow 0 for removal by updateQuantity
+  if (isNaN(quantity) || quantity < 0) return;
   updateQuantity(cartItemId, quantity);
 };
 
@@ -130,6 +157,18 @@ const confirmClearCart = () => {
   if (confirm('Are you sure you want to clear your entire cart?')) {
     clearCart();
   }
+};
+
+const handleApplyDiscount = async () => { // Added back
+  if (!discountCodeInput.value.trim()) return;
+  applyingDiscount.value = true;
+  await applyDiscountCode(discountCodeInput.value.trim());
+  applyingDiscount.value = false;
+};
+
+const handleRemoveDiscount = () => { // Added back
+  clearAppliedDiscount();
+  discountCodeInput.value = ''; // Clear input field as well
 };
 
 const checkCartEmptyBeforeCheckout = (event) => {
