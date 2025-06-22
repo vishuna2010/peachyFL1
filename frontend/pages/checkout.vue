@@ -162,28 +162,47 @@ const sameAsShipping = ref(true);
 const isSubmitting = ref(false);
 const submissionError = ref('');
 
+console.log('[checkout.vue setup] Initial isCartStoreInitialized.value:', isCartStoreInitialized.value);
 
 // Watchers for auth and cart initialization
 watchEffect(() => {
+    console.log('[checkout.vue watchEffect] TOP: isAuthInitialized.value:', (typeof isAuthInitialized === 'undefined' ? 'undefined_itself' : isAuthInitialized.value), 'isCartStoreInitialized.value:', isCartStoreInitialized.value);
     const authReady = typeof isAuthInitialized === 'undefined' ? true : isAuthInitialized.value;
     const cartReady = isCartStoreInitialized.value;
+    console.log('[checkout.vue watchEffect] authReady:', authReady, 'cartReady:', cartReady);
 
     if (authReady && cartReady) {
+        console.log('[checkout.vue watchEffect] Both ready. Setting isLoadingAuthOrCart to false. Prev value:', isLoadingAuthOrCart.value);
         isLoadingAuthOrCart.value = false;
         isAuthenticated.value = !!authToken.value; // Update isAuthenticated based on actual token
+        console.log('[checkout.vue watchEffect] isLoadingAuthOrCart is now:', isLoadingAuthOrCart.value, 'isAuthenticated is now:', isAuthenticated.value);
 
         if (isAuthenticated.value && cartItems.value.length === 0) {
-            console.log("User is authenticated but cart is empty. Redirecting to /cart");
+            console.log("[checkout.vue watchEffect] User authenticated but cart empty. Redirecting to /cart");
             router.replace('/cart');
         } else if (!isAuthenticated.value && cartItems.value.length === 0) {
             // If guest and cart becomes empty (e.g. cleared on another tab and then nav here)
-            console.log("User is guest and cart is empty. Redirecting to /cart");
+            console.log("[checkout.vue watchEffect] User is guest and cart is empty. Redirecting to /cart");
             router.replace('/cart');
         }
         // No automatic redirect to login if not authenticated, allow guest form to show
+    } else {
+        console.log('[checkout.vue watchEffect] Not yet ready. isLoadingAuthOrCart:', isLoadingAuthOrCart.value);
     }
 });
 
+onMounted(() => {
+  console.log('[checkout.vue onMounted] Component mounted. Initial isCartStoreInitialized.value:', isCartStoreInitialized.value);
+  // initCart is already destructured from useCart
+  // Call it to be safe, it has an internal guard.
+  if (typeof initCart === 'function') {
+      console.log('[checkout.vue onMounted] Calling initCart().');
+      initCart();
+      console.log('[checkout.vue onMounted] After initCart() call, isCartStoreInitialized.value:', isCartStoreInitialized.value);
+  } else {
+      console.error('[checkout.vue onMounted] initCart is not available from useCart()');
+  }
+});
 
 const handlePlaceOrder = async () => {
   isSubmitting.value = true;
