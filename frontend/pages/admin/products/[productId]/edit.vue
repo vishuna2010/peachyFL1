@@ -26,7 +26,6 @@
         :api-error="productFormApiError"
         @submit="handleUpdateProduct"
         class="mb-10 bg-white shadow-md rounded-lg p-6"
-        <!-- Pass permission props -->
         :can-edit-core-details="can('products:edit').value"
         :can-edit-price="can('products:edit_pricing').value"
         :can-edit-stock="can('products:edit_inventory').value"
@@ -34,8 +33,7 @@
         :can-edit-supplier="can('suppliers:manage').value"
         :can-edit-tax-class="can('taxes:manage_classes').value"
         :can-edit-tags="can('tags:manage').value"
-        :can-manage-image="can('products:edit').value"
-      />
+        :can-manage-image="can('products:edit').value" />
 
       <section class="bg-white shadow-md rounded-lg p-6 my-10" v-if="can('products:edit').value">
         <h3 class="text-xl font-semibold text-gray-700 mb-5 border-b pb-3">Product Specific Options</h3>
