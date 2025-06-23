@@ -6,8 +6,81 @@ const auditLogService = require('../services/auditLogService');
 const { query, body, param, validationResult } = require('express-validator');
 const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppError');
 
+const bcrypt = require('bcrypt'); // For password hashing
+
 // All routes in this file are protected by isAuthenticated and isAdmin
 router.use(isAuthenticated, isAdmin);
+
+// POST /api/admin/users - Create a new user by an admin
+router.post(
+  '/',
+  [
+    body('email').isEmail().withMessage('Valid email is required.').normalizeEmail(),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long.'),
+    // Optional: Add more password strength rules, e.g., .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/) for uppercase, lowercase, number
+    body('name').isString().trim().notEmpty().withMessage('Name is required.'),
+    body('role').isIn(['admin', 'customer', 'user']).withMessage("Role must be 'admin', 'customer', or 'user'.") // 'user' as an alias for 'customer' if needed
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, password, name, role } = req.body;
+    const client = await db.pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // Check if email already exists
+      const existingUser = await client.query('SELECT id FROM users WHERE email = $1', [email]);
+      if (existingUser.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return next(new ConflictError('A user with this email address already exists.'));
+      }
+
+      // Hash password
+      const saltRounds = 10; // Standard salt rounds
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+      // Insert new user
+      const insertQuery = `
+        INSERT INTO users (name, email, password, role, is_tax_exempt)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, name, email, role, is_tax_exempt, created_at, updated_at;
+      `;
+      // New users created by admin are not tax-exempt by default unless specified otherwise.
+      const result = await client.query(insertQuery, [name, email, hashedPassword, role, false]);
+      const newUser = result.rows[0];
+
+      await client.query('COMMIT');
+
+      // Audit log
+      auditLogService.recordAuditEvent(
+        'ADMIN_USER_CREATE_SUCCESS',
+        { userId: req.user.userId, userEmail: req.user.email },
+        { resourceType: 'USER', resourceId: newUser.id },
+        { createdUserEmail: newUser.email, createdUserRole: newUser.role },
+        req
+      ).catch(err => console.error('Audit log failed for ADMIN_USER_CREATE_SUCCESS:', err));
+
+      // Exclude password from the response
+      const { password: _, ...userWithoutPassword } = newUser;
+      res.status(201).json(userWithoutPassword);
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (error.code === '23505' && error.constraint === 'users_email_key') { // PostgreSQL unique violation
+        return next(new ConflictError('A user with this email address already exists (database constraint).'));
+      }
+      console.error('Error creating user by admin:', error);
+      next(new AppError('Failed to create user.', 500, error));
+    } finally {
+      client.release();
+    }
+  }
+);
 
 // GET /api/admin/users - List all users
 router.get(

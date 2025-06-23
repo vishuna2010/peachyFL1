@@ -1,6 +1,22 @@
 <template>
   <div class="p-4 sm:p-6 lg:p-8">
-    <h2 class="text-2xl font-semibold text-gray-800 mb-6">User Management</h2>
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-semibold text-gray-800">User Management</h2>
+      <div class="space-x-2">
+        <button
+          @click="navigateToCreateUserPage('customer')"
+          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        >
+          Create Customer
+        </button>
+        <button
+          @click="navigateToCreateUserPage('admin')"
+          class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        >
+          Create Admin User
+        </button>
+      </div>
+    </div>
 
     <!-- Tabs Navigation -->
     <div class="mb-6 border-b border-gray-200">
@@ -135,6 +151,10 @@ const actionSuccessMessage = ref('');
 
 const isCurrentUser = (userId) => {
   return authUser.value?.id === userId;
+};
+
+const navigateToCreateUserPage = (role) => {
+  navigateTo(`/admin/users/create?role=${role}`);
 };
 
 const selectTab = (tabName) => {
