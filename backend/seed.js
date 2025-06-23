@@ -163,6 +163,7 @@ async function createSchema(client) {
 
     // Adjust unique constraint: name alone might not be unique if rates differ by jurisdiction/type
     await client.query(`ALTER TABLE tax_rates DROP CONSTRAINT IF EXISTS uq_tax_rate_name;`);
+    await client.query(`ALTER TABLE tax_rates DROP CONSTRAINT IF EXISTS uq_tax_rate_name_jurisdiction_type;`); // Add this line
     await client.query(`ALTER TABLE tax_rates ADD CONSTRAINT uq_tax_rate_name_jurisdiction_type UNIQUE (name, jurisdiction, tax_type);`);
     console.log('All columns and constraints for "tax_rates" table ensured/checked.');
 
