@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isAuthenticated, isAdmin } = require('../auth');
+const { isAuthenticated, checkPermission } = require('../auth'); // Updated: isAdmin removed, checkPermission added
 const auditLogService = require('../services/auditLogService');
 const { query, body, param, validationResult } = require('express-validator');
 const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppError');
@@ -9,11 +9,13 @@ const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppE
 const bcrypt = require('bcrypt'); // For password hashing
 
 // All routes in this file are protected by isAuthenticated and isAdmin
-router.use(isAuthenticated, isAdmin);
+// router.use(isAuthenticated, isAdmin); // REMOVED: Will apply isAuthenticated and checkPermission per route
 
 // POST /api/admin/users - Create a new user by an admin
 router.post(
   '/',
+  isAuthenticated,
+  checkPermission('users:create'),
   [
     body('email').isEmail().withMessage('Valid email is required.').normalizeEmail(),
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long.'),
@@ -85,6 +87,8 @@ router.post(
 // GET /api/admin/users - List all users
 router.get(
   '/',
+  isAuthenticated,
+  checkPermission('users:view'),
   [
     query('role').optional().isString().trim().isIn(['admin', 'customer', 'user', 'guest']).withMessage('Invalid role specified.')
   ],
@@ -117,9 +121,11 @@ router.get(
 );
 
 // GET /api/admin/users/:id - View a specific user
-router.get('/:id', async (req, res) => {
+router.get('/:id', isAuthenticated, checkPermission('users:view'), async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) {
+    // This basic validation can be enhanced with express-validator's param('id').isInt() if desired,
+    // similar to how it's used in other routes, for consistency.
     return res.status(400).json({ message: 'Invalid user ID format.' });
   }
   try {
@@ -135,7 +141,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /api/admin/users/:id/role - Update a user's role
-router.put('/:id/role', async (req, res) => {
+router.put('/:id/role', isAuthenticated, checkPermission('users:assign_roles'), async (req, res) => {
   const { id } = req.params;
   const { role } = req.body;
 
@@ -187,6 +193,8 @@ router.put('/:id/role', async (req, res) => {
 // PUT /api/admin/users/:id - Update user details
 router.put(
   '/:id',
+  isAuthenticated,
+  checkPermission('users:edit'),
   [
     param('id').isInt({ gt: 0 }).toInt(),
     body('name').optional().isString().trim().isLength({ min: 1, max: 255 }).withMessage('Name must be between 1 and 255 chars.'),
@@ -297,9 +305,10 @@ router.put(
 );
 
 // DELETE /api/admin/users/:id - Delete a user
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', isAuthenticated, checkPermission('users:delete'), async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) {
+    // Consider using express-validator for param validation here too for consistency
     return res.status(400).json({ message: 'Invalid user ID format.' });
   }
 

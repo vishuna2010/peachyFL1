@@ -1611,8 +1611,32 @@ async function seedRbac(client, seededDataIds) {
     { name: 'users:delete', description: 'Can delete users.', group_name: 'Users' },
     // RBAC Management (for Super Admin to manage the roles/permissions system itself)
     { name: 'rbac:manage', description: 'Can manage roles and permissions assignments.', group_name: 'System' },
-    // Add more permissions for taxes, orders, discounts, suppliers, etc. as features are protected
-    // e.g., { name: 'taxes:manage_classes', description: 'Can manage tax classes.', group_name: 'Taxes' },
+
+    // Orders Management
+    { name: 'orders:view_all', description: 'Can view all orders.', group_name: 'Orders' },
+    { name: 'orders:view_details', description: 'Can view details of any order.', group_name: 'Orders' },
+    { name: 'orders:update_status', description: 'Can update order statuses.', group_name: 'Orders' },
+    { name: 'orders:manage_refunds', description: 'Can process refunds.', group_name: 'Orders' },
+
+    // Discounts Management
+    { name: 'discounts:manage', description: 'Can create, edit, and delete discounts.', group_name: 'Discounts' },
+
+    // Taxes Management
+    { name: 'taxes:manage_classes', description: 'Can manage tax classes.', group_name: 'Taxes' },
+    { name: 'taxes:manage_rates', description: 'Can manage tax rates.', group_name: 'Taxes' },
+
+    // Suppliers Management
+    { name: 'suppliers:manage', description: 'Can manage suppliers.', group_name: 'Suppliers' },
+
+    // Purchase Orders Management
+    { name: 'purchase_orders:manage', description: 'Can manage purchase orders.', group_name: 'Purchase Orders' },
+
+    // Reports Management
+    { name: 'reports:view', description: 'Can view admin reports.', group_name: 'Reports' },
+
+    // Settings Management (example)
+    { name: 'settings:manage_general', description: 'Can manage general store settings.', group_name: 'Settings' },
+
   ];
 
   try {

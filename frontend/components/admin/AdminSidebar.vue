@@ -15,19 +15,21 @@
     <!-- Navigation -->
     <nav class="flex-grow p-3 space-y-1.5 overflow-y-auto">
       <!-- Main Navigation Items -->
-      <NuxtLink
-        v-for="item in navigationItems"
-        :key="item.name"
-        :to="item.href"
-        @click="closeMobileSidebarIfNeeded"
-        class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white"
-      >
-        <span class="mr-3 h-5 w-5 flex-shrink-0"></span> <!-- Static spacer, icons are off for diagnostics -->
-        {{ item.name }}
-      </NuxtLink>
+      <template v-for="item in navigationItems" :key="item.name">
+        <NuxtLink
+          v-if="can(item.permission).value"
+          :to="item.href"
+          @click="closeMobileSidebarIfNeeded"
+          class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white"
+        >
+          <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+          <span v-else class="mr-3 h-5 w-5 flex-shrink-0"></span> <!-- Spacer if no icon -->
+          {{ item.name }}
+        </NuxtLink>
+      </template>
 
-      <!-- Inventory Sub-menu (Structure remains as it was, assuming it's functional) -->
-      <div>
+      <!-- Inventory Sub-menu -->
+      <div v-if="can('products:view').value"> <!-- Example: Inventory broadly needs product view access -->
         <button @click="toggleInventorySubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
           <span class="flex items-center">
             <span v-html="iconInventory" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
@@ -50,8 +52,9 @@
         </div>
       </div>
 
-      <!-- Tax Management Sub-menu (Structure remains as it was, assuming it's functional) -->
-      <div>
+      <!-- Tax Management Sub-menu -->
+      <!-- Assuming a general 'taxes:manage_classes' or 'taxes:manage_rates' implies view access to this section -->
+      <div v-if="can('taxes:manage_classes').value || can('taxes:manage_rates').value">
         <button @click="toggleTaxSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
           <span class="flex items-center">
             <span v-html="iconTax" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
@@ -74,8 +77,8 @@
         </div>
       </div>
 
-      <!-- Reports Sub-menu (Structure remains as it was, assuming it's functional) -->
-      <div>
+      <!-- Reports Sub-menu -->
+      <div v-if="can('reports:view').value">
         <button @click="toggleReportsSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
           <span class="flex items-center">
             <span v-html="iconReportsMain" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
@@ -114,9 +117,11 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue'; // Added onMounted
 import { useRoute } from 'vue-router';
 import CloseIcon from '~/components/icons/CloseIcon.vue';
+import { usePermissions } from '~/composables/usePermissions';
+import { useAuth } from '~/composables/useAuth';
 
 const props = defineProps({
   isOpenOnMobile: {
@@ -128,6 +133,23 @@ const props = defineProps({
 const emit = defineEmits(['toggleMobileSidebar']);
 
 const route = useRoute();
+const { can, fetchUserPermissions, isLoadingPermissions } = usePermissions();
+const { isAuthenticated } = useAuth();
+
+// Fetch permissions when component mounts and user is authenticated
+onMounted(() => {
+  if (isAuthenticated.value) {
+    fetchUserPermissions();
+  }
+});
+// Watch for authentication changes to refetch permissions
+watch(isAuthenticated, (newAuthStatus) => {
+  if (newAuthStatus) {
+    fetchUserPermissions();
+  } else {
+    // Permissions are usually cleared by usePermissions composable itself via its own watcher or logout hook
+  }
+}, { immediate: false }); // 'false' to avoid immediate call if already handled by onMounted or initial state
 
 const iconDashboard = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h7.5" /></svg>`;
 const iconUsers = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>`;
@@ -143,16 +165,16 @@ const iconInventory = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewB
 const iconTax = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.25 7.25A.75.75 0 018 6.5h8.5a.75.75 0 01.75.75v8.5a.75.75 0 01-.75.75H8a.75.75 0 01-.75-.75v-8.5z" /><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01zm0 4.5a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01zm4.5-4.5a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01zm0 4.5a.75.75 0 01.75-.75h.01a.75.75 0 01.75.75v.01a.75.75 0 01-.75.75h-.01a.75.75 0 01-.75-.75v-.01z" /><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 9.75l-6.75 6.75" /></svg>`
 
 const navigationItems = ref([
-  { name: 'Dashboard', href: '/admin', iconSvg: iconDashboard },
-  { name: 'Users', href: '/admin/users', iconSvg: iconUsers },
-  { name: 'Products', href: '/admin/products', iconSvg: null }, // Icon removed, href reverted
-  { name: 'Categories', href: '/admin/categories', iconSvg: null }, // Icon removed
-  { name: 'Orders', href: '/admin/orders', iconSvg: iconOrders },
-  { name: 'Discounts', href: '/admin/discounts', iconSvg: iconDiscounts },
-  { name: 'Suppliers', href: '/admin/suppliers', iconSvg: iconSuppliers },
-  { name: 'Purchase Orders', href: '/admin/purchase-orders', iconSvg: iconPurchaseOrders },
-  { name: 'Product Options', href: '/admin/options', iconSvg: null }, // Icon removed
-  { name: 'Reviews', href: '/admin/reviews', iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.82.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.82-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>` },
+  { name: 'Dashboard', href: '/admin', iconSvg: iconDashboard, permission: 'admin:access_dashboard' },
+  { name: 'Users', href: '/admin/users', iconSvg: iconUsers, permission: 'users:view' },
+  { name: 'Products', href: '/admin/products', iconSvg: null, permission: 'products:view' },
+  { name: 'Categories', href: '/admin/categories', iconSvg: null, permission: 'categories:manage' },
+  { name: 'Orders', href: '/admin/orders', iconSvg: iconOrders, permission: 'orders:view_all' },
+  { name: 'Discounts', href: '/admin/discounts', iconSvg: iconDiscounts, permission: 'discounts:manage' },
+  { name: 'Suppliers', href: '/admin/suppliers', iconSvg: iconSuppliers, permission: 'suppliers:manage' },
+  { name: 'Purchase Orders', href: '/admin/purchase-orders', iconSvg: iconPurchaseOrders, permission: 'purchase_orders:manage' },
+  { name: 'Product Options', href: '/admin/options', iconSvg: null, permission: 'products:edit' }, // Assuming managing global options is part of product editing
+  { name: 'Reviews', href: '/admin/reviews', iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.82.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.82-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>`, permission: 'reviews:manage' }, // Assuming a 'reviews:manage' permission
 ]);
 
 const reportsSubmenuOpen = ref(false);

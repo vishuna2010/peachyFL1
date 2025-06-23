@@ -376,4 +376,26 @@ router.get('/me', authService.isAuthenticated, async (req, res) => {
   res.status(200).json({ user: userDetails });
 });
 
+// GET /api/auth/my-permissions - Get current authenticated user's permissions
+const permissionService = require('../services/permissionService'); // Ensure service is imported
+
+router.get('/my-permissions', authService.isAuthenticated, async (req, res, next) => {
+  if (!req.user || !req.user.userId) {
+    // Should be caught by isAuthenticated, but good failsafe
+    return res.status(401).json({ message: 'Unauthorized: User not authenticated.' });
+  }
+
+  try {
+    const permissions = await permissionService.getUserPermissions(req.user.userId);
+    res.status(200).json({ permissions });
+  } catch (error) {
+    console.error(`Error fetching permissions for user ${req.user.userId} in /my-permissions route:`, error);
+    // Use AppError if it's available and configured for error handling middleware
+    // For now, sending a generic 500. If AppError is part of this file's imports, use it.
+    // Assuming AppError might not be imported here, let's use a standard response.
+    // If AppError is available: return next(new AppError('Failed to retrieve user permissions.', 500, error));
+    res.status(500).json({ message: 'Failed to retrieve user permissions.' });
+  }
+});
+
 module.exports = router;
