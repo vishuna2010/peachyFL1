@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isAuthenticated, isAdmin } = require('../auth');
-const { body, param, query, validationResult } = require('express-validator'); // Added query
-const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppError'); // Assuming AppError.js exports these
+const { isAuthenticated, checkPermission } = require('../auth'); // Replaced isAdmin with checkPermission
+const { body, param, query, validationResult } = require('express-validator');
+const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppError');
 
 // Apply auth middleware to all routes in this router
-router.use(isAuthenticated, isAdmin);
+// router.use(isAuthenticated, isAdmin); // REMOVED - will apply per route
 
-// const ALLOWED_DISCOUNT_TYPES = ['percentage', 'fixed_amount']; // Already used in validation chain
+// const ALLOWED_DISCOUNT_TYPES = ['percentage', 'fixed_amount'];
 
 // Validation Chains
 const validateDiscountId = [
@@ -126,7 +126,7 @@ const validateUpdateDiscount = [
 
 
 // POST /api/admin/discounts - Create a new discount code
-router.post('/', validateCreateDiscount, async (req, res, next) => {
+router.post('/', isAuthenticated, checkPermission('discounts:manage'), validateCreateDiscount, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -187,7 +187,7 @@ const validateListDiscountsParams = [
 ];
 
 // GET /api/admin/discounts - List all discount codes
-router.get('/', validateListDiscountsParams, async (req, res, next) => {
+router.get('/', isAuthenticated, checkPermission('discounts:manage'), validateListDiscountsParams, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -219,7 +219,7 @@ router.get('/', validateListDiscountsParams, async (req, res, next) => {
 });
 
 // GET /api/admin/discounts/:id - Get a specific discount code
-router.get('/:id', validateDiscountId, async (req, res, next) => {
+router.get('/:id', isAuthenticated, checkPermission('discounts:manage'), validateDiscountId, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -239,7 +239,7 @@ router.get('/:id', validateDiscountId, async (req, res, next) => {
 });
 
 // PUT /api/admin/discounts/:id - Update a discount code
-router.put('/:id', validateDiscountId, validateUpdateDiscount, async (req, res, next) => {
+router.put('/:id', isAuthenticated, checkPermission('discounts:manage'), validateDiscountId, validateUpdateDiscount, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -311,7 +311,7 @@ router.put('/:id', validateDiscountId, validateUpdateDiscount, async (req, res, 
 });
 
 // DELETE /api/admin/discounts/:id - Delete a discount code
-router.delete('/:id', validateDiscountId, async (req, res, next) => {
+router.delete('/:id', isAuthenticated, checkPermission('discounts:manage'), validateDiscountId, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });

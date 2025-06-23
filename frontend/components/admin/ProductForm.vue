@@ -2,29 +2,29 @@
   <form @submit.prevent="handleSubmit" class="space-y-6 bg-white shadow sm:rounded-lg p-6">
     <div>
       <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Product Name:</label>
-      <input type="text" id="name" v-model="formData.name" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+      <input type="text" id="name" v-model="formData.name" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" :disabled="!props.canEditCoreDetails && props.isEditMode" />
     </div>
 
     <div>
       <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Description:</label>
-      <textarea id="description" v-model="formData.description" rows="4" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></textarea>
+      <textarea id="description" v-model="formData.description" rows="4" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" :disabled="!props.canEditCoreDetails && props.isEditMode"></textarea>
     </div>
 
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
       <div>
         <label for="price" class="block text-sm font-medium text-gray-700 mb-1">Selling Price:</label>
-        <input type="number" id="price" v-model.number="formData.price" required min="0" step="0.01" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        <input type="number" id="price" v-model.number="formData.price" required min="0" step="0.01" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" :disabled="!props.canEditPrice && props.isEditMode" />
       </div>
       <div>
         <label for="cost_price" class="block text-sm font-medium text-gray-700 mb-1">Cost Price:</label>
-        <input type="number" id="cost_price" v-model.number="formData.cost_price" min="0" step="0.01" placeholder="0.00" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        <input type="number" id="cost_price" v-model.number="formData.cost_price" min="0" step="0.01" placeholder="0.00" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" :disabled="!props.canEditPrice && props.isEditMode" />
       </div>
     </div>
 
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
       <div>
         <label for="category_id" class="block text-sm font-medium text-gray-700 mb-1">Category:</label>
-        <select id="category_id" v-model="formData.category_id" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        <select id="category_id" v-model="formData.category_id" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" :disabled="!props.canEditCategory && props.isEditMode">
           <option :value="null">-- Select Category --</option>
           <option v-for="category in categories" :key="category.id" :value="category.id">
             {{ category.name }}
@@ -33,7 +33,7 @@
       </div>
       <div>
         <label for="supplier_id" class="block text-sm font-medium text-gray-700 mb-1">Supplier:</label>
-        <select id="supplier_id" v-model="formData.supplier_id" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        <select id="supplier_id" v-model="formData.supplier_id" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" :disabled="!props.canEditSupplier && props.isEditMode">
           <option :value="null">-- No Supplier --</option>
           <option v-for="supplier in suppliers" :key="supplier.id" :value="supplier.id">
             {{ supplier.name }}
@@ -45,15 +45,15 @@
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
         <div class="sm:col-span-2">
             <label for="sku" class="block text-sm font-medium text-gray-700 mb-1">SKU (Stock Keeping Unit):</label>
-            <input type="text" id="sku" v-model="formData.sku" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+            <input type="text" id="sku" v-model="formData.sku" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" :disabled="!props.canEditCoreDetails && props.isEditMode" />
         </div>
         <div class="sm:col-span-2">
             <label for="stock_quantity" class="block text-sm font-medium text-gray-700 mb-1">Stock Quantity:</label>
-            <input type="number" id="stock_quantity" v-model.number="formData.stock_quantity" required min="0" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+            <input type="number" id="stock_quantity" v-model.number="formData.stock_quantity" required min="0" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" :disabled="!props.canEditStock && props.isEditMode" />
         </div>
         <div class="sm:col-span-2">
             <label for="reorder_threshold" class="block text-sm font-medium text-gray-700 mb-1">Reorder Threshold (Optional):</label>
-            <input type="number" id="reorder_threshold" v-model.number="formData.reorder_threshold" min="0" placeholder="Leave empty for no threshold" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+            <input type="number" id="reorder_threshold" v-model.number="formData.reorder_threshold" min="0" placeholder="Leave empty for no threshold" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" :disabled="!props.canEditStock && props.isEditMode" />
         </div>
     </div>
 
@@ -69,6 +69,7 @@
             name="tax_class_id"
             v-model="formData.tax_class_id"
             class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            :disabled="!props.canEditTaxClass && props.isEditMode"
           >
             <option :value="null">-- No Tax Class --</option>
             <option v-for="taxClass in props.availableTaxClasses" :key="taxClass.id" :value="taxClass.id">
@@ -83,17 +84,17 @@
 
     <div>
         <label for="tags" class="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated):</label>
-        <input type="text" id="tags" v-model="tagsInput" placeholder="e.g., electronics, new, popular" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        <input type="text" id="tags" v-model="tagsInput" placeholder="e.g., electronics, new, popular" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" :disabled="!props.canEditTags && props.isEditMode" />
         <p class="mt-2 text-xs text-gray-500">Product tags will be created if they don't exist.</p>
     </div>
 
     <div>
       <label for="productImage" class="block text-sm font-medium text-gray-700 mb-1">Product Image:</label>
-      <input type="file" id="productImage" @change="handleFileChange" accept="image/*" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+      <input type="file" id="productImage" @change="handleFileChange" accept="image/*" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" :disabled="!props.canManageImage && props.isEditMode" />
       <div v-if="isEditMode && formData.image_url && !newImagePreview" class="mt-3">
         <p class="text-sm text-gray-700 mb-1">Current Image:</p>
         <img :src="formData.image_url.startsWith('http') ? formData.image_url : `${backendUrl}${formData.image_url}`" alt="Current product image" class="max-h-48 rounded border border-gray-200 shadow-sm" />
-        <button type="button" @click="removeCurrentImage" class="mt-2 px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-300 rounded-md hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Remove Image</button>
+        <button v-if="props.canManageImage" type="button" @click="removeCurrentImage" class="mt-2 px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-300 rounded-md hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Remove Image</button>
       </div>
       <div v-if="newImagePreview" class="mt-3">
         <p class="text-sm text-gray-700 mb-1">New Image Preview:</p>
@@ -177,7 +178,16 @@ const props = defineProps({
   taxClassesError: { // New
     type: String,
     default: null
-  }
+  },
+  // Permissions props
+  canEditCoreDetails: { type: Boolean, default: true }, // General edit access for name, desc, sku, etc.
+  canEditPrice: { type: Boolean, default: true },
+  canEditStock: { type: Boolean, default: true },
+  canEditCategory: { type: Boolean, default: true },
+  canEditSupplier: { type: Boolean, default: true },
+  canEditTaxClass: { type: Boolean, default: true },
+  canEditTags: { type: Boolean, default: true },
+  canManageImage: { type: Boolean, default: true }
 });
 
 const emit = defineEmits(['submit']);
