@@ -1520,18 +1520,11 @@ async function seedDatabase() {
       }
       console.log('User role_id migration step completed.');
 
-      // After migration, ideally make users.role_id NOT NULL and add FK constraint if not added in db.js
-      // For now, db.js attempts to add FK, which might fail if data is inconsistent before this migration.
-      // A more robust setup uses separate migration scripts.
-      // We can also try to add the FK constraint here again if it failed in db.js
-      try {
-        await client.query('ALTER TABLE users ADD CONSTRAINT fk_users_role_id_if_not_exists FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;');
-        console.log('Ensured foreign key users.role_id -> roles.id after migration.');
-      } catch (fkError) {
-        if (!fkError.message.includes("already exists") && !fkError.message.includes("multiple foreign-key constraints")) { // Ignore if already exists or if a similarly named one exists
-             console.warn(`Warning: Could not create FK users.role_id -> roles.id post-migration (this might be okay if already set or if there are users with NULL role_id): ${fkError.message}`);
-        }
-      }
+      // Foreign key constraint users.role_id -> roles.id is now primarily handled by db.js.
+      // The logic here was redundant and could lead to transaction aborts if it failed silently.
+      // db.js checks for the constraint's existence before attempting creation.
+      // Ensuring users have valid role_id assignments before db.js runs (or seed script runs if db is clean) is key.
+      console.log('Skipping direct FK constraint creation for users.role_id in seed.js; this is handled by db.js.');
 
     } else {
       console.error('CRITICAL: Super Admin or Customer role IDs not found in seededDataIds.roles. Skipping user role_id migration.');
