@@ -1803,6 +1803,9 @@ async function seedInventoryBatches(client, seededDataIds) {
   const productSku2 = 'TSHRT-MEN-COT-005';
   const productId2 = seededDataIds.products[productSku2];
 
+  const productSku3 = 'BOOK-THRILLER-001'; // "Modern Thriller Novel"
+  const productId3 = seededDataIds.products[productSku3];
+
   const batchesToSeed = [];
 
   if (productId1 && variantId1) {
@@ -1812,7 +1815,7 @@ async function seedInventoryBatches(client, seededDataIds) {
       batch_number: 'BATCH_V001_202305',
       expiry_date: '2026-05-31',
       initial_quantity: 50,
-      current_quantity: 45,
+      current_quantity: 45, // Example: some sold
       cost_price_at_receipt: 92.00,
       currency_code_at_receipt: 'USD',
       base_currency_cost_price_at_receipt: 92.00,
@@ -1824,32 +1827,50 @@ async function seedInventoryBatches(client, seededDataIds) {
   if (productId2) {
     batchesToSeed.push({
       product_id: productId2,
-      variant_id: null,
+      variant_id: null, // Base product T-shirt
       batch_number: 'BATCH_P002_202304',
       expiry_date: null,
       initial_quantity: 100,
-      current_quantity: 80,
+      current_quantity: 80, // Example: some sold
       cost_price_at_receipt: 12.00,
       currency_code_at_receipt: 'EUR',
-      base_currency_cost_price_at_receipt: null,
-      exchange_rate_used: null,
+      base_currency_cost_price_at_receipt: null, // Example: not set
+      exchange_rate_used: null, // Example: not set
       purchase_order_item_id: null
     });
      batchesToSeed.push({
       product_id: productId2,
-      variant_id: null,
+      variant_id: null, // Base product T-shirt
       batch_number: 'BATCH_P003_202306',
       expiry_date: null,
       initial_quantity: 100,
-      current_quantity: 100,
+      current_quantity: 100, // Full stock
       cost_price_at_receipt: 12.50,
       currency_code_at_receipt: 'EUR',
       purchase_order_item_id: null
     });
   }
 
+  if (productId3) {
+    // Seed batch for "Modern Thriller Novel" (SKU: BOOK-THRILLER-001)
+    // This product has an aggregate stock_quantity of 250 in products table.
+    batchesToSeed.push({
+      product_id: productId3,
+      variant_id: null, // It's a base product
+      batch_number: 'BATCH_BOOK001_202301', // Unique batch number
+      expiry_date: null, // Books don't typically expire
+      initial_quantity: 250, // Corresponds to aggregate stock
+      current_quantity: 250, // Full stock available in this batch
+      cost_price_at_receipt: 5.50, // From seedProducts
+      currency_code_at_receipt: 'USD', // Assuming USD, can be null if not applicable
+      base_currency_cost_price_at_receipt: 5.50,
+      exchange_rate_used: 1.0,
+      purchase_order_item_id: null // No specific PO for this seed
+    });
+  }
+
   if (batchesToSeed.length === 0) {
-    console.log('No suitable products/variants found for inventory batch seeding.');
+    console.log('No suitable products/variants found or defined for inventory batch seeding.');
     return;
   }
 
