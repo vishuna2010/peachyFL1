@@ -217,24 +217,30 @@ async function fetchGlobalOptionsAndColorValues() {
     // For example:
     // const response = await $axios.get('/api/public/filter-options');
     // const allPublicOptions = response.data.data || [];
-    // const foundColorOption = allPublicOptions.find(opt => opt.name.toLowerCase() === 'color');
-    // if (foundColorOption) {
-    //   colorOption.value = { id: foundColorOption.id, name: foundColorOption.name };
-    //   colorOptionValues.value = foundColorOption.values || [];
-    // } else {
-    //   console.warn('Public "Color" option type not found.');
-    //   colorOptionValues.value = [];
-    // }
-    console.warn('ProductFilters: Admin API call for global options skipped. A public API is needed.');
-    colorOption.value = null; // Explicitly set to null or a default state
-    colorOptionValues.value = []; // Ensure it's empty
-    allGlobalOptions.value = [];
+    const response = await $axios.get('/api/options/public-filters');
+    const allPublicOptions = response.data || []; // Assuming response.data is the array
+
+    allGlobalOptions.value = allPublicOptions; // Store all fetched options if needed elsewhere
+
+    const foundColorOption = allPublicOptions.find(opt => opt.option_name && opt.option_name.toLowerCase() === 'color');
+
+    if (foundColorOption) {
+      colorOption.value = { id: foundColorOption.option_id, name: foundColorOption.option_name };
+      // Ensure values are structured correctly, mapping value_id to id and value_name to value for template compatibility
+      colorOptionValues.value = (foundColorOption.values || []).map(v => ({ id: v.value_id, value: v.value_name }));
+    } else {
+      console.warn('Public "Color" option type not found in /api/options/public-filters response.');
+      colorOption.value = null;
+      colorOptionValues.value = [];
+    }
 
   } catch (err) {
-    // This catch block might be for a future public API call
-    console.error('Error fetching public filter options:', err);
+    console.error('Error fetching public filter options from /api/options/public-filters:', err);
     optionsFetchError.value = err.response?.data?.message || err.message || 'Failed to load filter options.';
-    // toast.error(optionsFetchError.value); // Optionally notify user if public API fails
+    toast.error(optionsFetchError.value || 'Could not load filter options.');
+    colorOption.value = null;
+    colorOptionValues.value = [];
+    allGlobalOptions.value = [];
   } finally {
     isLoadingOptions.value = false;
   }
