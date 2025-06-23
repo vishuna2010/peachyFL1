@@ -95,15 +95,21 @@
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
               <select
                 v-if="can('users:assign_roles').value"
-                v-model="user.role"
+                :value="user.role_id" <!-- Use :value for one-way binding to allow programmatic revert -->
                 @change="promptRoleChange(user, $event.target.value)"
-                :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id"
+                :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id || isLoadingRoles"
                 class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md disabled:opacity-50 disabled:bg-gray-100"
+                :data-user-id="user.id" <!-- Added for easier DOM selection if needed for revert -->
               >
-                <option value="customer">Customer</option>
-                <option value="admin">Admin</option>
+                <option v-if="isLoadingRoles" :value="user.originalRoleId" disabled>Loading roles...</option>
+                <option v-else-if="rolesFetchError" :value="user.originalRoleId" disabled>{{ rolesFetchError }}</option>
+                <template v-else>
+                  <option v-for="roleOpt in availableRoles" :key="roleOpt.id" :value="roleOpt.id">
+                    {{ roleOpt.name }}
+                  </option>
+                </template>
               </select>
-              <span v-else>{{ user.role }}</span>
+              <span v-else>{{ user.role_name || user.legacy_role || 'N/A' }}</span>
             </td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ new Date(user.created_at).toLocaleDateString() }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium space-x-2">
@@ -162,11 +168,16 @@ definePageMeta({
 
 const { $axios } = useNuxtApp();
 const { authUser } = useAuth(); // To check current user ID
+const { can } = usePermissions(); // Ensure 'can' is available
 
 const users = ref([]);
 const isLoading = ref(true);
 const fetchError = ref(null);
 const activeTab = ref('all'); // 'all', 'admin', 'customer'
+
+const availableRoles = ref([]);
+const isLoadingRoles = ref(true); // For loading the roles dropdown
+const rolesFetchError = ref(null);
 
 const actionLoading = ref({ userId: null, type: null }); // { userId: number, type: 'role' | 'delete' }
 const actionError = ref('');
@@ -198,41 +209,96 @@ async function fetchUsers() {
     let url = '/admin/users';
     const params = {};
     if (activeTab.value && activeTab.value !== 'all') {
-      params.role = activeTab.value; // 'admin' or 'customer'
+      // Backend now filters by role name for the 'role' query param
+      if (activeTab.value === 'admin') params.role = 'Super Admin'; // Or your main admin role name
+      else if (activeTab.value === 'customer') params.role = 'Customer';
+      // If you add a 'Product Manager' tab, you'd set params.role = 'Product Manager'
     }
 
     const response = await $axios.get(url, { params });
-    // Store original role for comparison or reset if API call fails for role change
-    users.value = response.data.map(u => ({ ...u, originalRole: u.role }));
+    users.value = response.data.map(u => ({
+      ...u,
+      originalRoleId: u.role_id, // Store original role_id
+      originalRoleName: u.role_name // Store original role_name
+      // The v-model for select will now bind to u.role_id directly if we change users.value structure
+    }));
   } catch (err) {
     console.error(`Failed to fetch users (filter: ${activeTab.value}):`, err);
-    fetchError.value = err.response?.data || err;
+    fetchError.value = err.response?.data?.message || err.message || 'Could not load users.';
+    toast.error(fetchError.value);
   } finally {
     isLoading.value = false;
   }
 }
 
-const promptRoleChange = (user, newRole) => {
-  if (confirm(`Are you sure you want to change the role of ${user.email} from ${user.originalRole} to ${newRole}?`)) {
-    updateUserRole(user, newRole);
+async function fetchAvailableRoles() {
+  isLoadingRoles.value = true;
+  rolesFetchError.value = null;
+  try {
+    const response = await $axios.get('/admin/roles');
+    availableRoles.value = response.data || [];
+  } catch (err) {
+    console.error('Error fetching available roles:', err);
+    rolesFetchError.value = err.response?.data?.message || err.message || 'Failed to load roles for dropdown.';
+    toast.error(rolesFetchError.value);
+  } finally {
+    isLoadingRoles.value = false;
+  }
+}
+
+
+const promptRoleChange = (user, newRoleIdString) => {
+  const newRoleId = parseInt(newRoleIdString, 10);
+  const newRole = availableRoles.value.find(r => r.id === newRoleId);
+  const oldRoleName = user.originalRoleName || user.legacy_role || 'unknown'; // Use originalRoleName or fallback
+
+  if (!newRole) {
+    toast.error("Invalid role selected.");
+    // Revert select dropdown if possible, or re-fetch users to ensure data integrity
+    const selectElement = document.querySelector(`select[data-user-id="${user.id}"]`); // Needs data-user-id on select
+    if (selectElement) selectElement.value = user.originalRoleId;
+    return;
+  }
+
+  if (confirm(`Are you sure you want to change the role of ${user.email} from "${oldRoleName}" to "${newRole.name}"?`)) {
+    updateUserRole(user, newRoleId, newRole.name);
   } else {
-    // Revert optimistic UI update if user cancels
-    user.role = user.originalRole;
+    // Revert UI: find the select element and set its value back to user.originalRoleId
+     const userInArray = users.value.find(u => u.id === user.id);
+    if (userInArray) {
+      userInArray.role_id = user.originalRoleId;
+    }
   }
 };
 
-async function updateUserRole(user, newRole) {
+async function updateUserRole(user, newRoleId, newRoleName) {
   actionLoading.value = { userId: user.id, type: 'role' };
   actionError.value = '';
   actionSuccessMessage.value = '';
   try {
-    await $axios.put(`/admin/users/${user.id}/role`, { role: newRole });
-    actionSuccessMessage.value = `Successfully updated role for ${user.email} to ${newRole}.`;
-    user.originalRole = newRole; // Update original role on success
+    // Use the main PUT endpoint for user updates, which handles role_id
+    await $axios.put(`/admin/users/${user.id}`, { role_id: newRoleId });
+    actionSuccessMessage.value = `Successfully updated role for ${user.email} to ${newRoleName}.`;
+    toast.success(actionSuccessMessage.value);
+
+    // Update local user data
+    const userInArray = users.value.find(u => u.id === user.id);
+    if (userInArray) {
+      userInArray.role_id = newRoleId;
+      userInArray.role_name = newRoleName;
+      userInArray.originalRoleId = newRoleId; // Update original for next potential change
+      userInArray.originalRoleName = newRoleName;
+    }
+
   } catch (err) {
     console.error('Failed to update user role:', err);
     actionError.value = `Failed to update role for ${user.email}: ${err.response?.data?.message || err.message}`;
-    user.role = user.originalRole; // Revert UI on error
+    toast.error(actionError.value);
+    // Revert UI
+    const userInArray = users.value.find(u => u.id === user.id);
+    if (userInArray) {
+      userInArray.role_id = user.originalRoleId;
+    }
   } finally {
     actionLoading.value = { userId: null, type: null };
     setTimeout(() => {
@@ -268,7 +334,10 @@ async function deleteUser(userId) {
   }
 }
 
-onMounted(fetchUsers);
+onMounted(() => {
+  fetchUsers();
+  fetchAvailableRoles(); // Fetch roles when component mounts
+});
 
 useHead({
   title: 'Admin - User Management',
