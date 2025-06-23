@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isAuthenticated, isAdmin } = require('../auth');
+const { isAuthenticated, checkPermission } = require('../auth'); // Replaced isAdmin with checkPermission
 const { generateOrderInvoicePdf, generatePackingSlipPdf } = require('../services/pdfService');
-const { param, query, validationResult } = require('express-validator'); // Added query
+const { param, query, validationResult } = require('express-validator');
 const { NotFoundError } = require('../utils/AppError');
 const crypto = require('crypto');
 
 // Apply auth middleware to all routes in this router
-router.use(isAuthenticated, isAdmin);
+// router.use(isAuthenticated, isAdmin); // REMOVED - will apply per route
 
 const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
 const BILLABLE_ORDER_STATUSES = ['shipped', 'completed', 'delivered']; // 'completed' can be an alias for delivered or a separate final step
@@ -21,7 +21,7 @@ const validateListOrdersParams = [
 ];
 
 // GET /admin/orders - List all orders
-router.get('/orders', validateListOrdersParams, async (req, res, next) => { // Added next
+router.get('/orders', isAuthenticated, checkPermission('orders:view_all'), validateListOrdersParams, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -66,10 +66,11 @@ router.get('/orders', validateListOrdersParams, async (req, res, next) => { // A
 });
 
 // GET /admin/orders/:id - View a specific order
-router.get('/orders/:id', async (req, res) => {
+router.get('/orders/:id', isAuthenticated, checkPermission('orders:view_details'), async (req, res, next) => {
+  // Added next for consistency, though current error handling doesn't use it for all paths
   const { id } = req.params;
   if (isNaN(parseInt(id))) {
-    return res.status(400).json({ message: 'Invalid order ID format.' });
+    return res.status(400).json({ message: 'Invalid order ID format.' }); // Or use express-validator
   }
 
   try {
@@ -126,7 +127,7 @@ router.get('/orders/:id', async (req, res) => {
 });
 
 // PUT /admin/orders/:id/status - Update an order's status and optionally payment_status
-router.put('/orders/:id/status', async (req, res, next) => { // Added next for error handling
+router.put('/orders/:id/status', isAuthenticated, checkPermission('orders:update_status'), async (req, res, next) => {
   const { id } = req.params;
   const { status: newStatus, payment_status: newPaymentStatus } = req.body;
 
@@ -220,6 +221,8 @@ router.put('/orders/:id/status', async (req, res, next) => { // Added next for e
 // GET /admin/orders/:orderId/invoice/pdf - Generate PDF invoice for an order
 router.get(
   '/orders/:orderId/invoice/pdf',
+  isAuthenticated,
+  checkPermission('orders:view_details'), // Viewing/generating an invoice requires viewing order details
   [
     param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.')
   ],
@@ -313,6 +316,8 @@ router.get(
 // GET /admin/orders/:orderId/packing-slip/pdf - Generate PDF packing slip for an order
 router.get(
   '/orders/:orderId/packing-slip/pdf',
+  isAuthenticated,
+  checkPermission('orders:view_details'), // Viewing/generating a packing slip requires viewing order details
   [
     param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt()
   ],
@@ -435,6 +440,8 @@ router.get(
 // GET /admin/orders/:orderId/packing-slip-data - Get structured data for a packing slip
 router.get(
   '/orders/:orderId/packing-slip-data',
+  isAuthenticated,
+  checkPermission('orders:view_details'),
   [
     param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt()
   ],

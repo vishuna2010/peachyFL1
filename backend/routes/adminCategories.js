@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isAuthenticated, isAdmin } = require('../auth');
+const { isAuthenticated, checkPermission } = require('../auth'); // Replaced isAdmin with checkPermission
 const auditLogService = require('../services/auditLogService');
 const { AppError, BadRequestError, NotFoundError, ConflictError } = require('../utils/AppError');
 const { body, param, query, validationResult } = require('express-validator');
 
 // Apply auth middleware to all routes in this router
-router.use(isAuthenticated, isAdmin);
+// router.use(isAuthenticated, isAdmin); // REMOVED - will apply per route
 
 // Validation Chains
 const validateCategoryIdParam = [
@@ -63,7 +63,7 @@ const validateUpdateCategory = [
 
 
 // POST / - Create a new category
-router.post('/', validateCreateCategory, async (req, res, next) => {
+router.post('/', isAuthenticated, checkPermission('categories:manage'), validateCreateCategory, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -100,7 +100,7 @@ router.post('/', validateCreateCategory, async (req, res, next) => {
 });
 
 // GET / - List all categories with pagination
-router.get('/', validatePaginationParams, async (req, res, next) => {
+router.get('/', isAuthenticated, checkPermission('categories:manage'), validatePaginationParams, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -138,7 +138,7 @@ router.get('/', validatePaginationParams, async (req, res, next) => {
 });
 
 // GET /:id - Get a single category by ID
-router.get('/:id', validateCategoryIdParam, async (req, res, next) => {
+router.get('/:id', isAuthenticated, checkPermission('categories:manage'), validateCategoryIdParam, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -168,7 +168,7 @@ router.get('/:id', validateCategoryIdParam, async (req, res, next) => {
 });
 
 // PUT /:id - Update a category
-router.put('/:id', validateCategoryIdParam, validateUpdateCategory, async (req, res, next) => {
+router.put('/:id', isAuthenticated, checkPermission('categories:manage'), validateCategoryIdParam, validateUpdateCategory, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -231,7 +231,7 @@ router.put('/:id', validateCategoryIdParam, validateUpdateCategory, async (req, 
 });
 
 // DELETE /:id - Delete a category
-router.delete('/:id', validateCategoryIdParam, async (req, res, next) => {
+router.delete('/:id', isAuthenticated, checkPermission('categories:manage'), validateCategoryIdParam, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });

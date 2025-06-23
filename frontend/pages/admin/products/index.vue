@@ -4,11 +4,13 @@
 
     <div class="flex justify-between items-center mb-6">
       <NuxtLink
+        v-if="can('products:create').value"
         to="/admin/products/new"
         class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
       >
         Add New Product
       </NuxtLink>
+      <div v-else></div> <!-- Placeholder to maintain layout if button is hidden -->
 
       <div class="flex items-center">
         <input
@@ -83,12 +85,14 @@
                   Print Labels
                 </button>
                 <NuxtLink
+                  v-if="can('products:edit').value"
                   :to="`/admin/products/${product.id}/edit`"
                   class="text-indigo-600 hover:text-indigo-900 mr-3"
                 >
                   Edit
                 </NuxtLink>
                 <button
+                  v-if="can('products:delete').value"
                   @click="deleteProduct(product.id)"
                   class="text-red-600 hover:text-red-900"
                 >
@@ -187,6 +191,9 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import { useNuxtApp } from '#app';
+import { usePermissions } from '~/composables/usePermissions';
+
+const { can } = usePermissions();
 
 definePageMeta({
   layout: 'admin',

@@ -1637,6 +1637,18 @@ async function seedRbac(client, seededDataIds) {
     // Settings Management (example)
     { name: 'settings:manage_general', description: 'Can manage general store settings.', group_name: 'Settings' },
 
+    // Product Options (Global)
+    { name: 'options:manage_global', description: 'Can manage global product options and their values.', group_name: 'Products' },
+
+    // Returns Management
+    { name: 'returns:manage', description: 'Can manage customer returns.', group_name: 'Orders' },
+
+    // Reviews Management
+    { name: 'reviews:manage', description: 'Can manage product reviews (approve, reject, delete).', group_name: 'Products' }, // Or 'Content' group
+
+    // Audit Logs
+    { name: 'auditlogs:view', description: 'Can view system audit logs.', group_name: 'System' },
+
   ];
 
   try {

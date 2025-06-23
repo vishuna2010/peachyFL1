@@ -58,7 +58,7 @@
     <!-- Tab Content Area -->
     <div>
       <!-- Button for Create Admin User - Shown only on Admin Tab -->
-      <div v-if="activeTab === 'admin'" class="mb-4 text-right">
+      <div v-if="activeTab === 'admin' && can('users:create').value" class="mb-4 text-right">
         <button
           @click="navigateToCreateUserPage('admin')"
           class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
@@ -68,7 +68,7 @@
       </div>
 
       <!-- Button for Create Customer User - Shown only on Customer Tab -->
-      <div v-if="activeTab === 'customer'" class="mb-4 text-right">
+      <div v-if="activeTab === 'customer' && can('users:create').value" class="mb-4 text-right">
         <button
           @click="navigateToCreateUserPage('customer')"
           class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -94,6 +94,7 @@
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.email }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
               <select
+                v-if="can('users:assign_roles').value"
                 v-model="user.role"
                 @change="promptRoleChange(user, $event.target.value)"
                 :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id"
@@ -102,10 +103,12 @@
                 <option value="customer">Customer</option>
                 <option value="admin">Admin</option>
               </select>
+              <span v-else>{{ user.role }}</span>
             </td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{{ new Date(user.created_at).toLocaleDateString() }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium space-x-2">
               <button
+                v-if="can('users:delete').value"
                 @click="confirmDeleteUser(user)"
                 :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id"
                 class="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -116,12 +119,13 @@
                 <span v-else>Delete</span>
               </button>
               <button
+                v-if="can('users:edit').value"
                 @click="navigateToEditUserPage(user.id)"
                 class="px-3 py-1.5 text-xs font-medium text-white bg-gray-500 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
               >
                 Edit
               </button>
-              <span v-if="actionLoading.type === 'role' && actionLoading.userId === user.id" class="text-xs text-indigo-600 italic">
+              <span v-if="actionLoading.type === 'role' && actionLoading.userId === user.id && can('users:assign_roles').value" class="text-xs text-indigo-600 italic">
                 <div class="inline-block animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-indigo-500 mr-1"></div>Updating role...
               </span>
             </td>
@@ -143,8 +147,11 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useAuth } from '~/composables/useAuth';
+import { usePermissions } from '~/composables/usePermissions'; // Added
 import { useNuxtApp } from '#app'; // Import useNuxtApp for $axios
 import { useHead } from '#imports'; // Import useHead
+
+const { can } = usePermissions(); // Added
 
 // This is crucial for Nuxt 3 to assign the layout
 definePageMeta({
