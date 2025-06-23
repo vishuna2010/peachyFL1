@@ -157,13 +157,16 @@ const createTables = async () => {
       `);
       console.log('Foreign key users.role_id -> roles.id ensured.');
     } catch (fkError) {
-      if (fkError.message.includes("constraint \"fk_users_role_id\" already exists")) {
-        console.log('Foreign key users.role_id -> roles.id already exists.');
+      if (fkError.message.includes("constraint \"fk_users_role_id\" already exists") ||
+          fkError.message.includes("multiple foreign-key constraints found for column")) { // Handle slightly different "already exists" messages
+        console.log('Foreign key users.role_id -> roles.id already exists or a similar one is present.');
       } else {
         // This might fail if users table has role_id values that don't exist in roles table yet
-        // (e.g. if run before seeding roles and migrating user data).
-        // This is a known complexity in schema changes vs data migration.
-        console.warn(`Warning: Could not create FK users.role_id -> roles.id. This might be okay if it's added after data migration in seed. Error: ${fkError.message}`);
+        // (e.g. if run before seeding roles and migrating user data which should not happen if seed is run on clean DB or migration is done first).
+        // Or if 'roles' table doesn't exist when this is attempted (schema creation order).
+        // For any other error, it's critical and should stop the schema creation.
+        console.error(`CRITICAL: Failed to create FK users.role_id -> roles.id. Error: ${fkError.message}`);
+        throw fkError; // Re-throw the error to halt schema creation if it's not a simple "already exists" case.
       }
     }
 
