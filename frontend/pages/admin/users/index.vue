@@ -170,7 +170,7 @@ definePageMeta({
 
 const { $axios } = useNuxtApp();
 const { authUser } = useAuth(); // To check current user ID
-const { can } = usePermissions(); // Ensure 'can' is available
+// Removed redundant: const { can } = usePermissions();
 
 const users = ref([]);
 const isLoading = ref(true);
