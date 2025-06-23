@@ -234,7 +234,29 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { page, limit, is_active, tax_type, jurisdiction } = req.query;
+    // req.query contains values processed by express-validator (toInt, toBoolean, default)
+    let page = req.query.page;
+    let limit = req.query.limit;
+    const { is_active, tax_type, jurisdiction } = req.query;
+
+    // Explicitly ensure page and limit are numbers and fall back to defaults if necessary,
+    // even after express-validator, to prevent NaN issues.
+    // express-validator's .default() applies if the param is missing.
+    // .toInt() converts valid numbers. If a param is present but empty (e.g., ?page=),
+    // toInt() might result in NaN if not caught by isInt() first.
+    // A simple parseInt with a fallback is a robust final check.
+
+    page = parseInt(page, 10);
+    if (isNaN(page) || page < 1) {
+      page = 1; // Default page
+    }
+
+    limit = parseInt(limit, 10);
+    if (isNaN(limit) || limit < 1) {
+      limit = 10; // Default limit
+    }
+    limit = Math.min(limit, 1000); // Ensure limit does not exceed max defined in validator
+
     const offset = (page - 1) * limit;
 
     const queryParams = [];
@@ -261,7 +283,15 @@ router.get(
     const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     try {
-      const dataQuery = `SELECT * FROM tax_rates ${whereString} ORDER BY name ASC LIMIT $${paramIndex++} OFFSET $${paramIndex++};`;
+      const dataQuery = `
+        SELECT
+          id, name, rate_percentage, jurisdiction, tax_type, tax_code,
+          is_active, priority, valid_from, valid_until, created_at, updated_at
+        FROM tax_rates
+        ${whereString}
+        ORDER BY name ASC
+        LIMIT $${paramIndex++} OFFSET $${paramIndex++};
+      `;
       const dataParams = [...queryParams, limit, offset];
       const dataResult = await db.query(dataQuery, dataParams);
 
