@@ -421,17 +421,17 @@ router.post('/', async (req, res, next) => { // Removed isAuthenticated, added n
 
       (async () => {
           try {
-              const emailHtml = await getOrderConfirmationHtml(emailOrderData, customerEmail);
-              const emailText = getOrderConfirmationText(emailOrderData, customerEmail);
+              const emailHtml = await getOrderConfirmationHtml(emailOrderData, userEmailForOrder);
+              const emailText = getOrderConfirmationText(emailOrderData, userEmailForOrder);
 
               sendEmail({
-                  to: customerEmail,
+                  to: userEmailForOrder,
                   subject: `Order Confirmation #${newOrder.id}`,
                   text: emailText,
                   html: emailHtml,
               }).then(emailResult => {
                   if (emailResult.success) {
-                      console.log(`Order confirmation email sent for order ${newOrder.id} to ${customerEmail}. Preview: ${emailResult.previewUrl || 'N/A'}`);
+                      console.log(`Order confirmation email sent for order ${newOrder.id} to ${userEmailForOrder}. Preview: ${emailResult.previewUrl || 'N/A'}`);
                   } else {
                       console.error(`Failed to send order confirmation email for order ${newOrder.id}: ${emailResult.error}`);
                   }
