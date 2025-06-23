@@ -156,11 +156,13 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useAuth } from '~/composables/useAuth';
-import { usePermissions } from '~/composables/usePermissions'; // Added
-import { useNuxtApp } from '#app'; // Import useNuxtApp for $axios
-import { useHead } from '#imports'; // Import useHead
+import { usePermissions } from '~/composables/usePermissions';
+import { useNuxtApp } from '#app';
+import { useHead } from '#imports';
+import { useToast } from 'vue-toastification'; // Import useToast
 
-const { can } = usePermissions(); // Added
+const { can } = usePermissions();
+const toast = useToast(); // Initialize toast
 
 // This is crucial for Nuxt 3 to assign the layout
 definePageMeta({
