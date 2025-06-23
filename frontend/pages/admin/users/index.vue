@@ -2,6 +2,39 @@
   <div class="p-4 sm:p-6 lg:p-8">
     <h2 class="text-2xl font-semibold text-gray-800 mb-6">User Management</h2>
 
+    <!-- Tabs Navigation -->
+    <div class="mb-6 border-b border-gray-200">
+      <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+        <button
+          @click="selectTab('all')"
+          :class="[
+            'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
+            activeTab === 'all' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          ]"
+        >
+          All Users
+        </button>
+        <button
+          @click="selectTab('admin')"
+          :class="[
+            'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
+            activeTab === 'admin' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          ]"
+        >
+          Administrators
+        </button>
+        <button
+          @click="selectTab('customer')"
+          :class="[
+            'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
+            activeTab === 'customer' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          ]"
+        >
+          Customers
+        </button>
+      </nav>
+    </div>
+
     <div v-if="isLoading" class="text-center py-10">
       <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
       <p class="mt-2 text-sm text-gray-500">Loading users...</p>
@@ -94,6 +127,7 @@ const { authUser } = useAuth(); // To check current user ID
 const users = ref([]);
 const isLoading = ref(true);
 const fetchError = ref(null);
+const activeTab = ref('all'); // 'all', 'admin', 'customer'
 
 const actionLoading = ref({ userId: null, type: null }); // { userId: number, type: 'role' | 'delete' }
 const actionError = ref('');
@@ -103,17 +137,28 @@ const isCurrentUser = (userId) => {
   return authUser.value?.id === userId;
 };
 
+const selectTab = (tabName) => {
+  activeTab.value = tabName;
+  fetchUsers(); // Refetch users when tab changes
+};
+
 async function fetchUsers() {
   isLoading.value = true;
   fetchError.value = null;
   actionError.value = '';
   actionSuccessMessage.value = '';
   try {
-    const response = await $axios.get('/admin/users');
+    let url = '/admin/users';
+    const params = {};
+    if (activeTab.value && activeTab.value !== 'all') {
+      params.role = activeTab.value; // 'admin' or 'customer'
+    }
+
+    const response = await $axios.get(url, { params });
     // Store original role for comparison or reset if API call fails for role change
     users.value = response.data.map(u => ({ ...u, originalRole: u.role }));
   } catch (err) {
-    console.error('Failed to fetch users:', err);
+    console.error(`Failed to fetch users (filter: ${activeTab.value}):`, err);
     fetchError.value = err.response?.data || err;
   } finally {
     isLoading.value = false;

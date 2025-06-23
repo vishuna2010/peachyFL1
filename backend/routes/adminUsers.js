@@ -10,15 +10,38 @@ const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppE
 router.use(isAuthenticated, isAdmin);
 
 // GET /api/admin/users - List all users
-router.get('/', async (req, res) => {
-  try {
-    const result = await db.query('SELECT id, name, email, role, is_tax_exempt, tax_exemption_certificate_id, tax_exemption_notes, created_at, updated_at FROM users ORDER BY id ASC');
-    res.status(200).json(result.rows);
-  } catch (error) {
-    console.error('Error listing users:', error);
-    res.status(500).json({ message: 'Error listing users.' });
+router.get(
+  '/',
+  [
+    query('role').optional().isString().trim().isIn(['admin', 'customer', 'user', 'guest']).withMessage('Invalid role specified.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { role } = req.query;
+    let queryString = 'SELECT id, name, email, role, is_tax_exempt, tax_exemption_certificate_id, tax_exemption_notes, created_at, updated_at FROM users';
+    const queryParams = [];
+
+    if (role) {
+      queryString += ' WHERE role = $1';
+      queryParams.push(role);
+    }
+
+    queryString += ' ORDER BY id ASC';
+
+    try {
+      const result = await db.query(queryString, queryParams);
+      res.status(200).json(result.rows);
+    } catch (error) {
+      console.error('Error listing users:', error);
+      // Pass to global error handler or keep specific response
+      next(new AppError('Error listing users.', 500, error));
+    }
   }
-});
+);
 
 // GET /api/admin/users/:id - View a specific user
 router.get('/:id', async (req, res) => {
