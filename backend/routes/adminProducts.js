@@ -403,14 +403,14 @@ router.put(
 
 
 const validateGetStockLevelsParams = [
-  query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'),
-  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('Limit must be an integer between 1 and 100.'),
+  query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'), // Defaults are applied in handler
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('Limit must be an integer between 1 and 100.'), // Defaults are applied in handler
   query('search_term').optional().isString().trim().escape(),
   query('category_id').optional().isInt({ min: 1 }).toInt().withMessage('Category ID must be a positive integer.'),
   query('supplier_id').optional().isInt({ min: 1 }).toInt().withMessage('Supplier ID must be a positive integer.'),
   query('low_stock_only').optional().isBoolean().toBoolean().withMessage('low_stock_only must be a boolean.'),
   query('sort_by').optional().trim().isIn(['product_name', 'sku', 'stock_quantity', 'reorder_threshold']).withMessage("Invalid sort_by value. Allowed: product_name, sku, stock_quantity, reorder_threshold."),
-  query('sort_order').optional().trim().toUpperCase().isIn(['ASC', 'DESC']).withMessage("Invalid sort_order value. Allowed: ASC, DESC.")
+  query('sort_order').optional().trim().isIn(['ASC', 'DESC', 'asc', 'desc']).withMessage("Invalid sort_order value. Allowed: ASC, DESC, asc, desc.") // Removed toUpperCase, added lowercase to array
 ];
 
 router.get('/stock-levels', validateGetStockLevelsParams, async (req, res, next) => {
@@ -419,16 +419,28 @@ router.get('/stock-levels', validateGetStockLevelsParams, async (req, res, next)
     return res.status(400).json({ errors: errors.array() });
   }
 
+  // Use destructured defaults for page and limit if not provided or if validator's default didn't catch all edge cases
+  const pageQuery = parseInt(req.query.page, 10);
+  const limitQuery = parseInt(req.query.limit, 10);
+
+  const page = (!isNaN(pageQuery) && pageQuery >= 1) ? pageQuery : 1;
+  const limit = (!isNaN(limitQuery) && limitQuery >= 1 && limitQuery <= 100) ? limitQuery : 20; // Max 100 as per validator
+
   const {
-    page = 1,
-    limit = 20,
-    search_term,
-    category_id,
-    supplier_id,
-    low_stock_only,
-    sort_by = 'product_name',
-    sort_order = 'ASC'
+    search_term, // Will be undefined if not present
+    category_id, // Will be undefined if not present
+    supplier_id, // Will be undefined if not present
+    low_stock_only, // Will be undefined if not present, or boolean if present
   } = req.query;
+
+  // For sort_by and sort_order, use validated values or handler defaults
+  const sort_by = req.query.sort_by || 'product_name';
+  let sort_order = req.query.sort_order || 'ASC';
+  // Ensure sort_order is one of the accepted values after potential trim by validator
+  if (!['ASC', 'DESC', 'asc', 'desc'].includes(sort_order)) {
+      sort_order = 'ASC'; // Fallback if somehow an invalid value bypassed validator (e.g. from direct req.query use before this block)
+  }
+
 
   const offset = (page - 1) * limit;
   let queryParams = [];
