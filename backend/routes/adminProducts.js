@@ -403,14 +403,16 @@ router.put(
 
 
 const validateGetStockLevelsParams = [
-  query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'), // Defaults are applied in handler
-  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('Limit must be an integer between 1 and 100.'), // Defaults are applied in handler
-  query('search_term').optional().isString().trim().escape(),
-  query('category_id').optional().isInt({ min: 1 }).toInt().withMessage('Category ID must be a positive integer.'),
-  query('supplier_id').optional().isInt({ min: 1 }).toInt().withMessage('Supplier ID must be a positive integer.'),
-  query('low_stock_only').optional().isBoolean().toBoolean().withMessage('low_stock_only must be a boolean.'),
+  // Only validate parameters that are expected to be sent and are used by the frontend
+  query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('Limit must be an integer between 1 and 100.'),
   query('sort_by').optional().trim().isIn(['product_name', 'sku', 'stock_quantity', 'reorder_threshold']).withMessage("Invalid sort_by value. Allowed: product_name, sku, stock_quantity, reorder_threshold."),
-  query('sort_order').optional().trim().isIn(['ASC', 'DESC', 'asc', 'desc']).withMessage("Invalid sort_order value. Allowed: ASC, DESC, asc, desc.") // Removed toUpperCase, added lowercase to array
+  query('sort_order').optional().trim().isIn(['ASC', 'DESC', 'asc', 'desc']).withMessage("Invalid sort_order value. Allowed: ASC, DESC, asc, desc.")
+  // Temporarily removed:
+  // query('search_term').optional().isString().trim().escape(),
+  // query('category_id').optional({ checkFalsy: true }).isInt({ min: 1 }).toInt().withMessage('Category ID must be a positive integer if provided.'),
+  // query('supplier_id').optional({ checkFalsy: true }).isInt({ min: 1 }).toInt().withMessage('Supplier ID must be a positive integer if provided.'),
+  // query('low_stock_only').optional().isBoolean().toBoolean().withMessage('low_stock_only must be a boolean.'),
 ];
 
 router.get('/stock-levels', validateGetStockLevelsParams, async (req, res, next) => {
