@@ -150,24 +150,28 @@ const createTables = async () => {
     // or seed script will handle pre-existing data carefully.
     // A more robust migration would handle this in steps.
     try {
-      await client.query(`
-        ALTER TABLE users
-        ADD CONSTRAINT fk_users_role_id
-        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
+      // Check if the constraint already exists
+      const constraintCheck = await client.query(`
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_users_role_id'
+          AND conrelid = 'users'::regclass;
       `);
-      console.log('Foreign key users.role_id -> roles.id ensured.');
-    } catch (fkError) {
-      if (fkError.message.includes("constraint \"fk_users_role_id\" already exists") ||
-          fkError.message.includes("multiple foreign-key constraints found for column")) { // Handle slightly different "already exists" messages
-        console.log('Foreign key users.role_id -> roles.id already exists or a similar one is present.');
+
+      if (constraintCheck.rowCount === 0) {
+        await client.query(`
+          ALTER TABLE users
+          ADD CONSTRAINT fk_users_role_id
+          FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
+        `);
+        console.log('Foreign key users.role_id -> roles.id created successfully.');
       } else {
-        // This might fail if users table has role_id values that don't exist in roles table yet
-        // (e.g. if run before seeding roles and migrating user data which should not happen if seed is run on clean DB or migration is done first).
-        // Or if 'roles' table doesn't exist when this is attempted (schema creation order).
-        // For any other error, it's critical and should stop the schema creation.
-        console.error(`CRITICAL: Failed to create FK users.role_id -> roles.id. Error: ${fkError.message}`);
-        throw fkError; // Re-throw the error to halt schema creation if it's not a simple "already exists" case.
+        console.log('Foreign key users.role_id -> roles.id already exists.');
       }
+    } catch (fkError) {
+      // Catch any other errors during constraint creation attempt (e.g., roles table not found, column type mismatch)
+      console.error(`CRITICAL: Error while ensuring foreign key users.role_id -> roles.id. Error: ${fkError.message}`);
+      throw fkError; // Re-throw critical errors to halt schema creation
     }
 
 
