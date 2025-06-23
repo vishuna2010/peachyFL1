@@ -141,7 +141,8 @@
       <p class="mt-1 text-sm text-gray-500">There are currently no users registered in the system.</p>
     </div>
     <!-- Pagination controls would go here if implemented -->
-  </div>
+  </div> <!-- This is the closing div for "Tab Content Area" -->
+</div> <!-- This is the main closing div for the page -->
 </template>
 
 <script setup>

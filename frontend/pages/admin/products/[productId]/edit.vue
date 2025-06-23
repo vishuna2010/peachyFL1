@@ -26,7 +26,7 @@
         :api-error="productFormApiError"
         @submit="handleUpdateProduct"
         class="mb-10 bg-white shadow-md rounded-lg p-6"
-        // Pass permission props
+        <!-- Pass permission props -->
         :can-edit-core-details="can('products:edit').value"
         :can-edit-price="can('products:edit_pricing').value"
         :can-edit-stock="can('products:edit_inventory').value"
