@@ -199,7 +199,8 @@ router.put(
     param('id').isInt({ gt: 0 }).toInt(),
     body('name').optional().isString().trim().isLength({ min: 1, max: 255 }).withMessage('Name must be between 1 and 255 chars.'),
     body('email').optional().isEmail().withMessage('Must be a valid email.').normalizeEmail(),
-    body('role').optional().isIn(['user', 'admin']).withMessage("Role must be 'user' or 'admin'."),
+    // body('role').optional().isIn(['user', 'admin']).withMessage("Role must be 'user' or 'admin'."), // Old: string role
+    body('role_id').optional().isInt({ gt: 0 }).withMessage('Role ID must be a positive integer.').toInt(), // New: role_id
     body('is_tax_exempt').optional().isBoolean().toBoolean(),
     body('tax_exemption_certificate_id').optional({ nullable: true }).isString().trim()
       .isLength({ max: 100 }).withMessage('Tax exemption certificate ID cannot exceed 100 characters.'),
@@ -218,9 +219,20 @@ router.put(
       return next(new BadRequestError('No fields provided for update.'));
     }
 
-    // Prevent admin from changing their own role to non-admin if this route also handles role
-    if (updates.role && parseInt(id) === req.user.userId && updates.role !== 'admin') {
-        return next(new BadRequestError("Administrators cannot change their own role to non-admin."));
+    // Prevent admin from changing their own role to a non-admin role
+    // This requires knowing the ID of the 'Super Admin' or general 'admin' roles.
+    // Let's assume 'Super Admin' role ID is fetched or known (e.g., from seededDataIds if this were seed, or a helper)
+    // For now, we'll make a simple check. A more robust check would query the target role_id's name.
+    if (updates.role_id && parseInt(id) === req.user.userId) {
+        // Fetch the name of the role being assigned
+        const targetRoleResult = await db.query('SELECT name FROM roles WHERE id = $1', [updates.role_id]);
+        if (targetRoleResult.rows.length > 0 && targetRoleResult.rows[0].name.toLowerCase() !== 'super admin' && targetRoleResult.rows[0].name.toLowerCase() !== 'admin') {
+             // Fetch current user's role name to ensure they are currently an admin type
+            const currentUserRoleResult = await db.query('SELECT r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = $1', [req.user.userId]);
+            if (currentUserRoleResult.rows.length > 0 && (currentUserRoleResult.rows[0].name.toLowerCase() === 'super admin' || currentUserRoleResult.rows[0].name.toLowerCase() === 'admin')) {
+                return next(new BadRequestError("Administrators cannot change their own role to a non-administrator role."));
+            }
+        }
     }
 
     const client = await db.pool.connect();
@@ -246,51 +258,69 @@ router.put(
       const values = [];
       let paramIndex = 1;
 
-      const fieldsToUpdate = ['name', 'email', 'role', 'is_tax_exempt', 'tax_exemption_certificate_id', 'tax_exemption_notes'];
+      // Updated fieldsToUpdate to use role_id instead of role
+      const fieldsToUpdate = ['name', 'email', 'role_id', 'is_tax_exempt', 'tax_exemption_certificate_id', 'tax_exemption_notes'];
       for (const field of fieldsToUpdate) {
         if (updates[field] !== undefined) {
           if (field === 'tax_exemption_certificate_id' && updates[field] === '') updates[field] = null;
           if (field === 'tax_exemption_notes' && updates[field] === '') updates[field] = null;
-
+          // Ensure role_id is handled as an integer if present
+          if (field === 'role_id' && updates[field] !== null) {
+             values.push(parseInt(updates[field],10));
+          } else {
+            values.push(updates[field]);
+          }
           setClauses.push(`${field} = $${paramIndex++}`);
-          values.push(updates[field]);
         }
       }
 
       if (setClauses.length === 0) {
         await client.query('ROLLBACK');
-        return res.status(200).json(currentUser); // No actual data change, return current.
+        // Fetch user with role name for consistent response
+        const userWithRoleName = await client.query('SELECT u.*, r.name as role_name FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.id = $1', [currentUser.id]);
+        return res.status(200).json(userWithRoleName.rows[0] || currentUser);
       }
 
       setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
-      values.push(id);
+      values.push(id); // For WHERE id = $N
 
-      const updateQuery = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING id, name, email, role, is_tax_exempt, tax_exemption_certificate_id, tax_exemption_notes, created_at, updated_at;`;
-      const result = await client.query(updateQuery, values);
-      const finalUpdatedUser = result.rows[0];
+      const updateQuery = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING id;`; // Only need ID to refetch
+      await client.query(updateQuery, values);
 
       await client.query('COMMIT');
 
+      // Re-fetch the user to get the role name and other fresh details
+      const updatedUserResult = await db.query(
+        `SELECT u.id, u.name, u.email, u.role_id, r.name as role_name, u.is_tax_exempt,
+                u.tax_exemption_certificate_id, u.tax_exemption_notes, u.created_at, u.updated_at, u.role as legacy_role
+         FROM users u
+         LEFT JOIN roles r ON u.role_id = r.id
+         WHERE u.id = $1`, [id]
+      );
+      const finalUpdatedUserWithRole = updatedUserResult.rows[0];
+
+
       const attemptedChanges = { ...updates };
-      // Clean up sensitive fields if necessary, e.g. delete attemptedChanges.password;
+      // Clean up sensitive fields if necessary
 
       auditLogService.recordAuditEvent(
         'USER_UPDATE_SUCCESS',
         { userId: req.user.userId, userEmail: req.user.email },
-        { resourceType: 'USER', resourceId: finalUpdatedUser.id },
+        { resourceType: 'USER', resourceId: finalUpdatedUserWithRole.id },
         {
-          message: `User ID ${finalUpdatedUser.id} details updated by admin.`,
+          message: `User ID ${finalUpdatedUserWithRole.id} details updated by admin.`,
           inputData: attemptedChanges,
           updatedSnapshot: {
-              name: finalUpdatedUser.name,
-              email: finalUpdatedUser.email,
-              role: finalUpdatedUser.role,
-              is_tax_exempt: finalUpdatedUser.is_tax_exempt
+              name: finalUpdatedUserWithRole.name,
+              email: finalUpdatedUserWithRole.email,
+              role_id: finalUpdatedUserWithRole.role_id,
+              role_name: finalUpdatedUserWithRole.role_name, // Include role name
+              is_tax_exempt: finalUpdatedUserWithRole.is_tax_exempt
           }
         },
         req
       ).catch(err => console.error('Audit log failed for USER_UPDATE_SUCCESS:', err));
-      res.status(200).json(finalUpdatedUser);
+      res.status(200).json(finalUpdatedUserWithRole);
 
     } catch (error) {
       await client.query('ROLLBACK');

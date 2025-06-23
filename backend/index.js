@@ -135,6 +135,12 @@ app.use('/api/orders', orderRoutes);
 // --- Public Options Routes (e.g., for product filters) ---
 app.use('/api/options', optionsRoutes);
 
+// --- Admin RBAC Management Routes ---
+const adminPermissionsRoutes = require('./routes/adminPermissions');
+const adminRolesRoutes = require('./routes/adminRoles');
+app.use('/api/admin/permissions', adminPermissionsRoutes);
+app.use('/api/admin/roles', adminRolesRoutes);
+
 
 // Ensure DB connection is attempted and tables are created when server starts
 // The db.js file already tries to connect and create tables upon import.

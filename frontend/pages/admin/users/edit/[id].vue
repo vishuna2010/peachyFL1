@@ -46,19 +46,22 @@
       </div>
 
       <div>
-        <label for="role" class="block text-sm font-medium text-gray-700">Role</label>
+        <label for="role_id" class="block text-sm font-medium text-gray-700">Role</label>
         <select
-          id="role"
-          v-model="form.role"
+          id="role_id"
+          v-model="form.role_id"
           required
-          :disabled="isEditingSelf && originalRole === 'admin'"
+          :disabled="!can('users:assign_roles').value || (isEditingSelf && wasAdminRole)"
           class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md disabled:opacity-70 disabled:bg-gray-100"
         >
-          <option value="customer">Customer</option>
-          <option value="admin">Admin</option>
+          <option v-if="isLoadingDetails || availableRoles.length === 0" :value="null" disabled>Loading roles...</option>
+          <option v-for="role_option in availableRoles" :key="role_option.id" :value="role_option.id">
+            {{ role_option.name }}
+          </option>
         </select>
-         <p v-if="isEditingSelf && originalRole === 'admin'" class="mt-1 text-xs text-gray-500">Admins cannot change their own role.</p>
-        <p v-if="errors.role" class="mt-1 text-xs text-red-500">{{ errors.role }}</p>
+         <p v-if="isEditingSelf && wasAdminRole && can('users:assign_roles').value" class="mt-1 text-xs text-gray-500">Administrators cannot change their own role to a non-administrator role via this form.</p>
+         <p v-if="!can('users:assign_roles').value" class="mt-1 text-xs text-gray-500">You do not have permission to assign roles.</p>
+        <p v-if="errors.role_id" class="mt-1 text-xs text-red-500">{{ errors.role_id }}</p>
       </div>
 
       <fieldset class="mt-6">
@@ -145,6 +148,7 @@ import { useNuxtApp } from '#app';
 import { useToast } from 'vue-toastification';
 import { useHead } from '#imports';
 import { useAuth } from '~/composables/useAuth';
+import { usePermissions } from '~/composables/usePermissions';
 
 
 definePageMeta({
@@ -155,18 +159,21 @@ const { $axios } = useNuxtApp();
 const route = useRoute();
 const toast = useToast();
 const { authUser } = useAuth();
+const { can } = usePermissions();
 
 const userId = ref(route.params.id);
-const originalRole = ref(null); // To store the role before editing
+const originalRoleId = ref(null); // To store the role_id before editing
 
 const form = ref({
   name: '',
   email: '',
-  role: 'customer', // Default, will be overridden by fetched data
+  role_id: null, // Will hold the integer role ID
   is_tax_exempt: false,
   tax_exemption_certificate_id: '',
   tax_exemption_notes: '',
 });
+
+const availableRoles = ref([]); // To store roles fetched from API
 
 const errors = ref({});
 const apiError = ref('');
@@ -182,22 +189,40 @@ const isEditingSelf = computed(() => {
   return authUser.value && authUser.value.id === parseInt(userId.value);
 });
 
-async function fetchUserDetails() {
+// Computed property to check if the original role of the user being edited was an admin-type role
+const wasAdminRole = computed(() => {
+  const originalRoleObj = availableRoles.value.find(r => r.id === originalRoleId.value);
+  return originalRoleObj && (originalRoleObj.name.toLowerCase() === 'admin' || originalRoleObj.name.toLowerCase() === 'super admin');
+});
+
+
+async function fetchUserDetailsAndRoles() {
   isLoadingDetails.value = true;
   fetchDetailsError.value = '';
   try {
-    const response = await $axios.get(`/admin/users/${userId.value}`);
-    const userData = response.data;
+    // Fetch user details and available roles in parallel
+    const [userResponse, rolesResponse] = await Promise.all([
+      $axios.get(`/admin/users/${userId.value}`),
+      $axios.get('/admin/roles') // Assuming this endpoint lists all roles {id, name}
+    ]);
+
+    availableRoles.value = rolesResponse.data;
+
+    const userData = userResponse.data;
     form.value.name = userData.name || '';
     form.value.email = userData.email || '';
-    form.value.role = userData.role || 'customer';
-    originalRole.value = userData.role; // Store original role
+    // Ensure role_id is set. The backend now returns role_id and role_name.
+    // The form should bind to role_id.
+    form.value.role_id = userData.role_id || null;
+    originalRoleId.value = userData.role_id;
+
     form.value.is_tax_exempt = userData.is_tax_exempt || false;
     form.value.tax_exemption_certificate_id = userData.tax_exemption_certificate_id || '';
     form.value.tax_exemption_notes = userData.tax_exemption_notes || '';
+
   } catch (err) {
-    console.error('Error fetching user details:', err);
-    fetchDetailsError.value = err.response?.data?.message || err.message || 'Failed to load user data.';
+    console.error('Error fetching user details or roles:', err);
+    fetchDetailsError.value = err.response?.data?.message || err.message || 'Failed to load user data or roles.';
     toast.error(fetchDetailsError.value);
   } finally {
     isLoadingDetails.value = false;
@@ -228,8 +253,8 @@ const validateForm = () => {
     errors.value.email = 'Please enter a valid email address.';
     isValid = false;
   }
-  if (!form.value.role) {
-    errors.value.role = 'Role is required.';
+  if (!form.value.role_id) { // Check role_id
+    errors.value.role_id = 'Role is required.'; // Error message for role_id
     isValid = false;
   }
   if (form.value.is_tax_exempt && !form.value.tax_exemption_certificate_id?.trim()) {
@@ -247,11 +272,15 @@ async function handleSubmit() {
     return;
   }
 
-  if (isEditingSelf.value && form.value.role !== 'admin' && originalRole.value === 'admin') {
-      apiError.value = "Administrators cannot change their own role to non-admin.";
+  // Check if the admin is trying to change their own role to a non-admin role
+  if (isEditingSelf.value && wasAdminRole.value && can('users:assign_roles').value) {
+    const newSelectedRoleObj = availableRoles.value.find(r => r.id === form.value.role_id);
+    if (newSelectedRoleObj && newSelectedRoleObj.name.toLowerCase() !== 'admin' && newSelectedRoleObj.name.toLowerCase() !== 'super admin') {
+      apiError.value = "Administrators cannot change their own role to a non-administrator role.";
       toast.error(apiError.value);
-      form.value.role = 'admin'; // Revert role change in form
+      form.value.role_id = originalRoleId.value; // Revert role_id change in form
       return;
+    }
   }
 
   isSubmitting.value = true;
@@ -260,11 +289,16 @@ async function handleSubmit() {
     const payload = {
       name: form.value.name,
       email: form.value.email,
-      role: form.value.role,
+      role_id: form.value.role_id, // Send role_id
       is_tax_exempt: form.value.is_tax_exempt,
       tax_exemption_certificate_id: form.value.tax_exemption_certificate_id?.trim() || null,
       tax_exemption_notes: form.value.tax_exemption_notes?.trim() || null,
     };
+     // Only include role_id in payload if user has permission to assign roles
+    if (!can('users:assign_roles').value) {
+      delete payload.role_id;
+    }
+
 
     await $axios.put(`/admin/users/${userId.value}`, payload);
     toast.success(`User "${form.value.name}" updated successfully.`);
