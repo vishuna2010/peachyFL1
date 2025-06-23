@@ -106,6 +106,12 @@
                 </span>
                 <span v-else>Delete</span>
               </button>
+              <button
+                @click="navigateToEditUserPage(user.id)"
+                class="px-3 py-1.5 text-xs font-medium text-white bg-gray-500 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+              >
+                Edit
+              </button>
               <span v-if="actionLoading.type === 'role' && actionLoading.userId === user.id" class="text-xs text-indigo-600 italic">
                 <div class="inline-block animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-indigo-500 mr-1"></div>Updating role...
               </span>
@@ -155,6 +161,10 @@ const isCurrentUser = (userId) => {
 
 const navigateToCreateUserPage = (role) => {
   navigateTo(`/admin/users/create?role=${role}`);
+};
+
+const navigateToEditUserPage = (userId) => {
+  navigateTo(`/admin/users/edit/${userId}`);
 };
 
 const selectTab = (tabName) => {
