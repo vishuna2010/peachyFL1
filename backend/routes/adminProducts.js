@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isAuthenticated, isAdmin } = require('../auth');
+const { isAuthenticated, checkPermission } = require('../auth'); // Replaced isAdmin with checkPermission
 const productService = require('../services/productService');
 const auditLogService = require('../services/auditLogService');
-const { query, param, body, validationResult } = require('express-validator'); // Added body
+const { query, param, body, validationResult } = require('express-validator');
 const { NotFoundError } = require('../utils/AppError');
 const { generateProductLabelPdf } = require('../services/pdfService'); // Ensured at top
 const taxService = require('../services/taxService');
@@ -20,7 +20,7 @@ router.use((req, res, next) => {
 });
 
 // Apply auth middleware to all routes in this router
-router.use(isAuthenticated, isAdmin);
+// router.use(isAuthenticated, isAdmin); // REMOVED - will apply per route
 
 // Validators for GET /api/admin/products
 const validateGetProductsParams = [
@@ -36,7 +36,7 @@ const validateGetProductsParams = [
 ];
 
 // GET /api/admin/products - List all products (admin)
-router.get('/', validateGetProductsParams, async (req, res, next) => {
+router.get('/', isAuthenticated, checkPermission('products:view'), validateGetProductsParams, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -92,7 +92,7 @@ const validateGetStockLevelsParams = [
   // query('low_stock_only').optional().isBoolean().toBoolean().withMessage('low_stock_only must be a boolean.'),
 ];
 
-router.get('/stock-levels', validateGetStockLevelsParams, async (req, res, next) => {
+router.get('/stock-levels', isAuthenticated, checkPermission('products:view'), validateGetStockLevelsParams, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -238,6 +238,8 @@ router.get('/stock-levels', validateGetStockLevelsParams, async (req, res, next)
 // GET /api/admin/products/:productId/assigned-options - List options assigned to a product, with their selected values
 router.get(
   '/:productId/assigned-options',
+  isAuthenticated,
+  checkPermission('products:view'), // Or 'products:edit' if assigning options is part of editing
   [
     param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt()
   ],
@@ -294,6 +296,8 @@ router.get(
 // GET /api/admin/products/:productId - Get a single product by ID (admin)
 router.get(
   '/:productId',
+  isAuthenticated,
+  checkPermission('products:view'),
   [
     param('productId')
       .isInt({ gt: 0 })
@@ -348,6 +352,8 @@ const validateUpdateProductParams = [
 
 router.put(
   '/:productId',
+  isAuthenticated,
+  checkPermission('products:edit'),
   productImageUploadMiddleware, // Handles req.file
   handleMulterError,
   validateUpdateProductParams,
@@ -559,7 +565,9 @@ router.put(
 );
 
 // PUT /api/admin/products/:id/stock - Update a product's stock quantity
-router.put('/:id/stock', async (req, res) => {
+router.put('/:id/stock', isAuthenticated, checkPermission('products:edit'), async (req, res) => {
+  // Note: The permission 'products:edit' might be too broad if you want separate control over stock.
+  // Could use a more specific 'products:edit_inventory' if defined and assigned.
   const { id } = req.params;
   const { new_stock_quantity } = req.body;
 
@@ -664,6 +672,8 @@ router.put('/:id/stock', async (req, res) => {
 // GET /api/admin/products/:id/label - Generate a PDF label for a product
 router.get(
   '/:id/label',
+  isAuthenticated,
+  checkPermission('products:view'), // Or a more specific 'products:generate_label'
   [
     param('id').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt(),
     query('variant_id').optional().isInt({ gt: 0 }).toInt().withMessage('Variant ID must be a positive integer if provided.'),
@@ -809,6 +819,8 @@ router.get(
 // GET /api/admin/products/:productId/inventory-batches - Get inventory batch information
 router.get(
   '/:productId/inventory-batches',
+  isAuthenticated,
+  checkPermission('products:view'), // Viewing inventory is part of viewing product details
   [
     param('productId').isInt({ gt: 0 }).toInt().withMessage('Product ID must be a positive integer.'),
     query('variant_id').optional().isInt({ gt: 0 }).toInt().withMessage('Variant ID must be a positive integer if provided.'),
@@ -929,6 +941,8 @@ router.get(
 // GET /api/admin/products/:productId/label-data - Get structured data for product labels
 router.get(
   '/:productId/label-data',
+  isAuthenticated,
+  checkPermission('products:view'),
   [
     param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.')
   ],
@@ -1039,6 +1053,8 @@ router.get(
 // GET /api/admin/products/:productId/cost-history - Get cost history for a product (and optionally variant)
 router.get(
   '/:productId/cost-history',
+  isAuthenticated,
+  checkPermission('products:view'), // Or a more specific 'products:view_cost_history'
   [
     param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt(),
     query('variant_id').optional().isInt({ gt: 0 }).toInt().withMessage('Variant ID must be a positive integer if provided.'),

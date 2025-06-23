@@ -150,6 +150,7 @@ module.exports = {
   jwtSecret,
   isAuthenticated,
   changeUserPassword, // Export the new function
+  checkPermission,    // Export the new permission checking middleware
 
   // isAdmin middleware - now checks role from DB
   isAdmin: async (req, res, next) => {
@@ -160,12 +161,20 @@ module.exports = {
     }
 
     try {
-      const result = await db.query('SELECT role FROM users WHERE id = $1', [req.user.userId]);
+      // Ensure role_id is being used if the migration is complete, or adapt as needed.
+      // For now, assuming the old 'role' column is still being used by this specific isAdmin.
+      // This isAdmin should eventually be replaced by checkPermission('some_super_admin_permission')
+      // or checkPermission('admin:access_dashboard') based on the new RBAC.
+      const result = await db.query('SELECT role, role_id FROM users WHERE id = $1', [req.user.userId]);
       if (result.rows.length === 0) {
         return res.status(403).json({ message: 'Forbidden: User not found.' });
       }
-      const userRole = result.rows[0].role;
-      if (userRole === 'admin') {
+      // Prefer new role_id system if available and matches a 'Super Admin' concept,
+      // otherwise fall back to string role for current isAdmin logic.
+      // This part needs careful handling during transition.
+      // For now, let's keep it simple and assume 'admin' string role.
+      const userRoleString = result.rows[0].role;
+      if (userRoleString === 'admin') { // This will need to align with how 'Super Admin' is identified
         next(); // User is admin, proceed
       } else {
         return res.status(403).json({ message: 'Forbidden: Requires admin role.' });
@@ -176,3 +185,34 @@ module.exports = {
     }
   }
 };
+
+const permissionService = require('./services/permissionService'); // Import the new service
+const { AppError } = require('./utils/AppError'); // For sending 403/500 error
+
+// Middleware to check if the user has a specific permission
+function checkPermission(requiredPermission) {
+  return async (req, res, next) => {
+    if (!req.user || !req.user.userId) {
+      // This should ideally be caught by isAuthenticated first, but as a safeguard
+      return next(new AppError('Authentication required.', 401));
+    }
+
+    try {
+      // It's good practice to fetch permissions using a DB client from a pool if in a transaction,
+      // but for a middleware check, using the default db import is usually fine unless high contention.
+      const hasPerm = await permissionService.userHasPermission(req.user.userId, requiredPermission);
+
+      if (hasPerm) {
+        next(); // User has the permission, proceed
+      } else {
+        // User does not have the permission
+        console.warn(`User ID ${req.user.userId} (Email: ${req.user.email || 'N/A'}) attempted action without required permission: "${requiredPermission}" on route ${req.originalUrl}`);
+        return next(new AppError(`Forbidden: You do not have the required permission ("${requiredPermission}") to perform this action.`, 403));
+      }
+    } catch (error) {
+      // This catches errors from userHasPermission (e.g., database issues in permissionService)
+      console.error(`Error checking permission '${requiredPermission}' for user ID ${req.user.userId}:`, error);
+      return next(new AppError('An error occurred while verifying permissions.', 500));
+    }
+  };
+}

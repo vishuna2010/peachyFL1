@@ -1488,12 +1488,54 @@ async function seedDatabase() {
       optionValues: {},
       products: {},
       taxClasses: {},
-      taxRates: {}
+      taxRates: {},
+      roles: {},      // For RBAC
+      permissions: {} // For RBAC
     };
     await seedTaxConfiguration(client, seededDataIds);
+    await seedRbac(client, seededDataIds); // Seed RBAC tables first
 
-    await seedAdminUser(client, seededDataIds.users);
-    await seedRegularUsers(client, seededDataIds.users);
+    await seedAdminUser(client, seededDataIds.users); // This creates users with string roles
+    await seedRegularUsers(client, seededDataIds.users); // This creates users with string roles
+
+    // Data Migration: Update users to use role_id
+    console.log('Migrating users to role_ids...');
+    if (seededDataIds.roles.super_admin && seededDataIds.roles.customer) {
+      const allUsers = await client.query('SELECT id, role FROM users WHERE role_id IS NULL'); // Get users not yet migrated
+      for (const user of allUsers.rows) {
+        let targetRoleId = null;
+        if (user.role === 'admin') {
+          targetRoleId = seededDataIds.roles.super_admin;
+        } else if (user.role === 'customer' || user.role === 'user' || user.role === 'guest') { // Consolidate 'user' and 'guest' to 'customer' role for RBAC
+          targetRoleId = seededDataIds.roles.customer;
+        }
+
+        if (targetRoleId) {
+          await client.query('UPDATE users SET role_id = $1 WHERE id = $2', [targetRoleId, user.id]);
+          console.log(`Migrated user ID ${user.id} (legacy role: ${user.role}) to role_id ${targetRoleId}.`);
+        } else {
+          console.warn(`User ID ${user.id} has legacy role "${user.role}" which has no defined migration path to a new role_id. It will remain with role_id NULL.`);
+        }
+      }
+      console.log('User role_id migration step completed.');
+
+      // After migration, ideally make users.role_id NOT NULL and add FK constraint if not added in db.js
+      // For now, db.js attempts to add FK, which might fail if data is inconsistent before this migration.
+      // A more robust setup uses separate migration scripts.
+      // We can also try to add the FK constraint here again if it failed in db.js
+      try {
+        await client.query('ALTER TABLE users ADD CONSTRAINT fk_users_role_id_if_not_exists FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;');
+        console.log('Ensured foreign key users.role_id -> roles.id after migration.');
+      } catch (fkError) {
+        if (!fkError.message.includes("already exists") && !fkError.message.includes("multiple foreign-key constraints")) { // Ignore if already exists or if a similarly named one exists
+             console.warn(`Warning: Could not create FK users.role_id -> roles.id post-migration (this might be okay if already set or if there are users with NULL role_id): ${fkError.message}`);
+        }
+      }
+
+    } else {
+      console.error('CRITICAL: Super Admin or Customer role IDs not found in seededDataIds.roles. Skipping user role_id migration.');
+    }
+
     await seedCategories(client);
     await seedSuppliers(client, seededDataIds);
     await seedSpecificGlobalOptionsAndValues(client, seededDataIds);
@@ -1533,6 +1575,121 @@ async function seedDatabase() {
     console.log('Seeding pool has ended.');
   }
 }
+
+async function seedRbac(client, seededDataIds) {
+  console.log('Seeding RBAC (Roles, Permissions, Role-Permissions)...');
+  seededDataIds.roles = seededDataIds.roles || {};
+  seededDataIds.permissions = seededDataIds.permissions || {};
+
+  // Define Roles
+  const rolesToSeed = [
+    { name: 'Super Admin', description: 'Full system access.' },
+    { name: 'Product Manager', description: 'Manages products, categories, and tags.' },
+    { name: 'Customer', description: 'Standard customer account.' },
+    // Add more roles like 'Tax Manager', 'Order Manager' here in future phases
+  ];
+
+  // Define Permissions (group_name is for UI organization later)
+  const permissionsToSeed = [
+    // General Admin Access
+    { name: 'admin:access_dashboard', description: 'Can access the admin dashboard area.', group_name: 'Admin' },
+    // Product Management
+    { name: 'products:view', description: 'Can view products.', group_name: 'Products' },
+    { name: 'products:create', description: 'Can create new products.', group_name: 'Products' },
+    { name: 'products:edit', description: 'Can edit existing products (details, pricing, inventory, variants, images).', group_name: 'Products' },
+    // { name: 'products:edit_core_details', description: 'Can edit product name, description, SKU, etc.', group_name: 'Products' },
+    // { name: 'products:edit_pricing', description: 'Can edit product prices.', group_name: 'Products' },
+    // { name: 'products:edit_inventory', description: 'Can edit product stock levels.', group_name: 'Products' },
+    { name: 'products:delete', description: 'Can delete products.', group_name: 'Products' },
+    { name: 'categories:manage', description: 'Can manage product categories.', group_name: 'Products' },
+    { name: 'tags:manage', description: 'Can manage product tags.', group_name: 'Products' },
+    // User Management
+    { name: 'users:view', description: 'Can view users.', group_name: 'Users' },
+    { name: 'users:create', description: 'Can create new users.', group_name: 'Users' },
+    { name: 'users:edit', description: 'Can edit user details.', group_name: 'Users' },
+    { name: 'users:assign_roles', description: 'Can assign roles to users.', group_name: 'Users' },
+    { name: 'users:delete', description: 'Can delete users.', group_name: 'Users' },
+    // RBAC Management (for Super Admin to manage the roles/permissions system itself)
+    { name: 'rbac:manage', description: 'Can manage roles and permissions assignments.', group_name: 'System' },
+    // Add more permissions for taxes, orders, discounts, suppliers, etc. as features are protected
+    // e.g., { name: 'taxes:manage_classes', description: 'Can manage tax classes.', group_name: 'Taxes' },
+  ];
+
+  try {
+    // Seed Roles
+    for (const role of rolesToSeed) {
+      const result = await client.query(
+        'INSERT INTO roles (name, description) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description RETURNING id, name;',
+        [role.name, role.description]
+      );
+      if (result.rows.length > 0) {
+        const roleKey = result.rows[0].name.toLowerCase().replace(/ /g, '_');
+        seededDataIds.roles[roleKey] = result.rows[0].id;
+        console.log(`Role "${result.rows[0].name}" seeded/updated with ID ${result.rows[0].id}.`);
+      }
+    }
+
+    // Seed Permissions
+    for (const perm of permissionsToSeed) {
+      const result = await client.query(
+        'INSERT INTO permissions (name, description, group_name) VALUES ($1, $2, $3) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, group_name = EXCLUDED.group_name RETURNING id, name;',
+        [perm.name, perm.description, perm.group_name]
+      );
+      if (result.rows.length > 0) {
+        // Store permission ID by its name for easy lookup when assigning to roles
+        seededDataIds.permissions[result.rows[0].name] = result.rows[0].id;
+        console.log(`Permission "${result.rows[0].name}" seeded/updated with ID ${result.rows[0].id}.`);
+      }
+    }
+
+    // Assign Permissions to Roles
+    const rolePermissionsToAssign = {
+      'super_admin': Object.keys(seededDataIds.permissions), // Super Admin gets all defined permissions
+      'product_manager': [
+        'admin:access_dashboard',
+        'products:view',
+        'products:create',
+        'products:edit',
+        'products:delete',
+        'categories:manage',
+        'tags:manage',
+      ],
+      'customer': [] // Customer gets no admin panel permissions from this list
+    };
+
+    for (const roleNameKey in rolePermissionsToAssign) {
+      const roleId = seededDataIds.roles[roleNameKey];
+      if (!roleId) {
+        console.warn(`Role ID for key "${roleNameKey}" not found. Skipping permission assignment.`);
+        continue;
+      }
+      const permissionsForRole = rolePermissionsToAssign[roleNameKey];
+      for (const permName of permissionsForRole) {
+        const permissionId = seededDataIds.permissions[permName];
+        if (!permissionId) {
+          console.warn(`Permission ID for name "${permName}" not found. Skipping assignment to role "${roleNameKey}".`);
+          continue;
+        }
+        try {
+          await client.query(
+            'INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;',
+            [roleId, permissionId]
+          );
+          // console.log(`Assigned permission "${permName}" to role "${roleNameKey}".`);
+        } catch (rpError) {
+          console.error(`Error assigning permission "${permName}" (ID: ${permissionId}) to role "${roleNameKey}" (ID: ${roleId}):`, rpError);
+        }
+      }
+      console.log(`Finished assigning permissions for role "${roleNameKey}".`);
+    }
+
+    console.log('RBAC seeding completed.');
+  } catch (error) {
+    console.error('Error seeding RBAC:', error);
+    throw error; // Re-throw to be caught by seedDatabase and potentially rollback
+  }
+}
+
 
 if (require.main === module) {
   seedDatabase().catch(err => {

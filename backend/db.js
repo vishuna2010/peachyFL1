@@ -66,14 +66,105 @@ const createTables = async () => {
       $$;
     `);
     console.log('Trigger for "users.updated_at" ensured.');
-     // Backward compatibility for users table (name, updated_at)
+     // Backward compatibility for users table (name, updated_at) and new role_id
     try {
       await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255) NULL;');
       await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;');
       await client.query('UPDATE users SET updated_at = created_at WHERE updated_at IS NULL;');
-      console.log('Backward compatibility for "users" (name, updated_at) applied.');
+      // Add role_id column, will be populated by seed script later
+      // Initially nullable to allow existing rows to be valid before migration.
+      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS role_id INTEGER NULL;');
+      // Constraint will be added after roles table exists and data is migrated.
+      console.log('Backward compatibility for "users" (name, updated_at) and role_id column applied.');
     } catch (alterError) {
-        // Ignore errors if columns already exist, etc.
+        console.warn('Warning during users table alteration (might be benign):', alterError.message);
+    }
+
+    // --- Roles Table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS roles (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "roles" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_roles') THEN
+          CREATE TRIGGER set_timestamp_roles
+          BEFORE UPDATE ON roles
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "roles.updated_at" ensured.');
+
+    // --- Permissions Table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS permissions (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) UNIQUE NOT NULL, -- e.g., 'products:create', 'users:delete'
+        description TEXT,
+        group_name VARCHAR(100), -- For UI grouping, e.g., 'Products', 'Users'
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "permissions" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_permissions') THEN
+          CREATE TRIGGER set_timestamp_permissions
+          BEFORE UPDATE ON permissions
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "permissions.updated_at" ensured.');
+
+    // --- Role Permissions Table (Junction) ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        role_id INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+        permission_id INTEGER NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (role_id, permission_id)
+      );
+    `);
+    console.log('Table "role_permissions" created or already exists.');
+    // Note: No updated_at trigger for junction tables like this usually, as rows are inserted/deleted, not updated.
+
+    // --- Add Foreign Key Constraint from users.role_id to roles.id ---
+    // This is added here after roles table is guaranteed to exist.
+    // It's better to add this after data migration in seed script if users table already has data.
+    // For now, assuming createTables runs on an empty or dev DB where order is okay,
+    // or seed script will handle pre-existing data carefully.
+    // A more robust migration would handle this in steps.
+    try {
+      await client.query(`
+        ALTER TABLE users
+        ADD CONSTRAINT fk_users_role_id
+        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
+      `);
+      console.log('Foreign key users.role_id -> roles.id ensured.');
+    } catch (fkError) {
+      if (fkError.message.includes("constraint \"fk_users_role_id\" already exists")) {
+        console.log('Foreign key users.role_id -> roles.id already exists.');
+      } else {
+        // This might fail if users table has role_id values that don't exist in roles table yet
+        // (e.g. if run before seeding roles and migrating user data).
+        // This is a known complexity in schema changes vs data migration.
+        console.warn(`Warning: Could not create FK users.role_id -> roles.id. This might be okay if it's added after data migration in seed. Error: ${fkError.message}`);
+      }
     }
 
 
