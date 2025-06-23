@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
 const auditLogService = require('../services/auditLogService');
-const { body, param, validationResult } = require('express-validator');
+const { query, body, param, validationResult } = require('express-validator');
 const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppError');
 
 // All routes in this file are protected by isAuthenticated and isAdmin
