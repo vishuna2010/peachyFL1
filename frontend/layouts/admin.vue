@@ -4,7 +4,7 @@
     <AdminSidebar :is-open-on-mobile="isMobileSidebarOpen" @toggle-mobile-sidebar="toggleMobileSidebar" />
 
     <!-- Main Content Area -->
-    <div class="flex-1 flex flex-col overflow-hidden">
+    <div class="flex-1 flex flex-col overflow-hidden min-w-0"> <!-- Added min-w-0 -->
       <!-- Top Bar -->
       <header class="bg-white shadow-sm py-3 px-4 sm:px-6 border-b border-neutral-200">
         <div class="flex items-center justify-between">
