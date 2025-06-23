@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isAuthenticated, isAdmin } = require('../auth');
+const { isAuthenticated, checkPermission } = require('../auth'); // Updated import
 
 // Apply auth middleware to all routes in this router
-router.use(isAuthenticated, isAdmin);
+// router.use(isAuthenticated, isAdmin); // REMOVED
 
 // POST /api/admin/suppliers - Create a new supplier
-router.post('/', async (req, res) => {
+router.post('/', isAuthenticated, checkPermission('suppliers:manage'), async (req, res) => {
   const {
     name, contact_person, email, phone,
     address_line1, address_line2, city, postal_code, country, notes,
@@ -65,7 +65,7 @@ router.post('/', async (req, res) => {
 });
 
 // GET /api/admin/suppliers - List all suppliers
-router.get('/', async (req, res) => {
+router.get('/', isAuthenticated, checkPermission('suppliers:manage'), async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20; // Default limit
   const offset = (page - 1) * limit;
@@ -92,7 +92,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/admin/suppliers/:id - Get a specific supplier
-router.get('/:id', async (req, res) => {
+router.get('/:id', isAuthenticated, checkPermission('suppliers:manage'), async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) {
     return res.status(400).json({ message: 'Invalid supplier ID format.' });
@@ -110,7 +110,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /api/admin/suppliers/:id - Update a supplier
-router.put('/:id', async (req, res) => {
+router.put('/:id', isAuthenticated, checkPermission('suppliers:manage'), async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) {
     return res.status(400).json({ message: 'Invalid supplier ID format.' });
@@ -200,7 +200,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/admin/suppliers/:id - Delete a supplier
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', isAuthenticated, checkPermission('suppliers:manage'), async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) {
     return res.status(400).json({ message: 'Invalid supplier ID format.' });

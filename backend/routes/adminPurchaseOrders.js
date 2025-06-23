@@ -1,15 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isAuthenticated, isAdmin } = require('../auth');
+const { isAuthenticated, checkPermission } = require('../auth'); // Updated import
 
 // Apply auth middleware to all routes in this router
-router.use(isAuthenticated, isAdmin);
+// router.use(isAuthenticated, isAdmin); // REMOVED
 
 const ALLOWED_PO_STATUSES = ['pending', 'ordered', 'partially_received', 'received', 'cancelled'];
 
 // POST /api/admin/purchase-orders - Create a new Purchase Order
-router.post('/', async (req, res) => {
+router.post('/', isAuthenticated, checkPermission('purchase_orders:manage'), async (req, res) => {
   const { supplier_id, order_date, expected_delivery_date, notes, items } = req.body;
   const created_by_user_id = req.user.userId;
 
@@ -107,7 +107,7 @@ router.post('/', async (req, res) => {
 });
 
 // POST /api/admin/purchase-orders/:poId/items/:poItemId/receive - Receive stock for a PO item
-router.post('/:poId/items/:poItemId/receive', async (req, res) => {
+router.post('/:poId/items/:poItemId/receive', isAuthenticated, checkPermission('purchase_orders:manage'), async (req, res) => {
   const BASE_CURRENCY_CODE = process.env.BASE_CURRENCY_CODE || 'USD'; // Define base currency
   const { poId, poItemId } = req.params;
   const { quantity_received_now, exchange_rate_to_base, batch_number, expiry_date } = req.body;
@@ -461,7 +461,7 @@ router.post('/:poId/items/:poItemId/receive', async (req, res) => {
 });
 
 // GET /api/admin/purchase-orders - List all Purchase Orders
-router.get('/', async (req, res) => {
+router.get('/', isAuthenticated, checkPermission('purchase_orders:manage'), async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const offset = (page - 1) * limit;
@@ -495,7 +495,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/admin/purchase-orders/:id - Get a specific Purchase Order
-router.get('/:id', async (req, res) => {
+router.get('/:id', isAuthenticated, checkPermission('purchase_orders:manage'), async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) {
     return res.status(400).json({ message: 'Invalid Purchase Order ID format.' });
@@ -532,7 +532,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /api/admin/purchase-orders/:id - Update PO Header
-router.put('/:id', async (req, res) => {
+router.put('/:id', isAuthenticated, checkPermission('purchase_orders:manage'), async (req, res) => {
   const { id } = req.params;
   if (isNaN(parseInt(id))) {
     return res.status(400).json({ message: 'Invalid Purchase Order ID format.' });

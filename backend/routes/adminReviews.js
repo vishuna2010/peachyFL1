@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { isAuthenticated, isAdmin } = require('../auth');
+const { isAuthenticated, checkPermission } = require('../auth'); // Updated import
 const { query, param, body, validationResult } = require('express-validator');
 const { NotFoundError, BadRequestError } = require('../utils/AppError');
 
 // Apply admin protection to all routes
-router.use(isAuthenticated, isAdmin);
+// router.use(isAuthenticated, isAdmin); // REMOVED
 
 // Helper function to update product's average rating and review count
 async function updateProductAverageRating(productId, client) {
@@ -39,6 +39,8 @@ async function updateProductAverageRating(productId, client) {
 // Endpoint 1: GET /api/admin/reviews (List All Reviews for Admin)
 router.get(
   '/',
+  isAuthenticated,
+  checkPermission('reviews:manage'),
   [
     query('page').optional().isInt({ min: 1 }).toInt().default(1),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10),
@@ -133,6 +135,8 @@ router.get(
 // Endpoint 2: GET /api/admin/reviews/:reviewId (Get Single Review)
 router.get(
   '/:reviewId',
+  isAuthenticated,
+  checkPermission('reviews:manage'),
   [param('reviewId').isInt({ gt: 0 }).withMessage('Review ID must be a positive integer.').toInt()],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -161,6 +165,8 @@ router.get(
 // Endpoint 3: PUT /api/admin/reviews/:reviewId/status (Update Review Status)
 router.put(
   '/:reviewId/status',
+  isAuthenticated,
+  checkPermission('reviews:manage'),
   [
     param('reviewId').isInt({ gt: 0 }).withMessage('Review ID must be a positive integer.').toInt(),
     body('status').isString().isIn(['approved', 'rejected', 'pending']).withMessage("Status must be one of: 'pending', 'approved', 'rejected'.")
@@ -212,6 +218,8 @@ router.put(
 // Endpoint 4: DELETE /api/admin/reviews/:reviewId (Delete a Review)
 router.delete(
   '/:reviewId',
+  isAuthenticated,
+  checkPermission('reviews:manage'),
   [param('reviewId').isInt({ gt: 0 }).withMessage('Review ID must be a positive integer.').toInt()],
   async (req, res, next) => {
     const errors = validationResult(req);
