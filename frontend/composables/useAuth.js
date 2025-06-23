@@ -145,9 +145,12 @@ export const useAuth = () => {
     fetchUser();
   }
 
+  const isAuthenticated = computed(() => !!authToken.value && !!authUser.value);
+
   return {
     authToken: computed(() => authToken.value), // Expose as computed for read-only pattern
     authUser: computed(() => authUser.value),
+    isAuthenticated, // Export the new computed property
     isAuthInitialized: computed(() => isAuthInitialized.value), // Expose initialization status
     // login, // Original login function might be deprecated for page-level handling
     loginSuccess, // New function to finalize login
