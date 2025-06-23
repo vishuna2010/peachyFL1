@@ -93,14 +93,16 @@
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.id }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.email }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+              <!-- Role selection dropdown -->
               <select
                 v-if="can('users:assign_roles').value"
-                :value="user.role_id" <!-- Use :value for one-way binding to allow programmatic revert -->
+                :value="user.role_id"
                 @change="promptRoleChange(user, $event.target.value)"
                 :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id || isLoadingRoles"
                 class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md disabled:opacity-50 disabled:bg-gray-100"
-                :data-user-id="user.id" <!-- Added for easier DOM selection if needed for revert -->
+                :data-user-id="user.id"
               >
+                <!-- Note: Using :value for one-way binding to allow programmatic revert if needed -->
                 <option v-if="isLoadingRoles" :value="user.originalRoleId" disabled>Loading roles...</option>
                 <option v-else-if="rolesFetchError" :value="user.originalRoleId" disabled>{{ rolesFetchError }}</option>
                 <template v-else>
