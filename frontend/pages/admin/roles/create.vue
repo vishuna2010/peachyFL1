@@ -34,10 +34,10 @@
       </div>
       <fieldset v-else class="space-y-5">
         <legend class="text-lg font-medium text-gray-900 mb-2">Assign Permissions</legend>
-        <div v-for="(group, groupName) in groupedPermissions" :key="groupName" class="border border-gray-200 p-4 rounded-md">
-          <h4 class="text-md font-semibold text-gray-700 mb-3">{{ groupName }}</h4>
+        <div v-for="groupObj in groupedPermissions" :key="groupObj.groupName" class="border border-gray-200 p-4 rounded-md">
+          <h4 class="text-md font-semibold text-gray-700 mb-3">{{ groupObj.groupName }}</h4>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div v-for="permission in group.permissions" :key="permission.id" class="relative flex items-start">
+            <div v-for="permission in groupObj.permissions" :key="permission.id" class="relative flex items-start">
               <div class="flex items-center h-5">
                 <input
                   :id="`permission-${permission.id}`"

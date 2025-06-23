@@ -231,7 +231,7 @@ async function fetchUserDetailsAndRoles() {
 
 onMounted(() => {
   if (userId.value) {
-    fetchUserDetails();
+    fetchUserDetailsAndRoles(); // Corrected function name
   } else {
     fetchDetailsError.value = 'User ID not found in route.';
     isLoadingDetails.value = false;
