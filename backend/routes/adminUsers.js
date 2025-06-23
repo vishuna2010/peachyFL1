@@ -21,7 +21,7 @@ router.post(
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long.'),
     // Optional: Add more password strength rules, e.g., .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/) for uppercase, lowercase, number
     body('name').isString().trim().notEmpty().withMessage('Name is required.'),
-    body('role').isIn(['admin', 'customer', 'user']).withMessage("Role must be 'admin', 'customer', or 'user'.") // 'user' as an alias for 'customer' if needed
+    body('role_id').isInt({ gt: 0 }).withMessage('Valid Role ID is required.').toInt() // Expect role_id
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -29,7 +29,7 @@ router.post(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, name, role } = req.body;
+    const { email, password, name, role_id } = req.body; // Use role_id
     const client = await db.pool.connect();
 
     try {
@@ -42,18 +42,27 @@ router.post(
         return next(new ConflictError('A user with this email address already exists.'));
       }
 
+      // Verify role_id exists
+      const roleCheck = await client.query('SELECT name FROM roles WHERE id = $1', [role_id]);
+      if (roleCheck.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return next(new BadRequestError(`Role with ID ${role_id} does not exist.`));
+      }
+      const newRoleName = roleCheck.rows[0].name;
+
+
       // Hash password
       const saltRounds = 10; // Standard salt rounds
       const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-      // Insert new user
+      // Insert new user with role_id and also populate the legacy 'role' column
       const insertQuery = `
-        INSERT INTO users (name, email, password, role, is_tax_exempt)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, name, email, role, is_tax_exempt, created_at, updated_at;
+        INSERT INTO users (name, email, password, role_id, role, is_tax_exempt)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, name, email, role_id, role as legacy_role, is_tax_exempt, created_at, updated_at;
       `;
       // New users created by admin are not tax-exempt by default unless specified otherwise.
-      const result = await client.query(insertQuery, [name, email, hashedPassword, role, false]);
+      const result = await client.query(insertQuery, [name, email, hashedPassword, role_id, newRoleName, false]);
       const newUser = result.rows[0];
 
       await client.query('COMMIT');
@@ -63,13 +72,14 @@ router.post(
         'ADMIN_USER_CREATE_SUCCESS',
         { userId: req.user.userId, userEmail: req.user.email },
         { resourceType: 'USER', resourceId: newUser.id },
-        { createdUserEmail: newUser.email, createdUserRole: newUser.role },
+        { createdUserEmail: newUser.email, createdUserRoleId: newUser.role_id, createdUserRoleName: newRoleName },
         req
       ).catch(err => console.error('Audit log failed for ADMIN_USER_CREATE_SUCCESS:', err));
 
-      // Exclude password from the response
-      const { password: _, ...userWithoutPassword } = newUser;
-      res.status(201).json(userWithoutPassword);
+      // Exclude password from the response, add role_name
+      const { password: _, ...userResponseData } = newUser;
+      userResponseData.role_name = newRoleName; // Add role_name to the response for clarity
+      res.status(201).json(userResponseData);
 
     } catch (error) {
       await client.query('ROLLBACK');

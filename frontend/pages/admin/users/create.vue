@@ -45,15 +45,18 @@
         <label for="role" class="block text-sm font-medium text-gray-700">Role</label>
         <select
           id="role"
-          v-model="form.role"
+          v-model="form.role_id"
           required
           class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
         >
-          <option value="customer">Customer</option>
-          <option value="admin">Admin</option>
-          <!-- <option value="user">User (if used as an alias for customer)</option> -->
+          <option v-if="isLoadingRoles || availableRoles.length === 0" :value="null" disabled>
+            {{ isLoadingRoles ? 'Loading roles...' : (rolesFetchError ? rolesFetchError : 'No roles available') }}
+          </option>
+          <option v-for="role_option in availableRoles" :key="role_option.id" :value="role_option.id">
+            {{ role_option.name }}
+          </option>
         </select>
-        <p v-if="errors.role" class="mt-1 text-xs text-red-500">{{ errors.role }}</p>
+        <p v-if="errors.role_id" class="mt-1 text-xs text-red-500">{{ errors.role_id }}</p>
       </div>
 
       <div v-if="apiError" class="mt-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -104,25 +107,57 @@ useHead({
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
-const router = useRouter(); // Though navigateTo is often preferred in Nuxt 3 setup
+// const router = useRouter(); // Not strictly needed if using navigateTo
 const toast = useToast();
 
 const form = ref({
   name: '',
   email: '',
   password: '',
-  role: 'customer', // Default role
+  role_id: null, // Changed from role to role_id, initialized to null
 });
 
-const errors = ref({}); // For client-side or specific field errors from API
-const apiError = ref(''); // For general API error messages
+const availableRoles = ref([]);
+const isLoadingRoles = ref(true);
+const rolesFetchError = ref(null);
+
+const errors = ref({});
+const apiError = ref('');
 const isSubmitting = ref(false);
 
-onMounted(() => {
-  const queryRole = route.query.role;
-  if (queryRole === 'admin' || queryRole === 'customer') {
-    form.value.role = queryRole;
+async function fetchAvailableRoles() {
+  isLoadingRoles.value = true;
+  rolesFetchError.value = null;
+  try {
+    const response = await $axios.get('/admin/roles');
+    availableRoles.value = response.data || [];
+    // Set default role_id based on query param after roles are fetched
+    const queryRoleName = route.query.role; // e.g., 'admin' or 'customer'
+    if (queryRoleName) {
+      const targetRole = availableRoles.value.find(r => r.name.toLowerCase() === queryRoleName.toLowerCase());
+      if (targetRole) {
+        form.value.role_id = targetRole.id;
+      } else {
+        // Fallback if queryRoleName doesn't match any fetched role names
+        const customerRole = availableRoles.value.find(r => r.name.toLowerCase() === 'customer');
+        if (customerRole) form.value.role_id = customerRole.id;
+      }
+    } else {
+      // Default to 'Customer' if no query param
+      const customerRole = availableRoles.value.find(r => r.name.toLowerCase() === 'customer');
+      if (customerRole) form.value.role_id = customerRole.id;
+    }
+  } catch (err) {
+    console.error('Error fetching available roles:', err);
+    rolesFetchError.value = err.response?.data?.message || err.message || 'Failed to load roles.';
+    toast.error(rolesFetchError.value);
+  } finally {
+    isLoadingRoles.value = false;
   }
+}
+
+onMounted(() => {
+  fetchAvailableRoles();
 });
 
 const validateForm = () => {
@@ -146,8 +181,8 @@ const validateForm = () => {
     errors.value.password = 'Password must be at least 8 characters long.';
     isValid = false;
   }
-  if (!form.value.role) {
-    errors.value.role = 'Role is required.';
+  if (!form.value.role_id) { // Validate role_id
+    errors.value.role_id = 'Role is required.'; // Error message for role_id
     isValid = false;
   }
   return isValid;
@@ -161,9 +196,16 @@ async function handleSubmit() {
 
   isSubmitting.value = true;
   try {
-    await $axios.post('/admin/users', form.value);
-    toast.success(`User "${form.value.name}" created successfully as ${form.value.role}.`);
-    navigateTo('/admin/users'); // Navigate back to the user list
+    const payload = {
+      name: form.value.name,
+      email: form.value.email,
+      password: form.value.password,
+      role_id: parseInt(form.value.role_id, 10), // Ensure role_id is an integer
+    };
+    await $axios.post('/admin/users', payload);
+    const selectedRoleName = availableRoles.value.find(r => r.id === payload.role_id)?.name || 'the selected role';
+    toast.success(`User "${form.value.name}" created successfully as ${selectedRoleName}.`);
+    navigateTo('/admin/users');
   } catch (err) {
     console.error('Error creating user:', err);
     if (err.response && err.response.data) {
