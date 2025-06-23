@@ -409,8 +409,8 @@ const validateGetStockLevelsParams = [
   query('category_id').optional().isInt({ min: 1 }).toInt().withMessage('Category ID must be a positive integer.'),
   query('supplier_id').optional().isInt({ min: 1 }).toInt().withMessage('Supplier ID must be a positive integer.'),
   query('low_stock_only').optional().isBoolean().toBoolean().withMessage('low_stock_only must be a boolean.'),
-  query('sort_by').optional().isIn(['product_name', 'sku', 'stock_quantity', 'reorder_threshold']).withMessage("Invalid sort_by value."),
-  query('sort_order').optional().isIn(['ASC', 'DESC']).withMessage("Invalid sort_order value. Allowed: 'ASC', 'DESC'.")
+  query('sort_by').optional().trim().isIn(['product_name', 'sku', 'stock_quantity', 'reorder_threshold']).withMessage("Invalid sort_by value. Allowed: product_name, sku, stock_quantity, reorder_threshold."),
+  query('sort_order').optional().trim().toUpperCase().isIn(['ASC', 'DESC']).withMessage("Invalid sort_order value. Allowed: ASC, DESC.")
 ];
 
 router.get('/stock-levels', validateGetStockLevelsParams, async (req, res, next) => {
