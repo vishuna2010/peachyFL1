@@ -217,7 +217,8 @@ async function fetchGlobalOptionsAndColorValues() {
     // For example:
     // const response = await $axios.get('/api/public/filter-options');
     // const allPublicOptions = response.data.data || [];
-    const response = await $axios.get('/api/options/public-filters');
+    // Corrected path: removed leading '/api' as $axios instance likely has it as baseURL
+    const response = await $axios.get('/options/public-filters');
     const allPublicOptions = response.data || []; // Assuming response.data is the array
 
     allGlobalOptions.value = allPublicOptions; // Store all fetched options if needed elsewhere
