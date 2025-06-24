@@ -33,10 +33,19 @@
             <p v-else-if="item.tax_class_id" class="text-xs text-venus-text-secondary mt-0.5">
               Tax Class ID: {{ item.tax_class_id }}
             </p>
-            <!-- Temporarily keeping quantity and cart item ID basic for now -->
-            <p>Quantity: {{ item.quantity }}</p>
-            <p>Cart Item ID: {{ item.cartItemId }}</p>
-            <!-- Remaining item details (quantity input, item tax, item subtotal) still commented out -->
+            <div class="item-quantity my-2">
+              <label :for="`quantity-${item.cartItemId}`" class="text-sm mr-2">Quantity:</label>
+              <input
+                type="number"
+                :id="`quantity-${item.cartItemId}`"
+                :value="item.quantity"
+                @input="updateItemQuantity(item.cartItemId, parseInt($event.target.value))"
+                min="1"
+                class="quantity-input w-16 px-2 py-1 border border-gray-300 rounded-md text-sm text-center focus:ring-1 focus:ring-peach-pink focus:border-peach-pink"
+              />
+            </div>
+            <!-- <p>Cart Item ID: {{ item.cartItemId }}</p> Temporarily remove this as well, will be re-added if not part of an issue -->
+            <!-- Remaining item details (item tax, item subtotal) still commented out -->
           </div>
           <!-- Ensure this <li> is properly closed. -->
         </li>
