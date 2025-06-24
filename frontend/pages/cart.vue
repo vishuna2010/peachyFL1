@@ -10,12 +10,27 @@
     </div>
     <div v-else class="md:grid md:grid-cols-3 md:gap-6 lg:gap-8">
       <ul class="md:col-span-2 list-none p-0 m-0">
-        <li v-for="item in cartItems" :key="item.cartItemId" class="p-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold">{{ item.name }}</h3>
-          <p>Quantity: {{ item.quantity }}</p>
-          <p>Price: ${{ typeof item.price === 'number' ? item.price.toFixed(2) : 'N/A' }}</p> <!-- Added toFixed and safety -->
-          <p>Cart Item ID: {{ item.cartItemId }}</p>
-          <!-- Ensure this <li> is properly closed. The large comment block is removed. -->
+        <li v-for="item in cartItems" :key="item.cartItemId" class="flex items-start gap-4 p-4 border border-gray-200 rounded-lg bg-white mb-4 shadow-sm relative">
+          <template v-if="item.image_url">
+            <img
+              :src="sanitizeAttributeValue(item.image_url)"
+              :alt="sanitizeAttributeValue(item.name)"
+              class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0" />
+          </template>
+          <template v-else>
+            <div class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0 flex items-center justify-center text-venus-text-secondary text-sm">No Image</div>
+          </template>
+
+          <div class="flex-grow flex flex-col"> <!-- Wrapper for text details -->
+            <h3 class="text-lg font-semibold text-venus-text-primary mb-1" :title="sanitizeAttributeValue(item.name)">{{ item.name }}</h3>
+            <p v-if="item.selectedVariantDescription" class="text-sm text-venus-text-secondary mb-1">{{ item.selectedVariantDescription }}</p>
+            <p v-if="item.sku" class="text-xs text-venus-text-secondary mb-1">SKU: {{ sanitizeAttributeValue(item.sku) }}</p>
+            <p>Quantity: {{ item.quantity }}</p>
+            <p>Price: ${{ typeof item.price === 'number' ? item.price.toFixed(2) : 'N/A' }}</p>
+            <p>Cart Item ID: {{ item.cartItemId }}</p>
+            <!-- Original more detailed content will be restored here piece by piece -->
+          </div>
+          <!-- Ensure this <li> is properly closed. -->
         </li>
       </ul>
       <!-- Cart Summary Section Fully Commented Out -->
