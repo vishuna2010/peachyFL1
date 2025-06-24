@@ -1,157 +1,157 @@
 <template>
 <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen">
-    <h2 class="text-3xl font-serif text-venus-text-primary mb-8 text-center">Checkout</h2>
+    <h2 class="text-3xl font-serif text-peach-pink mb-8 text-center">Checkout</h2> <!-- Themed: Page Title -->
     <ClientOnly>
-      <div v-if="isLoadingAuthOrCart" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow text-venus-text-secondary">Loading checkout...</div>
+      <div v-if="isLoadingAuthOrCart" class="text-center py-10 px-4 my-6 bg-neutral-bg-soft rounded-lg border border-gray-200 shadow text-venus-text-secondary">Loading checkout...</div> <!-- Themed: Placeholder -->
 
-      <div v-else> <!-- Main content wrapper when not loading auth/cart -->
-        <div v-if="showInitializingMessage" class="text-center py-8 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
+      <div v-else>
+        <div v-if="showInitializingMessage" class="text-center py-8 px-4 my-6 bg-neutral-bg-soft rounded-lg border border-gray-200 shadow"> <!-- Themed: Placeholder -->
           <p class="text-lg text-venus-text-secondary mb-4">Initializing cart... (computed: {{ showInitializingMessage }})</p>
         </div>
-        <div v-else-if="cartItems.length === 0" class="text-center py-10 px-4 my-6 bg-venus-neutral-light rounded-sm shadow">
+        <div v-else-if="cartItems.length === 0" class="text-center py-10 px-4 my-6 bg-neutral-bg-soft rounded-lg border border-gray-200 shadow"> <!-- Themed: Placeholder -->
           <p class="text-lg text-venus-text-secondary mb-4">Your cart is empty. Please add items to your cart before proceeding to checkout.</p>
-          <NuxtLink to="/" class="mt-4 inline-block px-6 py-3 bg-venus-text-primary text-white font-medium rounded-sm hover:bg-opacity-80 transition-colors duration-200 ease-in-out">Continue Shopping</NuxtLink>
+          <NuxtLink to="/" class="mt-4 inline-block px-6 py-3 bg-peach-pink text-white font-medium rounded-md hover:bg-opacity-90 transition-colors duration-200 ease-in-out">Continue Shopping</NuxtLink> <!-- Themed: Button -->
         </div>
         <div v-else class="lg:grid lg:grid-cols-5 lg:gap-x-8 xl:gap-x-12 mt-6">
-          <!-- Order Summary (Right Column on Desktop, First on Mobile) -->
-          <div class="lg:col-span-2 lg:order-last p-6 bg-venus-neutral-light rounded-sm shadow-md border-venus-neutral-medium h-fit lg:sticky lg:top-24">
-        <h3 class="text-xl font-serif text-venus-text-primary mb-6">Order Summary</h3>
-        <ul class="list-none p-0 m-0 space-y-3">
-          <li v-for="item in cartItems" :key="item.cartItemId" class="text-sm pb-3 mb-3 border-b border-venus-neutral-medium last:border-b-0 last:pb-0 last:mb-0">
-            <div class="flex justify-between items-start">
-              <div class="pr-2">
-                <span class="font-medium text-venus-text-primary">{{ item.name }}</span>
-                <p v-if="item.tax_class_name || item.tax_class_id" class="text-xs text-venus-text-secondary/80 mt-0.5">
-                  Tax Class: {{ item.tax_class_name || (item.tax_class_id ? `ID: ${item.tax_class_id}` : 'N/A') }}
+          <!-- Order Summary -->
+          <div class="lg:col-span-2 lg:order-last p-6 bg-neutral-bg-soft rounded-lg shadow-md border-gray-200 h-fit lg:sticky lg:top-24"> <!-- Themed: Summary BG, Rounded, Border -->
+            <h3 class="text-xl font-serif text-peach-pink mb-6">Order Summary</h3> <!-- Themed: Title -->
+            <ul class="list-none p-0 m-0 space-y-3">
+              <li v-for="item in cartItems" :key="item.cartItemId" class="text-sm pb-3 mb-3 border-b border-gray-200 last:border-b-0 last:pb-0 last:mb-0"> <!-- Themed: Border -->
+                <div class="flex justify-between items-start">
+                  <div class="pr-2">
+                    <span class="font-medium text-venus-text-primary">{{ item.name }}</span>
+                    <p v-if="item.tax_class_name || item.tax_class_id" class="text-xs text-venus-text-secondary/80 mt-0.5">
+                      Tax Class: {{ item.tax_class_name || (item.tax_class_id ? `ID: ${item.tax_class_id}` : 'N/A') }}
+                    </p>
+                  </div>
+                  <span class="font-medium text-orange-gold whitespace-nowrap">${{ (item.price * item.quantity).toFixed(2) }}</span> <!-- Themed: Price -->
+                </div>
+                <p class="text-xs text-venus-text-secondary mt-1">{{ item.quantity }} x <span class="text-orange-gold/90">${{ (typeof item.price === 'number' ? item.price : 0).toFixed(2) }}</span> (Unit Price)</p> <!-- Themed: Price -->
+                <p v-if="getLineItemTaxCheckout(item) !== null && !isFetchingTaxDetails" class="text-xs text-venus-text-secondary/90 mt-0.5">
+                    Item Tax: <span class="text-orange-gold/80">${{ getLineItemTaxCheckout(item) }}</span> <!-- Themed: Price -->
                 </p>
-              </div>
-              <span class="font-medium text-venus-text-primary whitespace-nowrap">${{ (item.price * item.quantity).toFixed(2) }}</span>
-            </div>
-            <p class="text-xs text-venus-text-secondary mt-1">{{ item.quantity }} x ${{ item.price.toFixed(2) }} (Unit Price)</p>
-            <p v-if="getLineItemTaxCheckout(item) !== null && !isFetchingTaxDetails" class="text-xs text-venus-text-secondary/90 mt-0.5">
-                Item Tax: ${{ getLineItemTaxCheckout(item) }}
-            </p>
-            <p v-if="isFetchingTaxDetails && !getLineItemTaxCheckout(item)" class="text-xs text-venus-text-secondary/70 animate-pulse mt-0.5">Calculating item tax...</p>
-          </li>
-        </ul>
+                <p v-if="isFetchingTaxDetails && !getLineItemTaxCheckout(item)" class="text-xs text-venus-text-secondary/70 animate-pulse mt-0.5">Calculating item tax...</p>
+              </li>
+            </ul>
 
-        <div class="mt-6 pt-4 border-t border-venus-neutral-medium space-y-1 text-sm">
-            <p class="flex justify-between text-venus-text-secondary">
-              <span>Subtotal:</span>
-              <span class="font-medium text-venus-text-primary">${{ cartSubtotal.toFixed(2) }}</span>
-            </p>
-            <div v-if="appliedDiscount" class="text-venus-accent-sale">
-              <p class="flex justify-between">
-                <span>Discount ({{ appliedDiscount.code }}):</span>
-                <span class="font-medium">-${{ calculatedDiscountAmount.toFixed(2) }}</span>
-              </p>
-            </div>
-            <div v-if="isFetchingTaxDetails" class="text-venus-text-secondary animate-pulse">
-                <p class="flex justify-between"><span>Tax:</span><span>Calculating...</span></p>
-            </div>
-            <div v-else-if="taxCalculationError">
-                <p class="flex justify-between text-red-600"><span>Tax:</span><span>Error</span></p>
-                <p class="text-xs text-red-500 text-right">{{ taxCalculationError }}</p>
-            </div>
-            <div v-else-if="cartItems.length > 0">
-                 <p class="flex justify-between text-venus-text-secondary">
-                    <span>Total Tax:</span>
-                    <span class="font-medium text-venus-text-primary">${{ cartTotalTax }}</span>
+            <div class="mt-6 pt-4 border-t border-gray-200 space-y-1 text-sm"> <!-- Themed: Border -->
+                <p class="flex justify-between text-venus-text-secondary">
+                  <span>Subtotal:</span>
+                  <span class="font-medium text-orange-gold">${{ cartSubtotal.toFixed(2) }}</span> <!-- Themed: Price -->
                 </p>
+                <div v-if="appliedDiscount" class="text-fresh-green"> <!-- Themed: Discount Text -->
+                  <p class="flex justify-between">
+                    <span>Discount ({{ appliedDiscount.code }}):</span>
+                    <span class="font-medium">-${{ calculatedDiscountAmount.toFixed(2) }}</span>
+                  </p>
+                </div>
+                <div v-if="isFetchingTaxDetails" class="text-venus-text-secondary animate-pulse">
+                    <p class="flex justify-between"><span>Tax:</span><span>Calculating...</span></p>
+                </div>
+                <div v-else-if="taxCalculationError">
+                    <p class="flex justify-between text-red-600"><span>Tax:</span><span>Error</span></p>
+                    <p class="text-xs text-red-500 text-right">{{ taxCalculationError }}</p>
+                </div>
+                <div v-else-if="cartItems.length > 0">
+                     <p class="flex justify-between text-venus-text-secondary">
+                        <span>Total Tax:</span>
+                        <span class="font-medium text-orange-gold/80">${{ cartTotalTax }}</span> <!-- Themed: Price -->
+                    </p>
+                </div>
             </div>
-        </div>
 
-        <p class="flex justify-between text-xl font-bold text-venus-text-primary mt-4 pt-4 border-t-2 border-venus-accent-gold">
-          <span>Grand Total:</span>
-          <span>${{ cartFinalTotalPrice.toFixed(2) }}</span>
-        </p>
-      </div>
+            <p class="flex justify-between text-xl font-bold text-orange-gold mt-4 pt-4 border-t-2 border-peach-pink"> <!-- Themed: Grand Total & Border -->
+              <span>Grand Total:</span>
+              <span>${{ cartFinalTotalPrice.toFixed(2) }}</span>
+            </p>
+          </div>
 
       <form @submit.prevent="handlePlaceOrder" class="lg:col-span-3 mt-8 lg:mt-0">
         <!-- Guest Details Form -->
-        <div v-if="!isAuthenticated" class="mb-8 p-6 bg-white border border-gray-200 rounded-md shadow-sm">
-          <h3 class="text-xl font-serif text-venus-text-primary mb-4">Guest Information</h3>
+        <div v-if="!isAuthenticated" class="mb-8 p-6 bg-white border border-gray-200 rounded-lg shadow-sm"> <!-- Themed: Rounded -->
+          <h3 class="text-xl font-serif text-peach-pink mb-4">Guest Information</h3> <!-- Themed: Title -->
           <p class="text-sm text-venus-text-secondary mb-4">
-            Already have an account? <NuxtLink :to="`/login?redirect=${encodeURIComponent('/checkout')}`" class="text-venus-accent-gold hover:underline font-medium">Log In</NuxtLink>
+            Already have an account? <NuxtLink :to="`/login?redirect=${encodeURIComponent('/checkout')}`" class="text-peach-pink hover:underline font-medium">Log In</NuxtLink> <!-- Themed: Link -->
           </p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="mb-4">
               <label for="guest-firstName" class="block text-sm font-medium text-venus-text-primary mb-1">First Name:</label>
-              <input type="text" id="guest-firstName" v-model="guestDetails.firstName" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold" />
+              <input type="text" id="guest-firstName" v-model="guestDetails.firstName" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink" /> <!-- Themed: Input -->
             </div>
             <div class="mb-4">
               <label for="guest-lastName" class="block text-sm font-medium text-venus-text-primary mb-1">Last Name:</label>
-              <input type="text" id="guest-lastName" v-model="guestDetails.lastName" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold" />
+              <input type="text" id="guest-lastName" v-model="guestDetails.lastName" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink" /> <!-- Themed: Input -->
             </div>
           </div>
           <div class="mb-4">
             <label for="guest-email" class="block text-sm font-medium text-venus-text-primary mb-1">Email Address:</label>
-            <input type="email" id="guest-email" v-model="guestDetails.email" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold" />
+            <input type="email" id="guest-email" v-model="guestDetails.email" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink" /> <!-- Themed: Input -->
           </div>
         </div>
 
-        <div v-else class="mb-8 p-6 bg-white border border-gray-200 rounded-md shadow-sm">
-           <h3 class="text-xl font-serif text-venus-text-primary mb-2">Welcome back, {{ authUser?.name || authUser?.email }}!</h3>
+        <div v-else class="mb-8 p-6 bg-white border border-gray-200 rounded-lg shadow-sm"> <!-- Themed: Rounded -->
+           <h3 class="text-xl font-serif text-peach-pink mb-2">Welcome back, {{ authUser?.name || authUser?.email }}!</h3> <!-- Themed: Title -->
            <p class="text-sm text-venus-text-secondary">You are checking out as a logged-in user.</p>
         </div>
 
-        <h3 class="text-xl font-serif text-venus-text-primary mb-6 mt-8 first:mt-0">Shipping Address</h3>
-        <div class="p-6 bg-white border border-gray-200 rounded-md shadow-sm">
+        <h3 class="text-xl font-serif text-peach-pink mb-6 mt-8 first:mt-0">Shipping Address</h3> <!-- Themed: Title -->
+        <div class="p-6 bg-white border border-gray-200 rounded-lg shadow-sm"> <!-- Themed: Rounded -->
           <div class="mb-4">
             <label for="sa-line1" class="block text-sm font-medium text-venus-text-primary mb-1">Address Line 1:</label>
-          <input type="text" id="sa-line1" v-model="shippingAddress.line1" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
+          <input type="text" id="sa-line1" v-model="shippingAddress.line1" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink placeholder:text-venus-text-secondary/70" /> <!-- Themed: Input -->
         </div>
         <div class="mb-4">
           <label for="sa-line2" class="block text-sm font-medium text-venus-text-primary mb-1">Address Line 2 (Optional):</label>
-          <input type="text" id="sa-line2" v-model="shippingAddress.line2" class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
+          <input type="text" id="sa-line2" v-model="shippingAddress.line2" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink placeholder:text-venus-text-secondary/70" /> <!-- Themed: Input -->
         </div>
         <div class="mb-4">
           <label for="sa-city" class="block text-sm font-medium text-venus-text-primary mb-1">City:</label>
-          <input type="text" id="sa-city" v-model="shippingAddress.city" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
+          <input type="text" id="sa-city" v-model="shippingAddress.city" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink placeholder:text-venus-text-secondary/70" /> <!-- Themed: Input -->
         </div>
         <div class="mb-4">
           <label for="sa-postalCode" class="block text-sm font-medium text-venus-text-primary mb-1">Postal Code:</label>
-          <input type="text" id="sa-postalCode" v-model="shippingAddress.postalCode" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
+          <input type="text" id="sa-postalCode" v-model="shippingAddress.postalCode" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink placeholder:text-venus-text-secondary/70" /> <!-- Themed: Input -->
         </div>
         <div class="mb-4">
           <label for="sa-country" class="block text-sm font-medium text-venus-text-primary mb-1">Country:</label>
-          <input type="text" id="sa-country" v-model="shippingAddress.country" required class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
+          <input type="text" id="sa-country" v-model="shippingAddress.country" required class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink placeholder:text-venus-text-secondary/70" /> <!-- Themed: Input -->
         </div>
         </div> <!-- Closing the div for shipping address fields -->
 
         <div class="flex items-center gap-2 my-5">
-          <input type="checkbox" id="sameAsShipping" v-model="sameAsShipping" class="h-4 w-4 text-venus-accent-gold border-venus-neutral-medium rounded-sm focus:ring-1 focus:ring-venus-accent-gold focus:ring-offset-0" />
+          <input type="checkbox" id="sameAsShipping" v-model="sameAsShipping" class="h-4 w-4 text-peach-pink border-gray-300 rounded-sm focus:ring-1 focus:ring-peach-pink focus:ring-offset-0" /> <!-- Themed: Checkbox -->
           <label for="sameAsShipping" class="text-sm text-venus-text-primary cursor-pointer">Billing address is the same as shipping address</label>
         </div>
 
         <!-- Billing Address Section -->
-        <div v-if="!sameAsShipping" class="p-6 bg-white border border-gray-200 rounded-md shadow-sm mt-8">
-          <h3 class="text-xl font-serif text-venus-text-primary mb-6">Billing Address</h3>
+        <div v-if="!sameAsShipping" class="p-6 bg-white border border-gray-200 rounded-lg shadow-sm mt-8"> <!-- Themed: Rounded -->
+          <h3 class="text-xl font-serif text-peach-pink mb-6">Billing Address</h3> <!-- Themed: Title -->
           <div class="mb-4">
             <label for="ba-line1" class="block text-sm font-medium text-venus-text-primary mb-1">Address Line 1:</label>
-            <input type="text" id="ba-line1" v-model="billingAddress.line1" :required="!sameAsShipping" class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
+            <input type="text" id="ba-line1" v-model="billingAddress.line1" :required="!sameAsShipping" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink placeholder:text-venus-text-secondary/70" /> <!-- Themed: Input -->
           </div>
           <div class="mb-4">
             <label for="ba-line2" class="block text-sm font-medium text-venus-text-primary mb-1">Address Line 2 (Optional):</label>
-            <input type="text" id="ba-line2" v-model="billingAddress.line2" class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
+            <input type="text" id="ba-line2" v-model="billingAddress.line2" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink placeholder:text-venus-text-secondary/70" /> <!-- Themed: Input -->
           </div>
           <div class="mb-4">
             <label for="ba-city" class="block text-sm font-medium text-venus-text-primary mb-1">City:</label>
-            <input type="text" id="ba-city" v-model="billingAddress.city" :required="!sameAsShipping" class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
+            <input type="text" id="ba-city" v-model="billingAddress.city" :required="!sameAsShipping" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink placeholder:text-venus-text-secondary/70" /> <!-- Themed: Input -->
           </div>
           <div class="mb-4">
             <label for="ba-postalCode" class="block text-sm font-medium text-venus-text-primary mb-1">Postal Code:</label>
-            <input type="text" id="ba-postalCode" v-model="billingAddress.postalCode" :required="!sameAsShipping" class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
+            <input type="text" id="ba-postalCode" v-model="billingAddress.postalCode" :required="!sameAsShipping" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink placeholder:text-venus-text-secondary/70" /> <!-- Themed: Input -->
           </div>
           <div class="mb-4">
             <label for="ba-country" class="block text-sm font-medium text-venus-text-primary mb-1">Country:</label>
-            <input type="text" id="ba-country" v-model="billingAddress.country" :required="!sameAsShipping" class="w-full px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold placeholder:text-venus-text-secondary/70" />
+            <input type="text" id="ba-country" v-model="billingAddress.country" :required="!sameAsShipping" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink placeholder:text-venus-text-secondary/70" /> <!-- Themed: Input -->
           </div>
         </div> <!-- Closing the div for billing address section -->
 
-        <div v-if="submissionError" class="mt-4 p-4 text-sm text-red-700 bg-red-50 border border-red-300 rounded-sm">{{ submissionError }}</div>
+        <div v-if="submissionError" class="mt-4 p-4 text-sm text-red-700 bg-red-50 border border-red-300 rounded-md">{{ submissionError }}</div> <!-- Adjusted rounded -->
 
-        <button type="submit" :disabled="isSubmitting" class="w-full mt-8 px-6 py-3 border border-transparent rounded-sm shadow-sm text-base font-medium text-white bg-venus-text-primary hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-venus-accent-gold/70 disabled:opacity-60 transition-colors duration-200 ease-in-out">
+        <button type="submit" :disabled="isSubmitting" class="w-full mt-8 px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-peach-pink hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink disabled:opacity-60 transition-colors duration-200 ease-in-out"> <!-- Themed: Button -->
           {{ isSubmitting ? 'Placing Order...' : 'Place Order' }}
         </button>
       </form>
@@ -202,10 +202,10 @@ const sameAsShipping = ref(true);
 const isSubmitting = ref(false);
 const submissionError = ref('');
 
-console.log('[checkout.vue setup] Initial isCartStoreInitialized.value:', isCartStoreInitialized.value);
+// console.log('[checkout.vue setup] Initial isCartStoreInitialized.value:', isCartStoreInitialized.value); // Debug
 
 const showInitializingMessage = computed(() => {
-  // console.log('[checkout.vue computed showInitializingMessage] isCartStoreInitialized.value is:', isCartStoreInitialized.value);
+  // console.log('[checkout.vue computed showInitializingMessage] isCartStoreInitialized.value is:', isCartStoreInitialized.value); // Debug
   return !isCartStoreInitialized.value;
 });
 
@@ -224,39 +224,35 @@ const getLineItemTaxCheckout = (cartItem) => {
 
 // Watchers for auth and cart initialization
 watchEffect(() => {
-    console.log('[checkout.vue watchEffect] TOP: isAuthInitialized.value:', (typeof isAuthInitialized === 'undefined' ? 'undefined_itself' : isAuthInitialized.value), 'isCartStoreInitialized.value:', isCartStoreInitialized.value);
+    // console.log('[checkout.vue watchEffect] TOP: isAuthInitialized.value:', (typeof isAuthInitialized === 'undefined' ? 'undefined_itself' : isAuthInitialized.value), 'isCartStoreInitialized.value:', isCartStoreInitialized.value); // Debug
     const authReady = typeof isAuthInitialized === 'undefined' ? true : isAuthInitialized.value;
     const cartReady = isCartStoreInitialized.value;
-    console.log('[checkout.vue watchEffect] authReady:', authReady, 'cartReady:', cartReady);
+    // console.log('[checkout.vue watchEffect] authReady:', authReady, 'cartReady:', cartReady); // Debug
 
     if (authReady && cartReady) {
-        console.log('[checkout.vue watchEffect] Both ready. Setting isLoadingAuthOrCart to false. Prev value:', isLoadingAuthOrCart.value);
+        // console.log('[checkout.vue watchEffect] Both ready. Setting isLoadingAuthOrCart to false. Prev value:', isLoadingAuthOrCart.value); // Debug
         isLoadingAuthOrCart.value = false;
-        isAuthenticated.value = !!authToken.value; // Update isAuthenticated based on actual token
-        console.log('[checkout.vue watchEffect] isLoadingAuthOrCart is now:', isLoadingAuthOrCart.value, 'isAuthenticated is now:', isAuthenticated.value);
+        isAuthenticated.value = !!authToken.value;
+        // console.log('[checkout.vue watchEffect] isLoadingAuthOrCart is now:', isLoadingAuthOrCart.value, 'isAuthenticated is now:', isAuthenticated.value); // Debug
 
         if (isAuthenticated.value && cartItems.value.length === 0) {
-            console.log("[checkout.vue watchEffect] User authenticated but cart empty. Redirecting to /cart");
+            // console.log("[checkout.vue watchEffect] User authenticated but cart empty. Redirecting to /cart"); // Debug
             router.replace('/cart');
-        } else if (!isAuthenticated.value && cartItems.value.length === 0) {
-            // If guest and cart becomes empty (e.g. cleared on another tab and then nav here)
-            console.log("[checkout.vue watchEffect] User is guest and cart is empty. Redirecting to /cart");
+        } else if (!isAuthenticated.value && cartItems.value.length === 0 && route.path === '/checkout') { // Ensure only redirect from checkout
+            // console.log("[checkout.vue watchEffect] User is guest and cart is empty on checkout page. Redirecting to /cart"); // Debug
             router.replace('/cart');
         }
-        // No automatic redirect to login if not authenticated, allow guest form to show
     } else {
-        console.log('[checkout.vue watchEffect] Not yet ready. isLoadingAuthOrCart:', isLoadingAuthOrCart.value);
+        // console.log('[checkout.vue watchEffect] Not yet ready. isLoadingAuthOrCart:', isLoadingAuthOrCart.value); // Debug
     }
 });
 
 onMounted(() => {
-  console.log('[checkout.vue onMounted] Component mounted. Initial isCartStoreInitialized.value:', isCartStoreInitialized.value);
-  // initCart is already destructured from useCart
-  // Call it to be safe, it has an internal guard.
+  // console.log('[checkout.vue onMounted] Component mounted. Initial isCartStoreInitialized.value:', isCartStoreInitialized.value); // Debug
   if (typeof initCart === 'function') {
-      console.log('[checkout.vue onMounted] Calling initCart().');
+      // console.log('[checkout.vue onMounted] Calling initCart().'); // Debug
       initCart();
-      console.log('[checkout.vue onMounted] After initCart() call, isCartStoreInitialized.value:', isCartStoreInitialized.value);
+      // console.log('[checkout.vue onMounted] After initCart() call, isCartStoreInitialized.value:', isCartStoreInitialized.value); // Debug
   } else {
       console.error('[checkout.vue onMounted] initCart is not available from useCart()');
   }
@@ -268,13 +264,9 @@ const handlePlaceOrder = async () => {
 
   let orderPayload = {
     cart: cartItems.value.map(item => ({
-      // Ensure all necessary item fields are sent, e.g., product_id, variant_id, quantity
-      // The backend currently expects productId, productVariantId, quantity from the original cart structure.
-      // Let's assume cartItems from useCart provides these.
-      productId: item.productId, // Base product ID
-      productVariantId: item.variantId || null, // Actual variant ID
+      productId: item.productId,
+      productVariantId: item.variantId || null,
       quantity: item.quantity,
-      // Price is not sent; backend recalculates. Tax class will be fetched by backend.
     })),
     shippingAddress: { ...shippingAddress },
     billingAddress: sameAsShipping.value ? { ...shippingAddress } : { ...billingAddress },
@@ -282,7 +274,6 @@ const handlePlaceOrder = async () => {
   };
 
   if (!isAuthenticated.value) {
-    // Add guest details if not authenticated
     if (!guestDetails.email || !guestDetails.firstName || !guestDetails.lastName) {
       submissionError.value = "Please fill in all guest information fields.";
       isSubmitting.value = false;
