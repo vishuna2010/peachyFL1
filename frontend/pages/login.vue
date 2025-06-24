@@ -105,7 +105,7 @@ const password = ref('');
 const errorMessage = ref('');
 const isLoading = ref(false);
 
-const { loginSuccess } = useAuth(); // Use the new loginSuccess function
+const { loginSuccess, authUser } = useAuth(); // Use the new loginSuccess function, get authUser for role check
 const router = useRouter();
 const route = useRoute(); // To get redirect query param
 const { $axios } = useNuxtApp();
@@ -135,8 +135,16 @@ const handleLogin = async () => {
       } else {
         // Standard login successful (2FA not enabled or already handled)
         if (loginSuccess(response.data)) { // response.data should be { token, user }
-          const redirectPath = route.query.redirect || '/profile';
-          router.push(redirectPath);
+          let targetPath = route.query.redirect;
+          if (!targetPath) {
+            if (authUser.value && authUser.value.role === 'admin') {
+              targetPath = '/admin';
+            } else {
+              targetPath = '/profile';
+            }
+          }
+          console.log('[Login Page] Login successful. Redirecting to:', targetPath);
+          router.push(targetPath);
         } else {
             errorMessage.value = 'Login failed: Invalid response data from server.';
         }
@@ -168,8 +176,16 @@ const handleTwoFactorVerify = async () => {
 
     if (response.data.success && response.data.token) {
       if (loginSuccess(response.data)) { // response.data should be { token, user }
-        const redirectPath = route.query.redirect || '/profile';
-        router.push(redirectPath);
+        let targetPath = route.query.redirect;
+        if (!targetPath) {
+          if (authUser.value && authUser.value.role === 'admin') {
+            targetPath = '/admin';
+          } else {
+            targetPath = '/profile';
+          }
+        }
+        console.log('[Login Page] 2FA Login successful. Redirecting to:', targetPath);
+        router.push(targetPath);
         // Reset 2FA state
         isTwoFactorStep.value = false;
         userIdFor2FA.value = null;
