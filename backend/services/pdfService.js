@@ -280,26 +280,26 @@ function getInvoiceHtml(orderDetails) {
       <style>
         body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #333; }
         .container { width: 90%; margin: 0 auto; padding: 20px; }
-        header { border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 30px; text-align: center; }
-        header img.logo { max-height: 80px; max-width: 200px; margin-bottom: 10px; }
-        header h1 { margin: 0; font-size: 24px; }
+        header { border-bottom: 1px solid #FC7099; padding-bottom: 20px; margin-bottom: 30px; text-align: center; } /* Peach Pink border */
+        header img.logo { max-height: 60px; max-width: 180px; margin-bottom: 15px; } /* Adjusted logo size */
+        header h1 { margin: 0; font-size: 24px; color: #FC7099; } /* Peach Pink company name */
         header p { margin: 2px 0; font-size: 12px; }
         .invoice-details { margin-bottom: 30px; overflow: hidden; }
-        .invoice-details .invoice-id { float: left; font-size: 20px; font-weight: bold; }
+        .invoice-details .invoice-id { float: left; font-size: 22px; font-weight: bold; color: #FC7099; } /* Peach Pink "INVOICE" */
         .invoice-details .invoice-date { float: right; text-align: right; }
         .addresses { margin-bottom: 30px; overflow: hidden; }
         .addresses .address-block { width: 48%; float: left; }
         .addresses .address-block.shipping { float: right; }
-        .addresses h3 { margin-top: 0; margin-bottom: 5px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px;}
+        .addresses h3 { margin-top: 0; margin-bottom: 8px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px; color: #26A7E2; } /* Sky Blue section titles */
         table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
         table.items-table th, table.items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        table.items-table th { background-color: #f9f9f9; font-weight: bold; }
+        table.items-table th { background-color: #26A7E2; color: white; font-weight: bold; } /* Sky Blue header, white text */
         table.items-table td.text-right, table.items-table th.text-right { text-align: right; }
         .totals-section { float: right; width: 40%; margin-top: 20px; }
         .totals-section table { width: 100%; }
         .totals-section td { padding: 5px 0; }
         .totals-section td.text-right { text-align: right; }
-        .totals-section .grand-total td { font-weight: bold; font-size: 16px; border-top: 2px solid #333; }
+        .totals-section .grand-total td { font-weight: bold; font-size: 16px; border-top: 2px solid #FC7099; color: #F6A03C } /* Peach Pink border, Orange Gold total */
         footer { text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #eee; font-size: 10px; color: #777; }
       </style>
     </head>
