@@ -44,8 +44,18 @@
                 class="quantity-input w-16 px-2 py-1 border border-gray-300 rounded-md text-sm text-center focus:ring-1 focus:ring-peach-pink focus:border-peach-pink"
               />
             </div>
+            <div class="mt-auto pt-1">
+              <p v-if="getLineItemTax(item) !== null && !isFetchingTaxDetails" class="text-xs text-venus-text-secondary">
+                Item Tax: <span class="text-orange-gold/80">${{ getLineItemTax(item) }}</span> <!-- Themed tax -->
+              </p>
+               <p v-if="isFetchingTaxDetails && !getLineItemTax(item)" class="text-xs text-venus-text-secondary animate-pulse">Calculating tax...</p>
+              <p class="font-medium text-orange-gold"> <!-- Themed subtotal -->
+                Subtotal for item: ${{
+                  ((typeof item.price === 'number' ? item.price : 0) * (typeof item.quantity === 'number' ? item.quantity : 0)).toFixed(2)
+                }}
+              </p>
+            </div>
             <!-- <p>Cart Item ID: {{ item.cartItemId }}</p> Temporarily remove this as well, will be re-added if not part of an issue -->
-            <!-- Remaining item details (item tax, item subtotal) still commented out -->
           </div>
           <!-- Ensure this <li> is properly closed. -->
         </li>
