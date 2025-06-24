@@ -25,7 +25,7 @@
             <h3 class="text-lg font-semibold text-venus-text-primary mb-1" :title="sanitizeAttributeValue(item.name)">{{ item.name }}</h3> <!-- Sanitize title, display original name -->
             <p v-if="item.selectedVariantDescription" class="text-sm text-venus-text-secondary mb-1">{{ item.selectedVariantDescription }}</p>
             <p v-if="item.sku" class="text-xs text-venus-text-secondary mb-1">SKU: {{ sanitizeAttributeValue(item.sku) }}</p> <!-- Sanitize SKU display -->
-            <p class="text-sm text-venus-text-secondary">Unit Price: <span class="text-orange-gold">${{ item.price.toFixed(2) }}</span></p> <!-- Themed unit price -->
+            <p class="text-sm text-venus-text-secondary">Unit Price: <span class="text-orange-gold">${{ (typeof item.price === 'number' ? item.price : 0).toFixed(2) }}</span></p> <!-- Themed unit price, added safety for toFixed -->
             <p v-if="item.tax_class_name" class="text-xs text-venus-text-secondary mt-0.5">
               Tax Class: {{ item.tax_class_name }}
             </p>
@@ -49,7 +49,9 @@
               </p>
                <p v-if="isFetchingTaxDetails && !getLineItemTax(item)" class="text-xs text-venus-text-secondary animate-pulse">Calculating tax...</p>
               <p class="font-medium text-orange-gold"> <!-- Themed subtotal -->
-                Subtotal for item: ${{ (item.price * item.quantity).toFixed(2) }}
+                Subtotal for item: ${{
+                  ((typeof item.price === 'number' ? item.price : 0) * (typeof item.quantity === 'number' ? item.quantity : 0)).toFixed(2)
+                }}
               </p>
             </div>
           </div>

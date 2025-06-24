@@ -165,13 +165,14 @@ export const useCart = () => {
       existingItem.quantity += quantityToAdd;
       toast.info(`Quantity of "${existingItem.name}" updated to ${existingItem.quantity}.`);
     } else {
+      const priceAsFloat = parseFloat(itemDetails.price);
       const newItem = {
         cartItemId,
         id: itemDetails.id,
         productId: itemDetails.product_id,
         variantId: itemDetails.variant_id || null,
         name: itemDetails.name,
-        price: parseFloat(itemDetails.price), // Unit price
+        price: isNaN(priceAsFloat) ? 0 : priceAsFloat, // Ensure price is a number, default to 0
         image_url: itemDetails.image_url || null,
         sku: itemDetails.sku || null,
         type: itemDetails.type,
@@ -255,7 +256,12 @@ export const useCart = () => {
 
   // --- Computed Properties ---
   const cartSubtotal = computed(() => {
-    return parseFloat(cartItems.value.reduce((total, item) => total + (item.price * item.quantity), 0).toFixed(2));
+    const sub = cartItems.value.reduce((total, item) => {
+      const itemPrice = typeof item.price === 'number' && !isNaN(item.price) ? item.price : 0;
+      const itemQuantity = typeof item.quantity === 'number' && !isNaN(item.quantity) ? item.quantity : 0;
+      return total + (itemPrice * itemQuantity);
+    }, 0);
+    return parseFloat(sub.toFixed(2));
   });
 
   const cartTotalTax = computed(() => {
