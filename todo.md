@@ -362,3 +362,30 @@ This section outlines the primary driver for future backend development, based o
 
 ---
 *This list will be updated as features are implemented or new requirements arise.*
+
+---
+
+# Theme Change Errata & Unresolved Issues
+
+- **Persistent Frontend Error:** `InvalidCharacterError: Failed to execute 'setAttribute' on 'Element': '<!--' is not a valid attribute name.`
+  - **Context:** This error started appearing after the major theming work was applied. It typically occurs during component updates, especially related to the Cart page (`frontend/pages/cart.vue`) when items are added or the Admin layout (`frontend/layouts/admin.vue`) updates.
+  - **Suspected Cause:** A misplaced HTML comment (e.g., `<!-- ... -->`) inside an HTML tag's definition (between `<` and `>`) but not within an attribute's quoted value, causing the parser to interpret `<!--` as an attribute name.
+  - **Attempts to Fix:**
+    - Multiple reviews of themed `.vue` files (`cart.vue`, `admin.vue`, `StatCard.vue`, etc.) to find and correct misplaced comments.
+    - Corrected logo paths (`/Logo.svg` instead of `/logo.png`) to resolve related import errors.
+    - Addressed a `v-else` placement issue in `cart.vue`.
+  - **Current Status:** The error was reported to still be occurring after initial fixes. The latest fixes involved moving comments in `admin.vue` and `StatCard.vue` to be syntactically correct.
+  - **Next Steps if Persists:**
+    1.  User to pull all latest changes from the `feat/apply-new-theme` branch.
+    2.  Thoroughly test cart functionality and admin page navigation with the browser console open.
+    3.  If the error still occurs, provide a new full stack trace. The file/line number in that trace will be key to pinpointing the exact component and template location.
+    4.  A very meticulous line-by-line review of the Vue component template identified in the new stack trace will be needed, looking for any non-standard HTML syntax or data binding that could result in `<!--` being treated as an attribute name.
+- **Admin Dashboard - Stat Cards Missing (Reported, then addressed):**
+    - Issue: StatCards were reported missing.
+    - Fix: Wrapped StatCard grid in `v-else` for `v-if="statsError"` to clarify rendering logic. Believed to be resolved, but needs user verification.
+- **Admin Layout - Duplicate Sidebar / Content Misplacement (Reported, then addressed):**
+    - Issue: Content (including a second sidebar) was appearing at the bottom of the main sidebar.
+    - Fix: Reverted a speculative `lg:w-[calc(...)]` style from the main content wrapper in `admin.vue`, relying on `flex-1`. Believed to be resolved, but needs user verification.
+- **Cart Navigation Issue (Reported):**
+    - Issue: After adding an item to the cart, clicking the cart icon/link in the header does not navigate to `/cart`.
+    - Analysis: Suspected to be a side-effect of the `InvalidCharacterError` halting JavaScript execution. If that error is fully resolved, this navigation issue might also be resolved. Otherwise, further investigation of `AppHeader.vue` and toast notification interference might be needed.
