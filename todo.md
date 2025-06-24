@@ -219,29 +219,31 @@ This section outlines the primary driver for future backend development, based o
 
 ### A. Dashboard (`pages/admin/index.vue`)
 - Implement actual data fetching for Stat Cards. *(DONE)*
-- Integrate basic charts (e.g., sales over time - requires backend data source).
+- [~] Integrate basic charts (e.g., sales over time - requires backend data source). *(UI placeholder exists, backend needed)*
 - [X] Implement "Recent Activity" (stock logs) and "Recent Orders Table" sections with real data.
 
 ### B. Core Page Styling & Structure
-- Create reusable admin-specific form components if beneficial.
+- [~] Create reusable admin-specific form components if beneficial. *(Created CategoryForm, FormField. DiscountForm and LowStockReport refactored. Further generalization can be reviewed.)*
 - **Refactor Key Admin Pages with Tailwind CSS:**
   - [X] `admin/users/index.vue`
   - [X] `admin/products/index.vue`
   - [X] `admin/products/new.vue / edit/[id].vue`
   - [X] `admin/orders/index.vue / [id].vue`
+  - [X] `admin/reports/low-stock.vue` *(Refactored to Tailwind)*
+  - [X] `admin/discounts` pages via `DiscountForm.vue` *(Refactored to Tailwind)*
   - (Other admin pages as they are developed).
 
 ### C. Layout & Navigation
 - Add SVG icons to all `AdminSidebar.vue` navigation items. *(DONE)*
 - [X] Implement breadcrumb navigation within the admin section.
-- [~] Implement a functional global search bar in the top admin bar (UI and navigation to search page implemented; backend search logic pending).
-- Add notification icon/dropdown placeholder in top admin bar.
+- [X] Implement a functional global search bar in the top admin bar (UI and navigation to search page implemented; backend search logic pending). *(Verified UI exists and navigates)*
+- [X] Add notification icon/dropdown placeholder in top admin bar.
 - Consider more sophisticated collapse mechanism for the sidebar (e.g., icon-only view).
 
 ### D. Category Management
 - Create `frontend/pages/admin/categories/index.vue`. *(DONE)*
-- Create `frontend/pages/admin/categories/new.vue`. *(DONE)*
-- Create `frontend/pages/admin/categories/edit/[id].vue`. *(DONE)*
+- Create `frontend/pages/admin/categories/new.vue`. *(DONE, refactored to use CategoryForm)*
+- Create `frontend/pages/admin/categories/edit/[id].vue`. *(DONE, refactored to use CategoryForm)*
 
 ### E. Product Option & Variant Management (New Section)
 - **Global Product Options UI:**
@@ -256,7 +258,7 @@ This section outlines the primary driver for future backend development, based o
 - Create Admin Page for Review Moderation (`/admin/reviews/index.vue`). *(DONE)*
 
 ### H. Reporting (Admin UI)
-- Create `frontend/pages/admin/reports/index.vue` (as a dashboard for various reports).
+- [X] Create `frontend/pages/admin/reports/index.vue` (as a dashboard for various reports). *(Exists as navigation page, added Stock Valuation link)*
 
 ### II.I Inventory Management UI (New Section)
 *   `[X] Admin Sidebar Menu: "Inventory" collapsible menu with links to Stock Levels, Batch Management, Stock Adjustments, Movement Logs.`
@@ -318,19 +320,21 @@ This section outlines the primary driver for future backend development, based o
   - `admin/products/index.vue` *(DONE)*
   - [X] `admin/products/new.vue / edit/[id].vue`
   - `admin/orders/index.vue` / `[id].vue`
+  - [X] `admin/reports/low-stock.vue` *(Refactored to Tailwind)*
+  - [X] Discount form component and its pages. *(Refactored to Tailwind)*
   - (Other admin pages as they are developed).
 
 ### C. Layout & Navigation
 - Add SVG icons to all `AdminSidebar.vue` navigation items. *(DONE)*
-- Implement breadcrumb navigation within the admin section.
-- Implement a functional global search bar in the top admin bar (for searching orders, products, users etc.).
-- Add notification icon/dropdown placeholder in top admin bar.
+- [X] Implement breadcrumb navigation within the admin section. *(Verified existing)*
+- [X] Implement a functional global search bar in the top admin bar (for searching orders, products, users etc.). *(UI/navigation exists)*
+- [X] Add notification icon/dropdown placeholder in top admin bar.
 - Consider more sophisticated collapse mechanism for the sidebar (e.g., icon-only view).
 
 ### H. Reporting (Admin UI)
-  - Consider UI for Low Stock Report (linked to "Reorder threshold alerts" in Core Modules).
-  - Consider UI for Stock Valuation Report.
-  - Consider UI for Inventory History/Audit Trail Report.
+  - [X] Consider UI for Low Stock Report (linked to "Reorder threshold alerts" in Core Modules). *(Exists, styling refactored)*
+  - [~] Consider UI for Stock Valuation Report. *(UI placeholder created, backend needed)*
+  - [X] Consider UI for Inventory History/Audit Trail Report. *(Covered by existing Stock Movement Logs page)*
 
 ---
 
