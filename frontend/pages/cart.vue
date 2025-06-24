@@ -1,29 +1,29 @@
 <template>
-  <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-[calc(100vh-theme(spacing.16))]">
-    <h2 class="text-3xl font-serif text-venus-text-primary mb-8 text-center">Your Shopping Cart</h2>
-    <div v-if="!isCartInitialized" class="text-center py-8 px-4 bg-venus-neutral-light rounded-sm">
+  <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-[calc(100vh-theme(spacing.16))]"> <!-- Page background will be white from layout -->
+    <h2 class="text-3xl font-serif text-peach-pink mb-8 text-center">Your Shopping Cart</h2> <!-- Themed title -->
+    <div v-if="!isCartInitialized" class="text-center py-8 px-4 bg-neutral-bg-soft rounded-lg border border-gray-200"> <!-- Themed placeholder bg -->
       Initializing cart...
     </div>
-    <div v-else-if="cartItems.length === 0" class="text-center py-10 px-4 bg-venus-neutral-light rounded-sm">
+    <div v-else-if="cartItems.length === 0" class="text-center py-10 px-4 bg-neutral-bg-soft rounded-lg border border-gray-200"> <!-- Themed placeholder bg -->
       <p class="text-xl text-venus-text-secondary mb-4">Your cart is empty.</p>
-      <NuxtLink to="/" class="bg-venus-text-primary text-white font-semibold py-3 px-6 rounded-sm hover:bg-opacity-80 transition-colors duration-200 ease-in-out">Continue Shopping</NuxtLink>
+      <NuxtLink to="/" class="bg-peach-pink text-white font-semibold py-3 px-6 rounded-md hover:bg-opacity-90 transition-colors duration-200 ease-in-out">Continue Shopping</NuxtLink> <!-- Themed button -->
     </div>
     <div v-else class="md:grid md:grid-cols-3 md:gap-6 lg:gap-8">
       <ul class="md:col-span-2 list-none p-0 m-0">
-        <li v-for="item in cartItems" :key="item.cartItemId" class="flex items-start gap-4 p-4 border border-venus-neutral-medium rounded-sm bg-venus-background mb-4 shadow-sm relative">
+        <li v-for="item in cartItems" :key="item.cartItemId" class="flex items-start gap-4 p-4 border border-gray-200 rounded-lg bg-white mb-4 shadow-sm relative"> <!-- Adjusted border and rounded -->
           <img
             v-if="item.image_url"
             :src="item.image_url"
             :alt="item.name"
-            class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-sm bg-venus-neutral-light flex-shrink-0"
+            class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0" <!-- Adjusted placeholder bg -->
           />
-          <div v-else class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-sm bg-venus-neutral-light flex-shrink-0 flex items-center justify-center text-venus-text-secondary text-sm">No Image</div>
+          <div v-else class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0 flex items-center justify-center text-venus-text-secondary text-sm">No Image</div>
 
           <div class="flex-grow flex flex-col">
             <h3 class="text-lg font-semibold text-venus-text-primary mb-1">{{ item.name }}</h3>
             <p v-if="item.selectedVariantDescription" class="text-sm text-venus-text-secondary mb-1">{{ item.selectedVariantDescription }}</p>
             <p v-if="item.sku" class="text-xs text-venus-text-secondary mb-1">SKU: {{ item.sku }}</p>
-            <p class="text-sm text-venus-text-secondary">Unit Price: ${{ item.price.toFixed(2) }}</p>
+            <p class="text-sm text-venus-text-secondary">Unit Price: <span class="text-orange-gold">${{ item.price.toFixed(2) }}</span></p> <!-- Themed unit price -->
             <p v-if="item.tax_class_name" class="text-xs text-venus-text-secondary mt-0.5">
               Tax Class: {{ item.tax_class_name }}
             </p>
@@ -38,85 +38,85 @@
                 :value="item.quantity"
                 @input="updateItemQuantity(item.cartItemId, parseInt($event.target.value))"
                 min="1"
-                class="quantity-input w-16 px-2 py-1 border border-venus-neutral-medium rounded-sm text-sm text-center focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold"
+                class="quantity-input w-16 px-2 py-1 border border-gray-300 rounded-md text-sm text-center focus:ring-1 focus:ring-peach-pink focus:border-peach-pink" <!-- Themed focus -->
               />
             </div>
             <div class="mt-auto pt-1">
               <p v-if="getLineItemTax(item) !== null && !isFetchingTaxDetails" class="text-xs text-venus-text-secondary">
-                Item Tax: ${{ getLineItemTax(item) }}
+                Item Tax: <span class="text-orange-gold/80">${{ getLineItemTax(item) }}</span> <!-- Themed tax -->
               </p>
                <p v-if="isFetchingTaxDetails && !getLineItemTax(item)" class="text-xs text-venus-text-secondary animate-pulse">Calculating tax...</p>
-              <p class="font-medium text-venus-text-primary">
+              <p class="font-medium text-orange-gold"> <!-- Themed subtotal -->
                 Subtotal for item: ${{ (item.price * item.quantity).toFixed(2) }}
               </p>
             </div>
           </div>
-          <button @click="removeItem(item.cartItemId)" class="remove-item-button absolute top-2 right-2 text-red-600 hover:text-red-800 transition-colors duration-200 ease-in-out p-1">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+          <button @click="removeItem(item.cartItemId)" class="remove-item-button absolute top-3 right-3 text-red-500 hover:text-red-700 transition-colors duration-200 ease-in-out p-1 rounded-full hover:bg-red-500/10"> <!-- Adjusted position & added hover bg -->
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"> <!-- Slightly smaller icon -->
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </li>
       </ul>
-      <div class="cart-summary md:col-span-1 mt-6 md:mt-0 p-6 bg-venus-neutral-light rounded-sm shadow border-venus-neutral-medium h-fit sticky top-20">
-        <h3 class="text-xl font-serif text-venus-text-primary mb-4">Cart Summary</h3>
+      <div class="cart-summary md:col-span-1 mt-6 md:mt-0 p-6 bg-neutral-bg-soft rounded-lg shadow border border-gray-200 h-fit sticky top-20"> <!-- Themed background and rounded -->
+        <h3 class="text-xl font-serif text-peach-pink mb-4">Cart Summary</h3> <!-- Themed title -->
         <p class="flex justify-between text-venus-text-secondary"><span>Total Items:</span> <span>{{ cartTotalItems }}</span></p>
-        <p class="flex justify-between text-venus-text-secondary mb-2"><span>Subtotal:</span> <span>${{ cartSubtotal.toFixed(2) }}</span></p>
+        <p class="flex justify-between text-venus-text-secondary mb-2"><span>Subtotal:</span> <span class="text-orange-gold font-medium">${{ cartSubtotal.toFixed(2) }}</span></p> <!-- Themed subtotal -->
 
-        <div class="discount-section my-4 py-4 border-t border-b border-venus-neutral-medium">
+        <div class="discount-section my-4 py-4 border-t border-b border-gray-200"> <!-- Adjusted border -->
           <div class="discount-form flex gap-2 mb-2">
             <input
               type="text"
               v-model="discountCodeInput"
               placeholder="Discount code"
-              class="discount-input flex-grow px-3 py-2 border border-venus-neutral-medium rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold focus:border-venus-accent-gold"
+              class="discount-input flex-grow px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink"  <!-- Themed focus -->
               :disabled="applyingDiscount"
             />
             <button
               @click="handleApplyDiscount"
               :disabled="applyingDiscount || !discountCodeInput"
-              class="apply-discount-button px-4 py-2 bg-venus-accent-gold text-white text-sm font-medium rounded-sm shadow-sm hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-venus-accent-gold/70 disabled:opacity-60 transition-colors duration-200 ease-in-out"
+              class="apply-discount-button px-4 py-2 bg-sky-blue text-white text-sm font-medium rounded-md shadow-sm hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-sky-blue/70 disabled:opacity-60 transition-colors duration-200 ease-in-out" <!-- Themed button -->
             >
               {{ applyingDiscount ? 'Applying...' : 'Apply' }}
             </button>
           </div>
           <p v-if="discountValidationError" class="text-sm text-red-600 mt-1">{{ discountValidationError }}</p>
-          <div v-if="appliedDiscount" class="mt-2 p-2 bg-venus-accent-sale/10 text-venus-accent-sale rounded-sm text-sm border border-venus-accent-sale/20">
+          <div v-if="appliedDiscount" class="mt-2 p-2 bg-fresh-green/10 text-fresh-green rounded-md text-sm border border-fresh-green/20"> <!-- Themed discount applied message -->
             <div class="flex justify-between items-center">
               <span>
                 Discount: <strong>{{ appliedDiscount.code }}</strong> (-${{ calculatedDiscountAmount.toFixed(2) }})
               </span>
-              <button @click="handleRemoveDiscount" class="text-venus-accent-sale hover:opacity-70 transition-opacity duration-200 ease-in-out text-xs underline disabled:opacity-60" :disabled="applyingDiscount">Remove</button>
+              <button @click="handleRemoveDiscount" class="text-fresh-green hover:opacity-70 transition-opacity duration-200 ease-in-out text-xs underline disabled:opacity-60" :disabled="applyingDiscount">Remove</button>
             </div>
             <p v-if="appliedDiscount.description" class="text-xs mt-1">{{ appliedDiscount.description }}</p>
           </div>
         </div>
 
         <!-- Tax Information -->
-        <div class="tax-info py-4 border-b border-venus-neutral-medium">
+        <div class="tax-info py-4 border-b border-gray-200"> <!-- Adjusted border -->
           <p v-if="isFetchingTaxDetails" class="text-sm text-venus-text-secondary animate-pulse">Calculating taxes...</p>
           <p v-if="taxCalculationError && !isFetchingTaxDetails" class="text-sm text-red-600">Error calculating tax: {{ taxCalculationError }}</p>
           <p v-if="!isFetchingTaxDetails && !taxCalculationError && cartItems.length > 0" class="flex justify-between text-venus-text-secondary">
             <span>Total Tax:</span>
-            <span class="font-medium">${{ cartTotalTax }}</span>
+            <span class="font-medium text-orange-gold/80">${{ cartTotalTax }}</span> <!-- Themed tax total -->
           </p>
         </div>
 
-        <p class="flex justify-between text-xl font-bold text-venus-text-primary my-3 pt-3 border-t-2 border-venus-accent-gold">
+        <p class="flex justify-between text-xl font-bold text-orange-gold my-3 pt-3 border-t-2 border-peach-pink"> <!-- Themed grand total and border -->
           <span>Grand Total:</span>
           <span>${{ cartFinalTotalPrice.toFixed(2) }}</span>
         </p>
         <div class="cart-actions mt-6 space-y-3">
           <NuxtLink
             :to="cartItems.length > 0 ? '/checkout' : '#'"
-            :class="['block w-full text-center px-4 py-3 bg-venus-text-primary text-white font-semibold rounded-sm shadow hover:bg-opacity-80 transition-colors duration-200 ease-in-out', { 'opacity-60 cursor-not-allowed': cartItems.length === 0 }]"
+            :class="['block w-full text-center px-4 py-3 bg-peach-pink text-white font-semibold rounded-md shadow hover:bg-opacity-90 transition-colors duration-200 ease-in-out', { 'opacity-60 cursor-not-allowed': cartItems.length === 0 }]" <!-- Themed button -->
             @click="checkCartEmptyBeforeCheckout"
           >
             Proceed to Checkout
           </NuxtLink>
           <button
             @click="confirmClearCart"
-            class="w-full px-4 py-2 bg-venus-neutral-medium text-venus-text-secondary text-sm font-medium rounded-sm shadow-sm hover:bg-venus-neutral-dark hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-venus-neutral-dark transition-colors duration-200 ease-in-out"
+            class="w-full px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 transition-colors duration-200 ease-in-out" <!-- Neutral clear button -->
           >
             Clear Cart
           </button>
