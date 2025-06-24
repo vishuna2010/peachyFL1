@@ -213,10 +213,14 @@ async function fetchUsers() {
     let url = '/admin/users';
     const params = {};
     if (activeTab.value && activeTab.value !== 'all') {
-      // Backend now filters by role name for the 'role' query param
-      if (activeTab.value === 'admin') params.role = 'Super Admin'; // Or your main admin role name
-      else if (activeTab.value === 'customer') params.role = 'Customer';
-      // If you add a 'Product Manager' tab, you'd set params.role = 'Product Manager'
+      // Backend expects specific lowercase role names based on its validator
+      if (activeTab.value === 'admin') {
+        params.role = 'admin'; // Use lowercase 'admin'
+      } else if (activeTab.value === 'customer') {
+        params.role = 'customer'; // Use lowercase 'customer'
+      }
+      // Add other specific role filters here if new tabs are created,
+      // ensuring they match backend validation or that backend validation is updated.
     }
 
     const response = await $axios.get(url, { params });
