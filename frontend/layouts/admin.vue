@@ -48,6 +48,14 @@
             <span class="text-sm text-text-secondary hidden sm:inline" v-if="user">
               {{ user.email }}
             </span>
+            <!-- Edit Profile Link -->
+            <NuxtLink
+              to="/profile"
+              title="Edit Profile"
+              class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-primary"
+            >
+              <span class="text-sm font-medium">Edit Profile</span>
+            </NuxtLink>
             <button
               @click="handleLogout"
               title="Logout"
