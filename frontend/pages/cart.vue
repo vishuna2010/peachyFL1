@@ -15,8 +15,7 @@
             <img
               :src="item.image_url"
               :alt="item.name"
-              class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0" <!-- Adjusted placeholder bg -->
-            />
+              class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0" /> <!-- Corrected comment placement -->
           </template>
           <template v-else>
             <div class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0 flex items-center justify-center text-venus-text-secondary text-sm">No Image</div>
