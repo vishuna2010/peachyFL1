@@ -418,7 +418,11 @@ router.get('/sales', async (req, res) => {
   if (startDate > endDate) {
     return res.status(400).json({ message: 'start_date cannot be after end_date.' });
   }
-  // Adjust endDate to be end of day for inclusive range
+
+  // Store the original end_date for reporting, before modifying it for the query
+  const reportPeriodEndDate = new Date(endDate);
+
+  // Adjust endDate to be end of day for inclusive range for the query
   endDate.setHours(23, 59, 59, 999);
 
   const client = await db.pool.connect();
@@ -477,8 +481,8 @@ router.get('/sales', async (req, res) => {
 
     res.status(200).json({
       report_period: {
-        start_date: startDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
-        end_date: new Date(end_date.getTime() - (23*60*60*1000 + 59*60*1000 + 59*1000 + 999)).toISOString().split('T')[0] // Format original end_date
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: reportPeriodEndDate.toISOString().split('T')[0] // Use the stored original end date for reporting
       },
       summary: summary,
       orders: individualOrders
