@@ -30,29 +30,47 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     // If not authenticated, redirect to login
     if (!isAuthenticated.value) {
       if (to.path !== '/login') { // Avoid redirect loop if already on login
-        console.log('[Middleware] Admin route, user not authenticated. Redirecting to login.');
+        console.log('[rbac.global.js] Admin route, user not authenticated. Redirecting to login.');
         return navigateTo(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
       }
       return; // Already on login page
     }
 
-    // User is authenticated, ensure permissions are loaded or being loaded.
-    // This check helps if navigation happens before initial permission fetch completes.
-    if (userPermissions.value.length === 0 && !isLoadingPermissions.value && authUser.value?.id) {
-        // console.log('[Middleware] Permissions not loaded for authenticated admin user, fetching...');
-        await fetchUserPermissions(); // Wait for permissions to be fetched
-    }
+    // User is authenticated, ensure permissions are loaded.
+    console.log(`[rbac.global.js] User authenticated. Checking permissions for path: ${to.path}. Current isLoadingPermissions: ${isLoadingPermissions.value}, Permissions loaded: ${userPermissions.value.length > 0}`);
 
-    // If still loading after attempting fetch, might need to show a loader or abort temporarily.
-    // For simplicity, we'll assume fetchUserPermissions resolves. A more complex app might use a loading state.
+    if (!isLoadingPermissions.value && userPermissions.value.length === 0 && authUser.value?.id) {
+        console.log(`[rbac.global.js] Permissions not loaded and not currently loading. Fetching for user ${authUser.value.id}...`);
+        await fetchUserPermissions(); // Wait for permissions to be fetched
+        console.log(`[rbac.global.js] Permissions fetch completed. isLoading: ${isLoadingPermissions.value}, Permissions count: ${userPermissions.value.length}`);
+    } else if (isLoadingPermissions.value) {
+        console.log(`[rbac.global.js] Permissions are currently loading. Setting up watcher to wait...`);
+        await new Promise(resolve => {
+            const unwatch = watch(isLoadingPermissions, (newValue) => {
+                if (!newValue) {
+                    console.log(`[rbac.global.js] Watcher: Permissions finished loading. isLoading: ${isLoadingPermissions.value}, Permissions count: ${userPermissions.value.length}`);
+                    unwatch();
+                    resolve();
+                }
+            });
+            // Timeout for safety, in case isLoadingPermissions never becomes false
+            setTimeout(() => {
+                console.warn('[rbac.global.js] Watcher: Timeout waiting for permissions to load.');
+                unwatch(); // Clean up watcher
+                resolve(); // Proceed even if timeout, to prevent infinite loop
+            }, 5000); // 5 second timeout
+        });
+    } else {
+        console.log(`[rbac.global.js] Permissions already loaded or no user ID. Count: ${userPermissions.value.length}`);
+    }
+    // At this point, permissions should have been given a chance to load.
 
     // Check for base admin access permission
-    if (!can('admin:access_dashboard').value) {
-      console.log(`[Middleware] User ${authUser.value?.email} lacks 'admin:access_dashboard' permission for ${to.path}. Redirecting.`);
-      // Abort navigation and show an error or redirect to a 'forbidden' page or home
-      // For now, redirect to home, but a dedicated /admin/forbidden page would be better.
-      // Make sure not to redirect from /admin to /admin if they lack dashboard but have other specific admin rights (complex case).
-      // Simplest for now: if no dashboard access, they can't access any /admin page.
+    const hasAdminDashboardAccess = can('admin:access_dashboard'); // This returns a computed ref
+    console.log(`[rbac.global.js] Checking 'admin:access_dashboard'. User: ${authUser.value?.email}. Has permission (computed.value): ${hasAdminDashboardAccess.value}. Permissions list for check: ${JSON.stringify(userPermissions.value)}`);
+
+    if (!hasAdminDashboardAccess.value) {
+      console.log(`[rbac.global.js] User ${authUser.value?.email} lacks 'admin:access_dashboard' permission for ${to.path}. Redirecting to '/'.`);
       return navigateTo('/'); // Or '/admin/access-denied'
     }
 
