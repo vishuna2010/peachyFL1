@@ -99,7 +99,7 @@
               <select
                 v-if="can('users:assign_roles').value"
                 :value="user.role_id"
-                @change="() => { console.log('SELECT @change event fired for user ID:', user.id, 'with value:', $event.target.value); promptRoleChange(user, $event.target.value); }"
+                @change="(event) => { console.log('SELECT @change event fired for user ID:', user.id, 'with value:', event.target.value); promptRoleChange(user, event.target.value); }"
                 :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id || isLoadingRoles"
                 class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md disabled:opacity-50 disabled:bg-gray-100"
                 :data-user-id="user.id"
@@ -191,20 +191,6 @@ const actionSuccessMessage = ref('');
 
 const isCurrentUser = (userId) => {
   return authUser.value?.id === userId;
-};
-
-const logUserRowDetails = (user) => {
-  console.log(`[UserRowDetails] User ID: ${user.id}, Email: ${user.email}`);
-  console.log(`  - can('users:assign_roles').value: ${can('users:assign_roles').value}`);
-  console.log(`  - isCurrentUser(user.id): ${isCurrentUser(user.id)}`);
-  console.log(`  - actionLoading.value.userId: ${actionLoading.value.userId}`);
-  console.log(`  - actionLoading.value.type: ${actionLoading.value.type}`);
-  console.log(`  - isLoadingRoles.value: ${isLoadingRoles.value}`);
-  const isDisabled = isCurrentUser(user.id) || actionLoading.value.userId === user.id || isLoadingRoles.value;
-  console.log(`  - Calculated :disabled state: ${isDisabled}`);
-  // Return a value that Vue can render, like an empty string or null,
-  // as template expressions are expected to produce renderable output.
-  return '';
 };
 
 const logUserRowDetails = (user) => {
