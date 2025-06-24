@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-screen bg-neutral-100 text-text-primary">
+  <div class="flex flex-row h-screen bg-neutral-100 text-text-primary">
     <!-- Admin Sidebar -->
     <AdminSidebar :is-open-on-mobile="isMobileSidebarOpen" @toggle-mobile-sidebar="toggleMobileSidebar" />
 
