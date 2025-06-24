@@ -180,33 +180,33 @@ const statCardsData = ref([
     title: "Total Revenue",
     value: "...",
     iconName: "TR",
-    trend: "", // Trends can be added later if specific APIs exist
-    trendDirection: "neutral",
-    iconBackgroundClass: "bg-green-100 text-green-700"
-  },
-  {
-    title: "Total Users", // Changed from New Customers
-    value: "...",
-    iconName: "TU", // Changed iconName
     trend: "",
     trendDirection: "neutral",
-    iconBackgroundClass: "bg-blue-100 text-blue-700"
+    iconBackgroundClass: "bg-peach-pink/20 text-peach-pink"
   },
   {
-    title: "Total Orders", // Changed from Pending Orders
+    title: "Total Users",
     value: "...",
-    iconName: "TO", // Changed iconName
+    iconName: "TU",
     trend: "",
     trendDirection: "neutral",
-    iconBackgroundClass: "bg-yellow-100 text-yellow-700"
+    iconBackgroundClass: "bg-sky-blue/20 text-sky-blue"
   },
   {
-    title: "Total Products", // Changed from Products Out of Stock
+    title: "Total Orders",
     value: "...",
-    iconName: "TP", // Changed iconName
+    iconName: "TO",
     trend: "",
     trendDirection: "neutral",
-    iconBackgroundClass: "bg-purple-100 text-purple-700" // Changed color
+    iconBackgroundClass: "bg-fresh-green/20 text-fresh-green"
+  },
+  {
+    title: "Total Products",
+    value: "...",
+    iconName: "TP",
+    trend: "",
+    trendDirection: "neutral",
+    iconBackgroundClass: "bg-orange-gold/20 text-orange-gold"
   }
 ]);
 

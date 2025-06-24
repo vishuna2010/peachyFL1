@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-neutral-bg-soft flex flex-col justify-center py-12 sm:px-6 lg:px-8"> <!-- Changed background -->
     <div class="sm:mx-auto sm:w-full sm:max-w-md">
-      <img class="mx-auto h-12 w-auto" src="/logo.svg" alt="Workflow" /> <!-- Placeholder logo, replace with actual if available -->
+      <img class="mx-auto h-16 w-auto" src="/logo.png" alt="Site Logo" /> <!-- Updated logo, adjusted size -->
       <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
         {{ isTwoFactorStep ? 'Enter Verification Code' : 'Sign in to your account' }}
       </h2>
@@ -18,7 +18,7 @@
               <div class="mt-1">
                 <input id="email" v-model="email" name="email" type="email" autocomplete="email" required
                        :disabled="isLoading"
-                       class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200" />
+                       class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200" />
               </div>
             </div>
 
@@ -29,12 +29,12 @@
               <div class="mt-1">
                 <input id="password" v-model="password" name="password" type="password" autocomplete="current-password" required
                        :disabled="isLoading"
-                       class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200" />
+                       class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200" />
               </div>
             </div>
           </template>
           <template v-else>
-            <p class="p-3 text-sm text-blue-700 bg-blue-100 rounded-md border border-blue-200 text-center">
+            <p class="p-3 text-sm text-sky-blue bg-sky-blue/10 rounded-md border border-sky-blue/20 text-center"> <!-- Themed message -->
               A verification code has been sent to your authenticator app. Please enter it below.
             </p>
             <div>
@@ -44,7 +44,7 @@
               <div class="mt-1">
                 <input id="twoFactorToken" v-model="twoFactorToken" name="twoFactorToken" type="text" required
                        pattern="\d{6}" title="Enter a 6-digit code" :disabled="isLoading"
-                       class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200" />
+                       class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:bg-gray-50 disabled:text-gray-500 disabled:border-gray-200" />
               </div>
             </div>
           </template>
@@ -55,7 +55,7 @@
 
           <div>
             <button type="submit" :disabled="isLoading"
-                    class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed">
+                    class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-peach-pink hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink disabled:opacity-70 disabled:cursor-not-allowed">
               <span v-if="isLoading">{{ isLoadingText }}</span>
               <span v-else>{{ isTwoFactorStep ? 'Verify Code' : 'Sign in' }}</span>
             </button>
@@ -63,7 +63,7 @@
 
           <div v-if="isTwoFactorStep">
             <button type="button" @click="cancelTwoFactor" :disabled="isLoading"
-                    class="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed">
+                    class="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink disabled:opacity-70 disabled:cursor-not-allowed">
               Cancel / Try Password Again
             </button>
           </div>
@@ -84,7 +84,7 @@
           <div class="mt-2 text-center">
              <p class="text-sm text-gray-600">
               Don't have an account?
-              <NuxtLink to="/register" class="font-medium text-indigo-600 hover:text-indigo-500 hover:underline">
+              <NuxtLink to="/register" class="font-medium text-peach-pink hover:text-opacity-80 hover:underline">
                 Sign up
               </NuxtLink>
             </p>

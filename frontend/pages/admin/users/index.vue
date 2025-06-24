@@ -12,7 +12,7 @@
           @click="selectTab('all')"
           :class="[
             'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
-            activeTab === 'all' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            activeTab === 'all' ? 'border-peach-pink text-peach-pink' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           ]"
         >
           All Users
@@ -21,7 +21,7 @@
           @click="selectTab('admin')"
           :class="[
             'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
-            activeTab === 'admin' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            activeTab === 'admin' ? 'border-peach-pink text-peach-pink' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           ]"
         >
           Administrators
@@ -30,7 +30,7 @@
           @click="selectTab('customer')"
           :class="[
             'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm',
-            activeTab === 'customer' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            activeTab === 'customer' ? 'border-peach-pink text-peach-pink' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
           ]"
         >
           Customers
@@ -39,7 +39,7 @@
     </div>
 
     <div v-if="isLoading" class="text-center py-10">
-      <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500"></div>
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-peach-pink"></div> <!-- Themed spinner -->
       <p class="mt-2 text-sm text-gray-500">Loading users...</p>
     </div>
 
@@ -61,7 +61,7 @@
       <div v-if="activeTab === 'admin' && can('users:create').value" class="mb-4 text-right">
         <button
           @click="navigateToCreateUserPage('admin')"
-          class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          class="px-4 py-2 text-sm font-medium text-white bg-peach-pink rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-peach-pink focus:ring-offset-2"
         >
           Create Admin User
         </button>
@@ -71,7 +71,7 @@
       <div v-if="activeTab === 'customer' && can('users:create').value" class="mb-4 text-right">
         <button
           @click="navigateToCreateUserPage('customer')"
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          class="px-4 py-2 text-sm font-medium text-white bg-sky-blue rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-sky-blue focus:ring-offset-2"
         >
           Create Customer
         </button>
@@ -79,10 +79,10 @@
 
       <div v-if="users.length > 0 && !isLoading" class="overflow-x-auto border border-gray-200 rounded-md shadow-sm">
         <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
+          <thead class="bg-sky-blue/10"> <!-- Themed table header -->
           <tr>
-            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-sky-blue uppercase tracking-wider">ID</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-sky-blue uppercase tracking-wider">Email</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registered At</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -101,7 +101,7 @@
                 :value="user.role_id"
                 @change="(event) => { console.log('SELECT @change event fired for user ID:', user.id, 'with value:', event.target.value); promptRoleChange(user, event.target.value); }"
                 :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id || isLoadingRoles"
-                class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md disabled:opacity-50 disabled:bg-gray-100"
+                class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm rounded-md disabled:opacity-50 disabled:bg-gray-100"
                 :data-user-id="user.id"
               >
                 <!-- Note: Using :value for one-way binding to allow programmatic revert if needed -->

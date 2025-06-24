@@ -1,18 +1,17 @@
 <template>
-  <div class="flex flex-row h-screen bg-neutral-100 text-text-primary">
+  <div class="flex flex-row h-screen bg-white text-venus-text-primary"> <!-- Changed text-text-primary to text-venus-text-primary -->
     <!-- Admin Sidebar -->
     <AdminSidebar :is-open-on-mobile="isMobileSidebarOpen" @toggle-mobile-sidebar="toggleMobileSidebar" />
 
     <!-- Main Content Area -->
-    <!-- Added lg:ml-60 which assumes sidebar is fixed width (w-60) and might be fixed position on desktop -->
-    <div class="flex-1 flex flex-col overflow-hidden min-w-0 lg:ml-60">
+    <div class="flex-1 flex flex-col overflow-hidden min-w-0 lg:w-[calc(100%-theme('spacing.60'))]">
       <!-- Top Bar -->
       <header class="bg-white shadow-sm py-3 px-4 sm:px-6 border-b border-neutral-200">
         <div class="flex items-center justify-between">
           <!-- Mobile Hamburger to open sidebar -->
           <button
             @click="toggleMobileSidebar"
-            class="lg:hidden text-text-secondary hover:text-brand-primary p-1 -ml-1 rounded-md focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-primary"
+            class="lg:hidden text-venus-text-secondary hover:text-peach-pink p-1 -ml-1 rounded-md focus:outline-none focus:ring-2 focus:ring-inset focus:ring-peach-pink"
             aria-label="Open sidebar"
           >
             <MenuIcon class="w-6 h-6" />
@@ -37,7 +36,7 @@
                 v-model="searchQuery"
                 id="global-search"
                 name="global-search"
-                class="block w-full bg-white border border-gray-300 rounded-md py-2 pl-10 pr-3 text-sm placeholder-gray-500 focus:outline-none focus:text-gray-900 focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                class="block w-full bg-white border border-gray-300 rounded-md py-2 pl-10 pr-3 text-sm placeholder-gray-500 focus:outline-none focus:text-gray-900 focus:placeholder-gray-400 focus:ring-1 focus:ring-peach-pink focus:border-peach-pink sm:text-sm"
                 placeholder="Search..."
                 type="search"
               >
@@ -48,7 +47,7 @@
           <div class="flex items-center space-x-3 ml-auto flex-grow-0 flex-shrink-0">
             <!-- Notification Icon & Dropdown Placeholder -->
             <div class="relative">
-              <button @click="toggleNotificationsDropdown" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-primary">
+              <button @click="toggleNotificationsDropdown" class="text-venus-text-secondary hover:text-peach-pink p-2 rounded-full hover:bg-neutral-bg-soft transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
               </button>
               <div v-if="notificationsDropdownOpen" class="origin-top-right absolute right-0 mt-2 w-64 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
@@ -60,21 +59,21 @@
               </div>
             </div>
 
-            <span class="text-sm text-text-secondary hidden sm:inline" v-if="user">
+            <span class="text-sm text-venus-text-secondary hidden sm:inline" v-if="user">
               {{ user.email }}
             </span>
             <!-- Edit Profile Link -->
             <NuxtLink
               to="/profile"
               title="Edit Profile"
-              class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-primary"
+              class="text-venus-text-secondary hover:text-peach-pink p-2 rounded-full hover:bg-neutral-bg-soft transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink"
             >
               <span class="text-sm font-medium">Edit Profile</span>
             </NuxtLink>
             <button
               @click="handleLogout"
               title="Logout"
-              class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-primary"
+              class="text-venus-text-secondary hover:text-peach-pink p-2 rounded-full hover:bg-neutral-bg-soft transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink"
             >
               <LogoutIcon class="w-5 h-5" />
             </button>
@@ -85,7 +84,7 @@
       <Breadcrumbs />
 
       <!-- Page Content Slot -->
-      <main class="flex-1 overflow-x-hidden overflow-y-auto bg-neutral-100 p-4 sm:p-6">
+      <main class="flex-1 overflow-x-hidden overflow-y-auto bg-white p-4 sm:p-6">
         <slot />
       </main>
     </div>

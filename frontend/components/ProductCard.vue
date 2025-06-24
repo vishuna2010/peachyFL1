@@ -1,5 +1,5 @@
 <template>
-  <div class="bg-venus-background border border-venus-neutral-light rounded-sm overflow-hidden flex flex-col group relative transition-all duration-300 ease-in-out hover:shadow-lg">
+  <div class="bg-white border border-gray-200 rounded-sm overflow-hidden flex flex-col group relative transition-all duration-300 ease-in-out hover:shadow-lg group-hover:border-peach-pink">
     <div class="relative">
       <NuxtLink :to="`/products/${product.id}`" class="block">
         <img
@@ -10,16 +10,16 @@
       </NuxtLink>
       <button
        @click.stop="handleOpenQuickView"
-class="absolute bottom-4 left-1/2 -translate-x-1/2 w-10/12
-       bg-white text-peach-pink border border-peach-pink text-sm font-semibold px-4 py-2.5
-       rounded-md shadow-md opacity-0 group-hover:opacity-100
-       transition-all duration-300 ease-in-out
-       hover:bg-peach-pink hover:text-white
-       focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink"
+       class="absolute bottom-4 left-1/2 -translate-x-1/2 w-10/12
+              bg-white text-sky-blue border border-sky-blue text-sm font-semibold px-4 py-2.5
+              rounded-md shadow-md opacity-0 group-hover:opacity-100
+              transition-all duration-300 ease-in-out
+              hover:bg-sky-blue hover:text-white
+              focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-sky-blue"
       >
         Quick View
       </button>
-      <div class="absolute top-3 left-3 bg-venus-accent-sale text-white text-xs font-bold px-2 py-0.5 rounded-sm">
+      <div class="absolute top-3 left-3 bg-orange-gold text-white text-xs font-bold px-2 py-0.5 rounded-sm">
         SALE
       </div>
     </div>
@@ -29,27 +29,26 @@ class="absolute bottom-4 left-1/2 -translate-x-1/2 w-10/12
           {{ product.name }}
         </h3>
       </NuxtLink>
-      <p v-if="product.category_name" class="text-xs text-venus-text-secondary mb-1 truncate">
+       <p v-if="product.category_name" class="text-xs text-sky-blue mb-1 truncate"> <!-- Changed text color -->
         {{ product.category_name }}
       </p>
       <p v-if="product.tax_class_name" class="text-xs text-venus-text-secondary mb-1 truncate">
         Tax: {{ product.tax_class_name }}
       </p>
-      <p class="font-sans text-base text-venus-text-primary font-semibold mt-auto pt-2">
+      <p class="font-sans text-base text-orange-gold font-semibold mt-auto pt-2"> <!-- Changed text color -->
         {{ formattedPrice }}
       </p>
       <div class="mt-3">
         <NuxtLink
           v-if="product.has_variants"
           :to="`/products/${product.id}`"
-          class="block w-full text-center bg-venus-neutral-dark text-white text-sm font-semibold px-4 py-2 rounded-sm shadow-sm hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-venus-accent-gold transition-all duration-200"
+          class="block w-full text-center bg-peach-pink text-white text-sm font-semibold px-4 py-2 rounded-md shadow-sm hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink transition-all duration-200"
         >
           View Options
         </NuxtLink>
-        <!-- Placeholder for Add to Cart for simple products -->
         <button
           v-else
-          class="block w-full bg-venus-text-primary text-white text-sm font-semibold px-4 py-2 rounded-sm shadow-sm hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-venus-accent-gold transition-all duration-200 disabled:opacity-50"
+          class="block w-full bg-peach-pink text-white text-sm font-semibold px-4 py-2 rounded-md shadow-sm hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink transition-all duration-200 disabled:opacity-50 disabled:bg-peach-pink/50"
           :disabled="!product.stock_quantity || product.stock_quantity <= 0"
           @click.stop="handleAddToCart"
         >

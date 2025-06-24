@@ -1,11 +1,12 @@
 <template>
-  <div class="bg-neutral-800 text-neutral-100 w-60 min-h-screen flex flex-col shadow-lg fixed lg:static inset-y-0 left-0 z-50 transform lg:transform-none transition-transform duration-300 ease-in-out"
+  <div class="bg-sky-blue-deep text-neutral-100 w-60 min-h-screen flex flex-col shadow-lg fixed lg:static inset-y-0 left-0 z-50 transform lg:transform-none transition-transform duration-300 ease-in-out"
        :class="isOpenOnMobile ? 'translate-x-0' : '-translate-x-full'">
 
     <!-- Sidebar Header -->
-    <div class="p-4 border-b border-neutral-700 flex justify-between items-center">
-      <NuxtLink to="/admin" @click="closeMobileSidebarIfNeeded">
-        <h1 class="text-xl font-semibold hover:text-brand-primary transition-colors">Admin Panel</h1>
+    <div class="p-4 border-b border-sky-blue/50 flex justify-between items-center"> <!-- Adjusted border -->
+      <NuxtLink to="/admin" @click="closeMobileSidebarIfNeeded" class="flex items-center space-x-2">
+        <img src="/logo.png" alt="Admin Logo" class="h-8 w-auto">
+        <h1 class="text-xl font-semibold hover:text-peach-pink transition-colors">Admin Panel</h1>
       </NuxtLink>
       <button @click="emit('toggleMobileSidebar')" class="lg:hidden text-neutral-300 hover:text-white p-1 rounded-md">
         <CloseIcon class="w-6 h-6" />
@@ -20,58 +21,58 @@
           v-if="can(item.permission).value"
           :to="item.href"
           @click="closeMobileSidebarIfNeeded"
-          class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white"
+          class="group flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-100 hover:bg-peach-pink hover:text-white"
+          :class="isActive(item.href) ? 'bg-peach-pink text-white' : 'hover:bg-opacity-75'"
         >
-          <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
-          <span v-else class="mr-3 h-5 w-5 flex-shrink-0"></span> <!-- Spacer if no icon -->
+          <span v-if="item.iconSvg" v-html="item.iconSvg" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-300 group-hover:text-white" :class="{'text-white': isActive(item.href)}"></span>
+          <span v-else class="mr-3 h-5 w-5 flex-shrink-0"></span>
           {{ item.name }}
         </NuxtLink>
       </template>
 
       <!-- Inventory Sub-menu -->
-      <div v-if="can('products:view').value"> <!-- Example: Inventory broadly needs product view access -->
-        <button @click="toggleInventorySubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
+      <div v-if="can('products:view').value">
+        <button @click="toggleInventorySubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75 transition-colors duration-150">
           <span class="flex items-center">
-            <span v-html="iconInventory" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+            <span v-html="iconInventory" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-300 group-hover:text-white"></span>
             Inventory
           </span>
-          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': inventorySubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-300 group-hover:text-white" :class="{'rotate-90': inventorySubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
         </button>
-        <div v-if="inventorySubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
+        <div v-if="inventorySubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-sky-blue/50 ml-3"> <!-- Adjusted border -->
           <NuxtLink
             v-for="invItem in inventoryItems"
             :key="invItem.name"
             :to="invItem.href"
             @click="closeMobileSidebarIfNeeded"
             class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
-            :class="isActive(invItem.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+            :class="isActive(invItem.href) ? 'bg-peach-pink text-white shadow-sm' : 'text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75'"
           >
-            <span v-if="invItem.iconSvg" v-html="invItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(invItem.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            <span v-if="invItem.iconSvg" v-html="invItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(invItem.href) ? 'text-white' : 'text-neutral-300 group-hover:text-white'"></span>
             {{ invItem.name }}
           </NuxtLink>
         </div>
       </div>
 
       <!-- Tax Management Sub-menu -->
-      <!-- Assuming a general 'taxes:manage_classes' or 'taxes:manage_rates' implies view access to this section -->
       <div v-if="can('taxes:manage_classes').value || can('taxes:manage_rates').value">
-        <button @click="toggleTaxSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
+        <button @click="toggleTaxSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75 transition-colors duration-150">
           <span class="flex items-center">
-            <span v-html="iconTax" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+            <span v-html="iconTax" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-300 group-hover:text-white"></span>
             Tax Management
           </span>
-          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': taxSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-300 group-hover:text-white" :class="{'rotate-90': taxSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
         </button>
-        <div v-if="taxSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
+        <div v-if="taxSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-sky-blue/50 ml-3"> <!-- Adjusted border -->
           <NuxtLink
             v-for="taxItem in taxItems"
             :key="taxItem.name"
             :to="taxItem.href"
             @click="closeMobileSidebarIfNeeded"
             class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
-            :class="isActive(taxItem.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+            :class="isActive(taxItem.href) ? 'bg-peach-pink text-white shadow-sm' : 'text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75'"
           >
-            <span v-if="taxItem.iconSvg" v-html="taxItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(taxItem.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            <span v-if="taxItem.iconSvg" v-html="taxItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(taxItem.href) ? 'text-white' : 'text-neutral-300 group-hover:text-white'"></span>
             {{ taxItem.name }}
           </NuxtLink>
         </div>
@@ -79,23 +80,23 @@
 
       <!-- Reports Sub-menu -->
       <div v-if="can('reports:view').value">
-        <button @click="toggleReportsSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150">
+        <button @click="toggleReportsSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75 transition-colors duration-150">
           <span class="flex items-center">
-            <span v-html="iconReportsMain" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-400 group-hover:text-neutral-300"></span>
+            <span v-html="iconReportsMain" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-300 group-hover:text-white"></span>
             Reports
           </span>
-          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-400 group-hover:text-neutral-300" :class="{'rotate-90': reportsSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
+          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-300 group-hover:text-white" :class="{'rotate-90': reportsSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
         </button>
-        <div v-if="reportsSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-neutral-700 ml-3">
+        <div v-if="reportsSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-sky-blue/50 ml-3"> <!-- Adjusted border -->
           <NuxtLink
             v-for="report in reportItems"
             :key="report.name"
             :to="report.href"
             @click="closeMobileSidebarIfNeeded"
             class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
-            :class="isActive(report.href) ? 'bg-brand-primary text-white shadow-sm' : 'text-neutral-300 hover:bg-neutral-700 hover:text-white'"
+            :class="isActive(report.href) ? 'bg-peach-pink text-white shadow-sm' : 'text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75'"
           >
-            <span v-if="report.iconSvg" v-html="report.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(report.href) ? 'text-white' : 'text-neutral-400 group-hover:text-neutral-300'"></span>
+            <span v-if="report.iconSvg" v-html="report.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(report.href) ? 'text-white' : 'text-neutral-300 group-hover:text-white'"></span>
             {{ report.name }}
           </NuxtLink>
         </div>
@@ -103,13 +104,13 @@
     </nav>
 
     <!-- Footer / View Site Link -->
-    <div class="p-4 border-t border-neutral-700 mt-auto">
+    <div class="p-4 border-t border-sky-blue/50 mt-auto"> <!-- Adjusted border -->
       <NuxtLink
         to="/"
-        class="flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-300 hover:bg-neutral-700 hover:text-white transition-colors duration-150"
+        class="flex items-center px-3 py-2.5 text-sm font-medium rounded-md text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75 transition-colors duration-150"
         title="View Live Site"
       >
-        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+        <svg class="w-5 h-5 mr-2 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
         View Site
       </NuxtLink>
     </div>

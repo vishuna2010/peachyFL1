@@ -24,11 +24,9 @@ const props = defineProps({
 const bannerClasses = computed(() => {
   let classes = 'text-sm ';
   if (props.type === 'primary') {
-    // Example: Gold background with dark text
-    classes += 'bg-venus-accent-gold text-venus-text-primary';
+    classes += 'bg-peach-pink text-white'; // New primary style
   } else { // secondary
-    // Example: Dark background with white text (like the existing top bar)
-    classes += 'bg-venus-neutral-dark text-white';
+    classes += 'bg-sky-blue text-white'; // New secondary style
   }
   return classes;
 });

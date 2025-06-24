@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-neutral-bg-soft flex flex-col justify-center py-12 sm:px-6 lg:px-8"> <!-- Changed background -->
     <div class="sm:mx-auto sm:w-full sm:max-w-md">
-      <img class="mx-auto h-12 w-auto" src="/logo.svg" alt="Workflow" /> <!-- Placeholder logo -->
+      <img class="mx-auto h-16 w-auto" src="/logo.png" alt="Site Logo" /> <!-- Updated logo, adjusted size -->
       <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
         Create your account
       </h2>
@@ -17,7 +17,7 @@
             <div class="mt-1">
               <input id="email" v-model="email" name="email" type="email" autocomplete="email" required
                      :disabled="isLoading"
-                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-70" />
+                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:opacity-70" />
             </div>
           </div>
 
@@ -28,7 +28,7 @@
             <div class="mt-1">
               <input id="password" v-model="password" name="password" type="password" autocomplete="new-password" required
                      :disabled="isLoading"
-                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-70" />
+                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:opacity-70" />
             </div>
           </div>
 
@@ -39,20 +39,20 @@
             <div class="mt-1">
               <input id="confirmPassword" v-model="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required
                      :disabled="isLoading"
-                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:opacity-70" />
+                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:opacity-70" />
             </div>
           </div>
 
           <div v-if="errorMessage" class="p-3 text-sm text-red-700 bg-red-100 rounded-md border border-red-200 text-center">
             {{ errorMessage }}
           </div>
-          <div v-if="successMessage" class="p-3 text-sm text-green-700 bg-green-100 rounded-md border border-green-200 text-center">
+          <div v-if="successMessage" class="p-3 text-sm text-fresh-green bg-fresh-green/10 rounded-md border border-fresh-green/20 text-center"> <!-- Themed success -->
             {{ successMessage }}
           </div>
 
           <div>
             <button type="submit" :disabled="isLoading"
-                    class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-70 disabled:cursor-not-allowed">
+                    class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-peach-pink hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink disabled:opacity-70 disabled:cursor-not-allowed">
               {{ isLoading ? 'Registering...' : 'Register' }}
             </button>
           </div>
@@ -60,7 +60,7 @@
 
         <p class="mt-8 text-center text-sm text-gray-600">
           Already have an account?
-          <NuxtLink to="/login" class="font-medium text-indigo-600 hover:text-indigo-500 hover:underline">
+          <NuxtLink to="/login" class="font-medium text-peach-pink hover:text-opacity-80 hover:underline">
             Sign in
           </NuxtLink>
         </p>
