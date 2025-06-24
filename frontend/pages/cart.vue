@@ -13,8 +13,8 @@
         <li v-for="item in cartItems" :key="item.cartItemId" class="flex items-start gap-4 p-4 border border-gray-200 rounded-lg bg-white mb-4 shadow-sm relative"> <!-- Adjusted border and rounded -->
           <template v-if="item.image_url">
             <img
-              :src="item.image_url"
-              :alt="item.name"
+              :src="sanitizeAttributeValue(item.image_url)"
+              :alt="sanitizeAttributeValue(item.name)"
               class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0" /> <!-- Corrected comment placement -->
           </template>
           <template v-else>
@@ -22,9 +22,9 @@
           </template>
 
           <div class="flex-grow flex flex-col">
-            <h3 class="text-lg font-semibold text-venus-text-primary mb-1">{{ item.name }}</h3>
+            <h3 class="text-lg font-semibold text-venus-text-primary mb-1" :title="sanitizeAttributeValue(item.name)">{{ item.name }}</h3> <!-- Sanitize title, display original name -->
             <p v-if="item.selectedVariantDescription" class="text-sm text-venus-text-secondary mb-1">{{ item.selectedVariantDescription }}</p>
-            <p v-if="item.sku" class="text-xs text-venus-text-secondary mb-1">SKU: {{ item.sku }}</p>
+            <p v-if="item.sku" class="text-xs text-venus-text-secondary mb-1">SKU: {{ sanitizeAttributeValue(item.sku) }}</p> <!-- Sanitize SKU display -->
             <p class="text-sm text-venus-text-secondary">Unit Price: <span class="text-orange-gold">${{ item.price.toFixed(2) }}</span></p> <!-- Themed unit price -->
             <p v-if="item.tax_class_name" class="text-xs text-venus-text-secondary mt-0.5">
               Tax Class: {{ item.tax_class_name }}
@@ -132,6 +132,8 @@
 import { ref, computed, onMounted, watchEffect } from 'vue';
 import { useCart } from '~/composables/useCart';
 import { useHead } from '#app';
+import { sanitizeAttributeValue } from '~/utils/sanitize'; // Import the sanitizer
+
 // CloseIcon import can be removed if SVG is directly in template for remove button
 // import CloseIcon from '~/components/icons/CloseIcon.vue';
 
