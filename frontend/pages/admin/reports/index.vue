@@ -6,6 +6,8 @@
       <p><NuxtLink to="/admin/reports/sales" class="text-indigo-600 hover:underline">View Sales Report</NuxtLink></p>
       <p><NuxtLink to="/admin/reports/low-stock" class="text-indigo-600 hover:underline">View Low Stock Report</NuxtLink></p>
       <p><NuxtLink to="/admin/reports/best-sellers" class="text-indigo-600 hover:underline">View Best Sellers Report</NuxtLink></p>
+      <p><NuxtLink to="/admin/reports/stock-valuation" class="text-indigo-600 hover:underline">View Stock Valuation Report</NuxtLink></p>
+      <p><NuxtLink to="/admin/reports/audit-logs" class="text-indigo-600 hover:underline">View Audit Logs</NuxtLink></p>
       <!-- Add links to other reports as they are created -->
     </div>
   </div>

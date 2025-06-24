@@ -180,9 +180,11 @@ const navigationItems = ref([
 
 const reportsSubmenuOpen = ref(false);
 const reportItems = ref([
+    { name: 'Overview', href: '/admin/reports', iconSvg: iconReportSubItem }, // Added Overview
     { name: 'Low Stock', href: '/admin/reports/low-stock', iconSvg: iconReportSubItem },
     { name: 'Sales', href: '/admin/reports/sales', iconSvg: iconReportSubItem },
     { name: 'Best Sellers', href: '/admin/reports/best-sellers', iconSvg: iconReportSubItem },
+    { name: 'Stock Valuation', href: '/admin/reports/stock-valuation', iconSvg: iconReportSubItem },
     { name: 'Audit Logs', href: '/admin/reports/audit-logs', iconSvg: iconReportSubItem },
 ]);
 

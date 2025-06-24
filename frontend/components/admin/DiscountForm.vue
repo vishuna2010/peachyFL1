@@ -1,68 +1,94 @@
 <template>
-  <form @submit.prevent="handleSubmit" class="discount-form">
-    <div class="form-group">
-      <label for="code">Discount Code:</label>
-      <input type="text" id="code" v-model="formData.code" :disabled="isEditMode" required
-             @input="formData.code = formData.code.toUpperCase()" />
-      <small v-if="isEditMode">Code cannot be changed after creation.</small>
+  <form @submit.prevent="handleSubmit" class="space-y-6 bg-white shadow sm:rounded-lg p-6 border border-gray-200">
+    <div>
+      <label for="code" class="block text-sm font-medium text-gray-700 mb-1">Discount Code:</label>
+      <input type="text" id="code" v-model="formData.code"
+             :disabled="isEditMode" required
+             @input="formData.code = formData.code.toUpperCase()"
+             class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm disabled:bg-gray-100 disabled:cursor-not-allowed" />
+      <p v-if="isEditMode" class="mt-1 text-xs text-gray-500">Code cannot be changed after creation.</p>
     </div>
 
-    <div class="form-group">
-      <label for="description">Description (Optional):</label>
-      <textarea id="description" v-model="formData.description"></textarea>
+    <div>
+      <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Description (Optional):</label>
+      <textarea id="description" v-model="formData.description" rows="3"
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></textarea>
     </div>
 
-    <div class="form-row">
-      <div class="form-group">
-        <label for="type">Type:</label>
-        <select id="type" v-model="formData.type" required>
+    <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+      <div>
+        <label for="type" class="block text-sm font-medium text-gray-700 mb-1">Type:</label>
+        <select id="type" v-model="formData.type" required
+                class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
           <option value="percentage">Percentage (%)</option>
           <option value="fixed_amount">Fixed Amount ($)</option>
         </select>
       </div>
 
-      <div class="form-group">
-        <label for="value">Value:</label>
-        <input type="number" id="value" v-model.number="formData.value" required min="0" step="0.01" />
-        <small v-if="formData.type === 'percentage'">Enter value between 0 and 100 (e.g., 10 for 10%).</small>
-        <small v-else>Enter fixed monetary value (e.g., 5.50 for $5.50).</small>
+      <div>
+        <label for="value" class="block text-sm font-medium text-gray-700 mb-1">Value:</label>
+        <input type="number" id="value" v-model.number="formData.value" required min="0" step="0.01"
+               class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+        <p v-if="formData.type === 'percentage'" class="mt-1 text-xs text-gray-500">Enter value between 0 and 100 (e.g., 10 for 10%).</p>
+        <p v-else class="mt-1 text-xs text-gray-500">Enter fixed monetary value (e.g., 5.50 for $5.50).</p>
       </div>
     </div>
 
-    <div class="form-group checkbox-group">
-      <input type="checkbox" id="is_active" v-model="formData.is_active" />
-      <label for="is_active">Is Active</label>
-    </div>
-
-    <div class="form-row">
-        <div class="form-group">
-            <label for="valid_from">Valid From (Optional):</label>
-            <input type="datetime-local" id="valid_from" v-model="formData.valid_from" />
+    <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+        <div>
+            <label for="valid_from" class="block text-sm font-medium text-gray-700 mb-1">Valid From (Optional):</label>
+            <input type="datetime-local" id="valid_from" v-model="formData.valid_from"
+                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
         </div>
 
-        <div class="form-group">
-            <label for="valid_until">Valid Until (Optional):</label>
-            <input type="datetime-local" id="valid_until" v-model="formData.valid_until" />
+        <div>
+            <label for="valid_until" class="block text-sm font-medium text-gray-700 mb-1">Valid Until (Optional):</label>
+            <input type="datetime-local" id="valid_until" v-model="formData.valid_until"
+                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
         </div>
     </div>
 
-    <div class="form-row">
-        <div class="form-group">
-            <label for="usage_limit">Usage Limit (Optional):</label>
-            <input type="number" id="usage_limit" v-model.number="formData.usage_limit" min="0" placeholder="Leave blank for no limit" />
+    <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+        <div>
+            <label for="usage_limit" class="block text-sm font-medium text-gray-700 mb-1">Usage Limit (Optional):</label>
+            <input type="number" id="usage_limit" v-model.number="formData.usage_limit" min="0" placeholder="Leave blank for no limit"
+                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
         </div>
 
-        <div class="form-group">
-            <label for="min_order_amount">Minimum Order Amount (Optional):</label>
-            <input type="number" id="min_order_amount" v-model.number="formData.min_order_amount" min="0" step="0.01" placeholder="Leave blank for no minimum" />
+        <div>
+            <label for="min_order_amount" class="block text-sm font-medium text-gray-700 mb-1">Minimum Order Amount (Optional):</label>
+            <input type="number" id="min_order_amount" v-model.number="formData.min_order_amount" min="0" step="0.01" placeholder="Leave blank for no minimum"
+                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
         </div>
     </div>
 
-    <div v-if="apiError" class="error-message">{{ apiError }}</div>
+    <div class="flex items-center">
+      <input type="checkbox" id="is_active" v-model="formData.is_active"
+             class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
+      <label for="is_active" class="ml-2 block text-sm text-gray-900">Is Active</label>
+    </div>
 
-    <button type="submit" :disabled="isSubmitting" class="submit-button">
-      {{ isSubmitting ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Discount' : 'Create Discount') }}
-    </button>
+    <div v-if="apiError" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4" role="alert">
+      <span class="block sm:inline">{{ apiError }}</span>
+    </div>
+
+    <div class="pt-5">
+      <div class="flex justify-end">
+        <button type="submit" :disabled="isSubmitting"
+                class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
+          <span v-if="isSubmitting" class="flex items-center">
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ isEditMode ? 'Updating...' : 'Creating...' }}
+          </span>
+          <span v-else>
+            {{ isEditMode ? 'Update Discount' : 'Create Discount' }}
+          </span>
+        </button>
+      </div>
+    </div>
   </form>
 </template>
 
@@ -128,22 +154,22 @@ watch(() => props.initialData, (newData) => {
 const handleSubmit = () => {
   // Basic client-side validation (can be expanded)
   if (!formData.code && !props.isEditMode) { // Code is required for new, not for edit (as it's disabled)
-    alert('Discount code is required.');
+    alert('Discount code is required.'); // TODO: Replace with a non-blocking notification
     return;
   }
   if (formData.type === 'percentage' && (formData.value < 0 || formData.value > 100)) {
-    alert('Percentage value must be between 0 and 100.');
+    alert('Percentage value must be between 0 and 100.'); // TODO: Replace
     return;
   }
-  if (formData.value < 0) {
-    alert('Discount value must be non-negative.');
+  if (formData.value < 0 && (formData.type === 'percentage' || formData.type === 'fixed_amount')) {
+    alert('Discount value must be non-negative.'); // TODO: Replace
     return;
   }
   // Convert empty strings for nullable number fields to null
   const payload = {
     ...formData,
-    usage_limit: formData.usage_limit === '' || formData.usage_limit === null ? null : parseInt(formData.usage_limit),
-    min_order_amount: formData.min_order_amount === '' || formData.min_order_amount === null ? null : parseFloat(formData.min_order_amount),
+    usage_limit: formData.usage_limit === '' || formData.usage_limit === null || isNaN(parseInt(formData.usage_limit)) ? null : parseInt(formData.usage_limit),
+    min_order_amount: formData.min_order_amount === '' || formData.min_order_amount === null || isNaN(parseFloat(formData.min_order_amount)) ? null : parseFloat(formData.min_order_amount),
     // Ensure dates are sent in a format backend expects (ISO string or null)
     valid_from: formData.valid_from ? new Date(formData.valid_from).toISOString() : null,
     valid_until: formData.valid_until ? new Date(formData.valid_until).toISOString() : null,
@@ -152,85 +178,4 @@ const handleSubmit = () => {
 };
 </script>
 
-<style scoped>
-.discount-form {
-  background-color: #fff;
-  padding: 1.5rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.form-group {
-  margin-bottom: 1rem;
-}
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-}
-.form-group input[type="text"],
-.form-group input[type="number"],
-.form-group input[type="datetime-local"],
-.form-group select,
-.form-group textarea {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-sizing: border-box;
-}
-.form-group input[type="text"]:disabled {
-    background-color: #e9ecef;
-    cursor: not-allowed;
-}
-.form-group textarea {
-  min-height: 80px;
-}
-.form-group small {
-  display: block;
-  margin-top: 0.3rem;
-  font-size: 0.85em;
-  color: #666;
-}
-.checkbox-group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.checkbox-group input[type="checkbox"] {
-  width: auto;
-  margin-right: 0.5rem;
-}
-.form-row {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap; /* Allow wrapping on smaller screens */
-}
-.form-row .form-group {
-    flex: 1;
-    min-width: 200px; /* Minimum width for inputs in a row */
-}
-
-.submit-button {
-  padding: 0.75rem 1.5rem;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-}
-.submit-button:disabled {
-  background-color: #aaa;
-}
-.submit-button:hover:not(:disabled) {
-  background-color: #0056b3;
-}
-.error-message {
-  color: red;
-  background-color: #ffe0e0;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
-  text-align: center;
-}
-</style>
+<!-- <style scoped> block removed, Tailwind classes used instead -->
