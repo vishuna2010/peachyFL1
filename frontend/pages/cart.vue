@@ -25,10 +25,18 @@
             <h3 class="text-lg font-semibold text-venus-text-primary mb-1" :title="sanitizeAttributeValue(item.name)">{{ item.name }}</h3>
             <p v-if="item.selectedVariantDescription" class="text-sm text-venus-text-secondary mb-1">{{ item.selectedVariantDescription }}</p>
             <p v-if="item.sku" class="text-xs text-venus-text-secondary mb-1">SKU: {{ sanitizeAttributeValue(item.sku) }}</p>
+            <!-- Restoring Unit Price and Tax Class -->
+            <p class="text-sm text-venus-text-secondary">Unit Price: <span class="text-orange-gold">${{ (typeof item.price === 'number' ? item.price : 0).toFixed(2) }}</span></p>
+            <p v-if="item.tax_class_name" class="text-xs text-venus-text-secondary mt-0.5">
+              Tax Class: {{ item.tax_class_name }}
+            </p>
+            <p v-else-if="item.tax_class_id" class="text-xs text-venus-text-secondary mt-0.5">
+              Tax Class ID: {{ item.tax_class_id }}
+            </p>
+            <!-- Temporarily keeping quantity and cart item ID basic for now -->
             <p>Quantity: {{ item.quantity }}</p>
-            <p>Price: ${{ typeof item.price === 'number' ? item.price.toFixed(2) : 'N/A' }}</p>
             <p>Cart Item ID: {{ item.cartItemId }}</p>
-            <!-- Original more detailed content will be restored here piece by piece -->
+            <!-- Remaining item details (quantity input, item tax, item subtotal) still commented out -->
           </div>
           <!-- Ensure this <li> is properly closed. -->
         </li>
