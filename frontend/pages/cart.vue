@@ -11,13 +11,16 @@
     <div v-else class="md:grid md:grid-cols-3 md:gap-6 lg:gap-8">
       <ul class="md:col-span-2 list-none p-0 m-0">
         <li v-for="item in cartItems" :key="item.cartItemId" class="flex items-start gap-4 p-4 border border-gray-200 rounded-lg bg-white mb-4 shadow-sm relative"> <!-- Adjusted border and rounded -->
-          <img
-            v-if="item.image_url"
-            :src="item.image_url"
-            :alt="item.name"
-            class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0" <!-- Adjusted placeholder bg -->
-          />
-          <div v-else class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0 flex items-center justify-center text-venus-text-secondary text-sm">No Image</div>
+          <template v-if="item.image_url">
+            <img
+              :src="item.image_url"
+              :alt="item.name"
+              class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0" <!-- Adjusted placeholder bg -->
+            />
+          </template>
+          <template v-else>
+            <div class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0 flex items-center justify-center text-venus-text-secondary text-sm">No Image</div>
+          </template>
 
           <div class="flex-grow flex flex-col">
             <h3 class="text-lg font-semibold text-venus-text-primary mb-1">{{ item.name }}</h3>
