@@ -3,7 +3,7 @@
     <div class="container mx-auto px-4 py-4 flex items-center justify-between">
       <!-- Logo -->
       <NuxtLink to="/" aria-label="Homepage">
-        <img src="/logo.png" alt="Site Logo" class="h-10 w-auto"> <!-- Adjust height (h-10) as needed -->
+        <img src="/Logo.svg" alt="Site Logo" class="h-10 w-auto"> <!-- Corrected to Logo.svg -->
       </NuxtLink>
 
       <!-- Navigation Links (Placeholders) -->

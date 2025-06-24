@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-neutral-bg-soft flex flex-col justify-center py-12 sm:px-6 lg:px-8"> <!-- Changed background -->
     <div class="sm:mx-auto sm:w-full sm:max-w-md">
-      <img class="mx-auto h-16 w-auto" src="/logo.png" alt="Site Logo" /> <!-- Updated logo, adjusted size -->
+      <img class="mx-auto h-16 w-auto" src="/Logo.svg" alt="Site Logo" /> <!-- Corrected to Logo.svg -->
       <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
         {{ isTwoFactorStep ? 'Enter Verification Code' : 'Sign in to your account' }}
       </h2>

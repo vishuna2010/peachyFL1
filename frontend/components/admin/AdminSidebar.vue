@@ -5,7 +5,7 @@
     <!-- Sidebar Header -->
     <div class="p-4 border-b border-sky-blue/50 flex justify-between items-center"> <!-- Adjusted border -->
       <NuxtLink to="/admin" @click="closeMobileSidebarIfNeeded" class="flex items-center space-x-2">
-        <img src="/logo.png" alt="Admin Logo" class="h-8 w-auto">
+        <img src="/Logo.svg" alt="Admin Logo" class="h-8 w-auto"> <!-- Corrected to Logo.svg -->
         <h1 class="text-xl font-semibold hover:text-peach-pink transition-colors">Admin Panel</h1>
       </NuxtLink>
       <button @click="emit('toggleMobileSidebar')" class="lg:hidden text-neutral-300 hover:text-white p-1 rounded-md">
