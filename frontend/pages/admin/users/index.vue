@@ -90,6 +90,8 @@
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
           <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50">
+            <!-- Log user row details (this will output to console for each row) -->
+            {{ logUserRowDetails(user) }}
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.id }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.email }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
@@ -97,7 +99,7 @@
               <select
                 v-if="can('users:assign_roles').value"
                 :value="user.role_id"
-                @change="promptRoleChange(user, $event.target.value)"
+                @change="() => { console.log('SELECT @change event fired for user ID:', user.id, 'with value:', $event.target.value); promptRoleChange(user, $event.target.value); }"
                 :disabled="isCurrentUser(user.id) || actionLoading.userId === user.id || isLoadingRoles"
                 class="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md disabled:opacity-50 disabled:bg-gray-100"
                 :data-user-id="user.id"
@@ -191,6 +193,34 @@ const isCurrentUser = (userId) => {
   return authUser.value?.id === userId;
 };
 
+const logUserRowDetails = (user) => {
+  console.log(`[UserRowDetails] User ID: ${user.id}, Email: ${user.email}`);
+  console.log(`  - can('users:assign_roles').value: ${can('users:assign_roles').value}`);
+  console.log(`  - isCurrentUser(user.id): ${isCurrentUser(user.id)}`);
+  console.log(`  - actionLoading.value.userId: ${actionLoading.value.userId}`);
+  console.log(`  - actionLoading.value.type: ${actionLoading.value.type}`);
+  console.log(`  - isLoadingRoles.value: ${isLoadingRoles.value}`);
+  const isDisabled = isCurrentUser(user.id) || actionLoading.value.userId === user.id || isLoadingRoles.value;
+  console.log(`  - Calculated :disabled state: ${isDisabled}`);
+  // Return a value that Vue can render, like an empty string or null,
+  // as template expressions are expected to produce renderable output.
+  return '';
+};
+
+const logUserRowDetails = (user) => {
+  console.log(`[UserRowDetails] User ID: ${user.id}, Email: ${user.email}`);
+  console.log(`  - can('users:assign_roles').value: ${can('users:assign_roles').value}`);
+  console.log(`  - isCurrentUser(user.id): ${isCurrentUser(user.id)}`);
+  console.log(`  - actionLoading.value.userId: ${actionLoading.value.userId}`);
+  console.log(`  - actionLoading.value.type: ${actionLoading.value.type}`);
+  console.log(`  - isLoadingRoles.value: ${isLoadingRoles.value}`);
+  const isDisabled = isCurrentUser(user.id) || actionLoading.value.userId === user.id || isLoadingRoles.value;
+  console.log(`  - Calculated :disabled state: ${isDisabled}`);
+  // Return a value that Vue can render, like an empty string or null,
+  // as template expressions are expected to produce renderable output.
+  return '';
+};
+
 const navigateToCreateUserPage = (role) => {
   navigateTo(`/admin/users/create?role=${role}`);
 };
@@ -256,25 +286,46 @@ async function fetchAvailableRoles() {
 
 
 const promptRoleChange = (user, newRoleIdString) => {
+  console.log('[promptRoleChange] Function called.');
+  console.log('[promptRoleChange] User:', JSON.parse(JSON.stringify(user)));
+  console.log('[promptRoleChange] newRoleIdString:', newRoleIdString);
+
   const newRoleId = parseInt(newRoleIdString, 10);
+  console.log('[promptRoleChange] Parsed newRoleId:', newRoleId);
+  console.log('[promptRoleChange] availableRoles.value:', JSON.parse(JSON.stringify(availableRoles.value)));
+
   const newRole = availableRoles.value.find(r => r.id === newRoleId);
-  const oldRoleName = user.originalRoleName || user.legacy_role || 'unknown'; // Use originalRoleName or fallback
+  console.log('[promptRoleChange] Found newRole:', JSON.parse(JSON.stringify(newRole)));
+
+  const oldRoleName = user.originalRoleName || user.legacy_role || 'unknown';
+  console.log('[promptRoleChange] Old role name:', oldRoleName);
 
   if (!newRole) {
+    console.log('[promptRoleChange] newRole is not found. Exiting.');
     toast.error("Invalid role selected.");
-    // Revert select dropdown if possible, or re-fetch users to ensure data integrity
-    const selectElement = document.querySelector(`select[data-user-id="${user.id}"]`); // Needs data-user-id on select
-    if (selectElement) selectElement.value = user.originalRoleId;
+    const selectElement = document.querySelector(`select[data-user-id="${user.id}"]`);
+    if (selectElement) {
+      console.log('[promptRoleChange] Reverting select element to originalRoleId:', user.originalRoleId);
+      selectElement.value = user.originalRoleId;
+    }
     return;
   }
 
+  console.log(`[promptRoleChange] About to confirm: Change role of ${user.email} from "${oldRoleName}" to "${newRole.name}"?`);
   if (confirm(`Are you sure you want to change the role of ${user.email} from "${oldRoleName}" to "${newRole.name}"?`)) {
+    console.log('[promptRoleChange] Confirmation successful. Calling updateUserRole.');
     updateUserRole(user, newRoleId, newRole.name);
   } else {
+    console.log('[promptRoleChange] Confirmation denied by user. Reverting UI selection.');
     // Revert UI: find the select element and set its value back to user.originalRoleId
-     const userInArray = users.value.find(u => u.id === user.id);
+    const userInArray = users.value.find(u => u.id === user.id);
     if (userInArray) {
+      console.log('[promptRoleChange] Reverting role_id in local users array for user:', user.id, 'to:', user.originalRoleId);
       userInArray.role_id = user.originalRoleId;
+    }
+     const selectElement = document.querySelector(`select[data-user-id="${user.id}"]`);
+    if (selectElement) {
+      selectElement.value = user.originalRoleId;
     }
   }
 };
