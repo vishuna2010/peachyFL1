@@ -62,16 +62,15 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+          <!-- Ensure this <li> is properly closed. -->
         </li>
       </ul>
-      <!-- Cart Summary Section Fully Commented Out -->
-      <!--
-      <div class="cart-summary md:col-span-1 mt-6 md:mt-0 p-6 bg-neutral-bg-soft rounded-lg shadow border border-gray-200 h-fit sticky top-20">
-        <h3 class="text-xl font-serif text-peach-pink mb-4">Cart Summary</h3>
+      <div class="cart-summary md:col-span-1 mt-6 md:mt-0 p-6 bg-neutral-bg-soft rounded-lg shadow border border-gray-200 h-fit sticky top-20"> <!-- Themed background and rounded -->
+        <h3 class="text-xl font-serif text-peach-pink mb-4">Cart Summary</h3> <!-- Themed title -->
         <p class="flex justify-between text-venus-text-secondary"><span>Total Items:</span> <span>{{ cartTotalItems }}</span></p>
-        <p class="flex justify-between text-venus-text-secondary mb-2"><span>Subtotal:</span> <span class="text-orange-gold font-medium">${{ cartSubtotal.toFixed(2) }}</span></p>
+        <p class="flex justify-between text-venus-text-secondary mb-2"><span>Subtotal:</span> <span class="text-orange-gold font-medium">${{ cartSubtotal.toFixed(2) }}</span></p> <!-- Themed subtotal -->
 
-        <div class="discount-section my-4 py-4 border-t border-b border-gray-200">
+        <div class="discount-section my-4 py-4 border-t border-b border-gray-200"> <!-- Adjusted border -->
           <div class="discount-form flex gap-2 mb-2">
             <input
               type="text"
@@ -89,7 +88,7 @@
             </button>
           </div>
           <p v-if="discountValidationError" class="text-sm text-red-600 mt-1">{{ discountValidationError }}</p>
-          <div v-if="appliedDiscount" class="mt-2 p-2 bg-fresh-green/10 text-fresh-green rounded-md text-sm border border-fresh-green/20">
+          <div v-if="appliedDiscount" class="mt-2 p-2 bg-fresh-green/10 text-fresh-green rounded-md text-sm border border-fresh-green/20"> <!-- Themed discount applied message -->
             <div class="flex justify-between items-center">
               <span>
                 Discount: <strong>{{ appliedDiscount.code }}</strong> (-${{ calculatedDiscountAmount.toFixed(2) }})
@@ -100,36 +99,36 @@
           </div>
         </div>
 
-        <div class="tax-info py-4 border-b border-gray-200">
+        <!-- Tax Information -->
+        <div class="tax-info py-4 border-b border-gray-200"> <!-- Adjusted border -->
           <p v-if="isFetchingTaxDetails" class="text-sm text-venus-text-secondary animate-pulse">Calculating taxes...</p>
           <p v-if="taxCalculationError && !isFetchingTaxDetails" class="text-sm text-red-600">Error calculating tax: {{ taxCalculationError }}</p>
           <p v-if="!isFetchingTaxDetails && !taxCalculationError && cartItems.length > 0" class="flex justify-between text-venus-text-secondary">
             <span>Total Tax:</span>
-            <span class="font-medium text-orange-gold/80">${{ cartTotalTax }}</span>
+            <span class="font-medium text-orange-gold/80">${{ cartTotalTax }}</span> <!-- Themed tax total -->
           </p>
         </div>
 
-        <p class="flex justify-between text-xl font-bold text-orange-gold my-3 pt-3 border-t-2 border-peach-pink">
+        <p class="flex justify-between text-xl font-bold text-orange-gold my-3 pt-3 border-t-2 border-peach-pink"> <!-- Themed grand total and border -->
           <span>Grand Total:</span>
           <span>${{ cartFinalTotalPrice.toFixed(2) }}</span>
         </p>
         <div class="cart-actions mt-6 space-y-3">
           <NuxtLink
             :to="cartItems.length > 0 ? '/checkout' : '#'"
-            :class="['block w-full text-center px-4 py-3 bg-peach-pink text-white font-semibold rounded-md shadow hover:bg-opacity-90 transition-colors duration-200 ease-in-out', { 'opacity-60 cursor-not-allowed': cartItems.length === 0 }]"
+            :class="['block w-full text-center px-4 py-3 bg-peach-pink text-white font-semibold rounded-md shadow hover:bg-opacity-90 transition-colors duration-200 ease-in-out', { 'opacity-60 cursor-not-allowed': cartItems.length === 0 }]" <!-- Themed button -->
             @click="checkCartEmptyBeforeCheckout"
           >
             Proceed to Checkout
           </NuxtLink>
           <button
             @click="confirmClearCart"
-            class="w-full px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 transition-colors duration-200 ease-in-out"
+            class="w-full px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 transition-colors duration-200 ease-in-out" <!-- Neutral clear button -->
           >
             Clear Cart
           </button>
         </div>
       </div>
-      -->
     </div>
   </div>
 </template>
