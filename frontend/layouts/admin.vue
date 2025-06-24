@@ -25,7 +25,7 @@
           </div>
 
           <!-- Global Search Bar -->
-          <div class="flex-shrink-0 px-4 sm:px-0 mx-auto">
+          <div class="flex-grow-0 flex-shrink-0 px-4 sm:px-0 mx-auto">
             <form @submit.prevent="handleSearchSubmit" class="relative w-full max-w-xs sm:max-w-sm md:max-w-md">
               <div class="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center">
                 <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -44,7 +44,7 @@
           </div>
 
           <!-- User Info & Logout -->
-          <div class="flex items-center space-x-3 ml-auto flex-shrink-0">
+          <div class="flex items-center space-x-3 ml-auto flex-grow-0 flex-shrink-0">
             <!-- Notification Icon & Dropdown Placeholder -->
             <div class="relative">
               <button @click="toggleNotificationsDropdown" class="text-text-secondary hover:text-brand-primary p-2 rounded-full hover:bg-neutral-light transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-brand-primary">
