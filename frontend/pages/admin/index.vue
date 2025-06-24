@@ -4,7 +4,7 @@
     <div v-if="statsError" class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg" role="alert">
       <span class="font-medium">Error fetching statistics:</span> {{ statsError.message || statsError }}
     </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 mb-6">
+    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 mb-6">
       <StatCard
         v-for="card in statCardsData"
         :key="card.title"
