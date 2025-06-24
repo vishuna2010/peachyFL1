@@ -16,7 +16,7 @@
           :value="localSearchTerm"
           @input="localSearchTerm = $event.target.value"
           placeholder="Product name..."
-          class="w-full px-3 py-2 border border-venus-neutral-medium text-venus-text-secondary rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold"
+          class="w-full px-3 py-2 border border-gray-300 text-venus-text-secondary rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink"
         />
       </div>
 
@@ -26,7 +26,7 @@
         <select
           id="filter-category"
           v-model="localSelectedCategoryId"
-          class="w-full px-3 py-2 border border-venus-neutral-medium text-venus-text-secondary rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold bg-venus-background pr-8"
+          class="w-full px-3 py-2 border border-gray-300 text-venus-text-secondary rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink bg-white pr-8"
         >
           <option :value="null">All Categories</option>
           <option v-for="category in categories" :key="category.id" :value="category.id">
@@ -77,7 +77,7 @@
               placeholder="Min"
               min="0"
               step="0.01"
-              class="w-full px-3 py-2 border border-venus-neutral-medium text-venus-text-secondary rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold"
+              class="w-full px-3 py-2 border border-gray-300 text-venus-text-secondary rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink"
             />
             <span class="text-gray-500">-</span>
             <input
@@ -87,7 +87,7 @@
               placeholder="Max"
               min="0"
               step="0.01"
-              class="w-full px-3 py-2 border border-venus-neutral-medium text-venus-text-secondary rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold"
+              class="w-full px-3 py-2 border border-gray-300 text-venus-text-secondary rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink"
             />
         </div>
         <p v-if="priceError" class="text-xs text-red-500 mt-1">{{ priceError }}</p>
@@ -99,7 +99,7 @@
         <select
             id="filter-sortby"
             v-model="localSortBy"
-            class="w-full px-3 py-2 border border-venus-neutral-medium text-venus-text-secondary rounded-sm text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold bg-venus-background pr-8"
+            class="w-full px-3 py-2 border border-gray-300 text-venus-text-secondary rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink bg-white pr-8"
         >
               <option value="created_at_desc">Newest</option>
               <option value="created_at_asc">Oldest</option>
@@ -113,13 +113,13 @@
       <div class="pt-2 space-y-3">
         <button
           @click="handleApplyFilters"
-          class="w-full px-4 py-2 bg-venus-text-primary text-white text-sm font-medium rounded-sm hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-venus-accent-gold/50"
+          class="w-full px-4 py-2 bg-peach-pink text-white text-sm font-medium rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink"
         >
           Apply Filters
         </button>
         <button
           @click="handleResetFilters"
-          class="w-full px-4 py-2 bg-venus-neutral-light text-venus-text-secondary text-sm font-medium rounded-sm hover:bg-venus-neutral-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-venus-accent-gold/50 border border-venus-neutral-medium"
+          class="w-full px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink border border-gray-300"
         >
           Reset Filters
         </button>

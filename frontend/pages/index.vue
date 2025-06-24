@@ -58,7 +58,22 @@
     </section>
 
     <div class="p-4 md:p-8">
-      <h1 class="text-3xl font-serif text-venus-text-primary mb-8 text-center" id="products">Featured Products</h1>
+      <h1 class="text-3xl font-serif text-peach-pink mb-6 text-center" id="products">Featured Products</h1> <!-- Themed title -->
+
+      <!-- Main Search Bar -->
+      <div class="mb-8 max-w-2xl mx-auto">
+        <form @submit.prevent="applyFiltersAndNavigate" class="relative">
+          <input
+            type="search"
+            v-model="searchTerm"
+            placeholder="Search products..."
+            class="w-full px-4 py-3 text-lg border-gray-300 rounded-lg shadow-sm focus:ring-peach-pink focus:border-peach-pink"
+          />
+          <button type="submit" class="absolute right-0 top-0 bottom-0 px-6 bg-peach-pink text-white rounded-r-lg hover:bg-opacity-90 flex items-center justify-center">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"></path></svg>
+          </button>
+        </form>
+      </div>
 
       <!-- Mobile Filters Toggle Button -->
       <div class="lg:hidden mb-4 text-center">
