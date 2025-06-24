@@ -288,12 +288,12 @@ router.get(
         ...orderDataFromDb,
         invoice_qr_code_url: invoice_qr_code_url, // Added this line
         // Company details can be from env or config
-        company_name: process.env.COMPANY_NAME || "My Awesome Store",
-        company_address: process.env.COMPANY_ADDRESS || "123 Store Street, Shopsville, ST 12345",
-        company_logo_url: process.env.COMPANY_LOGO_URL || null, // e.g. "https://example.com/logo.png"
-        company_phone: process.env.COMPANY_PHONE || "1-800-SHOP-NOW",
-        company_email: process.env.COMPANY_EMAIL || "contact@myawesomestore.com",
-        company_website: process.env.COMPANY_WEBSITE || "www.myawesomestore.com"
+        company_name: process.env.COMPANY_NAME || "YOUR_COMPANY_NAME",
+        company_address: process.env.COMPANY_ADDRESS || "Your Company Address, Street, City, Postal Code",
+        company_logo_url: process.env.COMPANY_LOGO_URL || "https://example.com/Logo.svg", // Placeholder: use full public URL to your logo
+        company_phone: process.env.COMPANY_PHONE || "Your Company Phone",
+        company_email: process.env.COMPANY_EMAIL || "yourcompany@example.com",
+        company_website: process.env.COMPANY_WEBSITE || "yourcompanywebsite.com"
       };
 
       const pdfBuffer = await generateOrderInvoicePdf(orderDetailsForPdf);
