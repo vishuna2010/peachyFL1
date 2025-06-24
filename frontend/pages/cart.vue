@@ -113,21 +113,23 @@
           <span>Grand Total:</span>
           <span>${{ cartFinalTotalPrice.toFixed(2) }}</span>
         </p>
+        <!--
         <div class="cart-actions mt-6 space-y-3">
           <NuxtLink
             :to="cartItems.length > 0 ? '/checkout' : '#'"
-            :class="['block w-full text-center px-4 py-3 bg-peach-pink text-white font-semibold rounded-md shadow hover:bg-opacity-90 transition-colors duration-200 ease-in-out', { 'opacity-60 cursor-not-allowed': cartItems.length === 0 }]" <!-- Themed button -->
+            :class="['block w-full text-center px-4 py-3 bg-peach-pink text-white font-semibold rounded-md shadow hover:bg-opacity-90 transition-colors duration-200 ease-in-out', { 'opacity-60 cursor-not-allowed': cartItems.length === 0 }]"
             @click="checkCartEmptyBeforeCheckout"
           >
             Proceed to Checkout
           </NuxtLink>
           <button
             @click="confirmClearCart"
-            class="w-full px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 transition-colors duration-200 ease-in-out" <!-- Neutral clear button -->
+            class="w-full px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 transition-colors duration-200 ease-in-out"
           >
             Clear Cart
           </button>
         </div>
+        -->
       </div>
     </div>
   </div>
