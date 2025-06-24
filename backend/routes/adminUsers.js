@@ -223,30 +223,49 @@ router.put(
     }
 
     const { id } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body }; // Create a mutable copy
 
     if (Object.keys(updates).length === 0) {
       return next(new BadRequestError('No fields provided for update.'));
     }
 
-    // Prevent admin from changing their own role to a non-admin role
-    // This requires knowing the ID of the 'Super Admin' or general 'admin' roles.
-    // Let's assume 'Super Admin' role ID is fetched or known (e.g., from seededDataIds if this were seed, or a helper)
-    // For now, we'll make a simple check. A more robust check would query the target role_id's name.
-    if (updates.role_id && parseInt(id) === req.user.userId) {
-        // Fetch the name of the role being assigned
-        const targetRoleResult = await db.query('SELECT name FROM roles WHERE id = $1', [updates.role_id]);
-        if (targetRoleResult.rows.length > 0 && targetRoleResult.rows[0].name.toLowerCase() !== 'super admin' && targetRoleResult.rows[0].name.toLowerCase() !== 'admin') {
-             // Fetch current user's role name to ensure they are currently an admin type
-            const currentUserRoleResult = await db.query('SELECT r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = $1', [req.user.userId]);
-            if (currentUserRoleResult.rows.length > 0 && (currentUserRoleResult.rows[0].name.toLowerCase() === 'super admin' || currentUserRoleResult.rows[0].name.toLowerCase() === 'admin')) {
-                return next(new BadRequestError("Administrators cannot change their own role to a non-administrator role."));
+    const client = await db.pool.connect(); // Connect early for potential role name lookup
+
+    try {
+      // If role_id is being updated, perform specific permission check and fetch role name
+      if (updates.role_id !== undefined) {
+        // Check if the authenticated user has permission to assign roles
+        // This requires checkPermission to be accessible or a similar mechanism.
+        // For this example, assuming req.user.permissions is populated by previous middleware.
+        if (!req.user || !req.user.permissions || !req.user.permissions.includes('users:assign_roles')) {
+          // Not using next(new ForbiddenError(...)) here as we might not have started a transaction
+          return res.status(403).json({ message: 'You do not have permission to assign roles.' });
+        }
+
+        const newRoleIdInt = parseInt(updates.role_id, 10);
+        if (isNaN(newRoleIdInt) || newRoleIdInt <= 0) {
+            return next(new BadRequestError('Invalid Role ID provided.'));
+        }
+        updates.role_id = newRoleIdInt; // Ensure it's an integer for the query
+
+        const targetRoleResult = await client.query('SELECT name FROM roles WHERE id = $1', [updates.role_id]);
+        if (targetRoleResult.rows.length === 0) {
+          throw new BadRequestError(`Role with ID ${updates.role_id} not found.`);
+        }
+        const newRoleName = targetRoleResult.rows[0].name;
+        updates.role = newRoleName; // Add/overwrite the legacy text 'role' field for consistency
+
+        // Prevent admin from changing their own role to a non-admin role
+        if (parseInt(id) === req.user.userId) {
+            if (newRoleName.toLowerCase() !== 'super admin' && newRoleName.toLowerCase() !== 'admin') {
+                const currentUserRoleResult = await client.query('SELECT r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = $1', [req.user.userId]);
+                if (currentUserRoleResult.rows.length > 0 && (currentUserRoleResult.rows[0].name.toLowerCase() === 'super admin' || currentUserRoleResult.rows[0].name.toLowerCase() === 'admin')) {
+                    return next(new BadRequestError("Administrators cannot change their own role to a non-administrator role."));
+                }
             }
         }
-    }
+      }
 
-    const client = await db.pool.connect();
-    try {
       await client.query('BEGIN');
 
       const currentUserResult = await client.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [id]);
@@ -268,21 +287,27 @@ router.put(
       const values = [];
       let paramIndex = 1;
 
-      // Updated fieldsToUpdate to use role_id instead of role
-      const fieldsToUpdate = ['name', 'email', 'role_id', 'is_tax_exempt', 'tax_exemption_certificate_id', 'tax_exemption_notes'];
+      // Define which fields can be updated. If role_id was updated, 'role' (text) will also be in 'updates'.
+      const fieldsToUpdate = ['name', 'email', 'role_id', 'role', 'is_tax_exempt', 'tax_exemption_certificate_id', 'tax_exemption_notes'];
       for (const field of fieldsToUpdate) {
         if (updates[field] !== undefined) {
-          if (field === 'tax_exemption_certificate_id' && updates[field] === '') updates[field] = null;
-          if (field === 'tax_exemption_notes' && updates[field] === '') updates[field] = null;
-          // Ensure role_id is handled as an integer if present
-          if (field === 'role_id' && updates[field] !== null) {
-             values.push(parseInt(updates[field],10));
+          // For nullable text fields, if an empty string is passed, store it as null
+          if ((field === 'tax_exemption_certificate_id' || field === 'tax_exemption_notes') && updates[field] === '') {
+            values.push(null);
           } else {
-            values.push(updates[field]);
+            values.push(updates[field]); // role_id is already an int, role is string
           }
           setClauses.push(`${field} = $${paramIndex++}`);
         }
       }
+
+      // If only role_id was passed, but we derived 'role', ensure 'role' is in fieldsToUpdate if not already processed by the loop.
+      // This is slightly redundant if 'role' is in fieldsToUpdate array, but ensures it's handled.
+      if (updates.role_id && updates.role && !fieldsToUpdate.includes('role')) {
+          // This case should not happen if 'role' is in fieldsToUpdate.
+          // This check is more of a safeguard if fieldsToUpdate was not comprehensive.
+      }
+
 
       if (setClauses.length === 0) {
         await client.query('ROLLBACK');

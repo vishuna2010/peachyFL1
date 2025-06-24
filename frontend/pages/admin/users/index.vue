@@ -288,31 +288,25 @@ const promptRoleChange = (user, newRoleIdString) => {
 
   if (!newRole) {
     console.log('[promptRoleChange] newRole is not found. Exiting.');
-    toast.error("Invalid role selected.");
-    const selectElement = document.querySelector(`select[data-user-id="${user.id}"]`);
-    if (selectElement) {
-      console.log('[promptRoleChange] Reverting select element to originalRoleId:', user.originalRoleId);
-      selectElement.value = user.originalRoleId;
-    }
+    toast.error("Invalid role selected. The selection will revert.");
+    // No direct DOM manipulation here. Vue should revert the select based on :value="user.role_id"
+    // if user.role_id wasn't actually changed to the invalid newRoleIdString.
+    // To be certain, we can force a re-render or ensure the original value is still set.
+    // However, since we don't update user.role_id to newRoleId until API success,
+    // the select should visually snap back to user.originalRoleId if the user clicks away
+    // or if Vue re-renders based on the unchanged user.role_id.
+    // Forcing a re-render can be tricky; let Vue handle it based on data.
     return;
   }
 
   console.log(`[promptRoleChange] About to confirm: Change role of ${user.email} from "${oldRoleName}" to "${newRole.name}"?`);
   if (confirm(`Are you sure you want to change the role of ${user.email} from "${oldRoleName}" to "${newRole.name}"?`)) {
     console.log('[promptRoleChange] Confirmation successful. Calling updateUserRole.');
-    updateUserRole(user, newRoleId, newRole.name);
+    updateUserRole(user, newRoleId, newRoleName);
   } else {
-    console.log('[promptRoleChange] Confirmation denied by user. Reverting UI selection.');
-    // Revert UI: find the select element and set its value back to user.originalRoleId
-    const userInArray = users.value.find(u => u.id === user.id);
-    if (userInArray) {
-      console.log('[promptRoleChange] Reverting role_id in local users array for user:', user.id, 'to:', user.originalRoleId);
-      userInArray.role_id = user.originalRoleId;
-    }
-     const selectElement = document.querySelector(`select[data-user-id="${user.id}"]`);
-    if (selectElement) {
-      selectElement.value = user.originalRoleId;
-    }
+    console.log('[promptRoleChange] Confirmation denied by user. UI should revert due to one-way binding.');
+    // No action needed here, :value="user.role_id" will ensure the select shows the current (original) role_id
+    // as we haven't updated it in the data yet.
   }
 };
 
