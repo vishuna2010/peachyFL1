@@ -1,10 +1,12 @@
 <template>
-  <div class="flex flex-row h-screen bg-white text-venus-text-primary"> <!-- Changed text-text-primary to text-venus-text-primary -->
+  <!-- Changed text-text-primary to text-venus-text-primary -->
+  <div class="flex flex-row h-screen bg-white text-venus-text-primary">
     <!-- Admin Sidebar -->
     <AdminSidebar :is-open-on-mobile="isMobileSidebarOpen" @toggle-mobile-sidebar="toggleMobileSidebar" />
 
     <!-- Main Content Area -->
-    <div class="flex-1 flex flex-col overflow-hidden min-w-0"> <!-- Removed lg:w-[calc(100%-theme('spacing.60'))] -->
+    <!-- Removed lg:w-[calc(100%-theme('spacing.60'))] -->
+    <div class="flex-1 flex flex-col overflow-hidden min-w-0">
       <!-- Top Bar -->
       <header class="bg-white shadow-sm py-3 px-4 sm:px-6 border-b border-neutral-200">
         <div class="flex items-center justify-between">

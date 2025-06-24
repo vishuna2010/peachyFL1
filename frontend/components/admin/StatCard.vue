@@ -1,18 +1,18 @@
 <template>
-  <div class="bg-white p-5 rounded-lg shadow-md border border-neutral-200 flex items-start space-x-4 transition-all duration-300 ease-in-out hover:shadow-lg group"> <!-- Added group class -->
+  <div class="bg-white p-5 rounded-lg shadow-md border border-neutral-200 flex items-start space-x-4 transition-all duration-300 ease-in-out hover:shadow-lg group">
     <div v-if="iconName"
-         class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full" <!-- Removed text-brand-primary -->
+         class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full"
          :class="iconBackgroundClass"
-         >
+    > <!-- Icon text color is now part of iconBackgroundClass (e.g. text-peach-pink) -->
       <!-- Simple text icon from first letter, or placeholder for actual SVG icon -->
       <span class="text-xl font-bold">{{ iconName.charAt(0).toUpperCase() }}</span>
       <!-- Example for actual SVG: <component :is="dynamicIconComponent" class="h-6 w-6" /> -->
     </div>
     <div class="flex-grow">
-      <p class="text-sm font-medium text-venus-text-secondary truncate group-hover:text-venus-text-primary">{{ title }}</p> <!-- Ensure venus-text-secondary is used -->
+      <p class="text-sm font-medium text-venus-text-secondary truncate group-hover:text-venus-text-primary">{{ title }}</p>
       <p v-if="isLoading" class="text-2xl sm:text-3xl font-bold text-gray-400 animate-pulse">...</p>
-      <p v-else class="text-2xl sm:text-3xl font-bold text-venus-text-primary group-hover:text-peach-pink">{{ value }}</p> <!-- Ensure venus-text-primary and hover:text-peach-pink -->
-      <div v-if="trend && !isLoading" class="text-xs mt-1 flex items-center" :class="trendDirection === 'up' ? 'text-fresh-green' : trendDirection === 'down' ? 'text-red-600' : 'text-venus-text-secondary'"> <!-- Used fresh-green -->
+      <p v-else class="text-2xl sm:text-3xl font-bold text-venus-text-primary group-hover:text-peach-pink">{{ value }}</p>
+      <div v-if="trend && !isLoading" class="text-xs mt-1 flex items-center" :class="trendDirection === 'up' ? 'text-fresh-green' : trendDirection === 'down' ? 'text-red-600' : 'text-venus-text-secondary'">
         <svg v-if="trendDirection === 'up'" class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
         <svg v-if="trendDirection === 'down'" class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>
         <span>{{ trend }}</span>
