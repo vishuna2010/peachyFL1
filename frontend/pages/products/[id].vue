@@ -315,6 +315,7 @@
       </div>
     </div>
   </div>
+  </div>
   <ImageZoomModal :is-open="isZoomModalOpen" :image-url="zoomedImageUrl" @close="closeZoomModal" />
 </template>
 
