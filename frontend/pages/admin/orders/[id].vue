@@ -55,19 +55,66 @@
       <!-- Refund Section -->
       <div v-if="can('orders:manage_refunds').value && order && order.payment_status !== 'refunded'" class="border-b border-gray-200 pb-6">
         <h3 class="text-xl font-semibold text-gray-800 mb-4">Process Refund</h3>
+
+        <!-- Refund Item Selection Table -->
+        <div v-if="order.items && order.items.length > 0" class="mb-4">
+          <p class="text-sm text-gray-600 mb-2">Select items and quantities to refund:</p>
+          <div class="overflow-x-auto border border-gray-200 rounded-md">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">Refund?</th>
+                  <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
+                  <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ordered Qty</th>
+                  <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty to Refund</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr v-for="(item, index) in order.items" :key="item.order_item_id">
+                  <td class="px-3 py-2">
+                    <input type="checkbox" v-model="itemsToRefundState[item.order_item_id].selected"
+                           class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                  </td>
+                  <td class="px-3 py-2 text-sm text-gray-700">
+                    {{ item.product_name }} <span v-if="item.display_sku" class="text-xs text-gray-500"> ({{ item.display_sku }})</span>
+                  </td>
+                  <td class="px-3 py-2 text-sm text-gray-700 text-center">{{ item.quantity }}</td>
+                  <td class="px-3 py-2">
+                    <input type="number" v-model.number="itemsToRefundState[item.order_item_id].quantity_to_refund"
+                           min="0" :max="item.quantity"
+                           :disabled="!itemsToRefundState[item.order_item_id].selected"
+                           class="w-20 p-1.5 border border-gray-300 rounded-md text-sm text-center focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100"
+                           @input="() => validateRefundQuantity(item.order_item_id, item.quantity)">
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="form-group mb-3">
             <label for="refund_reason" class="block text-sm font-medium text-gray-700 mb-1">Reason for Refund (Optional):</label>
             <input type="text" id="refund_reason" v-model="refundReason"
-                   class="w-full sm:w-1/2 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                   class="w-full sm:w-2/3 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                    placeholder="e.g., Customer request, item damaged">
         </div>
-        <button
-          @click="handleProcessFullRefund"
-          :disabled="isRefunding || order.payment_status === 'refunded'"
-          class="px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
-        >
-          {{ isRefunding ? 'Processing Refund...' : 'Process Full Refund' }}
-        </button>
+
+        <div class="flex space-x-3">
+          <button
+            @click="handleProcessPartialRefund"
+            :disabled="isRefunding || isNoItemsSelectedForRefund"
+            class="px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-500 hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-400 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          >
+            {{ isRefunding ? 'Processing Partial Refund...' : 'Process Selected Refund' }}
+          </button>
+          <button
+            @click="handleProcessFullRefund"
+            :disabled="isRefunding || order.payment_status === 'refunded'"
+            class="px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          >
+            {{ isRefunding ? 'Processing...' : 'Process Full Refund (All Items)' }}
+          </button>
+        </div>
         <p v-if="refundError" class="text-xs text-red-600 mt-2">{{ refundError }}</p>
         <p v-if="refundSuccess" class="text-xs text-green-600 mt-2">{{ refundSuccess }}</p>
       </div>
@@ -192,6 +239,36 @@ const refundError = ref('');
 const refundSuccess = ref('');
 const refundReason = ref('');
 
+// State for partial refund item selection
+const itemsToRefundState = reactive({});
+
+const initializeRefundState = () => {
+  if (order.value && order.value.items) {
+    order.value.items.forEach(item => {
+      if (!itemsToRefundState[item.order_item_id]) { // Initialize only if not already present
+        itemsToRefundState[item.order_item_id] = {
+          selected: false,
+          quantity_to_refund: 1, // Default to 1, user can change
+        };
+      }
+    });
+  }
+};
+
+const isNoItemsSelectedForRefund = computed(() => {
+  return Object.values(itemsToRefundState).every(itemState => !itemState.selected || itemState.quantity_to_refund <= 0);
+});
+
+const validateRefundQuantity = (orderItemId, maxQuantity) => {
+  if (itemsToRefundState[orderItemId]) {
+    let qty = itemsToRefundState[orderItemId].quantity_to_refund;
+    if (qty < 0) qty = 0;
+    if (qty > maxQuantity) qty = maxQuantity;
+    itemsToRefundState[orderItemId].quantity_to_refund = qty;
+  }
+};
+
+
 // backendUrl computed property is not used in this version, can be removed if not needed elsewhere
 // const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl);
 
@@ -227,6 +304,7 @@ async function fetchOrderDetails() {
     order.value = response.data;
     if (order.value) {
       selectedStatus.value = order.value.status;
+      initializeRefundState(); // Initialize refund state when order details are loaded
     }
   } catch (err) {
     console.error(`Failed to fetch order details for ID ${orderId}:`, err);
@@ -274,6 +352,34 @@ async function handleUpdateStatus() {
   }
 }
 
+async function processRefundApiCall(orderId, refundPayload) {
+  isRefunding.value = true;
+  refundError.value = '';
+  refundSuccess.value = '';
+  try {
+    const response = await $axios.post(`/admin/orders/${orderId}/refund`, refundPayload);
+    if (response.data && response.data.order) {
+      order.value = response.data.order;
+      selectedStatus.value = order.value.status;
+      initializeRefundState(); // Re-initialize/clear selection after refund
+      refundSuccess.value = response.data.message || `Order #${orderId} refund processed.`;
+      refundReason.value = '';
+    } else {
+      refundSuccess.value = 'Refund processed, but no updated order data returned. Please refresh.';
+      await fetchOrderDetails();
+    }
+  } catch (err) {
+    console.error(`Failed to process refund for order ID ${orderId}:`, err);
+    refundError.value = err.response?.data?.message || 'Failed to process refund.';
+  } finally {
+    isRefunding.value = false;
+    setTimeout(() => {
+      refundSuccess.value = '';
+      refundError.value = '';
+    }, 7000);
+  }
+}
+
 async function handleProcessFullRefund() {
   if (!order.value || order.value.payment_status === 'refunded') {
     refundError.value = "Order cannot be refunded or is already refunded.";
@@ -282,47 +388,52 @@ async function handleProcessFullRefund() {
   if (!confirm(`Are you sure you want to process a FULL refund for Order #${order.value.id}? This action cannot be undone.`)) {
     return;
   }
+  const payload = {
+    reason: refundReason.value.trim() || undefined
+    // No itemsToRefund means full refund in backend logic
+  };
+  await processRefundApiCall(order.value.id, payload);
+}
 
-  isRefunding.value = true;
-  refundError.value = '';
-  refundSuccess.value = '';
-  const orderId = order.value.id;
-
-  try {
-    const payload = {};
-    if (refundReason.value.trim()) {
-      payload.reason = refundReason.value.trim();
-    }
-
-    const response = await $axios.post(`/admin/orders/${orderId}/refund`, payload);
-    if (response.data && response.data.order) {
-      order.value = response.data.order; // Update local order data
-      selectedStatus.value = order.value.status; // Sync status dropdown
-      refundSuccess.value = response.data.message || `Order #${orderId} successfully refunded.`;
-      refundReason.value = ''; // Clear reason input
-    } else {
-      // Should ideally not happen if backend returns proper response
-      refundSuccess.value = 'Refund processed, but no updated order data returned. Please refresh.';
-      await fetchOrderDetails(); // Re-fetch to be sure
-    }
-  } catch (err) {
-    console.error(`Failed to process refund for order ID ${orderId}:`, err);
-    refundError.value = err.response?.data?.message || 'Failed to process refund.';
-  } finally {
-    isRefunding.value = false;
-    setTimeout(() => {
-        refundSuccess.value = '';
-        refundError.value = '';
-    }, 7000); // Display message for longer
+async function handleProcessPartialRefund() {
+  if (!order.value || order.value.payment_status === 'refunded') {
+    refundError.value = "Order is already fully refunded.";
+    return;
   }
+
+  const itemsPayload = Object.entries(itemsToRefundState)
+    .filter(([_, itemState]) => itemState.selected && itemState.quantity_to_refund > 0)
+    .map(([order_item_id, itemState]) => ({
+      order_item_id: parseInt(order_item_id),
+      quantity_to_refund: itemState.quantity_to_refund,
+    }));
+
+  if (itemsPayload.length === 0) {
+    refundError.value = "No items selected or quantities specified for partial refund.";
+    return;
+  }
+
+  if (!confirm(`Are you sure you want to refund the selected items for Order #${order.value.id}?`)) {
+    return;
+  }
+
+  const payload = {
+    itemsToRefund: itemsPayload,
+    reason: refundReason.value.trim() || undefined,
+  };
+  await processRefundApiCall(order.value.id, payload);
 }
 
 
 watch(order, (newOrderData) => {
-    if (newOrderData && newOrderData.status) {
-        selectedStatus.value = newOrderData.status;
+    if (newOrderData) { // Check if newOrderData is not null
+        if (newOrderData.status) {
+          selectedStatus.value = newOrderData.status;
+        }
+        initializeRefundState(); // Re-initialize when order data changes (e.g., after status update or refund)
     }
 });
+
 
 onMounted(fetchOrderDetails);
 
