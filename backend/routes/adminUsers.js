@@ -80,7 +80,7 @@ router.get(
   isAuthenticated,
   checkPermission('users:view'),
   [
-    query('role').optional().isString().trim().isIn(['admin', 'customer', 'user', 'guest']).withMessage('Invalid role specified.')
+    query('role_group').optional().isString().trim().isIn(['all', 'customer', 'administrator']).withMessage('Invalid role_group specified.')
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
