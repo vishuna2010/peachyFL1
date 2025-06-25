@@ -1583,6 +1583,23 @@ async function seedDatabase() {
       console.error("DIAGNOSTIC: Error querying for users with NULL role_id:", diagError);
     }
     */
+    // Post-seed verification for Gatsby batch
+    try {
+      const gatsbyProductIdResult = await client.query("SELECT id FROM products WHERE sku = 'BOOK-GATSBY-PB';");
+      if (gatsbyProductIdResult.rows.length > 0) {
+        const gatsbyProdId = gatsbyProductIdResult.rows[0].id;
+        const gatsbyBatchCheck = await client.query("SELECT product_id, variant_id, batch_number, initial_quantity, current_quantity FROM inventory_batches WHERE product_id = $1 AND batch_number = 'BATCH_GATSBY001_202302'", [gatsbyProdId]);
+        if (gatsbyBatchCheck.rows.length > 0) {
+          console.log("[SeedDB VERIFY] 'The Great Gatsby - Paperback' batch FOUND in DB post-seed:", JSON.stringify(gatsbyBatchCheck.rows[0]));
+        } else {
+          console.error(`[SeedDB VERIFY ERROR] 'The Great Gatsby - Paperback' batch NOT FOUND in DB post-seed for Product ID: ${gatsbyProdId}. This is critical for checkout.`);
+        }
+      } else {
+        console.error("[SeedDB VERIFY ERROR] 'The Great Gatsby - Paperback' product (SKU: BOOK-GATSBY-PB) NOT FOUND in DB post-seed. Batch cannot exist.");
+      }
+    } catch (verifyError) {
+      console.error("[SeedDB VERIFY ERROR] Error during post-seed verification query for Gatsby batch:", verifyError);
+    }
 
     await client.query('COMMIT');
   } catch (error) {
@@ -2090,20 +2107,24 @@ async function seedInventoryBatches(client, seededDataIds) {
   }
 
   if (productIdGatsby) {
-    // Seed batch for "The Great Gatsby - Paperback" (SKU: BOOK-GATSBY-PB)
-    batchesToSeed.push({
+    console.log(`[SeedDB] Preparing batch for 'The Great Gatsby - Paperback' (ID: ${productIdGatsby}) with SKU ${productSkuGatsby}`);
+    const gatsbyBatch = {
       product_id: productIdGatsby,
-      variant_id: null, // It's a base product
-      batch_number: 'BATCH_GATSBY001_202302', // Unique batch number
+      variant_id: null,
+      batch_number: 'BATCH_GATSBY001_202302',
       expiry_date: null,
-      initial_quantity: 50, // Matches stock_quantity in seedProducts
-      current_quantity: 50, // Full stock available
-      cost_price_at_receipt: 3.50, // From seedProducts
+      initial_quantity: 50,
+      current_quantity: 50,
+      cost_price_at_receipt: 3.50,
       currency_code_at_receipt: 'USD',
       base_currency_cost_price_at_receipt: 3.50,
       exchange_rate_used: 1.0,
       purchase_order_item_id: null
-    });
+    };
+    batchesToSeed.push(gatsbyBatch);
+    console.log('[SeedDB] Gatsby batch data to be seeded:', gatsbyBatch);
+  } else {
+    console.warn(`[SeedDB] productIdGatsby for SKU ${productSkuGatsby} was not found. Cannot seed its batch.`);
   }
 
 
