@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Refund Confirmation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 600px; margin: 20px auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .header { background-color: #FC7099; /* Peach Pink */ color: white; padding: 15px; text-align: center; border-top-left-radius: 8px; border-top-right-radius: 8px; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .content { padding: 20px; line-height: 1.6; }
+        .content h2 { color: #26A7E2; /* Sky Blue */ font-size: 20px; }
+        .order-details p, .refund-details p { margin-bottom: 5px; }
+        .order-details strong, .refund-details strong { color: #1a1a1a; }
+        .items-table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 15px; }
+        .items-table th, .items-table td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 14px; }
+        .items-table th { background-color: #f8f8f8; color: #333; }
+        .items-table .amount-col { text-align: right; }
+        .total-section { margin-top: 20px; padding-top: 15px; border-top: 2px solid #FC7099; /* Peach Pink */ }
+        .total-section p { font-size: 16px; margin-bottom: 8px; text-align: right; }
+        .total-section strong { color: #F6A03C; /* Orange Gold */ }
+        .footer { text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee; font-size: 12px; color: #777; }
+        .reason { margin-top: 15px; padding: 10px; background-color: #FFF5F8; /* Neutral Soft BG */ border-left: 4px solid #FC7099; /* Peach Pink */ font-style: italic; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Refund Processed</h1>
+        </div>
+        <div class="content">
+            <p>Dear <%= user.name || 'Customer' %>,</p>
+
+            <% if (refund.type === 'full') { %>
+                <p>We are writing to confirm that a <strong>full refund</strong> has been processed for your Order ID: <strong>#<%= order.id %></strong>.</p>
+            <% } else { %>
+                <p>We are writing to confirm that a <strong>partial refund</strong> has been processed for your Order ID: <strong>#<%= order.id %></strong>.</p>
+            <% } %>
+
+            <% if (refund.reason) { %>
+                <div class="reason">
+                    <p><strong>Reason for refund:</strong> <%= refund.reason %></p>
+                </div>
+            <% } %>
+
+            <h2>Refund Details (This Transaction)</h2>
+            <div class="refund-details">
+                <p><strong>Total Amount Refunded in this Transaction:</strong> <strong style="color: #5BAA41;"><!-- Fresh Green -->$<%= Number(refund.amount_this_transaction).toFixed(2) %></strong></p>
+                <p><strong>Date Processed:</strong> <%= new Date().toLocaleDateString() %></p>
+            </div>
+
+            <% if (refund.items_processed && refund.items_processed.length > 0) { %>
+                <h3>Items Refunded in this Transaction:</h3>
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>SKU</th>
+                            <th class="amount-col">Qty Refunded</th>
+                            <th class="amount-col">Unit Price</th>
+                            <th class="amount-col">Subtotal Refunded</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% refund.items_processed.forEach(function(item) { %>
+                            <tr>
+                                <td><%= item.name %></td>
+                                <td><%= item.sku || 'N/A' %></td>
+                                <td class="amount-col"><%= item.refunded_qty %></td>
+                                <td class="amount-col">$<%= Number(item.price_at_purchase).toFixed(2) %></td>
+                                <td class="amount-col">$<%= (Number(item.price_at_purchase) * item.refunded_qty).toFixed(2) %></td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            <% } %>
+
+            <p>The refunded amount should reflect in your account within a few business days, depending on your bank or payment provider.</p>
+            <p>If you have any questions, please don't hesitate to contact our customer support.</p>
+            <p>Thank you for your understanding.</p>
+        </div>
+        <div class="footer">
+            <p>&copy; <%= new Date().getFullYear() %> Your Company Name. All rights reserved.</p>
+            <p>Your Company Address, City, Postal Code</p>
+        </div>
+    </div>
+</body>
+</html>

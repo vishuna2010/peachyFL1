@@ -7,6 +7,7 @@ const { param, query, body, validationResult } = require('express-validator');
 const { NotFoundError, BadRequestError } = require('../utils/AppError');
 const crypto = require('crypto');
 const auditLogService = require('../services/auditLogService');
+const { sendEmail, getRefundConfirmationHtml, getRefundConfirmationText } = require('../services/emailService');
 
 // Apply auth middleware to all routes in this router
 // router.use(isAuthenticated, isAdmin); // REMOVED - will apply per route
@@ -717,6 +718,41 @@ router.post(
         message: `Order #${orderId} refund processed. Status: ${newOrderStatus}. Payment Status: ${newPaymentStatus}.`,
         order: updatedOrderResult.rows[0]
       });
+
+      // Send refund confirmation email (fire and forget for now, no await to block response)
+      if (order.user_email) {
+        const emailRefundData = {
+          order: { id: order.id },
+          user: { name: order.user_name || order.user_email.split('@')[0], email: order.user_email }, // Assuming user_name might be on order or fetch it
+          refund: {
+            type: isFullRefundIntent ? 'full' : 'partial',
+            reason: reason || 'N/A',
+            amount_this_transaction: calculatedRefundAmount,
+            items_processed: itemsToProcessForRefund.map(i => ({
+              name: i.product_name,
+              sku: i.variant_sku || i.base_sku,
+              refunded_qty: i.quantity_to_refund,
+              price_at_purchase: i.price_at_purchase // unit price
+            }))
+          }
+        };
+        getRefundConfirmationHtml(emailRefundData)
+          .then(html => {
+            const text = getRefundConfirmationText(emailRefundData);
+            sendEmail({
+              to: order.user_email,
+              subject: `Refund Processed for Order #${order.id}`,
+              text: text,
+              html: html,
+            }).then(emailResult => {
+                if(emailResult.success) console.log(`Refund confirmation email sent for order ${order.id} to ${order.user_email}. Preview: ${emailResult.previewUrl || 'N/A'}`);
+                else console.error(`Failed to send refund email for order ${order.id}: ${emailResult.error}`);
+            }).catch(emailSendError => console.error(`Error in sendEmail promise for refund email (Order ${order.id}):`, emailSendError));
+          })
+          .catch(templateError => console.error(`Error generating refund email template for order ${order.id}:`, templateError));
+      } else {
+        console.warn(`No customer email found for order ${order.id}. Skipping refund confirmation email.`);
+      }
 
     } catch (error) {
       await client.query('ROLLBACK');
