@@ -9,9 +9,10 @@ const db = require('../db');
  * @returns {Promise<string[]>} A promise that resolves to an array of permission names.
  */
 async function getUserPermissions(userId, client = db) {
+  console.log(`[PermissionService] getUserPermissions called for userId: ${userId}`);
   // Check if userId is provided and is a number
   if (!userId || isNaN(parseInt(userId))) {
-    // console.warn('getUserPermissions called with invalid userId:', userId);
+    console.warn(`[PermissionService] getUserPermissions: Invalid userId '${userId}'. Returning empty permissions.`);
     return []; // Return empty permissions for invalid userId
   }
 
@@ -24,10 +25,13 @@ async function getUserPermissions(userId, client = db) {
     WHERE u.id = $1;
   `;
   try {
+    console.log(`[PermissionService] getUserPermissions: Executing query for userId ${userId}: ${query}`);
     const { rows } = await client.query(query, [userId]);
-    return rows.map(row => row.name);
+    const permissionNames = rows.map(row => row.name);
+    console.log(`[PermissionService] getUserPermissions: Found permissions for userId ${userId}:`, permissionNames);
+    return permissionNames;
   } catch (error) {
-    console.error(`Error fetching permissions for user ID ${userId}:`, error);
+    console.error(`[PermissionService] getUserPermissions: Error fetching permissions for user ID ${userId}:`, error);
     throw error; // Re-throw to be handled by the caller
   }
 }
@@ -40,15 +44,20 @@ async function getUserPermissions(userId, client = db) {
  * @returns {Promise<boolean>} A promise that resolves to true if the user has the permission, false otherwise.
  */
 async function userHasPermission(userId, requiredPermission, client = db) {
+  console.log(`[PermissionService] userHasPermission called for userId: ${userId}, requiredPermission: '${requiredPermission}'`);
   if (!requiredPermission) {
-    // console.warn('userHasPermission called with no requiredPermission');
+    console.warn('[PermissionService] userHasPermission: No requiredPermission provided.');
     return false;
   }
   try {
     const userPermissions = await getUserPermissions(userId, client);
-    return userPermissions.includes(requiredPermission);
+    console.log(`[PermissionService] userHasPermission: User permissions for userId ${userId}:`, userPermissions);
+    const hasPermission = userPermissions.includes(requiredPermission);
+    console.log(`[PermissionService] userHasPermission: Does userId ${userId} have '${requiredPermission}'? Result: ${hasPermission}`);
+    return hasPermission;
   } catch (error) {
     // Error already logged by getUserPermissions
+    console.error(`[PermissionService] userHasPermission: Error during permission check for userId ${userId}, permission '${requiredPermission}':`, error);
     return false; // Default to no permission if there's an error fetching them
   }
 }
