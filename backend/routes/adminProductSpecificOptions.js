@@ -66,14 +66,31 @@ router.get(
     }
     const { productId } = req.params;
     try {
-      const result = await db.query(
-        `SELECT pao.id, pao.product_id, pao.option_id, po.name as option_name, po.created_at as option_created_at, po.updated_at as option_updated_at
-         FROM product_assigned_options pao
-         JOIN product_options po ON pao.option_id = po.id
-         WHERE pao.product_id = $1
-         ORDER BY po.name`,
-        [productId]
-      );
+      const query = `
+        SELECT
+            pao.id,
+            pao.product_id,
+            pao.option_id,
+            po.name AS option_name,
+            COALESCE(
+                (SELECT json_agg(json_build_object('id', pov.id, 'value', pov.value ORDER BY pov.value))
+                 FROM product_assigned_option_specific_values paosv
+                 JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
+                 WHERE paosv.product_assigned_option_id = pao.id),
+                '[]'::json
+            ) AS selected_values
+        FROM
+            product_assigned_options pao
+        JOIN
+            product_options po ON pao.option_id = po.id
+        WHERE
+            pao.product_id = $1
+        GROUP BY
+            pao.id, po.id, po.name
+        ORDER BY
+            po.name;
+      `;
+      const result = await db.query(query, [productId]);
       res.json(result.rows);
     } catch (error) {
       next(error);
