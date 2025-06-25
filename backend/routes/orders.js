@@ -319,15 +319,30 @@ router.post('/', async (req, res, next) => { // Removed isAuthenticated, added n
         shipping_address_line1, shipping_address_line2, shipping_city, shipping_postal_code, shipping_country,
         billing_address_line1, billing_address_line2, billing_city, billing_postal_code, billing_country,
         updated_at, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING id, status, payment_status, total_amount, original_total_amount, total_tax_amount, discount_code_applied, discount_amount_applied, created_at;
     `;
     const orderValues = [
-      userId, 'pending', 'pending', finalTotalAmount, originalTotalAmountBeforeDiscount, // Added 'pending' for payment_status
-      appliedDiscountId, appliedDiscountCode, appliedDiscountAmount,
-      orderTotalTaxAmount, orderTaxSummaryDetails ? JSON.stringify(orderTaxSummaryDetails) : null, // Added tax values
-      shippingAddress.line1, shippingAddress.line2 || null, shippingAddress.city, shippingAddress.postalCode, shippingAddress.country,
-      finalBillingAddress.line1, finalBillingAddress.line2 || null, finalBillingAddress.city, finalBillingAddress.postalCode, finalBillingAddress.country
+      userId, // $1
+      'pending', // $2 status
+      'pending', // $3 payment_status
+      finalTotalAmount, // $4
+      originalTotalAmountBeforeDiscount, // $5
+      appliedDiscountId, // $6
+      appliedDiscountCode, // $7
+      appliedDiscountAmount, // $8
+      orderTotalTaxAmount, // $9
+      orderTaxSummaryDetails ? JSON.stringify(orderTaxSummaryDetails) : null, // $10
+      shippingAddress.line1, // $11
+      shippingAddress.line2 || null, // $12
+      shippingAddress.city, // $13
+      shippingAddress.postalCode, // $14
+      shippingAddress.country, // $15
+      finalBillingAddress.line1, // $16
+      finalBillingAddress.line2 || null, // $17
+      finalBillingAddress.city, // $18
+      finalBillingAddress.postalCode, // $19
+      finalBillingAddress.country // $20
     ];
     const orderResult = await client.query(orderInsertQuery, orderValues);
     const newOrder = orderResult.rows[0];
