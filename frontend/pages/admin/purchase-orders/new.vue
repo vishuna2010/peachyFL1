@@ -97,7 +97,7 @@ async function fetchInitialData() {
   try {
     const [supResponse, prodResponse] = await Promise.all([
       $axios.get('/admin/suppliers'), // Fetch all suppliers (assuming not too many for a dropdown)
-      $axios.get('/products?limit=1000') // Fetch products (consider a searchable/paginated dropdown for large catalogs)
+      $axios.get('/products?limit=100') // Fetch products (consider a searchable/paginated dropdown for large catalogs)
     ]);
     suppliers.value = supResponse.data.data || supResponse.data;
     availableProducts.value = prodResponse.data.products || prodResponse.data;
