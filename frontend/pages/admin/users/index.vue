@@ -91,6 +91,7 @@
         <tbody class="bg-white divide-y divide-gray-200">
           <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50">
             <!-- Log user row details (this will output to console for each row) -->
+            {{ console.log('[UserList Table Row] User data:', JSON.stringify(user)) }}
             {{ logUserRowDetails(user) }}
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.id }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.email }}</td>
