@@ -1,12 +1,23 @@
 <template>
-  <div class="thank-you-page">
-    <div class="message-container">
-      <span class="icon">🎉</span>
-      <h1>Thank You for Your Order!</h1>
-      <p v-if="orderId">Your Order ID is: <strong>#{{ orderId }}</strong></p>
-      <p>We have received your order and are processing it now.</p>
-      <p>You will receive an email confirmation shortly with the details of your order.</p>
-      <NuxtLink to="/" class="home-button">Continue Shopping</NuxtLink>
+  <div class="min-h-[calc(100vh-10rem)] flex flex-col items-center justify-center bg-neutral-bg-soft py-12 px-4 sm:px-6 lg:px-8 text-center">
+    <div class="bg-white p-8 sm:p-12 rounded-xl shadow-2xl max-w-lg w-full transform transition-all duration-500 ease-out hover:scale-[1.02]">
+      <span class="text-6xl sm:text-7xl block mb-6 animate-bounce">🎉</span>
+      <h1 class="text-3xl sm:text-4xl font-serif font-bold text-fresh-green mb-4">Thank You for Your Order!</h1>
+      <p v-if="orderId" class="text-lg text-venus-text-primary mb-2">
+        Your Order ID is: <strong class="text-orange-gold font-semibold">#{{ orderId }}</strong>
+      </p>
+      <p class="text-md text-venus-text-secondary leading-relaxed">
+        We have received your order and are processing it with care.
+      </p>
+      <p class="text-md text-venus-text-secondary leading-relaxed mb-8">
+        You will receive an email confirmation shortly with all the details.
+      </p>
+      <NuxtLink
+        to="/"
+        class="inline-block px-8 py-3 bg-peach-pink text-white font-semibold rounded-md shadow-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink transition-all duration-200 ease-in-out hover:shadow-lg transform hover:-translate-y-0.5"
+      >
+        Continue Shopping
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -29,61 +40,4 @@ useHead({
 });
 </script>
 
-<style scoped>
-.thank-you-page {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 70vh; /* Adjust as needed */
-  text-align: center;
-  padding: 2rem;
-  background-color: #f4f7f6; /* Light background */
-}
-
-.message-container {
-  background-color: #fff;
-  padding: 2rem 3rem;
-  border-radius: 8px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-}
-
-.icon {
-  font-size: 3rem; /* Larger icon */
-  display: block;
-  margin-bottom: 1rem;
-}
-
-h1 {
-  color: #28a745; /* Green color for success */
-  margin-bottom: 1rem;
-  font-size: 1.8em;
-}
-
-p {
-  color: #555;
-  font-size: 1.1em;
-  line-height: 1.6;
-  margin-bottom: 0.75rem;
-}
-
-p strong {
-  color: #333;
-}
-
-.home-button {
-  display: inline-block;
-  margin-top: 1.5rem;
-  padding: 0.8rem 2rem;
-  background-color: #007bff;
-  color: white;
-  text-decoration: none;
-  border-radius: 5px;
-  font-size: 1em;
-  transition: background-color 0.2s;
-}
-
-.home-button:hover {
-  background-color: #0056b3;
-}
-</style>
+<!-- Removed scoped CSS block -->
