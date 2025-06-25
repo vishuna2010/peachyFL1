@@ -11,10 +11,12 @@
     </div>
 
     <div v-if="product && !pending && !fetchError" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-      <div class="lg:grid lg:grid-cols-2 lg:gap-x-8 xl:gap-x-12 items-start">
-        <!-- Image Column: Should be on the left -->
-        <div class="w-full">
-          {/* Image Gallery - Main Image - Sticky class removed below */}
+      <!-- Refactored Main Grid: Image Left, Details Right -->
+      <div class="lg:grid lg:grid-cols-12 lg:gap-x-8 items-start">
+
+        <!-- Image Column (e.g., takes 5 or 6 cols on lg) -->
+        <div class="lg:col-span-6 xl:col-span-5"> {/* Adjusted for potentially more image space */}
+          {/* Image Gallery - Main Image - Sticky class removed */}
           <div class="mb-4">
             <img
               @click="openZoomModal(selectedImage.value?.url)"
@@ -25,6 +27,7 @@
               key="selected-image"
             />
             <div v-if="!selectedImage || !selectedImage.value?.url" class="w-full h-[400px] md:h-[500px] flex items-center justify-center bg-neutral-bg-soft rounded-lg text-venus-text-secondary shadow-inner">No Image Available</div>
+          </div>
 
           <!-- Thumbnail Section with Arrows -->
           <div v-if="galleryImages.length > 1" class="mt-3 relative flex items-center justify-center px-6 sm:px-8">
@@ -59,8 +62,8 @@
           </div>
         </div>
 
-        <!-- Details Column -->
-        <div class="py-4 md:py-0 lg:col-span-1">
+        <!-- Details Column (e.g., takes 7 or 6 cols on lg) -->
+        <div class="lg:col-span-6 xl:col-span-7 mt-6 lg:mt-0 py-4 md:py-0">
           <div class="mb-3 text-xs text-venus-text-secondary">
             <NuxtLink to="/" class="hover:text-peach-pink">Home</NuxtLink>
             <span class="mx-1">/</span>
@@ -215,8 +218,8 @@
         </div>
       </div>
 
-      <!-- Tabs Section -->
-      <div v-if="product && !pending && !fetchError" class="mt-12 bg-neutral-bg-soft p-4 sm:p-6 rounded-lg shadow">
+      <!-- Tabs Section - Moved to be a direct child of the main product content wrapper, after the image/details grid -->
+      <div v-if="product && !pending && !fetchError" class="mt-10 lg:mt-16 bg-neutral-bg-soft p-4 sm:p-6 rounded-lg shadow">
         <div class="border-b border-gray-300">
           <nav class="-mb-px flex space-x-6 sm:space-x-8" aria-label="Tabs">
             <button v-for="tab in tabs" :key="tab.key" @click="selectTab(tab.key)"
@@ -315,7 +318,6 @@
       </div>
     </div>
   </div>
-  </div>
   <ImageZoomModal :is-open="isZoomModalOpen" :image-url="zoomedImageUrl" @close="closeZoomModal" />
 </template>
 
@@ -371,7 +373,7 @@ function selectTab(tabKey) {
 const selectedOptions = reactive({});
 const currentVariant = ref(null);
 const galleryImages = ref([]);
-const selectedImage = ref(null); // New ref for selected image object
+const selectedImage = ref(null);
 
 const displayPrice = ref(0);
 const displaySku = ref('');
@@ -381,12 +383,11 @@ const addToCartDisabled = ref(true);
 const quantity = ref(1);
 
 const thumbnailContainer = ref(null);
-const scrollStep = 200; // Or calculate based on thumbnail width + margin
+const scrollStep = 200;
 
 const isPrevDisabled = computed(() => thumbnailContainer.value && thumbnailContainer.value.scrollLeft <= 0);
 const isNextDisabled = computed(() => {
   if (!thumbnailContainer.value) return true;
-  // -5 for a small tolerance, ensures the very end can be reached by clicking next.
   return thumbnailContainer.value.scrollLeft + thumbnailContainer.value.clientWidth >= thumbnailContainer.value.scrollWidth - 5;
 });
 
@@ -402,15 +403,12 @@ function scrollThumbnails(direction) {
   container.scrollLeft = newScrollLeft;
 }
 
-// Public Reviews State
 const productPublicReviews = ref([]);
 const reviewPaginationData = ref({ currentPage: 1, totalPages: 1, totalItems: 0, pageSize: 5 });
 const isLoadingPublicReviews = ref(false);
 const publicReviewsError = ref(null);
 const currentPublicReviewsPage = ref(1);
 
-
-// --- Computed properties for dynamic display based on selection ---
 const stockStatusMessage = computed(() => {
   if (!product.value && !currentVariant.value && !pending.value) return 'Loading stock...';
   if (!product.value && pending.value) return 'Loading...';
@@ -429,8 +427,6 @@ const stockStatusMessage = computed(() => {
   return 'In Stock';
 });
 
-// --- Functions ---
-
 const isColorOption = (optionName) => {
   return optionName?.toLowerCase() === 'color';
 };
@@ -441,26 +437,19 @@ const getSelectedValueName = (optionType, selectedValueId) => {
   return selectedValue ? selectedValue.value_name : '';
 };
 
-// Helper to check if a variant's options include all values from a given selection object
 function variantMatchesSelection(variant, selectionsToMatch) {
   if (!variant || !variant.option_value_ids) return false;
-
   const selectionValueIds = Object.values(selectionsToMatch);
-
   if (selectionValueIds.length === 0 && Object.keys(selectionsToMatch).length > 0) {
     return Object.keys(selectionsToMatch).length === 0;
   }
   if (selectionValueIds.length === 0) return true;
-
   return selectionValueIds.every(selectedValueId => variant.option_value_ids.includes(selectedValueId));
 }
 
-// Determines available values for a specific option type, considering other current selections
-// and provides stock status hints for those potential selections.
 const getAvailableValuesForOption = (optionToFilter, currentSelectionsForOtherTypes) => {
   const detailedOptionValues = [];
   if (!product.value || !product.value.variants || !optionToFilter || !optionToFilter.values) {
-    // If no product variants or option values, return empty or all values as not potentially available
     if (optionToFilter && optionToFilter.values) {
       return optionToFilter.values.map(val => ({
         value_id: val.value_id,
@@ -471,29 +460,20 @@ const getAvailableValuesForOption = (optionToFilter, currentSelectionsForOtherTy
     }
     return detailedOptionValues;
   }
-
   for (const potentialValue of optionToFilter.values) {
     let isPotentiallyAvailable = false;
     let anyResultingVariantInStock = false;
-
     const testSelections = {
       ...currentSelectionsForOtherTypes,
       [optionToFilter.option_id]: potentialValue.value_id,
     };
-
     for (const variant of product.value.variants) {
       if (variantMatchesSelection(variant, testSelections)) {
         isPotentiallyAvailable = true;
         if (variant.stock_quantity > 0) {
           anyResultingVariantInStock = true;
-          // Optimization: if we only care that *any* variant is in stock for this specific potentialValue combination,
-          // and we've found one, we can break this inner loop.
-          // However, if other logic might depend on checking ALL variants that match testSelections, remove break.
-          // For current usage (disabling buttons, showing stock hints), this break is fine.
           break;
         }
-        // If a variant matches but is out of stock, we continue checking other variants
-        // that might also match this testSelection and *are* in stock.
       }
     }
     detailedOptionValues.push({
@@ -510,8 +490,6 @@ const availableValuesMap = computed(() => {
   const map = {};
   if (product.value && product.value.has_variants && product.value.available_options) {
     product.value.available_options.forEach(optionType => {
-      // Create a true copy for 'otherSelections' to avoid modifying 'selectedOptions' directly
-      // when deleting a key for the current option type being processed.
       const otherSelections = { ...selectedOptions };
       if (Object.prototype.hasOwnProperty.call(otherSelections, optionType.option_id)) {
         delete otherSelections[optionType.option_id];
@@ -528,7 +506,6 @@ function initializeSelections() {
     updateCurrentVariant();
     return;
   }
-
   const tempSelectedOptions = {};
   let allOptionsHaveDefault = true;
   for (const optionType of product.value.available_options) {
@@ -539,7 +516,6 @@ function initializeSelections() {
       allOptionsHaveDefault = false; break;
     }
   }
-
   if (allOptionsHaveDefault && Object.keys(tempSelectedOptions).length === product.value.available_options.length) {
     const selectedValuesArray = Object.values(tempSelectedOptions).sort((a, b) => a - b);
     const defaultMatchedVariant = product.value.variants.find(variant => {
@@ -547,7 +523,6 @@ function initializeSelections() {
       const sortedVariantValues = [...variant.option_value_ids].sort((a, b) => a - b);
       return JSON.stringify(sortedVariantValues) === JSON.stringify(selectedValuesArray);
     });
-
     if (defaultMatchedVariant && defaultMatchedVariant.stock_quantity > 0) {
       for (const key in tempSelectedOptions) { selectedOptions[key] = tempSelectedOptions[key]; }
     } else {
@@ -565,16 +540,13 @@ function selectOption(optionId, valueId) {
   } else {
     selectedOptions[optionId] = valueId;
   }
-
   if (product.value && product.value.has_variants && product.value.available_options) {
     for (const optType of product.value.available_options) {
       const optId = optType.option_id;
       if (optId === optionId) continue;
-
       if (selectedOptions[optId]) {
         const otherSelsForThisCheck = { ...selectedOptions };
         delete otherSelsForThisCheck[optId];
-
         const availableValsForThisOpt = getAvailableValuesForOption(optType, otherSelsForThisCheck);
         if (!availableValsForThisOpt.has(selectedOptions[optId])) {
           delete selectedOptions[optId];
@@ -587,13 +559,11 @@ function selectOption(optionId, valueId) {
 
 function updateCurrentVariant() {
   if (!product.value) return;
-
   if (!product.value.has_variants || !product.value.variants || product.value.variants.length === 0) {
     currentVariant.value = null;
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = product.value.stock_quantity;
-    // Update selectedImage based on product or gallery, similar to fetchProduct
     if (galleryImages.value.length > 0) {
         selectedImage.value = galleryImages.value[0];
     } else if (product.value.image_url) {
@@ -605,10 +575,8 @@ function updateCurrentVariant() {
     quantity.value = 1;
     return;
   }
-
   const numAvailableOptionTypes = product.value.available_options?.length || 0;
   const numSelectedOptions = Object.keys(selectedOptions).length;
-
   if (numSelectedOptions < numAvailableOptionTypes) {
     currentVariant.value = null;
     displayPrice.value = parseFloat(product.value.price);
@@ -617,20 +585,17 @@ function updateCurrentVariant() {
     addToCartDisabled.value = true;
     return;
   }
-
   const selectedValuesArray = Object.values(selectedOptions).sort((a, b) => a - b);
   const matchedVariant = product.value.variants.find(variant => {
     if (!variant.option_value_ids || variant.option_value_ids.length !== selectedValuesArray.length) return false;
     const sortedVariantValues = [...variant.option_value_ids].sort((a, b) => a - b);
     return JSON.stringify(sortedVariantValues) === JSON.stringify(selectedValuesArray);
   });
-
   if (matchedVariant) {
     currentVariant.value = matchedVariant;
     displayPrice.value = parseFloat(matchedVariant.final_price);
     displaySku.value = matchedVariant.sku || product.value.sku || '';
     displayStock.value = matchedVariant.stock_quantity;
-    // Update selectedImage based on variant
     if (matchedVariant.image_url) {
         const existingGalleryImage = galleryImages.value.find(img => img.url === matchedVariant.image_url);
         if (existingGalleryImage) {
@@ -638,12 +603,12 @@ function updateCurrentVariant() {
         } else {
             selectedImage.value = { url: matchedVariant.image_url, alt_text: currentVariant.value.sku || product.value.name, id: 'variant_' + currentVariant.value.id };
         }
-    } else if (galleryImages.value.length > 0) { // Fallback to first gallery image if variant has no specific image
+    } else if (galleryImages.value.length > 0) {
         selectedImage.value = galleryImages.value[0];
-    } else if (product.value.image_url) { // Fallback to main product image
+    } else if (product.value.image_url) {
         selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
     } else {
-        selectedImage.value = null; // No image available
+        selectedImage.value = null;
     }
     addToCartDisabled.value = matchedVariant.stock_quantity <= 0;
   } else {
@@ -651,7 +616,6 @@ function updateCurrentVariant() {
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = 0;
-    // Fallback selectedImage if no variant matches
     if (galleryImages.value.length > 0) {
         selectedImage.value = galleryImages.value[0];
     } else if (product.value.image_url) {
@@ -664,7 +628,6 @@ function updateCurrentVariant() {
   quantity.value = 1;
 }
 
-// SSR-friendly data fetching using useAsyncData
 const productId = route.params.id;
 const { data: productData, pending, error: fetchError, refresh } = await useAsyncData(
   `product-${productId}`,
@@ -674,27 +637,21 @@ const { data: productData, pending, error: fetchError, refresh } = await useAsyn
       return response.data;
     } catch (err) {
       console.error(`Failed to fetch product ${productId}:`, err);
-      // Throw an error that useAsyncData can catch and put into its 'error' ref
-      // This helps in displaying a proper error page or message.
-      // Consider creating a custom error object or using one from Nuxt if available.
       const statusCode = err.response?.status || 500;
       const message = err.response?.data?.message || err.message || "Unknown error occurred";
-      throw createError({ statusCode, statusMessage: message, fatal: false }); // fatal: false for non-blocking error page
+      throw createError({ statusCode, statusMessage: message, fatal: false });
     }
   },
   {
-    watch: [() => route.params.id] // Re-fetch if route.params.id changes (e.g. navigating between product pages)
+    watch: [() => route.params.id]
   }
 );
 
-// Assign the fetched data to a local ref 'product' for easier use in the component
-// This also allows watchers on 'product' to work as before.
 const product = ref(null);
 
 watch(productData, (newProductData) => {
   if (newProductData) {
     product.value = newProductData;
-    // Initialize states that depend on product data
     galleryImages.value = newProductData.gallery_images || [];
     if (galleryImages.value.length > 0) {
       selectedImage.value = galleryImages.value[0];
@@ -703,29 +660,28 @@ watch(productData, (newProductData) => {
     } else {
       selectedImage.value = null;
     }
-    initializeSelections(); // This will also call updateCurrentVariant
-
-    // Reset review related states when product changes
+    initializeSelections();
     userHasReviewed.value = false;
     userReview.value = null;
     showReviewForm.value = false;
     productPublicReviews.value = [];
     currentPublicReviewsPage.value = 1;
-    // checkUserReviewStatus(); // This will be triggered by its own watchEffect if product.id is now set
-    // fetchPublicProductReviews(1); // This will be triggered by its own watcher if tab is active
+    if (process.client) {
+        checkUserReviewStatus();
+        if (activeTab.value === 'reviews') {
+            fetchPublicProductReviews(1);
+        }
+    }
   } else if (fetchError.value) {
-    // If there was an error fetching, product.value should reflect that (e.g. by being null)
     product.value = null;
-    // Display toast for error if not already handled by a global error page
-    if (fetchError.value.statusMessage && process.client) { // Show toast only on client after hydration
+    if (fetchError.value.statusMessage && process.client) {
         toast.error(fetchError.value.statusMessage || "Failed to load product.");
     }
   }
-}, { immediate: true }); // immediate: true to run the watcher once on setup with initial productData
-
+}, { immediate: true });
 
 const handleAddToCart = () => {
-  if (!product.value) { // Guard against product not being loaded
+  if (!product.value) {
     toast.error("Product data is not available. Please try again.");
     return;
   }
@@ -744,11 +700,6 @@ const handleAddToCart = () => {
   }
   if (quantity.value <= 0) { toast.error("Please enter a valid quantity."); return; }
   if (quantity.value > stockAvailable) { toast.error(`Cannot add ${quantity.value} items. Only ${stockAvailable} left in stock.`); return; }
-
-  // console.log('PDP: product.value before creating cartItemData:', JSON.parse(JSON.stringify(product.value))); // Cleaned
-  // if(currentVariant.value) { // Cleaned
-  //   console.log('PDP: currentVariant.value before creating cartItemData:', JSON.parse(JSON.stringify(currentVariant.value))); // Cleaned
-  // }
 
   let cartItemData;
   if (currentVariant.value) {
@@ -774,7 +725,7 @@ const handleAddToCart = () => {
       price: parseFloat(currentVariant.value.final_price), sku: currentVariant.value.sku || product.value.sku,
       image_url: selectedImage.value?.url || product.value.image_url, type: 'variant',
       tax_class_id: product.value.tax_class_id || null,
-      tax_class_name: product.value.tax_class_name || null, // Add tax_class_name from parent product
+      tax_class_name: product.value.tax_class_name || null,
     };
   } else {
     cartItemData = {
@@ -782,24 +733,16 @@ const handleAddToCart = () => {
       name: product.value.name, price: parseFloat(product.value.price), sku: product.value.sku,
       image_url: selectedImage.value?.url || product.value.image_url, type: 'product',
       tax_class_id: product.value.tax_class_id || null,
-      tax_class_name: product.value.tax_class_name || null, // Add tax_class_name
+      tax_class_name: product.value.tax_class_name || null,
     };
   }
   addToCart(cartItemData, quantity.value);
 };
 
-// REMOVED: onMounted(() => { fetchProduct(); });
-// The data fetching is now handled by useAsyncData
-
-// Watchers that depend on `product.value` being available
 watch(product, (newProductValue) => {
   if (newProductValue && newProductValue.id) {
-    // These actions should only run client-side or if product data is present.
-    // `useAsyncData` ensures product.value is populated before these watchers run effectively on client after SSR.
-    if (process.client) { // Explicitly run these on client, or ensure they are SSR safe
-        checkUserReviewStatus(); // This function has its own guards now.
-
-        // Reset and fetch reviews if tab is active
+    if (process.client) {
+        checkUserReviewStatus();
         productPublicReviews.value = [];
         currentPublicReviewsPage.value = 1;
         if (activeTab.value === 'reviews') {
@@ -807,14 +750,11 @@ watch(product, (newProductValue) => {
         }
     }
   }
-}, { deep: true }); // deep might be intensive if product object is huge, consider specific properties if needed.
+}, { deep: true });
 
-// This watchEffect will re-run whenever isLoggedIn.value or product.value (specifically product.value.id) changes.
-// `checkUserReviewStatus` has internal guards.
 watchEffect(() => {
-  if (process.client) { // Defer to client-side
-    // console.log(`[PDP watchEffect for review status CLIENT] isLoggedIn: ${isLoggedIn.value}, product ID: ${product.value?.id}`);
-    if (product.value?.id) { // Still ensure product is loaded before checking review status
+  if (process.client) {
+    if (product.value?.id) {
       checkUserReviewStatus();
     }
   }
@@ -824,7 +764,7 @@ watch(activeTab, (newTab) => {
   if (newTab === 'reviews' && product.value?.id &&
       (!productPublicReviews.value || productPublicReviews.value.length === 0) &&
       !isLoadingPublicReviews.value && !publicReviewsError.value) {
-    if (process.client) { // Defer to client-side
+    if (process.client) {
         fetchPublicProductReviews(currentPublicReviewsPage.value);
     }
   }
@@ -832,25 +772,21 @@ watch(activeTab, (newTab) => {
 
 watch(currentPublicReviewsPage, (newPage, oldPage) => {
     if (newPage !== oldPage && activeTab.value === 'reviews' && product.value?.id) {
-        if (process.client) { // Defer to client-side
+        if (process.client) {
             fetchPublicProductReviews(newPage);
         }
     }
 });
 
 async function checkUserReviewStatus() {
-  // More robust guard for isLoggedIn and product.value
   const loggedIn = (typeof isLoggedIn?.value === 'boolean') ? isLoggedIn.value : false;
   const currentProductId = product.value?.id;
-
   if (!loggedIn || !currentProductId) {
     userHasReviewed.value = false;
     userReview.value = null;
     showReviewForm.value = false;
-    // console.log(`[checkUserReviewStatus] Bailing out: isLoggedInVal: ${loggedIn}, currentProductId: ${currentProductId}`);
     return;
   }
-  // console.log(`[checkUserReviewStatus] Proceeding: isLoggedInVal: ${loggedIn}, currentProductId: ${currentProductId}`);
   isLoadingUserReview.value = true;
   try {
     const response = await $axios.get(`/products/${product.value.id}/reviews/my-review`);
@@ -908,7 +844,6 @@ const getPublicReviewStarClass = (rating, starIndex) => {
 
 async function fetchPublicProductReviews(page = 1) {
   if (!product.value || !product.value.id) {
-    // Should not happen if called from watchers correctly, but good guard
     productPublicReviews.value = [];
     return;
   }
@@ -918,7 +853,7 @@ async function fetchPublicProductReviews(page = 1) {
     const response = await $axios.get(`/products/${product.value.id}/reviews`, {
       params: {
         page: page,
-        limit: reviewPaginationData.value.pageSize || 5, // Use a default limit
+        limit: reviewPaginationData.value.pageSize || 5,
       },
     });
     productPublicReviews.value = response.data.reviews || [];
@@ -933,8 +868,7 @@ async function fetchPublicProductReviews(page = 1) {
   } catch (error) {
     console.error('Error fetching public reviews:', error);
     publicReviewsError.value = error.response?.data?.message || error.message || 'Could not load reviews.';
-    productPublicReviews.value = []; // Clear reviews on error
-    // toast.error(publicReviewsError.value); // Optional: notify user via toast
+    productPublicReviews.value = [];
   } finally {
     isLoadingPublicReviews.value = false;
   }
@@ -944,6 +878,8 @@ useHead({
   title: computed(() => product.value ? product.value.name : 'Product Details'),
 });
 </script>
+
+[end of frontend/pages/products/[id].vue]
 
 [end of frontend/pages/products/[id].vue]
 
