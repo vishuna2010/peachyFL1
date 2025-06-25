@@ -30,7 +30,7 @@
           <!-- Thumbnail Section with Arrows -->
           <div v-if="galleryImages.length > 1" class="mt-3 relative flex items-center justify-center px-6 sm:px-8"> {/* Adjusted spacing */}
             <button
-              v-if="galleryImages.length > 3"  {/* Show arrows if more than 3-4 thumbnails typically */}
+              v-if="galleryImages.length > 3"
               @click="scrollThumbnails('prev')"
               class="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-1.5 sm:p-2 bg-sky-blue/60 hover:bg-sky-blue text-white rounded-full shadow-md disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
               :disabled="isPrevDisabled"
