@@ -82,6 +82,10 @@ This section outlines the primary driver for future backend development, based o
     - [~] Order packing label printing
       - [X] Phase 1: Backend API endpoint (`/api/admin/orders/:orderId/packing-slip-data`) provides structured JSON data for packing slips.
       - [X] Phase 1 PDF: Basic PDF packing slip generated via admin API endpoint (/api/admin/orders/:orderId/packing-slip/pdf).
+    - [ ] **Refund Processing (Admin):**
+        - [ ] Phase 1: Implement backend endpoint and basic UI for full (mock) refunds. Update order/payment status, adjust product/variant stock (simplified), create stock movement & audit logs. Use `orders:manage_refunds` permission.
+        - [ ] Phase 2: UI for partial refunds (item selection, amounts).
+        - [ ] Phase 3: Integrate with actual payment gateway for refund transactions.
 7.  **Barcode / QR Scanning Support**
     - Mobile or USB scanner support
     - Use QR codes for fast lookups or reorders
@@ -110,6 +114,8 @@ This section outlines the primary driver for future backend development, based o
   - Implement tax calculation logic.
 - **Payment Gateway Integration (Major Feature):**
   - Integrate Stripe or PayPal for actual payment processing.
+  - [ ] **Mock Payment Flow (Checkout Page):**
+    - [ ] Phase 1: Implement UI changes on checkout page for a mock payment step. Modify order creation to reflect "paid" status if mock payment is confirmed.
 - [~] Email Templating:
   - [X] Phase 1: Implement EJS templating for Order Confirmation email (HTML). Created template structure (`order_confirmation.ejs`), refactored `emailService.js` to use it, and updated `orders.js` to call it correctly.
 - **Search API Refinements:**

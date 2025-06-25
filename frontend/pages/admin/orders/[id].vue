@@ -52,6 +52,31 @@
         </div>
       </div>
 
+      <!-- Refund Section -->
+      <div v-if="can('orders:manage_refunds').value && order && order.payment_status !== 'refunded'" class="border-b border-gray-200 pb-6">
+        <h3 class="text-xl font-semibold text-gray-800 mb-4">Process Refund</h3>
+        <div class="form-group mb-3">
+            <label for="refund_reason" class="block text-sm font-medium text-gray-700 mb-1">Reason for Refund (Optional):</label>
+            <input type="text" id="refund_reason" v-model="refundReason"
+                   class="w-full sm:w-1/2 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                   placeholder="e.g., Customer request, item damaged">
+        </div>
+        <button
+          @click="handleProcessFullRefund"
+          :disabled="isRefunding || order.payment_status === 'refunded'"
+          class="px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        >
+          {{ isRefunding ? 'Processing Refund...' : 'Process Full Refund' }}
+        </button>
+        <p v-if="refundError" class="text-xs text-red-600 mt-2">{{ refundError }}</p>
+        <p v-if="refundSuccess" class="text-xs text-green-600 mt-2">{{ refundSuccess }}</p>
+      </div>
+      <div v-else-if="order && order.payment_status === 'refunded'" class="border-b border-gray-200 pb-6">
+         <h3 class="text-xl font-semibold text-gray-800 mb-4">Refund Status</h3>
+         <p class="text-sm text-green-600 bg-green-50 p-3 rounded-md border border-green-200">This order has been fully refunded.</p>
+      </div>
+
+
       <!-- Customer Information Section -->
       <div class="border-b border-gray-200 pb-6">
         <h3 class="text-xl font-semibold text-gray-800 mb-4">Customer Information</h3>
@@ -139,6 +164,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useNuxtApp, useRuntimeConfig, useHead } from '#app'; // Added useHead
+import { usePermissions } from '~/composables/usePermissions'; // Import usePermissions
 
 definePageMeta({
   layout: 'admin',
@@ -159,6 +185,12 @@ const selectedStatus = ref('');
 const isUpdatingStatus = ref(false);
 const statusUpdateError = ref('');
 const statusUpdateSuccess = ref('');
+
+const { can } = usePermissions();
+const isRefunding = ref(false);
+const refundError = ref('');
+const refundSuccess = ref('');
+const refundReason = ref('');
 
 // backendUrl computed property is not used in this version, can be removed if not needed elsewhere
 // const backendUrl = computed(() => runtimeConfig.public.backendBaseUrl);
@@ -241,6 +273,50 @@ async function handleUpdateStatus() {
     }, 5000);
   }
 }
+
+async function handleProcessFullRefund() {
+  if (!order.value || order.value.payment_status === 'refunded') {
+    refundError.value = "Order cannot be refunded or is already refunded.";
+    return;
+  }
+  if (!confirm(`Are you sure you want to process a FULL refund for Order #${order.value.id}? This action cannot be undone.`)) {
+    return;
+  }
+
+  isRefunding.value = true;
+  refundError.value = '';
+  refundSuccess.value = '';
+  const orderId = order.value.id;
+
+  try {
+    const payload = {};
+    if (refundReason.value.trim()) {
+      payload.reason = refundReason.value.trim();
+    }
+
+    const response = await $axios.post(`/admin/orders/${orderId}/refund`, payload);
+    if (response.data && response.data.order) {
+      order.value = response.data.order; // Update local order data
+      selectedStatus.value = order.value.status; // Sync status dropdown
+      refundSuccess.value = response.data.message || `Order #${orderId} successfully refunded.`;
+      refundReason.value = ''; // Clear reason input
+    } else {
+      // Should ideally not happen if backend returns proper response
+      refundSuccess.value = 'Refund processed, but no updated order data returned. Please refresh.';
+      await fetchOrderDetails(); // Re-fetch to be sure
+    }
+  } catch (err) {
+    console.error(`Failed to process refund for order ID ${orderId}:`, err);
+    refundError.value = err.response?.data?.message || 'Failed to process refund.';
+  } finally {
+    isRefunding.value = false;
+    setTimeout(() => {
+        refundSuccess.value = '';
+        refundError.value = '';
+    }, 7000); // Display message for longer
+  }
+}
+
 
 watch(order, (newOrderData) => {
     if (newOrderData && newOrderData.status) {

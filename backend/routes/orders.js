@@ -9,7 +9,7 @@ const bcrypt = require('bcrypt'); // Added bcrypt
 
 // POST /api/orders - Create a new order
 router.post('/', async (req, res, next) => { // Removed isAuthenticated, added next
-  const { cart, shippingAddress, billingAddress, discount_code, guestDetails } = req.body;
+  const { cart, shippingAddress, billingAddress, discount_code, guestDetails, mock_payment_successful } = req.body;
   let userId;
   let userEmailForOrder;
   let userNameForOrder;
@@ -322,10 +322,14 @@ router.post('/', async (req, res, next) => { // Removed isAuthenticated, added n
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING id, status, payment_status, total_amount, original_total_amount, total_tax_amount, discount_code_applied, discount_amount_applied, created_at;
     `;
+
+    const initialOrderStatus = 'pending'; // Default order status
+    const initialPaymentStatus = mock_payment_successful ? 'paid' : 'pending';
+
     const orderValues = [
       userId, // $1
-      'pending', // $2 status
-      'pending', // $3 payment_status
+      initialOrderStatus, // $2 status
+      initialPaymentStatus, // $3 payment_status
       finalTotalAmount, // $4
       originalTotalAmountBeforeDiscount, // $5
       appliedDiscountId, // $6

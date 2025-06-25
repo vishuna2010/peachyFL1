@@ -3,9 +3,10 @@ const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, checkPermission } = require('../auth'); // Replaced isAdmin with checkPermission
 const { generateOrderInvoicePdf, generatePackingSlipPdf } = require('../services/pdfService');
-const { param, query, validationResult } = require('express-validator');
-const { NotFoundError } = require('../utils/AppError');
+const { param, query, body, validationResult } = require('express-validator');
+const { NotFoundError, BadRequestError } = require('../utils/AppError');
 const crypto = require('crypto');
+const auditLogService = require('../services/auditLogService');
 
 // Apply auth middleware to all routes in this router
 // router.use(isAuthenticated, isAdmin); // REMOVED - will apply per route
@@ -551,5 +552,131 @@ router.get(
     }
   }
 );
+
+// POST /admin/orders/:orderId/refund - Process a (mock) full refund for an order
+router.post(
+  '/orders/:orderId/refund',
+  isAuthenticated,
+  checkPermission('orders:manage_refunds'),
+  [
+    param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt(),
+    body('reason').optional().isString().trim().withMessage('Refund reason must be a string if provided.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { orderId } = req.params;
+    const { reason } = req.body; // For now, just a simple reason string for full refund
+    const adminUserId = req.user.userId; // Assuming req.user is populated by isAuthenticated
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Fetch the order
+      const orderResult = await client.query(
+        'SELECT * FROM orders WHERE id = $1 FOR UPDATE', // Lock the order row
+        [orderId]
+      );
+      if (orderResult.rows.length === 0) {
+        throw new NotFoundError(`Order with ID ${orderId} not found.`);
+      }
+      const order = orderResult.rows[0];
+
+      // 2. Check if order can be refunded
+      if (order.payment_status === 'refunded') {
+        throw new BadRequestError('This order has already been fully refunded.');
+      }
+      // Add other conditions if necessary (e.g., order.status must be 'delivered' or 'shipped')
+      // For now, we'll allow refunding from most states as it's a mock.
+
+      // 3. Fetch order items to restock
+      const itemsResult = await client.query(
+        'SELECT oi.product_id, oi.product_variant_id, oi.quantity, p.name as product_name, pv.sku as variant_sku, p.sku as base_sku FROM order_items oi JOIN products p ON oi.product_id = p.id LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id WHERE oi.order_id = $1',
+        [orderId]
+      );
+      const orderItems = itemsResult.rows;
+
+      // 4. Update inventory and log stock movements
+      for (const item of orderItems) {
+        const oldStockResult = await client.query(
+          item.product_variant_id
+            ? 'SELECT stock_quantity FROM product_variants WHERE id = $1 FOR UPDATE' // Lock variant
+            : 'SELECT stock_quantity FROM products WHERE id = $1 FOR UPDATE', // Lock product
+          [item.product_variant_id || item.product_id]
+        );
+        const oldStockQuantity = oldStockResult.rows[0]?.stock_quantity || 0;
+        const newStockQuantity = oldStockQuantity + item.quantity;
+
+        if (item.product_variant_id) {
+          await client.query(
+            'UPDATE product_variants SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [item.quantity, item.product_variant_id]
+          );
+        } else {
+          await client.query(
+            'UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [item.quantity, item.product_id]
+          );
+        }
+
+        // Log stock movement
+        await client.query(
+          `INSERT INTO stock_movement_logs (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            item.product_id,
+            item.product_variant_id || null,
+            adminUserId,
+            'refund_restock',
+            item.quantity, // Positive for increase
+            newStockQuantity,
+            `Refund for Order #${orderId}. Reason: ${reason || 'N/A'}`,
+            orderId.toString()
+          ]
+        );
+      }
+
+      // 5. Update order status and payment status
+      const updatedOrderResult = await client.query(
+        `UPDATE orders SET status = 'refunded', payment_status = 'refunded', updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+         RETURNING *`,
+        [orderId]
+      );
+
+      // 6. Create audit log
+      await auditLogService.recordAuditEvent(
+        'ORDER_REFUND_PROCESSED',
+        { userId: adminUserId, userEmail: req.user.email },
+        { resourceType: 'ORDER', resourceId: orderId },
+        {
+          refund_type: 'full', // For now, only full
+          reason: reason || 'N/A',
+          previous_status: order.status,
+          previous_payment_status: order.payment_status,
+          items_restocked: orderItems.map(i => ({ id: i.product_variant_id || i.product_id, qty: i.quantity, name: i.product_name, sku: i.variant_sku || i.base_sku }))
+        },
+        req
+      );
+
+      await client.query('COMMIT');
+      res.status(200).json({
+        message: `Order #${orderId} has been fully refunded and items restocked.`,
+        order: updatedOrderResult.rows[0]
+      });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      next(error); // Pass to global error handler
+    } finally {
+      client.release();
+    }
+  }
+);
+
 
 module.exports = router;
