@@ -109,15 +109,26 @@ router.get(
     }
 
     const { role } = req.query;
-    let queryString = 'SELECT id, name, email, role, is_tax_exempt, tax_exemption_certificate_id, tax_exemption_notes, created_at, updated_at FROM users';
+    // Join with roles table to get role_name
+    let queryString = `
+      SELECT u.id, u.name, u.email, u.role_id, r.name as role_name, u.role as legacy_role,
+             u.is_tax_exempt, u.tax_exemption_certificate_id, u.tax_exemption_notes,
+             u.created_at, u.updated_at
+      FROM users u
+      LEFT JOIN roles r ON u.role_id = r.id
+    `;
     const queryParams = [];
+    let paramIndex = 1;
 
     if (role) {
-      queryString += ' WHERE role = $1';
+      // Ensure filtering by role name (text) if that's what 'role' query param means
+      // Or adjust if 'role' query param is meant to be role_id
+      // Assuming 'role' query param refers to the text role name for this filter
+      queryString += ` WHERE LOWER(r.name) = LOWER($${paramIndex++})`; // Filter by role name
       queryParams.push(role);
     }
 
-    queryString += ' ORDER BY id ASC';
+    queryString += ' ORDER BY u.id ASC';
 
     try {
       const result = await db.query(queryString, queryParams);

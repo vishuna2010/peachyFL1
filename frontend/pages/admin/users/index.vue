@@ -272,8 +272,20 @@ async function fetchAvailableRoles() {
 
 
 const promptRoleChange = (user, newRoleIdString) => {
-  console.log('[promptRoleChange] Function called.');
-  console.log('[promptRoleChange] User:', JSON.parse(JSON.stringify(user)));
+  console.log('[promptRoleChange] Entry. User:', JSON.parse(JSON.stringify(user)), 'New Role ID String:', newRoleIdString);
+  // Ensure originalRoleId and originalRoleName are actually present on the user object from fetchUsers
+  if (user.originalRoleId === undefined || user.originalRoleName === undefined) {
+    console.error('[promptRoleChange] User object is missing originalRoleId or originalRoleName. Refetching users might be needed or initial fetch is incomplete.', user);
+    toast.error("User data is incomplete. Cannot change role at this moment.");
+    // Attempt to revert select visually if possible, though data binding should handle it
+    const selectElement = document.querySelector(`select[data-user-id="${user.id}"]`);
+    if (selectElement && user.role_id) { // check user.role_id to prevent error if it's also missing
+        selectElement.value = user.role_id; // Revert to current role_id
+    }
+    return;
+  }
+
+  console.log('[promptRoleChange] User (full):', JSON.parse(JSON.stringify(user)));
   console.log('[promptRoleChange] newRoleIdString:', newRoleIdString);
 
   const newRoleId = parseInt(newRoleIdString, 10);
@@ -311,34 +323,52 @@ const promptRoleChange = (user, newRoleIdString) => {
 };
 
 async function updateUserRole(user, newRoleId, newRoleName) {
+  console.log(`[updateUserRole] Attempting to update user ${user.id} (${user.email}) to roleId: ${newRoleId}, roleName: ${newRoleName}`);
   actionLoading.value = { userId: user.id, type: 'role' };
   actionError.value = '';
   actionSuccessMessage.value = '';
+
+  const payload = { role_id: newRoleId };
+  console.log('[updateUserRole] Payload for API:', payload);
+
   try {
-    // Use the main PUT endpoint for user updates, which handles role_id
-    await $axios.put(`/admin/users/${user.id}`, { role_id: newRoleId });
+    const response = await $axios.put(`/admin/users/${user.id}`, payload);
+    console.log('[updateUserRole] API Success Response:', response.data);
     actionSuccessMessage.value = `Successfully updated role for ${user.email} to ${newRoleName}.`;
     toast.success(actionSuccessMessage.value);
 
-    // Update local user data
+    // Update local user data from the response to ensure consistency
+    const updatedUserFromServer = response.data;
     const userInArray = users.value.find(u => u.id === user.id);
     if (userInArray) {
-      userInArray.role_id = newRoleId;
-      userInArray.role_name = newRoleName;
-      userInArray.originalRoleId = newRoleId; // Update original for next potential change
-      userInArray.originalRoleName = newRoleName;
+      console.log(`[updateUserRole] Updating local user data for ${user.id}. Old role_id: ${userInArray.role_id}, new: ${updatedUserFromServer.role_id}`);
+      userInArray.role_id = updatedUserFromServer.role_id;
+      userInArray.role_name = updatedUserFromServer.role_name; // Make sure backend returns this
+      userInArray.legacy_role = updatedUserFromServer.legacy_role; // And this
+      userInArray.originalRoleId = updatedUserFromServer.role_id;
+      userInArray.originalRoleName = updatedUserFromServer.role_name;
+      console.log(`[updateUserRole] Local user data updated for ${user.id}:`, JSON.parse(JSON.stringify(userInArray)));
+    } else {
+      console.warn(`[updateUserRole] User ${user.id} not found in local array after update.`);
     }
 
   } catch (err) {
-    console.error('Failed to update user role:', err);
+    console.error('[updateUserRole] Failed to update user role API error:', err.response?.data || err.message || err);
     actionError.value = `Failed to update role for ${user.email}: ${err.response?.data?.message || err.message}`;
     toast.error(actionError.value);
-    // Revert UI
+
+    // Revert UI by restoring originalRoleId to the reactive user.role_id
     const userInArray = users.value.find(u => u.id === user.id);
-    if (userInArray) {
-      userInArray.role_id = user.originalRoleId;
+    if (userInArray && userInArray.originalRoleId !== undefined) {
+      console.log(`[updateUserRole] Error caught. Reverting role_id for ${user.id} to ${userInArray.originalRoleId}`);
+      userInArray.role_id = userInArray.originalRoleId;
+      // We might need to force Vue to re-render the select if it doesn't pick this up.
+      // For now, relying on Vue's reactivity.
+    } else {
+      console.error(`[updateUserRole] Could not revert role for user ${user.id} as originalRoleId is undefined or user not found.`);
     }
   } finally {
+    console.log(`[updateUserRole] Finally block for user ${user.id}. Clearing actionLoading.`);
     actionLoading.value = { userId: null, type: null };
     setTimeout(() => {
       actionError.value = '';
