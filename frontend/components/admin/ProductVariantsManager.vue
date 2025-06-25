@@ -457,42 +457,40 @@ async function fetchConfiguredProductOptions() {
     console.log('[ProductVariantsManager] Data before .map():', JSON.stringify(assignedOptionsResponse.data, null, 2));
 
     const fetchedConfiguredOptions = assignedOptionsResponse.data.map((assignedOpt, index) => {
-      // Unconditional log at the very start of the map callback
-      console.log(`[ProductVariantsManager] MAP ITEM ${index}: global_option_name = ${assignedOpt?.global_option_name}, global_option_id = ${assignedOpt?.global_option_id}`);
-
-      if (!assignedOpt || typeof assignedOpt !== 'object') {
-        console.warn(`[ProductVariantsManager] Item at index ${index} is not a valid object:`, assignedOpt);
-        return null; // Skip this item
+      // assignedOpt is expected to have: id (assigned_option_id), option_id (global_option_id), option_name (global_option_name), selected_values
+      if (assignedOpt.option_id === null || assignedOpt.option_id === undefined || !assignedOpt.option_name) {
+        console.error(`[ProductVariantsManager] MAP ITEM ${index} (assigned_option_id: ${assignedOpt.id}) has invalid/missing option_id or option_name:`, JSON.stringify(assignedOpt));
+        toast.error(`Configuration error: An assigned option (ID: ${assignedOpt.id || 'N/A'}) is missing critical details (option type ID or name). Please check product option configuration in admin.`);
+        return null; // Skip this invalid option configuration
       }
-
-      if (!assignedOpt.global_option_name && assignedOpt.global_option_id === undefined) { // Check if BOTH are missing
-        console.warn('[ProductVariantsManager] Critical: Encountered an assigned option completely missing global_option_name AND global_option_id:', JSON.stringify(assignedOpt));
-      } else if (!assignedOpt.global_option_name) {
-        console.warn('[ProductVariantsManager] Encountered an assigned option without a global_option_name (ID might be present):', JSON.stringify(assignedOpt));
-      }
-
 
       // The 'selected_values' array from the backend IS the list of allowed values for this product's option assignment.
-      // These are global product_option_values that have been specifically chosen for this product-option link.
       if (!assignedOpt.selected_values || assignedOpt.selected_values.length === 0) {
-        const optionNameForToast = assignedOpt.global_option_name || `(Unknown Option ID: ${assignedOpt.global_option_id !== undefined ? assignedOpt.global_option_id : 'undefined'})`;
-        toast.warning(`Option type "${optionNameForToast}" has no specific values configured for this product. Variants cannot be created with it until values are selected.`);
+        // This toast is fine, it's a valid state (option assigned, but no values selected for it yet for this product)
+        // This message will appear if an option type is assigned to a product, but no specific values (e.g. "Red", "Blue")
+        // have been chosen for that product-option assignment via the "Configure Values" interface.
+        // Variants can only be created if an option type has selectable values.
+        toast.warning(`Option type "${assignedOpt.option_name}" has specific values that need to be configured for this product before it can be used in variants.`);
       }
 
       return {
-        assigned_option_id: assignedOpt.assigned_option_id,
-        option_id: assignedOpt.global_option_id,
-        option_name: assignedOpt.global_option_name,
+        assigned_option_id: assignedOpt.id, // This is pao.id from backend
+        option_id: assignedOpt.option_id, // This is pao.option_id (global option id) from backend
+        option_name: assignedOpt.option_name, // This is po.name from backend
         allowed_values: Array.isArray(assignedOpt.selected_values) ? assignedOpt.selected_values.map(val => ({
-          value_id: val.id,
-          value_name: val.value
+          value_id: val.id, // This is product_option_values.id
+          value_name: val.value // This is product_option_values.value
         })) : []
       };
-    }).filter(opt => opt !== null); // Filter out any nulls from invalid items
+    }).filter(opt => opt !== null); // Filter out any nulls from explicitly invalid items due to missing option_id/option_name
 
+    // This filter remains: only include options that actually have selectable values for variant creation UI.
+    // An option might be valid (has option_id, option_name) but have an empty allowed_values if no specific
+    // values were configured for it for THIS product. Such options cannot be used to create variants.
     configuredProductOptions.value = fetchedConfiguredOptions.filter(opt => opt.allowed_values && opt.allowed_values.length > 0);
 
-    if (configuredProductOptions.value.length === 0 && assignedOptionsResponse.data.length > 0) {
+    if (configuredProductOptions.value.length === 0 && assignedOptionsResponse.data.length > 0 && fetchedConfiguredOptions.length > 0) {
+      // This case means that options ARE assigned to the product, but NONE of them have specific values selected (allowed_values is empty for all).
         toast.info("None of the assigned options for this product have any specific values configured. Please configure values for each option type to enable variant creation.");
     }
 
