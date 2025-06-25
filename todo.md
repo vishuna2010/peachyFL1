@@ -126,6 +126,31 @@ This section outlines the primary driver for future backend development, based o
   - [X] Enhanced input validation for Discount Management routes (`/api/admin/discounts`) using express-validator.
   - [X] Enhanced input validation for Category Management routes (`/api/admin/categories`) using express-validator.
 
+## V. Backend Architecture & Process Improvements (New Section for General Backend Enhancements)
+- [ ] **Configuration Management:** Centralize environment variable access into a dedicated config module (e.g., `backend/config/index.js`).
+- [ ] **Error Handling & Validation:**
+    - [ ] Ensure consistent error response structures across all APIs.
+    - [ ] Systematically review and expand input validation (`express-validator` or similar) for all API endpoints.
+    - [ ] Refine global error handler for better logging and to prevent leaking sensitive details.
+- [ ] **Database Interactions & Services:**
+    - [ ] Enforce service layer pattern: Ensure all DB logic is within services, minimize direct `db.query` in route handlers.
+    - [ ] Review and ensure comprehensive transaction management for all multi-step DB operations.
+    - [ ] (Consider for Future) Evaluate ORM/Query Builder (e.g., Sequelize, Knex.js) for potential adoption if complexity warrants.
+- [ ] **Stock Management Logic:**
+    - [ ] **Critical:** Reconcile `productService.getAllProducts` stock determination (currently `products.stock_quantity`) with batch-aware stock logic used in order processing. Public listings should reflect actual sellable batch inventory.
+    - [ ] Enhance refund restocking logic: Allow options for returning items to specific batches or a "returns" status, rather than just incrementing main product/variant stock.
+- [ ] **Asynchronous Operations:**
+    - [ ] For email sending and other potentially long-running non-critical tasks, evaluate using a message queue and background workers for improved API resilience and responsiveness.
+- [ ] **Security:**
+    - [ ] Periodically review RBAC permission granularity.
+    - [ ] Ensure no sensitive data is inadvertently exposed in general `console.log` statements (audit logs are structured, but general debug logs need care).
+- [ ] **API Design & Documentation:**
+    - [ ] Maintain/improve consistency in API endpoint paths and naming.
+    - [ ] Consider implementing API documentation using Swagger/OpenAPI.
+- [ ] **Testing:**
+    - [ ] Expand unit test coverage for services and utility functions.
+    - [ ] Increase integration test coverage for critical API endpoints.
+
 ### E. Development Utilities: Data Seeding (Existing)
 - [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
 - [X] Major `seed.js` overhaul: Implemented full schema creation (`CREATE TABLE IF NOT EXISTS` for all tables including all new columns/features) and added comprehensive sample data for new entities (product images, stock logs, cost history) and new fields in existing entities.

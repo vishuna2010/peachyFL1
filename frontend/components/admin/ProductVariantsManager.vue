@@ -438,10 +438,16 @@ async function fetchConfiguredProductOptions() {
     const assignedOptionsResponse = await $axios.get(`/admin/products/${propProductId.value}/assigned-options`);
 
     const fetchedConfiguredOptions = assignedOptionsResponse.data.map(assignedOpt => {
+      if (!assignedOpt.global_option_name) {
+        console.warn('[ProductVariantsManager] Encountered an assigned option without a global_option_name:', JSON.stringify(assignedOpt));
+        // Potentially skip this malformed option or provide a default name to avoid "undefined" in toast
+      }
       // The 'selected_values' array from the backend IS the list of allowed values for this product's option assignment.
       // These are global product_option_values that have been specifically chosen for this product-option link.
       if (!assignedOpt.selected_values || assignedOpt.selected_values.length === 0) {
-        toast.warning(`Option type "${assignedOpt.global_option_name}" has no specific values configured for this product. Variants cannot be created with it until values are selected.`);
+        // Use a placeholder if global_option_name is missing, to make the toast more informative than "undefined"
+        const optionNameForToast = assignedOpt.global_option_name || `(Unknown Option ID: ${assignedOpt.global_option_id})`;
+        toast.warning(`Option type "${optionNameForToast}" has no specific values configured for this product. Variants cannot be created with it until values are selected.`);
       }
       return {
         assigned_option_id: assignedOpt.assigned_option_id, // This is product_assigned_options.id
