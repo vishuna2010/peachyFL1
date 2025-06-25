@@ -1081,6 +1081,47 @@ async function seedCategories(client) {
 }
 
 async function seedProducts(client, seededDataIds) { // Changed: Pass full seededDataIds
+  // More aggressive cleanup for "The Great Gatsby - Paperback"
+  try {
+    const targetProductName = 'The Great Gatsby - Paperback';
+    const correctSku = 'BOOK-GATSBY-PB';
+
+    // Find all products with that name
+    const productsByName = await client.query('SELECT id, sku FROM products WHERE name = $1', [targetProductName]);
+
+    for (const productEntry of productsByName.rows) {
+      if (productEntry.sku !== correctSku) {
+        const conflictingProductId = productEntry.id;
+        const conflictingProductSku = productEntry.sku;
+        console.log(`Found conflicting product entry: ID ${conflictingProductId}, SKU ${conflictingProductSku} for name "${targetProductName}". Deleting...`);
+
+        // Perform necessary deletions from dependent tables first
+        await client.query('DELETE FROM product_reviews WHERE product_id = $1', [conflictingProductId]);
+        await client.query('DELETE FROM product_tags WHERE product_id = $1', [conflictingProductId]);
+        await client.query('DELETE FROM product_images WHERE product_id = $1', [conflictingProductId]);
+        await client.query('DELETE FROM product_variant_option_values WHERE product_variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)', [conflictingProductId]);
+        await client.query('DELETE FROM product_variants WHERE product_id = $1', [conflictingProductId]);
+        await client.query('DELETE FROM product_assigned_option_specific_values WHERE product_assigned_option_id IN (SELECT id FROM product_assigned_options WHERE product_id = $1)', [conflictingProductId]);
+        await client.query('DELETE FROM product_assigned_options WHERE product_id = $1', [conflictingProductId]);
+        await client.query('DELETE FROM inventory_batches WHERE product_id = $1', [conflictingProductId]); // Clean batches too
+        // IMPORTANT: Check if order_items reference this product ID. If so, deletion will fail due to FK constraints.
+        // This seed script assumes a relatively clean state or that such orders are not critical for seeding.
+        // If orders are critical, a soft delete/archival or more complex migration is needed.
+        const orderItemsCheck = await client.query('SELECT COUNT(*) FROM order_items WHERE product_id = $1', [conflictingProductId]);
+        if (parseInt(orderItemsCheck.rows[0].count, 10) > 0) {
+          console.warn(`Product ID ${conflictingProductId} (SKU: ${conflictingProductSku}) is referenced in order_items. Skipping direct deletion to avoid FK violation. Manual cleanup might be required or adjust seed logic for orders.`);
+        } else {
+          const deletionResult = await client.query('DELETE FROM products WHERE id = $1 RETURNING id', [conflictingProductId]);
+          if (deletionResult.rowCount > 0) {
+            console.log(`Successfully deleted conflicting product: ID ${conflictingProductId}, SKU ${conflictingProductSku}.`);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Error during cleanup of conflicting "${targetProductName}" products:`, error);
+  }
+
   const sampleProducts = [
     {
       name: 'Wireless Bluetooth Headphones',
