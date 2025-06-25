@@ -73,10 +73,11 @@ router.get(
             pao.option_id,
             po.name AS option_name,
             COALESCE(
-                (SELECT json_agg(json_build_object('id', pov.id, 'value', pov.value ORDER BY pov.value))
+                (SELECT json_agg(json_build_object('id', pov.id, 'value', pov.value))
                  FROM product_assigned_option_specific_values paosv
                  JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
-                 WHERE paosv.product_assigned_option_id = pao.id),
+                 WHERE paosv.product_assigned_option_id = pao.id
+                ),
                 '[]'::json
             ) AS selected_values
         FROM
