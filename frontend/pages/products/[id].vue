@@ -10,12 +10,12 @@
       <NuxtLink to="/" class="font-medium text-peach-pink hover:text-opacity-80 hover:underline">&larr; Back to Home</NuxtLink>
     </div>
 
-    <div v-if="product && !pending && !fetchError" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8"> {/* Adjusted padding */}
-      <div class="lg:grid lg:grid-cols-2 lg:gap-x-8 xl:gap-x-12 items-start"> {/* Use lg for grid, better gap */}
+    <div v-if="product && !pending && !fetchError" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <div class="lg:grid lg:grid-cols-2 lg:gap-x-8 xl:gap-x-12 items-start">
         <!-- Image Column -->
-        <div class="w-full"> {/* Removed md:col-span-3 lg:col-span-1 */}
+        <div class="w-full">
           <!-- Image Gallery - Main Image -->
-          <div class="mb-4 sticky top-24"> {/* Sticky main image for better scroll on desktop */}
+          <div class="mb-4 sticky top-24">
             <img
               @click="openZoomModal(selectedImage.value?.url)"
               v-if="selectedImage && selectedImage.value?.url"
@@ -28,7 +28,7 @@
 
 
           <!-- Thumbnail Section with Arrows -->
-          <div v-if="galleryImages.length > 1" class="mt-3 relative flex items-center justify-center px-6 sm:px-8"> {/* Adjusted spacing */}
+          <div v-if="galleryImages.length > 1" class="mt-3 relative flex items-center justify-center px-6 sm:px-8">
             <button
               v-if="galleryImages.length > 3"
               @click="scrollThumbnails('prev')"
@@ -49,11 +49,10 @@
                 :class="selectedImage?.value?.url === imageItem.url ? 'border-orange-gold ring-2 ring-orange-gold/50' : 'border-neutral-bg-soft hover:border-sky-blue/70'"
               />
             </div>
-
             <button
-              v-if="galleryImages.length > 4"
+              v-if="galleryImages.length > 3"
               @click="scrollThumbnails('next')"
-              class="absolute right-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-sky-blue/60 hover:bg-sky-blue text-white rounded-full shadow-md disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+              class="absolute right-0 top-1/2 -translate-y-1/2 z-10 p-1.5 sm:p-2 bg-sky-blue/60 hover:bg-sky-blue text-white rounded-full shadow-md disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
               :disabled="isNextDisabled"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
@@ -97,7 +96,7 @@
 
           <p class="text-venus-text-secondary leading-relaxed mb-5 text-sm">{{ product.description?.substring(0, 250) + (product.description?.length > 250 ? '...' : '') }}</p>
 
-          <p class="text-3xl font-semibold text-orange-gold mb-5"> <!-- Price styling -->
+          <p class="text-3xl font-semibold text-orange-gold mb-5">
             ${{ displayPrice.toFixed(2) }}
             <span v-if="product.original_price && parseFloat(product.original_price) > displayPrice" class="text-lg text-gray-400 line-through ml-2">
               ${{ parseFloat(product.original_price).toFixed(2) }}
@@ -222,28 +221,28 @@
 
       <!-- Tabs Section -->
       <div v-if="product && !pending && !fetchError" class="mt-12 bg-neutral-bg-soft p-4 sm:p-6 rounded-lg shadow">
-        <div class="border-b border-gray-300"> {/* Adjusted border color */}
-          <nav class="-mb-px flex space-x-6 sm:space-x-8" aria-label="Tabs"> {/* Adjusted spacing */}
+        <div class="border-b border-gray-300">
+          <nav class="-mb-px flex space-x-6 sm:space-x-8" aria-label="Tabs">
             <button v-for="tab in tabs" :key="tab.key" @click="selectTab(tab.key)"
               :class="[
                 activeTab === tab.key
-                  ? 'border-peach-pink text-peach-pink' /* Active tab style */
-                  : 'border-transparent text-venus-text-secondary hover:text-peach-pink hover:border-gray-400', /* Inactive tab style */
-                'whitespace-nowrap pb-3 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors duration-200 ease-in-out' /* Common tab styles */
+                  ? 'border-peach-pink text-peach-pink'
+                  : 'border-transparent text-venus-text-secondary hover:text-peach-pink hover:border-gray-400',
+                'whitespace-nowrap pb-3 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors duration-200 ease-in-out'
               ]"
             >
               {{ tab.label }}
             </button>
           </nav>
         </div>
-        <div class="mt-6 py-4" id="product-tabs-content"> {/* Adjusted margin and padding */}
+        <div class="mt-6 py-4" id="product-tabs-content">
           <div v-if="activeTab === 'description'">
             <h3 class="text-xl font-semibold text-venus-text-primary mb-3">Product Description</h3>
             <div class="prose prose-sm sm:prose max-w-none text-venus-text-secondary leading-relaxed" v-html="product.description"></div>
           </div>
           <div v-if="activeTab === 'specifications'">
             <h3 class="text-xl font-semibold text-venus-text-primary mb-3">Specifications</h3>
-            <dl class="space-y-3 text-sm"> {/* Adjusted spacing and base text size */}
+            <dl class="space-y-3 text-sm">
               <div v-if="product.category_name" class="grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-2 items-baseline py-1 border-b border-neutral-light last:border-b-0">
                 <dt class="font-medium text-venus-text-secondary sm:col-span-1">Category</dt>
                 <dd class="text-venus-text-primary sm:col-span-2">{{ product.category_name }}</dd>
@@ -252,7 +251,6 @@
                 <dt class="font-medium text-venus-text-secondary sm:col-span-1">SKU</dt>
                 <dd class="text-venus-text-primary sm:col-span-2">{{ displaySku }}</dd>
               </div>
-              {/* Placeholder for more specs if product.specifications is populated */}
               <div v-if="product.specifications && typeof product.specifications === 'object'">
                 <template v-for="(value, key) in product.specifications" :key="key">
                   <div class="grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-2 items-baseline py-1 border-b border-neutral-light last:border-b-0">
@@ -265,9 +263,8 @@
             </dl>
           </div>
           <div v-if="activeTab === 'reviews'">
-            <h3 class="text-xl font-semibold text-venus-text-primary mb-4">Customer Reviews</h3> {/* Title for section */}
+            <h3 class="text-xl font-semibold text-venus-text-primary mb-4">Customer Reviews</h3>
 
-            <!-- Review Submission Area -->
             <div class="mb-8 p-4 border border-neutral-medium rounded-lg bg-white shadow-sm">
               <div v-if="!isLoggedIn" class="text-center py-3">
                 <p class="text-venus-text-secondary">Please <NuxtLink to="/login" class="text-peach-pink hover:underline font-medium">login</NuxtLink> to write a review.</p>
@@ -276,7 +273,7 @@
                 <div v-if="isLoadingUserReview" class="text-center text-venus-text-secondary py-3"><p>Loading your review status...</p><div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-peach-pink mt-2"></div></div>
                 <div v-else-if="userHasReviewed && userReview">
                   <h4 class="text-md font-semibold text-venus-text-primary mb-2">Your Review:</h4>
-                  <div class="p-3 bg-neutral-bg-soft border border-neutral-medium rounded-md"> {/* Themed background for user's own review display */}
+                  <div class="p-3 bg-neutral-bg-soft border border-neutral-medium rounded-md">
                     <div class="flex items-center mb-1"><span v-for="i in 5" :key="`user-review-star-${i}`" class="h-5 w-5" :class="i <= userReview.rating ? 'text-orange-gold' : 'text-gray-300'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg></span></div>
                     <h5 v-if="userReview.title" class="text-md font-medium text-venus-text-primary">{{ userReview.title }}</h5>
                     <p class="text-sm text-venus-text-secondary mt-1 whitespace-pre-wrap">{{ userReview.comment }}</p>
@@ -293,29 +290,28 @@
               </div>
             </div>
 
-            <!-- Public Reviews List -->
-            <div class="mt-8 pt-6 border-t border-gray-300" id="public-reviews-section"> {/* Adjusted border color */}
-              <h4 class="text-lg font-medium text-venus-text-primary mb-4">What Others Are Saying</h4> {/* Adjusted heading */}
-              <div v-if="isLoadingPublicReviews" class="text-center py-6"><p class="text-venus-text-secondary">Loading reviews...</p><div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-venus-accent-gold mt-2"></div></div>
-              <div v-else-if="publicReviewsError" class="p-4 bg-red-50 text-red-600 border border-red-200 rounded-md text-sm"><p>Could not load reviews: {{ publicReviewsError }}</p></div>
+            <div class="mt-8 pt-6 border-t border-gray-300" id="public-reviews-section">
+              <h4 class="text-lg font-medium text-venus-text-primary mb-4">What Others Are Saying</h4>
+              <div v-if="isLoadingPublicReviews" class="text-center py-6"><p class="text-venus-text-secondary">Loading reviews...</p><div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-peach-pink mt-2"></div></div>
+              <div v-else-if="publicReviewsError" class="p-4 bg-red-100 text-red-600 border border-red-300 rounded-md text-sm shadow-sm"><p>Could not load reviews: {{ publicReviewsError }}</p></div>
               <div v-else-if="!productPublicReviews || productPublicReviews.length === 0" class="text-center py-6"><p class="text-venus-text-secondary">This product has no approved reviews yet.</p></div>
               <ul v-else class="space-y-6">
-                <li v-for="review in productPublicReviews" :key="review.id" class="pb-6 border-b border-gray-100 last:border-b-0">
+                <li v-for="review in productPublicReviews" :key="review.id" class="p-4 bg-white border border-neutral-medium rounded-lg shadow-sm">
                   <div class="flex items-start space-x-3">
-                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-venus-neutral-medium flex items-center justify-center text-venus-text-primary font-semibold">{{ review.user_name ? review.user_name.charAt(0).toUpperCase() : 'U' }}</div>
+                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-sky-blue/20 flex items-center justify-center text-sky-blue font-semibold text-lg">{{ review.user_name ? review.user_name.charAt(0).toUpperCase() : 'U' }}</div>
                     <div class="flex-1">
-                      <div class="flex items-center justify-between"><p class="text-sm font-medium text-venus-text-primary">{{ review.user_name || 'Anonymous User' }}</p><p class="text-xs text-venus-text-secondary">{{ new Date(review.created_at).toLocaleDateString() }}</p></div>
+                      <div class="flex items-center justify-between"><p class="text-sm font-semibold text-venus-text-primary">{{ review.user_name || 'Anonymous User' }}</p><p class="text-xs text-venus-text-secondary">{{ new Date(review.created_at).toLocaleDateString() }}</p></div>
                       <div class="flex items-center mt-1"><span v-for="i in 5" :key="`pub-star-${review.id}-${i}`" class="h-4 w-4" :class="getPublicReviewStarClass(review.rating, i)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg></span></div>
-                      <h5 v-if="review.title" class="mt-2 text-sm font-semibold text-venus-text-primary">{{ review.title }}</h5>
-                      <p class="mt-1 text-sm text-venus-text-secondary whitespace-pre-wrap">{{ review.comment }}</p>
+                      <h5 v-if="review.title" class="mt-2 text-sm font-medium text-venus-text-primary">{{ review.title }}</h5>
+                      <p class="mt-1 text-sm text-venus-text-secondary whitespace-pre-wrap leading-relaxed">{{ review.comment }}</p>
                     </div>
                   </div>
                 </li>
               </ul>
               <div class="mt-8 flex justify-center items-center space-x-3" v-if="reviewPaginationData && reviewPaginationData.totalPages > 1">
-                <button @click="currentPublicReviewsPage = reviewPaginationData.currentPage - 1" :disabled="reviewPaginationData.currentPage <= 1" class="px-4 py-2 border border-venus-neutral-medium text-venus-text-secondary hover:bg-venus-neutral-light rounded-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200">Previous</button>
+                <button @click="currentPublicReviewsPage = reviewPaginationData.currentPage - 1" :disabled="reviewPaginationData.currentPage <= 1" class="px-4 py-2 border border-gray-300 text-sm font-medium text-venus-text-secondary hover:bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-peach-pink">Previous</button>
                 <span class="text-sm text-venus-text-secondary">Page {{ reviewPaginationData.currentPage }} of {{ reviewPaginationData.totalPages }}</span>
-                <button @click="currentPublicReviewsPage = reviewPaginationData.currentPage + 1" :disabled="reviewPaginationData.currentPage >= reviewPaginationData.totalPages" class="px-4 py-2 border border-venus-neutral-medium text-venus-text-secondary hover:bg-venus-neutral-light rounded-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200">Next</button>
+                <button @click="currentPublicReviewsPage = reviewPaginationData.currentPage + 1" :disabled="reviewPaginationData.currentPage >= reviewPaginationData.totalPages" class="px-4 py-2 border border-gray-300 text-sm font-medium text-venus-text-secondary hover:bg-gray-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-peach-pink">Next</button>
               </div>
             </div>
           </div>
@@ -951,3 +947,5 @@ useHead({
   title: computed(() => product.value ? product.value.name : 'Product Details'),
 });
 </script>
+
+[end of frontend/pages/products/[id].vue]

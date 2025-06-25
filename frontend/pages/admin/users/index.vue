@@ -230,23 +230,14 @@ async function fetchUsers() {
   try {
     let url = '/admin/users';
     const params = {};
-    if (activeTab.value && activeTab.value !== 'all') {
-      if (activeTab.value === 'admin') {
-        params.role = 'admin';
-      } else if (activeTab.value === 'customer') {
-        params.role = 'customer';
-      }
+    if (activeTab.value === 'customer') {
+      params.role_group = 'customer';
+    } else if (activeTab.value === 'admin') {
+      params.role_group = 'administrator';
     }
-<<<<<<< HEAD
-<<<<<<< HEAD
     // For 'all', no role_group parameter is sent, backend will interpret as all users.
 
     // console.log('[fetchUsers] Fetching with params:', params); // Cleaned
-=======
-=======
->>>>>>> parent of ca2b8ac (Implement new filtering for Customer/Administrator tabs and update sorting. Backend uses role_group param; frontend updated to send it.)
-    console.log('[fetchUsers] Fetching with params:', params);
->>>>>>> parent of ca2b8ac (Implement new filtering for Customer/Administrator tabs and update sorting. Backend uses role_group param; frontend updated to send it.)
     const response = await $axios.get(url, { params });
     // console.log('[fetchUsers] Backend response.data:', JSON.stringify(response.data, null, 2)); // Cleaned
 
