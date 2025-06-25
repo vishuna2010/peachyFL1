@@ -113,7 +113,7 @@ const handleAddToCart = () => {
   );
 
   if (props.product && !props.product.has_variants && props.product.stock_quantity && props.product.stock_quantity > 0 && !isNaN(priceForCart)) {
-    console.log('ProductCard: props.product before creating cartItemData:', JSON.parse(JSON.stringify(props.product))); // DEBUG LOG
+    // console.log('ProductCard: props.product before creating cartItemData:', JSON.parse(JSON.stringify(props.product))); // Cleaned
     const cartItemData = {
       id: props.product.id, // Use product ID as item ID if no variants
       product_id: props.product.id,

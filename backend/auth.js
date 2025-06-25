@@ -20,7 +20,7 @@ const isAuthenticated = (req, res, next) => {
       }
       // Token is valid, attach decoded payload to request
       req.user = decoded; // Contains userId, email (based on loginUser JWT signing)
-      console.log('[Auth] isAuthenticated: req.user populated:', JSON.stringify(req.user)); // Added log
+      // console.log('[Auth] isAuthenticated: req.user populated:', JSON.stringify(req.user)); // Removed log
       next();
     });
   } else {
@@ -148,28 +148,20 @@ async function changeUserPassword(userId, currentPassword, newPassword) {
 // Middleware to check if the user has a specific permission (moved here, before module.exports)
 function checkPermission(requiredPermission) {
   return async (req, res, next) => {
-    // Log at the beginning of the middleware
-    console.log(`[checkPermission Middleware] Path: ${req.originalUrl}, Method: ${req.method}, Required: '${requiredPermission}'`);
-    console.log(`[checkPermission Middleware] req.user at entry:`, JSON.stringify(req.user, null, 2));
-
     if (!req.user || !req.user.userId) {
-      console.warn(`[checkPermission Middleware] Authentication issue: req.user or req.user.userId missing. User:`, JSON.stringify(req.user, null, 2));
+      // console.warn(`[checkPermission Middleware] Authentication issue: req.user or req.user.userId missing.`); // Keep minimal if needed
       return next(new AppError('Authentication required for permission check.', 401));
     }
-
-    console.log(`[checkPermission Middleware] Calling permissionService.userHasPermission for userId: ${req.user.userId}, permission: '${requiredPermission}'`);
-
     try {
       const hasPerm = await permissionService.userHasPermission(req.user.userId, requiredPermission);
-      console.log(`[checkPermission Middleware] permissionService.userHasPermission returned: ${hasPerm} for userId: ${req.user.userId}, permission: '${requiredPermission}'`);
       if (hasPerm) {
         next();
       } else {
-        console.warn(`[checkPermission Middleware] Forbidden: User ID ${req.user.userId} (Email: ${req.user.email || 'N/A'}) lacks permission: "${requiredPermission}" for ${req.method} ${req.originalUrl}`);
+        console.warn(`User ID ${req.user.userId} (Email: ${req.user.email || 'N/A'}) lacks permission: "${requiredPermission}" for ${req.method} ${req.originalUrl}`); // Retain this important warning
         return next(new AppError(`Forbidden: You do not have the required permission ("${requiredPermission}") to perform this action.`, 403));
       }
     } catch (error) {
-      console.error(`[checkPermission Middleware] Error checking permission '${requiredPermission}' for user ID ${req.user.userId} on ${req.method} ${req.originalUrl}:`, error);
+      console.error(`Error in checkPermission middleware for '${requiredPermission}', user ID ${req.user.userId}:`, error); // Retain error log
       return next(new AppError('An error occurred while verifying permissions.', 500));
     }
   };

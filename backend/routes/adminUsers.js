@@ -1,4 +1,3 @@
-console.log("ADMIN USERS ROUTE FILE LOADED - VERSION MNO"); // NEW VERSION MARKER
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
@@ -198,11 +197,11 @@ router.put(
   ],
   async (req, res, next) => {
     const { id } = req.params;
-    console.log(`[PUT /api/admin/users/:${id}] Handler reached AFTER checkPermission('users:edit'). req.user:`, JSON.stringify(req.user, null, 2));
+    // console.log(`[PUT /api/admin/users/:${id}] Handler reached AFTER checkPermission('users:edit'). req.user:`, JSON.stringify(req.user, null, 2)); // Cleaned
 
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.warn(`[PUT /api/admin/users/:${id}] Validation errors:`, JSON.stringify(errors.array()));
+      // console.warn(`[PUT /api/admin/users/:${id}] Validation errors:`, JSON.stringify(errors.array())); // Cleaned
       return res.status(400).json({ errors: errors.array() });
     }
 
@@ -214,13 +213,13 @@ router.put(
     const client = await db.pool.connect();
     try {
       if (updates.role_id !== undefined) {
-        console.log(`[PUT /api/admin/users/:${id}] Role update detected. Checking 'users:assign_roles' for userId: ${req.user.userId}`);
+        // console.log(`[PUT /api/admin/users/:${id}] Role update detected. Checking 'users:assign_roles' for userId: ${req.user.userId}`); // Cleaned
         const hasAssignRolesPermission = await permissionService.userHasPermission(req.user.userId, 'users:assign_roles');
         if (!hasAssignRolesPermission) {
-           console.warn(`[PUT /api/admin/users/:${id}] User ${req.user.userId} lacks 'users:assign_roles' for role update.`);
+           // console.warn(`[PUT /api/admin/users/:${id}] User ${req.user.userId} lacks 'users:assign_roles' for role update.`); // Cleaned
            throw new AppError("Forbidden: You do not have permission to assign roles.", 403);
         }
-        console.log(`[PUT /api/admin/users/:${id}] User ${req.user.userId} HAS 'users:assign_roles' for role update.`);
+        // console.log(`[PUT /api/admin/users/:${id}] User ${req.user.userId} HAS 'users:assign_roles' for role update.`); // Cleaned
 
         const newRoleIdInt = parseInt(updates.role_id, 10);
         if (isNaN(newRoleIdInt) || newRoleIdInt <= 0) {

@@ -1552,9 +1552,10 @@ async function seedDatabase() {
 
 
     console.log('Database seeding completed successfully.');
-    console.log('IDs of critical seeded data:', JSON.stringify(seededDataIds, null, 2));
+    // console.log('IDs of critical seeded data:', JSON.stringify(seededDataIds, null, 2)); // Optional: Keep if useful for debugging seeds
 
-    // Diagnostic: Check for users with NULL role_id after migration
+    // Diagnostic: Check for users with NULL role_id after migration - Can be commented out or removed for production seeds
+    /*
     try {
       const usersWithNullRoleId = await client.query("SELECT id, email, role as legacy_role FROM users WHERE role_id IS NULL");
       if (usersWithNullRoleId.rows.length > 0) {
@@ -1568,6 +1569,7 @@ async function seedDatabase() {
     } catch (diagError) {
       console.error("DIAGNOSTIC: Error querying for users with NULL role_id:", diagError);
     }
+    */
 
     await client.query('COMMIT');
   } catch (error) {

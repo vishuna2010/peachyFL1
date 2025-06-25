@@ -3,56 +3,57 @@
     <ProductDetailSkeleton v-if="pending" />
     <div v-else-if="fetchError" class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
       <h2 class="text-2xl font-semibold text-red-600 mb-4">Error Loading Product</h2>
-      <p class="text-gray-600 mb-2">{{ fetchError.message || fetchError }}</p>
-      <p v-if="fetchError.response && fetchError.response.status === 404" class="text-gray-600 mb-6">
+      <p class="text-venus-text-secondary mb-2">{{ fetchError.message || fetchError }}</p>
+      <p v-if="fetchError.response && fetchError.response.status === 404" class="text-venus-text-secondary mb-6">
         The product you are looking for does not exist.
       </p>
-      <NuxtLink to="/" class="font-medium text-indigo-600 hover:text-indigo-800 hover:underline">&larr; Back to Home</NuxtLink>
+      <NuxtLink to="/" class="font-medium text-peach-pink hover:text-opacity-80 hover:underline">&larr; Back to Home</NuxtLink>
     </div>
 
-    <div v-if="product && !pending && !fetchError" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="md:grid md:grid-cols-5 lg:grid-cols-2 gap-8 lg:gap-12">
+    <div v-if="product && !pending && !fetchError" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8"> {/* Adjusted padding */}
+      <div class="lg:grid lg:grid-cols-2 lg:gap-x-8 xl:gap-x-12 items-start"> {/* Use lg for grid, better gap */}
         <!-- Image Column -->
-        <div class="md:col-span-3 lg:col-span-1">
-          <img
-            @click="openZoomModal(selectedImage.value?.url)"
-            v-if="selectedImage && selectedImage.value?.url"
-            :src="selectedImage.value.url"
-            :alt="selectedImage.value.alt_text || product.name"
-            class="w-full h-auto object-contain rounded-lg shadow-lg max-h-[550px] aspect-[4/5] cursor-zoom-in hover:opacity-90 transition-opacity duration-200"
-            key="selected-image"
-          />
-          <div v-if="!selectedImage || !selectedImage.value?.url" class="w-full h-[400px] md:h-[550px] flex items-center justify-center bg-neutral-medium rounded-lg text-text-secondary">No Image Available</div>
+        <div class="w-full"> {/* Removed md:col-span-3 lg:col-span-1 */}
+          <!-- Image Gallery - Main Image -->
+          <div class="mb-4 sticky top-24"> {/* Sticky main image for better scroll on desktop */}
+            <img
+              @click="openZoomModal(selectedImage.value?.url)"
+              v-if="selectedImage && selectedImage.value?.url"
+              :src="selectedImage.value.url"
+              :alt="selectedImage.value.alt_text || product.name"
+              class="w-full h-auto object-contain rounded-lg shadow-lg max-h-[450px] sm:max-h-[500px] lg:max-h-[550px] aspect-[4/5] cursor-zoom-in hover:opacity-90 transition-opacity duration-200 border border-neutral-bg-soft"
+              key="selected-image"
+            />
+            <div v-if="!selectedImage || !selectedImage.value?.url" class="w-full h-[400px] md:h-[500px] flex items-center justify-center bg-neutral-bg-soft rounded-lg text-venus-text-secondary shadow-inner">No Image Available</div>
+
 
           <!-- Thumbnail Section with Arrows -->
-          <div v-if="galleryImages.length > 1" class="mt-4 relative flex items-center justify-center">
-            <!-- Previous Arrow -->
+          <div v-if="galleryImages.length > 1" class="mt-3 relative flex items-center justify-center px-6 sm:px-8"> {/* Adjusted spacing */}
             <button
-              v-if="galleryImages.length > 5"
+              v-if="galleryImages.length > 3"  {/* Show arrows if more than 3-4 thumbnails typically */}
               @click="scrollThumbnails('prev')"
-              class="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/40 hover:bg-black/60 text-white rounded-sm disabled:opacity-30 disabled:cursor-not-allowed transition-colors duration-200"
+              class="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-1.5 sm:p-2 bg-sky-blue/60 hover:bg-sky-blue text-white rounded-full shadow-md disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
               :disabled="isPrevDisabled"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
             </button>
 
-            <div ref="thumbnailContainer" class="flex space-x-2 sm:space-x-3 overflow-x-auto py-2 px-1 no-scrollbar scroll-smooth">
+            <div ref="thumbnailContainer" class="flex space-x-2 sm:space-x-3 overflow-x-auto py-2 no-scrollbar scroll-smooth">
               <img
                 v-for="imageItem in galleryImages"
                 :key="imageItem.id"
                 :src="imageItem.url"
                 @click="selectedImage.value = imageItem"
                 :alt="imageItem.alt_text || product.name + ' thumbnail ' + imageItem.id"
-                class="h-16 w-16 sm:h-20 sm:w-20 object-cover rounded-md border-2 cursor-pointer transition-all duration-200 ease-in-out flex-shrink-0"
-                :class="selectedImage?.value?.url === imageItem.url ? 'border-venus-accent-gold ring-2 ring-venus-accent-gold/50 ring-offset-1 rounded-md' : 'border-transparent hover:border-venus-accent-gold/70 hover:scale-105 rounded-md'"
+                class="h-16 w-16 sm:h-20 sm:w-20 object-cover rounded-md border-2 cursor-pointer transition-all duration-200 ease-in-out flex-shrink-0 hover:shadow-md"
+                :class="selectedImage?.value?.url === imageItem.url ? 'border-orange-gold ring-2 ring-orange-gold/50' : 'border-neutral-bg-soft hover:border-sky-blue/70'"
               />
             </div>
 
-            <!-- Next Arrow -->
             <button
-              v-if="galleryImages.length > 5"
+              v-if="galleryImages.length > 4"
               @click="scrollThumbnails('next')"
-              class="absolute right-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-black/40 hover:bg-black/60 text-white rounded-sm disabled:opacity-30 disabled:cursor-not-allowed transition-colors duration-200"
+              class="absolute right-0 top-1/2 -translate-y-1/2 z-10 p-2 bg-sky-blue/60 hover:bg-sky-blue text-white rounded-full shadow-md disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
               :disabled="isNextDisabled"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
@@ -62,52 +63,70 @@
 
         <!-- Details Column -->
         <div class="md:col-span-2 lg:col-span-1 py-4 md:py-0">
-          <h1 class="text-3xl lg:text-4xl font-serif text-venus-text-primary mb-3">{{ product.name }}</h1>
+          <!-- Breadcrumbs (Placeholder - Assuming you might add a breadcrumb component later) -->
+          <div class="mb-3 text-xs text-venus-text-secondary">
+            <NuxtLink to="/" class="hover:text-peach-pink">Home</NuxtLink>
+            <span class="mx-1">/</span>
+            <NuxtLink :to="`/categories/${product.category_slug || product.category_id}`" class="hover:text-peach-pink" v-if="product.category_name">{{ product.category_name }}</NuxtLink>
+            <span class="mx-1" v-if="product.category_name">/</span>
+            <span class="text-venus-text-primary">{{ product.name }}</span>
+          </div>
 
-          <div v-if="product && product.review_count !== undefined" class="flex items-center mb-3">
+          <h1 class="text-3xl lg:text-4xl font-bold text-venus-text-primary mb-2">{{ product.name }}</h1>
+
+          <p v-if="currentVariant && currentVariant.sku" class="text-xs text-venus-text-secondary mb-3">SKU: {{ currentVariant.sku }}</p>
+          <p v-else-if="!currentVariant && product.sku" class="text-xs text-venus-text-secondary mb-3">SKU: {{ product.sku }}</p>
+
+          <div v-if="product && product.review_count !== undefined" class="flex items-center mb-4">
             <div v-if="product.review_count > 0" class="flex items-center">
               <div class="flex items-center">
-                <span v-for="i in 5" :key="`star-${i}`" class="h-5 w-5" :class="i <= Math.round(product.average_rating) ? 'text-yellow-400' : 'text-gray-300'">
+                <span v-for="i in 5" :key="`star-${i}`" class="h-5 w-5" :class="i <= Math.round(product.average_rating) ? 'text-orange-gold' : 'text-gray-300'">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
                 </span>
               </div>
-              <button @click="scrollToReviewsAndOpenTab()" class="ml-2 text-sm text-gray-600 hover:text-indigo-500 hover:underline"> {/* Will be updated later if it's a venus-text-secondary or venus-accent-gold link */}
+              <button @click="scrollToReviewsAndOpenTab()" class="ml-2 text-sm text-sky-blue hover:text-peach-pink hover:underline">
                 ({{ product.review_count }} {{ product.review_count === 1 ? 'review' : 'reviews' }})
               </button>
             </div>
             <div v-else class="text-sm text-gray-500">
-              <button @click="scrollToReviewsAndOpenTab(true)" class="hover:text-indigo-500 hover:underline"> {/* Will be updated later */}
+              <button @click="scrollToReviewsAndOpenTab(true)" class="text-sky-blue hover:text-peach-pink hover:underline">
                 Be the first to review!
               </button>
             </div>
           </div>
 
-          <p v-if="currentVariant && currentVariant.sku" class="text-xs text-venus-text-secondary mb-4">SKU: {{ currentVariant.sku }}</p>
-          <p v-else-if="!currentVariant && product.sku" class="text-xs text-venus-text-secondary mb-4">SKU: {{ product.sku }}</p>
+          <p class="text-venus-text-secondary leading-relaxed mb-5 text-sm">{{ product.description?.substring(0, 250) + (product.description?.length > 250 ? '...' : '') }}</p>
 
-          <p class="text-venus-text-secondary leading-relaxed mb-6 text-sm">{{ product.description?.substring(0, 150) + (product.description?.length > 150 ? '...' : '') }}</p>
-
-          <p class="text-3xl font-sans font-bold text-venus-text-primary mb-6">${{ displayPrice.toFixed(2) }}</p>
-
-          <p v-if="product.category_name" class="text-sm text-venus-text-secondary mb-2">
-            Category: <span class="font-medium text-venus-text-primary">{{ product.category_name }}</span>
-          </p>
-          <div v-if="product.tags && product.tags.length > 0" class="mb-6">
-            <span v-for="tag in product.tags" :key="tag" class="inline-block bg-venus-neutral-light text-venus-text-secondary text-xs font-semibold mr-2 px-2.5 py-0.5 rounded-sm">
-              {{ tag }}
+          <p class="text-3xl font-semibold text-orange-gold mb-5"> <!-- Price styling -->
+            ${{ displayPrice.toFixed(2) }}
+            <span v-if="product.original_price && parseFloat(product.original_price) > displayPrice" class="text-lg text-gray-400 line-through ml-2">
+              ${{ parseFloat(product.original_price).toFixed(2) }}
             </span>
+          </p>
+
+          <div class="space-y-1 mb-4 text-sm">
+            <p v-if="product.category_name" class="text-venus-text-secondary">
+              Category: <NuxtLink :to="`/categories/${product.category_slug || product.category_id}`" class="font-medium text-sky-blue hover:text-peach-pink hover:underline">{{ product.category_name }}</NuxtLink>
+            </p>
+            <div v-if="product.tags && product.tags.length > 0" class="flex flex-wrap gap-2 items-center">
+              <span class="text-venus-text-secondary">Tags:</span>
+              <NuxtLink v-for="tag in product.tags" :key="tag" :to="`/tags/${tag.toLowerCase().replace(/\s+/g, '-')}`" class="inline-block bg-fresh-green/10 text-fresh-green text-xs font-semibold px-2 py-0.5 rounded-full hover:bg-fresh-green/20">
+                {{ tag }}
+              </NuxtLink>
+            </div>
+            <p v-if="product.tax_class_name || product.tax_class_id" class="text-venus-text-secondary">
+              Tax Class: <span class="font-medium text-venus-text-primary">{{ product.tax_class_name || (product.tax_class_id ? 'ID: ' + product.tax_class_id : 'N/A') }}</span>
+            </p>
           </div>
 
-          <p v-if="product.tax_class_name || product.tax_class_id" class="text-sm text-venus-text-secondary mb-4">
-            <strong>Tax Class:</strong> {{ product.tax_class_name || (product.tax_class_id ? 'ID: ' + product.tax_class_id : 'N/A') }}
-          </p>
 
+          <!-- Variant Selection -->
           <div v-if="product.has_variants && product.available_options && product.available_options.length > 0" class="space-y-4 mb-6">
             <div v-for="option_type in product.available_options" :key="option_type.option_id">
-              <label :for="`option-${option_type.option_id}`" class="block text-sm font-medium text-venus-text-primary mb-1">
+              <label :for="`option-${option_type.option_id}`" class="block text-sm font-medium text-venus-text-primary mb-1.5">
                 {{ option_type.option_name }}:
-                <span v-if="selectedOptions[option_type.option_id]" class="text-sm text-venus-text-secondary ml-1">
-                  ({{ getSelectedValueName(option_type, selectedOptions[option_type.option_id]) }})
+                <span v-if="selectedOptions[option_type.option_id]" class="text-sm text-gray-600 ml-1">
+                  {{ getSelectedValueName(option_type, selectedOptions[option_type.option_id]) }}
                 </span>
               </label>
               <div class="flex flex-wrap gap-2">
@@ -118,40 +137,34 @@
                     @click="valueDetail.isPotentiallyAvailable && selectOption(option_type.option_id, valueDetail.value_id)"
                     :disabled="!valueDetail.isPotentiallyAvailable"
                     :class="[
-                      'p-1.5 border flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-1 transition-all duration-150 rounded-md', // Added rounded-md to base
+                      'p-1 border flex items-center space-x-2 focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-150 rounded-md',
                       selectedOptions[option_type.option_id] === valueDetail.value_id
-                        ? 'border-venus-accent-gold ring-2 ring-venus-accent-gold/50 shadow-md' // Selected
+                        ? 'border-peach-pink ring-2 ring-peach-pink'
                         : !valueDetail.isPotentiallyAvailable
-                          ? 'border-gray-200 opacity-40 cursor-not-allowed' // Fully unavailable (keep gray for strong visual difference)
+                          ? 'border-gray-300 opacity-40 cursor-not-allowed'
                           : valueDetail.anyResultingVariantInStock
-                            ? 'border-venus-neutral-medium hover:border-neutral-dark focus:ring-venus-accent-gold/50' // Available and in stock
-                            : 'border-yellow-300 hover:border-yellow-400 focus:ring-yellow-500/50', // Available but OOS
-                       // Add a subtle indicator for OOS if it's not selected but available
-                      valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id ? 'bg-yellow-50' : ''
+                            ? 'border-gray-300 hover:border-sky-blue focus:ring-peach-pink'
+                            : 'border-yellow-400 hover:border-yellow-500 focus:ring-peach-pink',
+                      valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id ? 'bg-lemon-yellow/20' : ''
                     ]"
                     :aria-pressed="selectedOptions[option_type.option_id] === valueDetail.value_id"
                     :title="valueDetail.isPotentiallyAvailable
-                              ? (valueDetail.anyResultingVariantInStock ? valueDetail.value_name : `${valueDetail.value_name} (Out of stock with current selections)`)
-                              : `${valueDetail.value_name} (Unavailable with current selections)`"
+                              ? (valueDetail.anyResultingVariantInStock ? valueDetail.value_name : `${valueDetail.value_name} (Out of stock)`)
+                              : `${valueDetail.value_name} (Unavailable)`"
                   >
                     <span
-                      class="w-6 h-6 rounded-md border border-gray-400 inline-block relative"
+                      class="w-6 h-6 rounded border border-gray-400 inline-block relative"
                       :style="{ backgroundColor: valueDetail.value_name.toLowerCase() }"
-                      :class="{
-                        'opacity-40': !valueDetail.isPotentiallyAvailable,
-                        'group-hover:opacity-75': valueDetail.isPotentiallyAvailable
-                      }"
+                      :class="{ 'opacity-40': !valueDetail.isPotentiallyAvailable }"
                     >
                       <span v-if="valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id"
-                            class="absolute inset-0 flex items-center justify-center text-yellow-700 font-bold text-xs">
-                        !
-                      </span>
+                            class="absolute inset-0 flex items-center justify-center text-orange-gold font-bold text-xs">!</span>
                     </span>
                     <span
                       class="text-sm text-venus-text-secondary pr-1"
                       :class="{
                         'opacity-60 line-through': !valueDetail.isPotentiallyAvailable,
-                        'text-yellow-700': valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id
+                        'text-orange-gold': valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id
                       }"
                     >
                       {{ valueDetail.value_name }}
@@ -164,95 +177,125 @@
                     @click="valueDetail.isPotentiallyAvailable && selectOption(option_type.option_id, valueDetail.value_id)"
                     :disabled="!valueDetail.isPotentiallyAvailable"
                     :class="[
-                      'px-3 py-1.5 border rounded-sm text-sm focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors duration-150', // base rounded-sm
+                      'px-3 py-1.5 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-150',
                       selectedOptions[option_type.option_id] === valueDetail.value_id
-                        ? 'bg-venus-text-primary text-white border-venus-text-primary focus:ring-venus-accent-gold/50' // Selected
+                        ? 'bg-sky-blue text-white border-sky-blue focus:ring-peach-pink'
                         : !valueDetail.isPotentiallyAvailable
-                          ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-75 cursor-not-allowed line-through' // Fully unavailable (keep gray)
+                          ? 'bg-gray-100 text-gray-400 border-gray-300 opacity-75 cursor-not-allowed line-through'
                           : !valueDetail.anyResultingVariantInStock
-                            ? 'bg-yellow-50 text-yellow-700 border-yellow-300 hover:bg-yellow-100 focus:ring-yellow-500' // Available, but leads to OOS (keep yellow)
-                            : 'bg-white text-venus-text-primary border-venus-neutral-medium hover:bg-gray-50 hover:border-neutral-dark focus:ring-venus-accent-gold/50' // Available and in stock
+                            ? 'bg-lemon-yellow/20 text-orange-gold border-yellow-400 hover:bg-lemon-yellow/40 focus:ring-peach-pink'
+                            : 'bg-white text-venus-text-primary border-gray-300 hover:bg-gray-50 hover:border-sky-blue focus:ring-peach-pink'
                     ]"
                     :aria-pressed="selectedOptions[option_type.option_id] === valueDetail.value_id"
                     :title="valueDetail.isPotentiallyAvailable
-                              ? (valueDetail.anyResultingVariantInStock ? valueDetail.value_name : `${valueDetail.value_name} (Out of stock with current selections)`)
-                              : `${valueDetail.value_name} (Unavailable with current selections)`"
+                              ? (valueDetail.anyResultingVariantInStock ? valueDetail.value_name : `${valueDetail.value_name} (Out of stock)`)
+                              : `${valueDetail.value_name} (Unavailable)`"
                   >
                     {{ valueDetail.value_name }}
-                    <span v-if="valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id" class="text-xs ml-1">(Out of Stock)</span>
+                    <span v-if="valueDetail.isPotentiallyAvailable && !valueDetail.anyResultingVariantInStock && selectedOptions[option_type.option_id] !== valueDetail.value_id" class="text-xs ml-1">(OOS)</span>
                   </button>
                 </template>
               </div>
             </div>
           </div>
 
-          <div v-if="product.has_variants && product.available_options && product.available_options.length > 0 && !currentVariant && Object.keys(selectedOptions).length === product.available_options.length" class="my-4 p-3 rounded-md bg-red-100 text-red-700 border border-red-200 text-sm">
-            Selected combination is unavailable. Please try different options.
+          <div v-if="product.has_variants && product.available_options && product.available_options.length > 0 && !currentVariant && Object.keys(selectedOptions).length === product.available_options.length" class="my-4 p-3 rounded-md bg-red-100 text-red-700 border border-red-300 text-sm shadow">
+            Selected combination is currently unavailable. Please try different options.
           </div>
 
-          <div class="my-4 p-3 rounded-md text-sm font-medium" :class="{'bg-green-100 text-green-700 border border-green-200': displayStock > 5, 'bg-yellow-100 text-yellow-700 border border-yellow-200': displayStock > 0 && displayStock <= 5, 'bg-red-100 text-red-700 border border-red-200': displayStock <= 0}">
+          <div class="my-4 p-3 rounded-md text-sm font-medium shadow-sm" :class="{'bg-fresh-green/10 text-fresh-green border border-fresh-green/30': displayStock > 5, 'bg-lemon-yellow/20 text-orange-gold border border-orange-gold/30': displayStock > 0 && displayStock <= 5, 'bg-red-100 text-red-600 border border-red-300': displayStock <= 0}">
             {{ stockStatusMessage }}
           </div>
 
-          <div class="flex items-center gap-4 my-6">
-            <input type="number" v-model.number="quantity" min="1" :max="displayStock > 0 ? displayStock : 1" :disabled="addToCartDisabled" class="w-20 p-2 border border-venus-neutral-medium rounded-sm text-center focus:ring-1 focus:ring-venus-accent-gold/50 focus:border-venus-accent-gold" />
-            <button @click="handleAddToCart" class="flex-grow bg-venus-text-primary text-white font-bold py-3 px-6 rounded-sm hover:bg-opacity-80 hover:scale-105 transform transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-venus-neutral-medium disabled:text-venus-text-secondary flex items-center justify-center" :disabled="addToCartDisabled">
+          <div class="flex items-center gap-3 my-6">
+            <input type="number" v-model.number="quantity" min="1" :max="displayStock > 0 ? displayStock : 1" :disabled="addToCartDisabled" class="w-20 p-2.5 border border-gray-300 rounded-md text-center focus:ring-1 focus:ring-peach-pink focus:border-peach-pink disabled:bg-gray-100" />
+            <button @click="handleAddToCart" class="flex-grow bg-peach-pink text-white font-semibold py-3 px-6 rounded-md shadow hover:bg-opacity-90 transform transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-300 flex items-center justify-center" :disabled="addToCartDisabled">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
               <span>{{ (displayStock <= 0 ? 'Out of Stock' : 'Add to Cart') }}</span>
             </button>
           </div>
-          <NuxtLink to="/" class="inline-block mt-6 text-venus-accent-gold hover:underline transition-colors duration-200 ease-in-out hover:opacity-80">&larr; Back to all products</NuxtLink>
+          <NuxtLink to="/" class="inline-block mt-6 text-sky-blue hover:text-peach-pink hover:underline transition-colors duration-200 ease-in-out">&larr; Back to all products</NuxtLink>
         </div>
       </div>
 
       <!-- Tabs Section -->
-      <div v-if="product && !pending && !fetchError" class="mt-12">
-        <div class="border-b border-gray-200">
-          <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-            <button v-for="tab in tabs" :key="tab.key" @click="selectTab(tab.key)" :class="[activeTab === tab.key ? 'border-venus-text-primary text-venus-text-primary font-semibold' : 'border-transparent text-venus-text-secondary hover:text-venus-text-primary hover:border-venus-neutral-dark', 'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors duration-200 ease-in-out']">
+      <div v-if="product && !pending && !fetchError" class="mt-12 bg-neutral-bg-soft p-4 sm:p-6 rounded-lg shadow">
+        <div class="border-b border-gray-300"> {/* Adjusted border color */}
+          <nav class="-mb-px flex space-x-6 sm:space-x-8" aria-label="Tabs"> {/* Adjusted spacing */}
+            <button v-for="tab in tabs" :key="tab.key" @click="selectTab(tab.key)"
+              :class="[
+                activeTab === tab.key
+                  ? 'border-peach-pink text-peach-pink' /* Active tab style */
+                  : 'border-transparent text-venus-text-secondary hover:text-peach-pink hover:border-gray-400', /* Inactive tab style */
+                'whitespace-nowrap pb-3 px-1 border-b-2 font-medium text-sm focus:outline-none transition-colors duration-200 ease-in-out' /* Common tab styles */
+              ]"
+            >
               {{ tab.label }}
             </button>
           </nav>
         </div>
-        <div class="mt-8" id="product-tabs-content">
+        <div class="mt-6 py-4" id="product-tabs-content"> {/* Adjusted margin and padding */}
           <div v-if="activeTab === 'description'">
-            <h3 class="sr-only">Product Description</h3>
-            <div class="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none text-venus-text-secondary leading-relaxed" v-html="product.description"></div>
+            <h3 class="text-xl font-semibold text-venus-text-primary mb-3">Product Description</h3>
+            <div class="prose prose-sm sm:prose max-w-none text-venus-text-secondary leading-relaxed" v-html="product.description"></div>
           </div>
           <div v-if="activeTab === 'specifications'">
-            <h3 class="sr-only">Specifications</h3>
-            <dl class="space-y-4">
-              <div v-if="product.category_name"><dt class="text-sm font-medium text-venus-text-secondary">Category</dt><dd class="mt-1 text-sm text-venus-text-primary">{{ product.category_name }}</dd></div>
-              <div v-if="displaySku"><dt class="text-sm font-medium text-venus-text-secondary">SKU</dt><dd class="mt-1 text-sm text-venus-text-primary">{{ displaySku }}</dd></div>
-              <div v-if="!product.category_name && !displaySku"><p class="text-venus-text-secondary">Detailed specifications are not available for this product. Please refer to the product description.</p></div>
+            <h3 class="text-xl font-semibold text-venus-text-primary mb-3">Specifications</h3>
+            <dl class="space-y-3 text-sm"> {/* Adjusted spacing and base text size */}
+              <div v-if="product.category_name" class="grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-2 items-baseline py-1 border-b border-neutral-light last:border-b-0">
+                <dt class="font-medium text-venus-text-secondary sm:col-span-1">Category</dt>
+                <dd class="text-venus-text-primary sm:col-span-2">{{ product.category_name }}</dd>
+              </div>
+              <div v-if="displaySku" class="grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-2 items-baseline py-1 border-b border-neutral-light last:border-b-0">
+                <dt class="font-medium text-venus-text-secondary sm:col-span-1">SKU</dt>
+                <dd class="text-venus-text-primary sm:col-span-2">{{ displaySku }}</dd>
+              </div>
+              {/* Placeholder for more specs if product.specifications is populated */}
+              <div v-if="product.specifications && typeof product.specifications === 'object'">
+                <template v-for="(value, key) in product.specifications" :key="key">
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-1 sm:gap-2 items-baseline py-1 border-b border-neutral-light last:border-b-0">
+                    <dt class="font-medium text-venus-text-secondary sm:col-span-1 capitalize">{{ key.replace(/_/g, ' ') }}</dt>
+                    <dd class="text-venus-text-primary sm:col-span-2">{{ value }}</dd>
+                  </div>
+                </template>
+              </div>
+              <div v-if="!product.category_name && !displaySku && (!product.specifications || Object.keys(product.specifications).length === 0)"><p class="text-venus-text-secondary">Detailed specifications are not available.</p></div>
             </dl>
           </div>
           <div v-if="activeTab === 'reviews'">
-            <h3 class="sr-only">Customer Reviews</h3>
-            <div class="mb-8 p-4 border border-gray-200 rounded-lg bg-gray-50">
-              <div v-if="!isLoggedIn" class="text-center"><p class="text-venus-text-secondary">Please <NuxtLink to="/login" class="text-venus-accent-gold hover:underline font-medium">login</NuxtLink> to write a review.</p></div>
+            <h3 class="text-xl font-semibold text-venus-text-primary mb-4">Customer Reviews</h3> {/* Title for section */}
+
+            <!-- Review Submission Area -->
+            <div class="mb-8 p-4 border border-neutral-medium rounded-lg bg-white shadow-sm">
+              <div v-if="!isLoggedIn" class="text-center py-3">
+                <p class="text-venus-text-secondary">Please <NuxtLink to="/login" class="text-peach-pink hover:underline font-medium">login</NuxtLink> to write a review.</p>
+              </div>
               <div v-else>
-                <div v-if="isLoadingUserReview" class="text-center text-venus-text-secondary"><p>Loading your review status...</p><div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-venus-accent-gold mt-2"></div></div>
+                <div v-if="isLoadingUserReview" class="text-center text-venus-text-secondary py-3"><p>Loading your review status...</p><div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-peach-pink mt-2"></div></div>
                 <div v-else-if="userHasReviewed && userReview">
                   <h4 class="text-md font-semibold text-venus-text-primary mb-2">Your Review:</h4>
-                  <div class="p-3 bg-white border border-gray-200 rounded-md">
-                    <div class="flex items-center mb-1"><span v-for="i in 5" :key="`user-review-star-${i}`" class="h-5 w-5" :class="i <= userReview.rating ? 'text-yellow-400' : 'text-gray-300'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg></span></div>
+                  <div class="p-3 bg-neutral-bg-soft border border-neutral-medium rounded-md"> {/* Themed background for user's own review display */}
+                    <div class="flex items-center mb-1"><span v-for="i in 5" :key="`user-review-star-${i}`" class="h-5 w-5" :class="i <= userReview.rating ? 'text-orange-gold' : 'text-gray-300'"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg></span></div>
                     <h5 v-if="userReview.title" class="text-md font-medium text-venus-text-primary">{{ userReview.title }}</h5>
                     <p class="text-sm text-venus-text-secondary mt-1 whitespace-pre-wrap">{{ userReview.comment }}</p>
-                    <p class="text-xs text-gray-400 mt-2">Status: <span class="font-medium" :class="{'text-yellow-500': userReview.status === 'pending', 'text-green-500': userReview.status === 'approved', 'text-red-500': userReview.status === 'rejected'}">{{ userReview.status }}</span></p>
+                    <p class="text-xs text-gray-500 mt-2">Status: <span class="font-medium" :class="{'text-orange-gold': userReview.status === 'pending', 'text-fresh-green': userReview.status === 'approved', 'text-red-500': userReview.status === 'rejected'}">{{ userReview.status }}</span></p>
                   </div>
                 </div>
-                <div v-else-if="!showReviewForm" class="text-center"><button @click="openReviewForm" class="px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 transition-colors">Write a Review</button></div>
+                <div v-else-if="!showReviewForm" class="text-center py-3">
+                  <button @click="openReviewForm" class="px-6 py-2 bg-fresh-green text-white font-medium rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-fresh-green transition-colors">Write a Review</button>
+                </div>
                 <div v-if="showReviewForm && !userHasReviewed">
                   <ReviewForm :product-id="product.id" @review-submitted-successfully="handleReviewSubmittedSuccessfully" />
-                  <button @click="showReviewForm = false" class="mt-2 w-full text-center px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors duration-200">Cancel</button>
+                  <button @click="showReviewForm = false" class="mt-3 w-full text-center px-4 py-2 text-sm text-venus-text-secondary hover:bg-neutral-medium rounded-md transition-colors duration-200 focus:outline-none focus:ring-1 focus:ring-peach-pink">Cancel</button>
                 </div>
               </div>
             </div>
-            <div class="mt-10 pt-6 border-t border-gray-200" id="public-reviews-section">
-              <h4 class="text-lg font-medium text-venus-text-primary mb-4">Customer Feedback</h4>
+
+            <!-- Public Reviews List -->
+            <div class="mt-8 pt-6 border-t border-gray-300" id="public-reviews-section"> {/* Adjusted border color */}
+              <h4 class="text-lg font-medium text-venus-text-primary mb-4">What Others Are Saying</h4> {/* Adjusted heading */}
               <div v-if="isLoadingPublicReviews" class="text-center py-6"><p class="text-venus-text-secondary">Loading reviews...</p><div class="inline-block animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-venus-accent-gold mt-2"></div></div>
               <div v-else-if="publicReviewsError" class="p-4 bg-red-50 text-red-600 border border-red-200 rounded-md text-sm"><p>Could not load reviews: {{ publicReviewsError }}</p></div>
               <div v-else-if="!productPublicReviews || productPublicReviews.length === 0" class="text-center py-6"><p class="text-venus-text-secondary">This product has no approved reviews yet.</p></div>
@@ -709,10 +752,10 @@ const handleAddToCart = () => {
   if (quantity.value <= 0) { toast.error("Please enter a valid quantity."); return; }
   if (quantity.value > stockAvailable) { toast.error(`Cannot add ${quantity.value} items. Only ${stockAvailable} left in stock.`); return; }
 
-  console.log('PDP: product.value before creating cartItemData:', JSON.parse(JSON.stringify(product.value))); // DEBUG LOG
-  if(currentVariant.value) {
-    console.log('PDP: currentVariant.value before creating cartItemData:', JSON.parse(JSON.stringify(currentVariant.value))); // DEBUG LOG
-  }
+  // console.log('PDP: product.value before creating cartItemData:', JSON.parse(JSON.stringify(product.value))); // Cleaned
+  // if(currentVariant.value) { // Cleaned
+  //   console.log('PDP: currentVariant.value before creating cartItemData:', JSON.parse(JSON.stringify(currentVariant.value))); // Cleaned
+  // }
 
   let cartItemData;
   if (currentVariant.value) {

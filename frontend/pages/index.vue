@@ -152,39 +152,57 @@
             <ProductCard v-for="product in products" :key="product.id" :product="product" @open-quick-view="openQuickViewModal" />
           </div>
 
-          <!-- Basic QuickView Modal Placeholder -->
-          <div v-if="isQuickViewModalVisible && productForQuickView" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[100] p-4">
-            <div class="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full mx-auto overflow-y-auto max-h-[90vh]"> {/* Adjusted max-w and mx for centering, added overflow and max-h */}
-              <div class="flex justify-between items-center mb-4">
-                <h3 class="text-2xl font-serif text-peach-pink">{{ productForQuickView.name }}</h3>
-                <button @click="closeQuickViewModal" aria-label="Close quick view" class="text-gray-500 hover:text-peach-pink transition-colors duration-150">
+          <!-- QuickView Modal -->
+          <div v-if="isQuickViewModalVisible && productForQuickView"
+               class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4 transition-opacity duration-300 ease-in-out"
+               :class="isQuickViewModalVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'">
+            <div
+              class="bg-neutral-bg-soft p-5 sm:p-6 rounded-lg shadow-2xl max-w-3xl w-full mx-auto overflow-y-auto max-h-[90vh] transform transition-all duration-300 ease-out"
+              :class="isQuickViewModalVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'"
+              role="dialog" aria-modal="true" :aria-labelledby="`quickview-title-${productForQuickView.id}`"
+            >
+              <div class="flex justify-between items-start mb-4">
+                <h3 :id="`quickview-title-${productForQuickView.id}`" class="text-2xl font-semibold text-peach-pink">{{ productForQuickView.name }}</h3>
+                <button @click="closeQuickViewModal" aria-label="Close quick view" class="p-1 text-venus-text-secondary hover:text-peach-pink transition-colors duration-150 rounded-full hover:bg-neutral-light focus:outline-none focus:ring-2 focus:ring-peach-pink">
                   <CloseIcon class="w-6 h-6" />
                 </button>
               </div>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <img :src="productForQuickView.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'" :alt="productForQuickView.name" class="w-full h-auto object-contain rounded-md max-h-80 md:max-h-96"> {/* Increased max-h slightly for larger modal */}
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                <div class="border border-neutral-light rounded-md p-2 bg-white shadow-sm">
+                  <img :src="productForQuickView.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'" :alt="productForQuickView.name" class="w-full h-auto object-contain rounded max-h-80 md:max-h-96">
                 </div>
-                <div>
-                  <p class="text-venus-text-secondary mb-2 line-clamp-3">{{ productForQuickView.description }}</p>
-                  <p class="text-2xl font-semibold text-orange-gold my-3"> {/* Price color updated */}
+                <div class="flex flex-col">
+                  <p class="text-venus-text-secondary mb-3 text-sm leading-relaxed line-clamp-4">{{ productForQuickView.description }}</p>
+                  <p class="text-3xl font-bold text-orange-gold my-2">
                     {{ new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(productForQuickView.price) }}
                   </p>
-                  <p v-if="productForQuickView.sku" class="text-sm text-venus-text-secondary mb-1">SKU: {{ productForQuickView.sku }}</p>
-                  <p v-if="productForQuickView.category_name" class="text-sm text-venus-text-secondary mb-1">Category: {{ productForQuickView.category_name }}</p>
-
-                  <div v-if="productForQuickView.has_variants" class="my-3 p-3 bg-sky-blue bg-opacity-10 border border-sky-blue border-opacity-30 rounded-md text-sm text-sky-blue"> {/* Info message styling updated */}
-                    This product has other options (e.g., size, color). View full details to select.
+                  <div class="text-xs text-venus-text-secondary space-y-0.5 mb-3">
+                    <p v-if="productForQuickView.sku">SKU: {{ productForQuickView.sku }}</p>
+                    <p v-if="productForQuickView.category_name">Category: <span class="text-sky-blue">{{ productForQuickView.category_name }}</span></p>
                   </div>
 
-                  <NuxtLink
-                    :to="`/products/${productForQuickView.id}`"
-                    @click="closeQuickViewModal"
-                    class="block w-full mt-4 bg-peach-pink text-white text-center py-2.5 px-4 rounded-md hover:bg-opacity-90 transition-colors duration-200"
-                  >
-                    View Full Details
-                  </NuxtLink>
-                   <p class="text-xs text-center mt-2 text-venus-text-secondary">(Full add to cart / variant selection in actual modal)</p>
+                  <div v-if="productForQuickView.has_variants" class="my-3 p-3 bg-sky-blue/10 border border-sky-blue/30 rounded-md text-sm text-sky-blue">
+                    This product has options (e.g., size, color). View full details to select.
+                  </div>
+
+                  <div class="mt-auto pt-4 space-y-3"> {/* Pushes buttons to bottom */}
+                    <NuxtLink
+                      :to="`/products/${productForQuickView.id}`"
+                      @click="closeQuickViewModal"
+                      class="block w-full bg-peach-pink text-white text-center py-2.5 px-4 rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink transition-all duration-200 font-semibold"
+                    >
+                      View Full Details
+                    </NuxtLink>
+                    {/* Placeholder for a direct Add to Cart if product has NO variants and is in stock */}
+                    <button
+                      v-if="!productForQuickView.has_variants && productForQuickView.stock_quantity > 0"
+                      @click="() => { handleDirectAddToCart(productForQuickView); closeQuickViewModal(); }"
+                      class="block w-full bg-fresh-green text-white text-center py-2.5 px-4 rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-fresh-green transition-all duration-200 font-semibold"
+                    >
+                      Add to Cart
+                    </button>
+                     <p v-if="!productForQuickView.has_variants && productForQuickView.stock_quantity <= 0" class="text-sm text-center text-red-500 font-medium">Out of Stock</p>
+                  </div>
                 </div>
               </div>
             </div>
