@@ -238,10 +238,13 @@ async function fetchUsers() {
       }
     }
 <<<<<<< HEAD
+<<<<<<< HEAD
     // For 'all', no role_group parameter is sent, backend will interpret as all users.
 
     // console.log('[fetchUsers] Fetching with params:', params); // Cleaned
 =======
+=======
+>>>>>>> parent of ca2b8ac (Implement new filtering for Customer/Administrator tabs and update sorting. Backend uses role_group param; frontend updated to send it.)
     console.log('[fetchUsers] Fetching with params:', params);
 >>>>>>> parent of ca2b8ac (Implement new filtering for Customer/Administrator tabs and update sorting. Backend uses role_group param; frontend updated to send it.)
     const response = await $axios.get(url, { params });
