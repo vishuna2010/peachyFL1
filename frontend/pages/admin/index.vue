@@ -29,7 +29,7 @@
       <div class="bg-white p-6 rounded-lg shadow-md border border-neutral-200">
         <div class="flex justify-between items-center mb-4">
           <h3 class="text-lg font-semibold text-gray-800">Recent Stock Activity</h3>
-          <NuxtLink to="/admin/inventory/logs" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+          <NuxtLink to="/admin/inventory/logs" class="text-sm text-peach-pink hover:text-opacity-80 font-medium">
             View All Logs &rarr;
           </NuxtLink>
         </div>
@@ -85,7 +85,7 @@
     <div class="bg-white p-6 rounded-lg shadow-md border border-neutral-200">
       <div class="flex justify-between items-center mb-4">
         <h3 class="text-lg font-semibold text-gray-800">Recent Orders</h3>
-        <NuxtLink to="/admin/orders" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+        <NuxtLink to="/admin/orders" class="text-sm text-peach-pink hover:text-opacity-80 font-medium">
           View All Orders &rarr;
         </NuxtLink>
       </div>

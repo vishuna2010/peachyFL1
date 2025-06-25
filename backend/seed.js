@@ -1136,6 +1136,19 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
       specifications: null,
       tags: ['Thriller', 'Fiction', 'Suspense'],
       tax_class_key: 'tax_exempt_goods' // Example for exempt
+    },
+    {
+      name: 'The Great Gatsby - Paperback',
+      description: 'A classic novel by F. Scott Fitzgerald. This edition is a quality paperback.',
+      price: 9.99, cost_price: 3.50, wholesale_price: 6.99,
+      stock_quantity: 50, // Initial aggregate stock
+      category_name: 'Books', supplier_name: null,
+      image_url: 'https://placehold.co/300x450.png?text=The+Great+Gatsby', // Placeholder image
+      sku: 'BOOK-GATSBY-PB',
+      brand_manufacturer: 'Scribner', supplier_reference: null, product_status: 'active',
+      specifications: { "Format": "Paperback", "Language": "English" },
+      tags: ['Classic', 'Literature', 'Fiction'],
+      tax_class_key: 'tax_exempt_goods' // Assuming books are exempt
     }
   ];
 
@@ -1552,7 +1565,25 @@ async function seedDatabase() {
 
 
     console.log('Database seeding completed successfully.');
-    console.log('IDs of critical seeded data:', JSON.stringify(seededDataIds, null, 2));
+    // console.log('IDs of critical seeded data:', JSON.stringify(seededDataIds, null, 2)); // Optional: Keep if useful for debugging seeds
+
+    // Diagnostic: Check for users with NULL role_id after migration - Can be commented out or removed for production seeds
+    /*
+    try {
+      const usersWithNullRoleId = await client.query("SELECT id, email, role as legacy_role FROM users WHERE role_id IS NULL");
+      if (usersWithNullRoleId.rows.length > 0) {
+        console.warn(`DIAGNOSTIC: Found ${usersWithNullRoleId.rows.length} user(s) with NULL role_id after seeding/migration:`);
+        usersWithNullRoleId.rows.forEach(u => {
+          console.warn(`  - User ID: ${u.id}, Email: ${u.email}, Legacy Role: ${u.legacy_role}`);
+        });
+      } else {
+        console.log("DIAGNOSTIC: All users have a role_id assigned.");
+      }
+    } catch (diagError) {
+      console.error("DIAGNOSTIC: Error querying for users with NULL role_id:", diagError);
+    }
+    */
+
     await client.query('COMMIT');
   } catch (error) {
     if (client) { // Ensure client is defined before trying to rollback
@@ -1992,6 +2023,9 @@ async function seedInventoryBatches(client, seededDataIds) {
 
   const productSku3 = 'BOOK-THRILLER-001'; // "Modern Thriller Novel"
   const productId3 = seededDataIds.products[productSku3];
+  const productSkuGatsby = 'BOOK-GATSBY-PB'; // "The Great Gatsby - Paperback"
+  const productIdGatsby = seededDataIds.products[productSkuGatsby];
+
 
   const batchesToSeed = [];
 
@@ -2040,21 +2074,38 @@ async function seedInventoryBatches(client, seededDataIds) {
 
   if (productId3) {
     // Seed batch for "Modern Thriller Novel" (SKU: BOOK-THRILLER-001)
-    // This product has an aggregate stock_quantity of 250 in products table.
     batchesToSeed.push({
       product_id: productId3,
-      variant_id: null, // It's a base product
-      batch_number: 'BATCH_BOOK001_202301', // Unique batch number
-      expiry_date: null, // Books don't typically expire
-      initial_quantity: 250, // Corresponds to aggregate stock
-      current_quantity: 250, // Full stock available in this batch
-      cost_price_at_receipt: 5.50, // From seedProducts
-      currency_code_at_receipt: 'USD', // Assuming USD, can be null if not applicable
+      variant_id: null,
+      batch_number: 'BATCH_BOOK001_202301',
+      expiry_date: null,
+      initial_quantity: 250,
+      current_quantity: 250,
+      cost_price_at_receipt: 5.50,
+      currency_code_at_receipt: 'USD',
       base_currency_cost_price_at_receipt: 5.50,
       exchange_rate_used: 1.0,
-      purchase_order_item_id: null // No specific PO for this seed
+      purchase_order_item_id: null
     });
   }
+
+  if (productIdGatsby) {
+    // Seed batch for "The Great Gatsby - Paperback" (SKU: BOOK-GATSBY-PB)
+    batchesToSeed.push({
+      product_id: productIdGatsby,
+      variant_id: null, // It's a base product
+      batch_number: 'BATCH_GATSBY001_202302', // Unique batch number
+      expiry_date: null,
+      initial_quantity: 50, // Matches stock_quantity in seedProducts
+      current_quantity: 50, // Full stock available
+      cost_price_at_receipt: 3.50, // From seedProducts
+      currency_code_at_receipt: 'USD',
+      base_currency_cost_price_at_receipt: 3.50,
+      exchange_rate_used: 1.0,
+      purchase_order_item_id: null
+    });
+  }
+
 
   if (batchesToSeed.length === 0) {
     console.log('No suitable products/variants found or defined for inventory batch seeding.');

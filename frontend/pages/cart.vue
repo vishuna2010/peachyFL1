@@ -10,22 +10,22 @@
     </div>
     <div v-else class="md:grid md:grid-cols-3 md:gap-6 lg:gap-8">
       <ul class="md:col-span-2 list-none p-0 m-0">
-        <li v-for="item in cartItems" :key="item.cartItemId" class="flex items-start gap-4 p-4 border border-gray-200 rounded-lg bg-white mb-4 shadow-sm relative"> <!-- Adjusted border and rounded -->
+        <li v-for="item in cartItems" :key="item.cartItemId" class="flex items-start gap-4 p-4 border border-gray-200 rounded-lg bg-white mb-4 shadow-sm relative">
           <template v-if="item.image_url">
             <img
-              :src="item.image_url"
-              :alt="item.name"
-              class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0" /> <!-- Corrected comment placement -->
+              :src="sanitizeAttributeValue(item.image_url)"
+              :alt="sanitizeAttributeValue(item.name)"
+              class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0" />
           </template>
           <template v-else>
             <div class="w-24 h-24 sm:w-28 sm:h-28 object-cover rounded-md bg-gray-100 flex-shrink-0 flex items-center justify-center text-venus-text-secondary text-sm">No Image</div>
           </template>
 
           <div class="flex-grow flex flex-col">
-            <h3 class="text-lg font-semibold text-venus-text-primary mb-1">{{ item.name }}</h3>
+            <h3 class="text-lg font-semibold text-venus-text-primary mb-1" :title="sanitizeAttributeValue(item.name)">{{ item.name }}</h3>
             <p v-if="item.selectedVariantDescription" class="text-sm text-venus-text-secondary mb-1">{{ item.selectedVariantDescription }}</p>
-            <p v-if="item.sku" class="text-xs text-venus-text-secondary mb-1">SKU: {{ item.sku }}</p>
-            <p class="text-sm text-venus-text-secondary">Unit Price: <span class="text-orange-gold">${{ item.price.toFixed(2) }}</span></p> <!-- Themed unit price -->
+            <p v-if="item.sku" class="text-xs text-venus-text-secondary mb-1">SKU: {{ sanitizeAttributeValue(item.sku) }}</p>
+            <p class="text-sm text-venus-text-secondary">Unit Price: <span class="text-orange-gold">${{ (typeof item.price === 'number' ? item.price : 0).toFixed(2) }}</span></p>
             <p v-if="item.tax_class_name" class="text-xs text-venus-text-secondary mt-0.5">
               Tax Class: {{ item.tax_class_name }}
             </p>
@@ -40,21 +40,23 @@
                 :value="item.quantity"
                 @input="updateItemQuantity(item.cartItemId, parseInt($event.target.value))"
                 min="1"
-                class="quantity-input w-16 px-2 py-1 border border-gray-300 rounded-md text-sm text-center focus:ring-1 focus:ring-peach-pink focus:border-peach-pink" <!-- Themed focus -->
+                class="quantity-input w-16 px-2 py-1 border border-gray-300 rounded-md text-sm text-center focus:ring-1 focus:ring-peach-pink focus:border-peach-pink"
               />
             </div>
             <div class="mt-auto pt-1">
               <p v-if="getLineItemTax(item) !== null && !isFetchingTaxDetails" class="text-xs text-venus-text-secondary">
-                Item Tax: <span class="text-orange-gold/80">${{ getLineItemTax(item) }}</span> <!-- Themed tax -->
+                Item Tax: <span class="text-orange-gold/80">${{ getLineItemTax(item) }}</span>
               </p>
                <p v-if="isFetchingTaxDetails && !getLineItemTax(item)" class="text-xs text-venus-text-secondary animate-pulse">Calculating tax...</p>
-              <p class="font-medium text-orange-gold"> <!-- Themed subtotal -->
-                Subtotal for item: ${{ (item.price * item.quantity).toFixed(2) }}
+              <p class="font-medium text-orange-gold">
+                Subtotal for item: ${{
+                  ((typeof item.price === 'number' ? item.price : 0) * (typeof item.quantity === 'number' ? item.quantity : 0)).toFixed(2)
+                }}
               </p>
             </div>
           </div>
-          <button @click="removeItem(item.cartItemId)" class="remove-item-button absolute top-3 right-3 text-red-500 hover:text-red-700 transition-colors duration-200 ease-in-out p-1 rounded-full hover:bg-red-500/10"> <!-- Adjusted position & added hover bg -->
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"> <!-- Slightly smaller icon -->
+          <button @click="removeItem(item.cartItemId)" class="remove-item-button absolute top-3 right-3 text-red-500 hover:text-red-700 transition-colors duration-200 ease-in-out p-1 rounded-full hover:bg-red-500/10">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -71,13 +73,13 @@
               type="text"
               v-model="discountCodeInput"
               placeholder="Discount code"
-              class="discount-input flex-grow px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink"  <!-- Themed focus -->
+              class="discount-input flex-grow px-3 py-2 border border-gray-300 rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-peach-pink focus:border-peach-pink"
               :disabled="applyingDiscount"
             />
             <button
               @click="handleApplyDiscount"
               :disabled="applyingDiscount || !discountCodeInput"
-              class="apply-discount-button px-4 py-2 bg-sky-blue text-white text-sm font-medium rounded-md shadow-sm hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-sky-blue/70 disabled:opacity-60 transition-colors duration-200 ease-in-out" <!-- Themed button -->
+              class="apply-discount-button px-4 py-2 bg-sky-blue text-white text-sm font-medium rounded-md shadow-sm hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-sky-blue/70 disabled:opacity-60 transition-colors duration-200 ease-in-out"
             >
               {{ applyingDiscount ? 'Applying...' : 'Apply' }}
             </button>
@@ -111,15 +113,15 @@
         <div class="cart-actions mt-6 space-y-3">
           <NuxtLink
             :to="cartItems.length > 0 ? '/checkout' : '#'"
-            :class="['block w-full text-center px-4 py-3 bg-peach-pink text-white font-semibold rounded-md shadow hover:bg-opacity-90 transition-colors duration-200 ease-in-out', { 'opacity-60 cursor-not-allowed': cartItems.length === 0 }]" <!-- Themed button -->
+            :class="['block w-full text-center px-4 py-3 bg-peach-pink text-white font-semibold rounded-md shadow hover:bg-opacity-90 transition-colors duration-200 ease-in-out', { 'opacity-60 cursor-not-allowed': cartItems.length === 0 }]"
             @click="checkCartEmptyBeforeCheckout"
-          >
+          > <!-- Themed button -->
             Proceed to Checkout
           </NuxtLink>
           <button
             @click="confirmClearCart"
-            class="w-full px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 transition-colors duration-200 ease-in-out" <!-- Neutral clear button -->
-          >
+            class="w-full px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 transition-colors duration-200 ease-in-out"
+          > <!-- Neutral clear button -->
             Clear Cart
           </button>
         </div>
@@ -132,6 +134,8 @@
 import { ref, computed, onMounted, watchEffect } from 'vue';
 import { useCart } from '~/composables/useCart';
 import { useHead } from '#app';
+import { sanitizeAttributeValue } from '~/utils/sanitize'; // Import the sanitizer
+
 // CloseIcon import can be removed if SVG is directly in template for remove button
 // import CloseIcon from '~/components/icons/CloseIcon.vue';
 

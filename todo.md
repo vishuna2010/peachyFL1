@@ -362,3 +362,64 @@ This section outlines the primary driver for future backend development, based o
 
 ---
 *This list will be updated as features are implemented or new requirements arise.*
+
+---
+
+# Theming Implementation (New Palette & UI Suggestions)
+
+- **[X] Setup and Configuration:**
+  - [X] Updated `tailwind.config.js` with the new color palette:
+    - Peach Pink: `#FC7099` (primary)
+    - Sky Blue: `#26A7E2` (secondary)
+    - Fresh Green: `#5BAA41` (secondary)
+    - Lemon Yellow: `#F9D849` (accent)
+    - Orange Gold: `#F6A03C` (accent)
+    - Neutral Soft BG: `#FFF5F8` (neutral-bg-soft)
+    - Sky Blue Deep: `#17729D` (for admin sidebar bg)
+  - [X] Updated logo references to `/Logo.svg` (assuming `frontend/public/Logo.svg`).
+- **[X] Global Styling:**
+  - [X] Ensured main page backgrounds default to white (`bg-white`).
+  - [X] Standardized default text color to `text-venus-text-primary` (`#1a1a1a`).
+- **[X] Public E-commerce Website Styling:**
+  - [X] **Header (`AppHeader.vue`):** White background, Peach Pink hover underlines for nav links, themed action icons and auth buttons.
+  - [X] **Top Bar (`HeaderTopBar.vue`):** Sky Blue background, white text, Peach Pink link hover.
+  - [X] **Buttons (General):** Primary actions (e.g., Sign Up, Add to Cart, Place Order, main form submits) use `bg-peach-pink text-white rounded-md`. Secondary/accent buttons use Sky Blue or neutrals.
+  - [X] **Product Cards (`ProductCard.vue`):** White base, Sky Blue category text, Orange Gold price text, Peach Pink border hover, Orange Gold sale tag.
+  - [X] **Hero Banner (`HeroBanner.vue`):** Changed to solid Peach Pink background with white text and contrasting button.
+  - [X] **Promotional Banners (`PromotionalBanner.vue`):** Primary type uses `bg-peach-pink text-white`; secondary uses `bg-sky-blue text-white`.
+  - [X] **Auth Pages (`login.vue`, `register.vue`):** Themed background (`neutral-bg-soft`), logo, input focus rings (Peach Pink), primary buttons (Peach Pink), and links (Peach Pink).
+  - [X] **Cart Page (`cart.vue`):** Themed titles, placeholders, buttons, summary section (totals, borders, discount display), and input focus rings.
+  - [X] **Checkout Page (`checkout.vue`):** Themed titles, placeholders, order summary (background, text, totals, borders), form section titles, input focus rings, checkbox, and "Place Order" button.
+  - [X] **Footer (`AppFooter.vue`):** Background `bg-sky-blue-deep`, `text-neutral-100`, Peach Pink link hovers.
+- **[X] Admin Panel Styling:**
+  - [X] **Layout (`admin.vue`, `AdminSidebar.vue`):**
+    - Sidebar: `bg-sky-blue-deep`, `text-neutral-100`, Peach Pink for active/hover link states and title hover. Logo updated.
+    - Top Bar: White background, Peach Pink for interactive element hovers/focus rings.
+  - [X] **Forms (Product, Category, Discount, User Management):** Updated primary buttons and input focus rings to Peach Pink.
+  - [X] **Stat Cards (`StatCard.vue` & `admin/index.vue`):** Icon backgrounds/text themed with new palette (Peach Pink, Sky Blue, Fresh Green, Orange Gold accents). Value hover to Peach Pink.
+  - [X] **User Management Page (`admin/users/index.vue`):** Themed tabs, "Create User" buttons, table headers.
+- **[X] Invoice PDF Template (Backend - `pdfService.js`):**
+  - [X] Injected CSS styles into `getInvoiceHtml` to use theme colors: Peach Pink for header accents/main title, Sky Blue for address titles/table headers, Orange Gold for grand total.
+  - [X] Ensured structure supports company logo (via `company_logo_url` from `adminOrders.js`, which now has updated placeholders if ENV vars are not set).
+
+---
+
+# Theme Change Errata & Unresolved Issues
+
+- **[~] Persistent Frontend Error (Believed Resolved):** `InvalidCharacterError: Failed to execute 'setAttribute' on 'Element': '<!--' is not a valid attribute name.`
+  - **Context:** This error appeared after initial theming. It occurred during component updates (Cart page, Admin layout).
+  - **Suspected Cause:** Misplaced HTML comments within tag definitions.
+  - **Fixes Applied:**
+    - Multiple reviews and corrections of HTML comment placements in themed `.vue` files (esp. `cart.vue`, `admin.vue`, `StatCard.vue`).
+    - Sanitization of product data for attributes in `ProductCard.vue` and `cart.vue`.
+  - **Current Status (as of last interaction):** Believed to be resolved after targeted fixes to comment syntax and product data sanitization, particularly in `cart.vue`. User confirmation pending on all cart functionalities.
+- **[~] Cart Navigation & Rendering (Believed Resolved):**
+    - **Issue:** Cart page not loading content or failing navigation when items were present.
+    - **Fixes:** Addressed potential TypeErrors in `useCart.js` computed properties and `cart.vue` template for `.toFixed()` calls. Systematically debugged `cart.vue` rendering by commenting/uncommenting sections, leading to the fix for the `InvalidCharacterError`.
+    - **Current Status:** User reported the simplified cart and then the cart with most details (including summary without action buttons) were loading. The final fix for `InvalidCharacterError` (related to action button comments) should allow full cart functionality. User to verify.
+- **Admin Dashboard - Stat Cards Missing (Reported, then addressed):**
+    - Issue: StatCards were reported missing.
+    - Fix: Wrapped StatCard grid in `v-else` for `v-if="statsError"`. This issue is likely resolved. User to verify.
+- **Admin Layout - Duplicate Sidebar / Content Misplacement (Reported, then addressed):**
+    - Issue: Content (including a second sidebar) was appearing at the bottom of the main sidebar.
+    - Fix: Reverted a speculative `lg:w-[calc(...)]` style from the main content wrapper in `admin.vue`. This issue is likely resolved. User to verify.

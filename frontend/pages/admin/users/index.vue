@@ -90,8 +90,6 @@
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
           <tr v-for="user in users" :key="user.id" class="hover:bg-gray-50">
-            <!-- Log user row details (this will output to console for each row) -->
-            {{ logUserRowDetails(user) }}
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.id }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ user.email }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
@@ -193,25 +191,29 @@ const isCurrentUser = (userId) => {
   return authUser.value?.id === userId;
 };
 
-const logUserRowDetails = (user) => {
-  console.log(`[UserRowDetails] User ID: ${user.id}, Email: ${user.email}`);
-  console.log(`  - can('users:assign_roles').value: ${can('users:assign_roles').value}`);
-  console.log(`  - isCurrentUser(user.id): ${isCurrentUser(user.id)}`);
-  console.log(`  - actionLoading.value.userId: ${actionLoading.value.userId}`);
-  console.log(`  - actionLoading.value.type: ${actionLoading.value.type}`);
-  console.log(`  - isLoadingRoles.value: ${isLoadingRoles.value}`);
-  const isDisabled = isCurrentUser(user.id) || actionLoading.value.userId === user.id || isLoadingRoles.value;
-  console.log(`  - Calculated :disabled state: ${isDisabled}`);
-  // Return a value that Vue can render, like an empty string or null,
-  // as template expressions are expected to produce renderable output.
-  return '';
-};
+// const logUserRowDetails = (user) => { // Cleaned
+//   console.log(`[UserRowDetails] User ID: ${user.id}, Email: ${user.email}`);
+//   console.log(`  - can('users:assign_roles').value: ${can('users:assign_roles').value}`);
+//   console.log(`  - isCurrentUser(user.id): ${isCurrentUser(user.id)}`);
+//   console.log(`  - actionLoading.value.userId: ${actionLoading.value.userId}`);
+//   console.log(`  - actionLoading.value.type: ${actionLoading.value.type}`);
+//   console.log(`  - isLoadingRoles.value: ${isLoadingRoles.value}`);
+//   const isDisabled = isCurrentUser(user.id) || actionLoading.value.userId === user.id || isLoadingRoles.value;
+//   console.log(`  - Calculated :disabled state: ${isDisabled}`);
+//   return '';
+// };
 
 const navigateToCreateUserPage = (role) => {
   navigateTo(`/admin/users/create?role=${role}`);
 };
 
 const navigateToEditUserPage = (userId) => {
+  console.log('[navigateToEditUserPage] Navigating to edit page for userId:', userId);
+  if (userId === undefined || userId === null) {
+    console.error('[navigateToEditUserPage] Attempted to navigate with undefined/null userId.');
+    toast.error('Cannot edit user: User ID is missing.');
+    return;
+  }
   navigateTo(`/admin/users/edit/${userId}`);
 };
 
@@ -228,26 +230,29 @@ async function fetchUsers() {
   try {
     let url = '/admin/users';
     const params = {};
-    if (activeTab.value && activeTab.value !== 'all') {
-      // Backend expects specific lowercase role names based on its validator
-      if (activeTab.value === 'admin') {
-        params.role = 'admin'; // Use lowercase 'admin'
-      } else if (activeTab.value === 'customer') {
-        params.role = 'customer'; // Use lowercase 'customer'
-      }
-      // Add other specific role filters here if new tabs are created,
-      // ensuring they match backend validation or that backend validation is updated.
+    if (activeTab.value === 'customer') {
+      params.role_group = 'customer';
+    } else if (activeTab.value === 'admin') {
+      params.role_group = 'administrator';
     }
+    // For 'all', no role_group parameter is sent, backend will interpret as all users.
 
+    // console.log('[fetchUsers] Fetching with params:', params); // Cleaned
     const response = await $axios.get(url, { params });
+    // console.log('[fetchUsers] Backend response.data:', JSON.stringify(response.data, null, 2)); // Cleaned
+
     users.value = response.data.map(u => ({
       ...u,
-      originalRoleId: u.role_id, // Store original role_id
-      originalRoleName: u.role_name // Store original role_name
-      // The v-model for select will now bind to u.role_id directly if we change users.value structure
+      originalRoleId: u.role_id,
+      originalRoleName: u.role_name
     }));
+
+    // if (users.value.length > 0) { // Cleaned
+    //  console.log('[fetchUsers] First user object after mapping (frontend state):', JSON.stringify(users.value[0], null, 2));
+    // }
+
   } catch (err) {
-    console.error(`Failed to fetch users (filter: ${activeTab.value}):`, err);
+    console.error(`[fetchUsers] Failed to fetch users (filter: ${activeTab.value}):`, err.response?.data || err.message || err);
     fetchError.value = err.response?.data?.message || err.message || 'Could not load users.';
     toast.error(fetchError.value);
   } finally {
@@ -272,79 +277,78 @@ async function fetchAvailableRoles() {
 
 
 const promptRoleChange = (user, newRoleIdString) => {
-  console.log('[promptRoleChange] Function called.');
-  console.log('[promptRoleChange] User:', JSON.parse(JSON.stringify(user)));
-  console.log('[promptRoleChange] newRoleIdString:', newRoleIdString);
-
-  const newRoleId = parseInt(newRoleIdString, 10);
-  console.log('[promptRoleChange] Parsed newRoleId:', newRoleId);
-  console.log('[promptRoleChange] availableRoles.value:', JSON.parse(JSON.stringify(availableRoles.value)));
-
-  const newRole = availableRoles.value.find(r => r.id === newRoleId);
-  console.log('[promptRoleChange] Found newRole:', JSON.parse(JSON.stringify(newRole)));
-
-  const oldRoleName = user.originalRoleName || user.legacy_role || 'unknown';
-  console.log('[promptRoleChange] Old role name:', oldRoleName);
-
-  if (!newRole) {
-    console.log('[promptRoleChange] newRole is not found. Exiting.');
-    toast.error("Invalid role selected.");
+  // console.log('[promptRoleChange] Entry. User:', JSON.parse(JSON.stringify(user)), 'New Role ID String:', newRoleIdString); // Cleaned
+  if (user.originalRoleId === undefined || user.originalRoleName === undefined) {
+    // console.error('[promptRoleChange] User object is missing originalRoleId or originalRoleName.', user); // Keep if "User data incomplete" is still an issue
+    toast.error("User data is incomplete. Cannot change role at this moment.");
     const selectElement = document.querySelector(`select[data-user-id="${user.id}"]`);
-    if (selectElement) {
-      console.log('[promptRoleChange] Reverting select element to originalRoleId:', user.originalRoleId);
-      selectElement.value = user.originalRoleId;
+    if (selectElement && user.role_id !== undefined) {
+        selectElement.value = user.role_id;
     }
     return;
   }
 
-  console.log(`[promptRoleChange] About to confirm: Change role of ${user.email} from "${oldRoleName}" to "${newRole.name}"?`);
+  const newRoleId = parseInt(newRoleIdString, 10);
+  const newRole = availableRoles.value.find(r => r.id === newRoleId);
+  const oldRoleName = user.originalRoleName || user.legacy_role || 'unknown';
+
+  if (!newRole) {
+    // console.log('[promptRoleChange] newRole is not found. Exiting.'); // Cleaned
+    toast.error("Invalid role selected. The selection will revert.");
+    return;
+  }
+
   if (confirm(`Are you sure you want to change the role of ${user.email} from "${oldRoleName}" to "${newRole.name}"?`)) {
-    console.log('[promptRoleChange] Confirmation successful. Calling updateUserRole.');
-    updateUserRole(user, newRoleId, newRole.name);
+    // console.log('[promptRoleChange] Confirmation successful. Calling updateUserRole.'); // Cleaned
+    updateUserRole(user, newRoleId, newRoleName);
   } else {
-    console.log('[promptRoleChange] Confirmation denied by user. Reverting UI selection.');
-    // Revert UI: find the select element and set its value back to user.originalRoleId
-    const userInArray = users.value.find(u => u.id === user.id);
-    if (userInArray) {
-      console.log('[promptRoleChange] Reverting role_id in local users array for user:', user.id, 'to:', user.originalRoleId);
-      userInArray.role_id = user.originalRoleId;
-    }
-     const selectElement = document.querySelector(`select[data-user-id="${user.id}"]`);
-    if (selectElement) {
-      selectElement.value = user.originalRoleId;
-    }
+    // console.log('[promptRoleChange] Confirmation denied by user.'); // Cleaned
+    // UI should revert due to :value binding
   }
 };
 
 async function updateUserRole(user, newRoleId, newRoleName) {
+  // console.log(`[updateUserRole] Attempting to update user ${user.id} to roleId: ${newRoleId}`); // Cleaned
   actionLoading.value = { userId: user.id, type: 'role' };
   actionError.value = '';
   actionSuccessMessage.value = '';
+
+  const payload = { role_id: newRoleId };
+  // console.log('[updateUserRole] Payload for API:', payload); // Cleaned
+
   try {
-    // Use the main PUT endpoint for user updates, which handles role_id
-    await $axios.put(`/admin/users/${user.id}`, { role_id: newRoleId });
+    const response = await $axios.put(`/admin/users/${user.id}`, payload);
+    // console.log('[updateUserRole] API Success Response:', response.data); // Cleaned
     actionSuccessMessage.value = `Successfully updated role for ${user.email} to ${newRoleName}.`;
     toast.success(actionSuccessMessage.value);
 
-    // Update local user data
+    const updatedUserFromServer = response.data;
     const userInArray = users.value.find(u => u.id === user.id);
     if (userInArray) {
-      userInArray.role_id = newRoleId;
-      userInArray.role_name = newRoleName;
-      userInArray.originalRoleId = newRoleId; // Update original for next potential change
-      userInArray.originalRoleName = newRoleName;
+      userInArray.role_id = updatedUserFromServer.role_id;
+      userInArray.role_name = updatedUserFromServer.role_name;
+      userInArray.legacy_role = updatedUserFromServer.legacy_role;
+      userInArray.originalRoleId = updatedUserFromServer.role_id;
+      userInArray.originalRoleName = updatedUserFromServer.role_name;
+      // console.log(`[updateUserRole] Local user data updated for ${user.id}:`, JSON.parse(JSON.stringify(userInArray))); // Cleaned
+    } else {
+      // console.warn(`[updateUserRole] User ${user.id} not found in local array after update.`); // Cleaned
     }
 
   } catch (err) {
-    console.error('Failed to update user role:', err);
+    // console.error('[updateUserRole] Failed to update user role API error:', err.response?.data || err.message || err); // Keep if errors persist
     actionError.value = `Failed to update role for ${user.email}: ${err.response?.data?.message || err.message}`;
     toast.error(actionError.value);
-    // Revert UI
+
     const userInArray = users.value.find(u => u.id === user.id);
-    if (userInArray) {
-      userInArray.role_id = user.originalRoleId;
+    if (userInArray && userInArray.originalRoleId !== undefined) {
+      // console.log(`[updateUserRole] Error caught. Reverting role_id for ${user.id} to ${userInArray.originalRoleId}`); // Cleaned
+      userInArray.role_id = userInArray.originalRoleId;
+    } else {
+      // console.error(`[updateUserRole] Could not revert role for user ${user.id} as originalRoleId is undefined or user not found.`); // Cleaned
     }
   } finally {
+    // console.log(`[updateUserRole] Finally block for user ${user.id}. Clearing actionLoading.`); // Cleaned
     actionLoading.value = { userId: null, type: null };
     setTimeout(() => {
       actionError.value = '';

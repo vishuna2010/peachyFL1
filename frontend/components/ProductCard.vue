@@ -4,7 +4,7 @@
       <NuxtLink :to="`/products/${product.id}`" class="block">
         <img
           :src="product.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'"
-          :alt="`Image of ${product.name}`"
+          :alt="`Image of ${sanitizeAttributeValue(product.name)}`"
           class="w-full h-56 object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
         />
       </NuxtLink>
@@ -25,8 +25,8 @@
     </div>
     <div class="p-4 flex flex-col flex-grow">
       <NuxtLink :to="`/products/${product.id}`" class="block group-hover:underline">
-        <h3 class="font-sans text-base text-venus-text-primary mb-1 h-10 overflow-hidden" :title="product.name">
-          {{ product.name }}
+        <h3 class="font-sans text-base text-venus-text-primary mb-1 h-10 overflow-hidden" :title="sanitizeAttributeValue(product.name)">
+          {{ product.name }} <!-- Display original name, sanitize for title attr only -->
         </h3>
       </NuxtLink>
        <p v-if="product.category_name" class="text-xs text-sky-blue mb-1 truncate"> <!-- Changed text color -->
@@ -63,6 +63,7 @@
 import { computed } from 'vue';
 import { useCart } from '~/composables/useCart';
 import { useToast } from 'vue-toastification';
+import { sanitizeAttributeValue } from '~/utils/sanitize';
 
 
 const { addToCart } = useCart();
@@ -112,21 +113,21 @@ const handleAddToCart = () => {
   );
 
   if (props.product && !props.product.has_variants && props.product.stock_quantity && props.product.stock_quantity > 0 && !isNaN(priceForCart)) {
-    console.log('ProductCard: props.product before creating cartItemData:', JSON.parse(JSON.stringify(props.product))); // DEBUG LOG
+    // console.log('ProductCard: props.product before creating cartItemData:', JSON.parse(JSON.stringify(props.product))); // Cleaned
     const cartItemData = {
       id: props.product.id, // Use product ID as item ID if no variants
       product_id: props.product.id,
       variant_id: null,
-      name: props.product.name,
+      name: sanitizeAttributeValue(props.product.name), // Sanitize name before adding to cart
       price: priceForCart,
-      sku: props.product.sku,
-      image_url: props.product.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image',
+      sku: sanitizeAttributeValue(props.product.sku), // Sanitize SKU
+      image_url: sanitizeAttributeValue(props.product.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'), // Sanitize image_url
       type: 'product',
       tax_class_id: props.product.tax_class_id || null,
-      tax_class_name: props.product.tax_class_name || null, // Add tax_class_name
+      tax_class_name: props.product.tax_class_name || null,
     };
     addToCart(cartItemData, 1); // Add 1 quantity
-    toast.success(`${props.product.name} added to cart!`);
+    toast.success(`${sanitizeAttributeValue(props.product.name)} added to cart!`); // Sanitize for toast as well
   } else {
     toast.error("Item is out of stock or unavailable.");
   }

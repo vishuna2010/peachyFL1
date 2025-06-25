@@ -111,9 +111,12 @@ router.post('/', async (req, res, next) => { // Removed isAuthenticated, added n
     for (const item of cart) {
       let priceAtPurchase;
       let productName;
-      // let currentStock; // This will now be sum of batches or checked against aggregate first
       let productSku = null;
-      let aggregate_old_stock_quantity; // For stock_movement_log
+      let aggregate_old_stock_quantity;
+
+      // Initial log for the cart item being processed
+      // Note: productName and productSku are not yet fetched from DB here, this log will show what's in cart.
+      console.log(`[OrderProcessing] Processing cart item from request: ProductID: ${item.productId}, VariantID: ${item.productVariantId || 'N/A'}, Name in Cart: ${item.name}, Qty: ${item.quantity}`);
 
       if (item.productVariantId) {
         const variantAggregateResult = await client.query(
@@ -149,8 +152,12 @@ router.post('/', async (req, res, next) => { // Removed isAuthenticated, added n
         );
 
         let totalBatchStock = batches.rows.reduce((sum, batch) => sum + batch.current_quantity, 0);
+
+        console.log(`[OrderProcessing] Stock check for VARIANT: "${productName}" (ProdID: ${item.productId}, VarID: ${item.productVariantId}, SKU: ${productSku}). Requested: ${item.quantity}, Found in Batches: ${totalBatchStock}`);
+
         if (totalBatchStock < item.quantity) {
           await client.query('ROLLBACK');
+          console.error(`[OrderProcessing] Batch stock check FAILED for VARIANT. Name: "${productName}", Product ID: ${item.productId}, Variant ID: ${item.productVariantId}, SKU: ${productSku}. Total Batch Stock Found: ${totalBatchStock}, Requested: ${item.quantity}`);
           throw new BadRequestError(`Insufficient batch stock for variant "${productName}". Available in batches: ${totalBatchStock}, Requested: ${item.quantity}.`);
         }
 
@@ -200,8 +207,12 @@ router.post('/', async (req, res, next) => { // Removed isAuthenticated, added n
         );
 
         let totalBatchStock = batches.rows.reduce((sum, batch) => sum + batch.current_quantity, 0);
+
+        console.log(`[OrderProcessing] Stock check for BASE product: "${productName}" (ID: ${item.productId}, SKU: ${productSku}). Requested: ${item.quantity}, Found in Batches: ${totalBatchStock}`);
+
         if (totalBatchStock < item.quantity) {
           await client.query('ROLLBACK');
+          console.error(`[OrderProcessing] Batch stock check FAILED for BASE product. Name: "${productName}", ID: ${item.productId}, SKU: ${productSku}. Total Batch Stock Found: ${totalBatchStock}, Requested: ${item.quantity}`);
           throw new BadRequestError(`Insufficient batch stock for product "${productName}". Available in batches: ${totalBatchStock}, Requested: ${item.quantity}.`);
         }
 
