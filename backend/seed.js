@@ -1081,45 +1081,78 @@ async function seedCategories(client) {
 }
 
 async function seedProducts(client, seededDataIds) { // Changed: Pass full seededDataIds
-  // More aggressive cleanup for "The Great Gatsby - Paperback"
+  // More aggressive cleanup for "The Great Gatsby - Paperback" and specific problematic SKUs
   try {
     const targetProductName = 'The Great Gatsby - Paperback';
     const correctSku = 'BOOK-GATSBY-PB';
+    const knownProblematicSku = 'BOOK-GATSBY-PB-001';
+    const specificProblematicId = 4; // Directly target ID 4
+    let idsToDelete = new Set();
 
-    // Find all products with that name
+    // Add specific problematic ID directly
+    const checkSpecificId = await client.query('SELECT id, sku, name FROM products WHERE id = $1', [specificProblematicId]);
+    if (checkSpecificId.rows.length > 0) {
+        console.log(`Found product by specific ID ${specificProblematicId}: SKU ${checkSpecificId.rows[0].sku}, Name "${checkSpecificId.rows[0].name}". Adding to delete list.`);
+        idsToDelete.add(specificProblematicId);
+    } else {
+        console.log(`Product with specific ID ${specificProblematicId} not found.`);
+    }
+
+    // Find by known problematic SKU
+    const productByProblematicSku = await client.query('SELECT id, sku FROM products WHERE sku = $1', [knownProblematicSku]);
+    if (productByProblematicSku.rows.length > 0) {
+      if (productByProblematicSku.rows[0].id !== specificProblematicId) { // Avoid double logging if ID 4 has this SKU
+        console.log(`Found product by known problematic SKU ${knownProblematicSku}: ID ${productByProblematicSku.rows[0].id}. Adding to delete list.`);
+      }
+      idsToDelete.add(productByProblematicSku.rows[0].id);
+    }
+
+    // Find all products with the target name that don't have the correct SKU
     const productsByName = await client.query('SELECT id, sku FROM products WHERE name = $1', [targetProductName]);
-
     for (const productEntry of productsByName.rows) {
       if (productEntry.sku !== correctSku) {
-        const conflictingProductId = productEntry.id;
-        const conflictingProductSku = productEntry.sku;
-        console.log(`Found conflicting product entry: ID ${conflictingProductId}, SKU ${conflictingProductSku} for name "${targetProductName}". Deleting...`);
+        if (!idsToDelete.has(productEntry.id)) { // Avoid double logging
+            console.log(`Found product by name "${targetProductName}" with non-target SKU ${productEntry.sku}: ID ${productEntry.id}. Adding to delete list.`);
+        }
+        idsToDelete.add(productEntry.id);
+      }
+    }
 
-        // Perform necessary deletions from dependent tables first
-        await client.query('DELETE FROM product_reviews WHERE product_id = $1', [conflictingProductId]);
-        await client.query('DELETE FROM product_tags WHERE product_id = $1', [conflictingProductId]);
-        await client.query('DELETE FROM product_images WHERE product_id = $1', [conflictingProductId]);
-        await client.query('DELETE FROM product_variant_option_values WHERE product_variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)', [conflictingProductId]);
-        await client.query('DELETE FROM product_variants WHERE product_id = $1', [conflictingProductId]);
-        await client.query('DELETE FROM product_assigned_option_specific_values WHERE product_assigned_option_id IN (SELECT id FROM product_assigned_options WHERE product_id = $1)', [conflictingProductId]);
-        await client.query('DELETE FROM product_assigned_options WHERE product_id = $1', [conflictingProductId]);
-        await client.query('DELETE FROM inventory_batches WHERE product_id = $1', [conflictingProductId]); // Clean batches too
-        // IMPORTANT: Check if order_items reference this product ID. If so, deletion will fail due to FK constraints.
-        // This seed script assumes a relatively clean state or that such orders are not critical for seeding.
-        // If orders are critical, a soft delete/archival or more complex migration is needed.
-        const orderItemsCheck = await client.query('SELECT COUNT(*) FROM order_items WHERE product_id = $1', [conflictingProductId]);
-        if (parseInt(orderItemsCheck.rows[0].count, 10) > 0) {
-          console.warn(`Product ID ${conflictingProductId} (SKU: ${conflictingProductSku}) is referenced in order_items. Skipping direct deletion to avoid FK violation. Manual cleanup might be required or adjust seed logic for orders.`);
+    if (idsToDelete.size > 0) {
+      console.log(`Attempting to delete product IDs: ${Array.from(idsToDelete).join(', ')}`);
+    } else {
+      console.log("No conflicting products identified for deletion by SKU or Name criteria.");
+    }
+
+    for (const conflictingProductId of idsToDelete) {
+      console.log(`Processing deletion for product ID ${conflictingProductId}...`);
+      // Perform necessary deletions from dependent tables first
+      await client.query('DELETE FROM product_reviews WHERE product_id = $1', [conflictingProductId]);
+      await client.query('DELETE FROM product_tags WHERE product_id = $1', [conflictingProductId]);
+      await client.query('DELETE FROM product_images WHERE product_id = $1', [conflictingProductId]);
+      await client.query('DELETE FROM product_variant_option_values WHERE product_variant_id IN (SELECT id FROM product_variants WHERE product_id = $1)', [conflictingProductId]);
+      await client.query('DELETE FROM product_variants WHERE product_id = $1', [conflictingProductId]);
+      await client.query('DELETE FROM product_assigned_option_specific_values WHERE product_assigned_option_id IN (SELECT id FROM product_assigned_options WHERE product_id = $1)', [conflictingProductId]);
+      await client.query('DELETE FROM product_assigned_options WHERE product_id = $1', [conflictingProductId]);
+      await client.query('DELETE FROM inventory_batches WHERE product_id = $1', [conflictingProductId]);
+
+      const orderItemsCheck = await client.query('SELECT COUNT(*) FROM order_items WHERE product_id = $1', [conflictingProductId]);
+      if (parseInt(orderItemsCheck.rows[0].count, 10) > 0) {
+        console.warn(`Product ID ${conflictingProductId} is referenced in order_items. Skipping direct deletion. Manual cleanup might be required or its stock set to 0 if it cannot be deleted.`);
+        // Option: Set stock to 0 if it can't be deleted
+        // await client.query('UPDATE products SET stock_quantity = 0 WHERE id = $1', [conflictingProductId]);
+        // console.log(`Set stock_quantity to 0 for product ID ${conflictingProductId} as it's in orders.`);
+      } else {
+        const deletionResult = await client.query('DELETE FROM products WHERE id = $1 RETURNING id', [conflictingProductId]);
+        if (deletionResult.rowCount > 0) {
+          console.log(`Successfully deleted product ID ${conflictingProductId}.`);
         } else {
-          const deletionResult = await client.query('DELETE FROM products WHERE id = $1 RETURNING id', [conflictingProductId]);
-          if (deletionResult.rowCount > 0) {
-            console.log(`Successfully deleted conflicting product: ID ${conflictingProductId}, SKU ${conflictingProductSku}.`);
-          }
+          console.log(`Product ID ${conflictingProductId} not found for deletion (might have been deleted by another check or never existed).`);
         }
       }
     }
   } catch (error) {
-    console.error(`Error during cleanup of conflicting "${targetProductName}" products:`, error);
+    console.error(`Error during cleanup of conflicting products:`, error);
   }
 
   const sampleProducts = [
@@ -1190,6 +1223,20 @@ async function seedProducts(client, seededDataIds) { // Changed: Pass full seede
       specifications: { "Format": "Paperback", "Language": "English" },
       tags: ['Classic', 'Literature', 'Fiction'],
       tax_class_key: 'tax_exempt_goods' // Assuming books are exempt
+    },
+    {
+      name: 'Organic Green Tea Bags',
+      description: '100 premium organic green tea bags, rich in antioxidants.',
+      price: 15.99, cost_price: 7.00, wholesale_price: 11.50,
+      stock_quantity: 100, // Initial aggregate stock
+      category_name: 'Home Goods', // Or a new "Groceries" / "Tea & Coffee" category
+      supplier_name: 'Home Comforts Co.', // Example supplier
+      image_url: 'https://placehold.co/300x300.png?text=Green+Tea',
+      sku: 'TEA-GRN-ORG-100',
+      brand_manufacturer: 'PureLeaf Organics', supplier_reference: null, product_status: 'active',
+      specifications: { "Count": "100 bags", "Type": "Green Tea", "Certifications": "USDA Organic" },
+      tags: ['Tea', 'Organic', 'Beverage', 'Groceries'],
+      tax_class_key: 'standard_goods' // Example, adjust if tea has special tax
     }
   ];
 
@@ -2084,8 +2131,31 @@ async function seedInventoryBatches(client, seededDataIds) {
   const productSkuGatsby = 'BOOK-GATSBY-PB'; // "The Great Gatsby - Paperback"
   const productIdGatsby = seededDataIds.products[productSkuGatsby];
 
+  const productSkuTea = 'TEA-GRN-ORG-100'; // "Organic Green Tea Bags"
+  const productIdTea = seededDataIds.products[productSkuTea];
+
 
   const batchesToSeed = [];
+
+  if (productIdTea) {
+    console.log(`[SeedDB] Preparing batch for 'Organic Green Tea Bags' (ID: ${productIdTea}) with SKU ${productSkuTea}`);
+    batchesToSeed.push({
+      product_id: productIdTea,
+      variant_id: null,
+      batch_number: 'BATCH_TEA001_202307',
+      expiry_date: '2025-12-31', // Example expiry
+      initial_quantity: 100,
+      current_quantity: 100,
+      cost_price_at_receipt: 7.00,
+      currency_code_at_receipt: 'USD',
+      base_currency_cost_price_at_receipt: 7.00,
+      exchange_rate_used: 1.0,
+      purchase_order_item_id: null
+    });
+    console.log('[SeedDB] Tea batch data to be seeded:', batchesToSeed[batchesToSeed.length-1]);
+  } else {
+    console.warn(`[SeedDB] productIdTea for SKU ${productSkuTea} was not found. Cannot seed its batch.`);
+  }
 
   if (productId1 && variantId1) {
     batchesToSeed.push({
