@@ -236,25 +236,28 @@ async function fetchUsers() {
     let url = '/admin/users';
     const params = {};
     if (activeTab.value && activeTab.value !== 'all') {
-      // Backend expects specific lowercase role names based on its validator
       if (activeTab.value === 'admin') {
-        params.role = 'admin'; // Use lowercase 'admin'
+        params.role = 'admin';
       } else if (activeTab.value === 'customer') {
-        params.role = 'customer'; // Use lowercase 'customer'
+        params.role = 'customer';
       }
-      // Add other specific role filters here if new tabs are created,
-      // ensuring they match backend validation or that backend validation is updated.
     }
-
+    console.log('[fetchUsers] Fetching with params:', params);
     const response = await $axios.get(url, { params });
+    console.log('[fetchUsers] Backend response.data:', JSON.stringify(response.data, null, 2));
+
     users.value = response.data.map(u => ({
       ...u,
-      originalRoleId: u.role_id, // Store original role_id
-      originalRoleName: u.role_name // Store original role_name
-      // The v-model for select will now bind to u.role_id directly if we change users.value structure
+      originalRoleId: u.role_id,
+      originalRoleName: u.role_name
     }));
+
+    if (users.value.length > 0) {
+      console.log('[fetchUsers] First user object after mapping (frontend state):', JSON.stringify(users.value[0], null, 2));
+    }
+
   } catch (err) {
-    console.error(`Failed to fetch users (filter: ${activeTab.value}):`, err);
+    console.error(`[fetchUsers] Failed to fetch users (filter: ${activeTab.value}):`, err.response?.data || err.message || err);
     fetchError.value = err.response?.data?.message || err.message || 'Could not load users.';
     toast.error(fetchError.value);
   } finally {
