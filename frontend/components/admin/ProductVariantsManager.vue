@@ -431,11 +431,28 @@ async function handleDeleteVariant(variantId) {
 }
 
 async function fetchConfiguredProductOptions() {
-  if (!propProductId.value) return;
+  if (!propProductId.value) {
+    console.log('[ProductVariantsManager] fetchConfiguredProductOptions: propProductId is missing. Skipping fetch.');
+    configuredProductOptions.value = []; // Ensure it's empty
+    isLoadingConfiguredOptions.value = false;
+    return;
+  }
   isLoadingConfiguredOptions.value = true;
+  console.log(`[ProductVariantsManager] fetchConfiguredProductOptions: Attempting to fetch for product ID: ${propProductId.value}`);
   try {
     // This endpoint now returns assigned options with their specifically selected/allowed values
     const assignedOptionsResponse = await $axios.get(`/admin/products/${propProductId.value}/assigned-options`);
+
+    console.log('[ProductVariantsManager] Raw assignedOptionsResponse.data:', JSON.stringify(assignedOptionsResponse.data, null, 2)); // Log raw response
+
+    if (!assignedOptionsResponse || !assignedOptionsResponse.data) {
+      console.error('[ProductVariantsManager] API response or response.data is undefined for assigned-options.');
+      toast.error('Failed to retrieve valid option configuration data from the server.');
+      configuredProductOptions.value = [];
+      fetchError.value = fetchError.value ? fetchError.value + ' Invalid options data.' : 'Invalid options data.';
+      isLoadingConfiguredOptions.value = false;
+      return;
+    }
 
     const fetchedConfiguredOptions = assignedOptionsResponse.data.map(assignedOpt => {
       if (!assignedOpt.global_option_name) {
