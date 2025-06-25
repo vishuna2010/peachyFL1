@@ -12,10 +12,10 @@
 
     <div v-if="product && !pending && !fetchError" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
       <div class="lg:grid lg:grid-cols-2 lg:gap-x-8 xl:gap-x-12 items-start">
-        <!-- Image Column -->
+        <!-- Image Column: Should be on the left -->
         <div class="w-full">
-          <!-- Image Gallery - Main Image -->
-          <div class="mb-4 sticky top-24">
+          {/* Image Gallery - Main Image - Sticky class removed below */}
+          <div class="mb-4">
             <img
               @click="openZoomModal(selectedImage.value?.url)"
               v-if="selectedImage && selectedImage.value?.url"
@@ -25,7 +25,6 @@
               key="selected-image"
             />
             <div v-if="!selectedImage || !selectedImage.value?.url" class="w-full h-[400px] md:h-[500px] flex items-center justify-center bg-neutral-bg-soft rounded-lg text-venus-text-secondary shadow-inner">No Image Available</div>
-
 
           <!-- Thumbnail Section with Arrows -->
           <div v-if="galleryImages.length > 1" class="mt-3 relative flex items-center justify-center px-6 sm:px-8">
@@ -61,8 +60,7 @@
         </div>
 
         <!-- Details Column -->
-        <div class="md:col-span-2 lg:col-span-1 py-4 md:py-0">
-          <!-- Breadcrumbs (Placeholder - Assuming you might add a breadcrumb component later) -->
+        <div class="py-4 md:py-0 lg:col-span-1">
           <div class="mb-3 text-xs text-venus-text-secondary">
             <NuxtLink to="/" class="hover:text-peach-pink">Home</NuxtLink>
             <span class="mx-1">/</span>
@@ -118,8 +116,6 @@
             </p>
           </div>
 
-
-          <!-- Variant Selection -->
           <div v-if="product.has_variants && product.available_options && product.available_options.length > 0" class="space-y-4 mb-6">
             <div v-for="option_type in product.available_options" :key="option_type.option_id">
               <label :for="`option-${option_type.option_id}`" class="block text-sm font-medium text-venus-text-primary mb-1.5">
@@ -319,7 +315,6 @@
       </div>
     </div>
   </div>
-</div>
   <ImageZoomModal :is-open="isZoomModalOpen" :image-url="zoomedImageUrl" @close="closeZoomModal" />
 </template>
 
@@ -948,5 +943,7 @@ useHead({
   title: computed(() => product.value ? product.value.name : 'Product Details'),
 });
 </script>
+
+[end of frontend/pages/products/[id].vue]
 
 [end of frontend/pages/products/[id].vue]
