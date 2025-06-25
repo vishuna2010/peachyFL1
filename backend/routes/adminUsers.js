@@ -215,7 +215,7 @@ router.put('/:id/role', isAuthenticated, checkPermission('users:assign_roles'), 
 router.put(
   '/:id',
   isAuthenticated,
-  checkPermission('users:edit'),
+  // checkPermission('users:edit'), // Will be guarded inside more granularly
   [
     param('id').isInt({ gt: 0 }).toInt(),
     body('name').optional().isString().trim().isLength({ min: 1, max: 255 }).withMessage('Name must be between 1 and 255 chars.'),
@@ -228,30 +228,58 @@ router.put(
     body('tax_exemption_notes').optional({ nullable: true }).isString().trim()
   ],
   async (req, res, next) => {
+    const { id } = req.params; // Define id early for logging
+    console.log(`[PUT /api/admin/users/:${id}] Handler invoked. Validating inputs first.`);
+    console.log(`[PUT /api/admin/users/:${id}] Initial req.user:`, JSON.stringify(req.user, null, 2));
+
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.warn(`[PUT /api/admin/users/:${id}] Validation errors:`, JSON.stringify(errors.array()));
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { id } = req.params;
+    console.log(`[PUT /api/admin/users/:${id}] Input validation passed.`);
+
+    // This is where req.user is critical for permission checks
+    console.log(`[PUT /api/admin/users/:${id}] req.user before permission checks:`, JSON.stringify(req.user, null, 2));
+
+
     const updates = { ...req.body }; // Create a mutable copy
 
     if (Object.keys(updates).length === 0) {
       return next(new BadRequestError('No fields provided for update.'));
     }
 
-    const client = await db.pool.connect(); // Connect early for potential role name lookup
+    const client = await db.pool.connect();
 
     try {
-      // If role_id is being updated, perform specific permission check and fetch role name
+      // Manual Permission Check for 'users:edit'
+      if (!req.user || !req.user.userId) { // Check req.user again, as it might be lost if isAuthenticated isn't correctly first
+        console.error(`[PUT /api/admin/users/:${id}] CRITICAL: req.user or req.user.userId is missing before 'users:edit' check. req.user:`, JSON.stringify(req.user, null, 2));
+        throw new AppError("Authentication failure: User context lost.", 401);
+      }
+      console.log(`[PUT /api/admin/users/:${id}] Checking 'users:edit' for userId: ${req.user.userId}`);
+      const hasEditPermission = await permissionService.userHasPermission(req.user.userId, 'users:edit');
+      if (!hasEditPermission) {
+        console.warn(`[PUT /api/admin/users/:${id}] User ${req.user.userId} lacks 'users:edit'.`);
+        throw new AppError("Forbidden: You do not have permission to edit users.", 403);
+      }
+      console.log(`[PUT /api/admin/users/:${id}] User ${req.user.userId} HAS 'users:edit'.`);
+
+      // If role_id is being updated, perform specific permission check for 'users:assign_roles'
       if (updates.role_id !== undefined) {
-        // Check if the authenticated user has permission to assign roles
-        // This requires checkPermission to be accessible or a similar mechanism.
-        // For this example, assuming req.user.permissions is populated by previous middleware.
-        if (!req.user || !req.user.permissions || !req.user.permissions.includes('users:assign_roles')) {
-          // Not using next(new ForbiddenError(...)) here as we might not have started a transaction
-          return res.status(403).json({ message: 'You do not have permission to assign roles.' });
+        if (!req.user || !req.user.userId) { // Defensive check
+             console.error(`[PUT /api/admin/users/:${id}] CRITICAL: req.user or req.user.userId is missing before 'users:assign_roles' check. req.user:`, JSON.stringify(req.user, null, 2));
+            throw new AppError("Authentication failure: User context lost before role assignment check.", 401);
         }
+        console.log(`[PUT /api/admin/users/:${id}] Role update detected. Checking 'users:assign_roles' for userId: ${req.user.userId}`);
+        const hasAssignRolesPermission = await permissionService.userHasPermission(req.user.userId, 'users:assign_roles');
+        if (!hasAssignRolesPermission) {
+           console.warn(`[PUT /api/admin/users/:${id}] User ${req.user.userId} lacks 'users:assign_roles'.`);
+           throw new AppError("Forbidden: You do not have permission to assign roles.", 403);
+        }
+        console.log(`[PUT /api/admin/users/:${id}] User ${req.user.userId} HAS 'users:assign_roles'.`);
 
         const newRoleIdInt = parseInt(updates.role_id, 10);
         if (isNaN(newRoleIdInt) || newRoleIdInt <= 0) {
