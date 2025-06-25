@@ -100,11 +100,11 @@ router.post(
         }
         selectedGlobalOptionTypes.add(globalOptionId);
 
-        // Check if this global option value is assigned to this product through product_assigned_options & product_assigned_option_values
+        // Check if this global option value is assigned to this product through product_assigned_options & product_assigned_option_specific_values
         const assignmentCheck = await client.query(
-          `SELECT paov.id FROM product_assigned_option_values paov
-           JOIN product_assigned_options pao ON paov.product_assigned_option_id = pao.id
-           WHERE pao.product_id = $1 AND pao.option_id = $2 AND paov.option_value_id = $3`,
+          `SELECT paosv.id FROM product_assigned_option_specific_values paosv
+           JOIN product_assigned_options pao ON paosv.product_assigned_option_id = pao.id
+           WHERE pao.product_id = $1 AND pao.option_id = $2 AND paosv.product_option_value_id = $3`,
           [productId, globalOptionId, globalValueId]
         );
         if (assignmentCheck.rows.length === 0) {
@@ -317,9 +317,9 @@ router.put(
             selectedGlobalOptionTypes.add(globalOptionId);
 
             const assignmentCheck = await client.query(
-              `SELECT paov.id FROM product_assigned_option_values paov
-               JOIN product_assigned_options pao ON paov.product_assigned_option_id = pao.id
-               WHERE pao.product_id = $1 AND pao.option_id = $2 AND paov.option_value_id = $3`,
+              `SELECT paosv.id FROM product_assigned_option_specific_values paosv
+               JOIN product_assigned_options pao ON paosv.product_assigned_option_id = pao.id
+               WHERE pao.product_id = $1 AND pao.option_id = $2 AND paosv.product_option_value_id = $3`,
               [currentVariant.product_id, globalOptionId, globalValueId]
             );
             if (assignmentCheck.rows.length === 0) {
