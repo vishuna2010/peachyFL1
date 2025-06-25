@@ -151,18 +151,63 @@
 
         <div v-if="submissionError" class="mt-4 p-4 text-sm text-red-700 bg-red-50 border border-red-300 rounded-md">{{ submissionError }}</div> <!-- Adjusted rounded -->
 
-        <button type="submit" :disabled="isSubmitting" class="w-full mt-8 px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-peach-pink hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink disabled:opacity-60 transition-colors duration-200 ease-in-out"> <!-- Themed: Button -->
-          {{ isSubmitting ? 'Placing Order...' : 'Place Order' }}
+        <!-- Payment Method Section (Placeholder) -->
+        <div class="mt-8 p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
+          <h3 class="text-xl font-serif text-peach-pink mb-4">Payment Method</h3>
+          <div class="p-4 border border-dashed border-gray-300 rounded-md bg-gray-50">
+            <p class="text-sm text-gray-700">
+              This is a mock checkout. Clicking "Proceed to Payment" will simulate a payment step.
+            </p>
+            <p class="mt-2 font-semibold text-gray-800">Pay with: MockCard Ending in 1234</p>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          :disabled="isSubmitting"
+          class="w-full mt-8 px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-peach-pink hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink disabled:opacity-60 transition-colors duration-200 ease-in-out"
+        > <!-- Themed: Button -->
+          {{ isSubmitting ? 'Processing...' : 'Proceed to Payment' }}
         </button>
       </form>
     </div> <!-- End of lg:grid -->
+
+    <!-- Mock Payment Modal -->
+    <div v-if="showMockPaymentModal" class="fixed inset-0 z-50 overflow-y-auto bg-gray-600 bg-opacity-75 flex items-center justify-center p-4 transition-opacity duration-300 ease-in-out">
+      <div class="bg-white rounded-lg shadow-xl w-full max-w-md transform transition-all duration-300 ease-in-out p-6 space-y-4">
+        <h3 class="text-2xl font-serif text-peach-pink text-center">Confirm Mock Payment</h3>
+        <p class="text-center text-venus-text-secondary">
+          You are about to place an order for:
+          <strong class="text-orange-gold">${{ cartFinalTotalPrice.toFixed(2) }}</strong>
+        </p>
+        <p class="text-sm text-center text-gray-600">This is a simulated payment. No real transaction will occur.</p>
+        <div class="flex justify-around mt-6">
+          <button
+            @click="executeOrderPlacement"
+            :disabled="isPlacingOrderAfterMockPayment"
+            class="px-6 py-3 bg-fresh-green text-white font-semibold rounded-md shadow hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-fresh-green disabled:opacity-60"
+          >
+            {{ isPlacingOrderAfterMockPayment ? 'Placing Order...' : 'Confirm Payment & Place Order' }}
+          </button>
+          <button
+            @click="showMockPaymentModal = false"
+            :disabled="isPlacingOrderAfterMockPayment"
+            class="px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-md shadow hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+        </div>
+        <p v-if="mockPaymentError" class="text-sm text-red-600 mt-3 text-center">{{ mockPaymentError }}</p>
+      </div>
+    </div>
+
     </div> <!-- Closing tag for <div v-else> associated with isLoadingAuthOrCart -->
   </ClientOnly> <!-- End of ClientOnly -->
 </div> <!-- Closing tag for the main container div -->
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watchEffect, computed, nextTick } from 'vue';
+import { ref, reactive, onMounted, watchEffect, computed } from 'vue';
 import { useCart } from '~/composables/useCart';
 import { useAuth } from '~/composables/useAuth';
 import { useRouter, useNuxtApp } from '#app';
@@ -199,8 +244,13 @@ const guestDetails = reactive({ // For guest checkout
   email: '', firstName: '', lastName: ''
 });
 const sameAsShipping = ref(true);
-const isSubmitting = ref(false);
-const submissionError = ref('');
+const isSubmitting = ref(false); // Used for the "Proceed to Payment" button state
+const submissionError = ref(''); // For errors before showing modal
+
+const showMockPaymentModal = ref(false);
+const isPlacingOrderAfterMockPayment = ref(false); // For the "Confirm Payment & Place Order" button state
+const mockPaymentError = ref('');
+
 
 // console.log('[checkout.vue setup] Initial isCartStoreInitialized.value:', isCartStoreInitialized.value); // Debug
 
@@ -248,19 +298,49 @@ watchEffect(() => {
 });
 
 onMounted(() => {
-  // console.log('[checkout.vue onMounted] Component mounted. Initial isCartStoreInitialized.value:', isCartStoreInitialized.value); // Debug
   if (typeof initCart === 'function') {
-      // console.log('[checkout.vue onMounted] Calling initCart().'); // Debug
       initCart();
-      // console.log('[checkout.vue onMounted] After initCart() call, isCartStoreInitialized.value:', isCartStoreInitialized.value); // Debug
   } else {
       console.error('[checkout.vue onMounted] initCart is not available from useCart()');
   }
 });
 
-const handlePlaceOrder = async () => {
-  isSubmitting.value = true;
-  submissionError.value = '';
+const validateForm = () => {
+  submissionError.value = ''; // Clear previous errors
+  if (!isAuthenticated.value) {
+    if (!guestDetails.email || !guestDetails.firstName || !guestDetails.lastName) {
+      submissionError.value = "Please fill in all guest information fields.";
+      return false;
+    }
+  }
+  // Add other address validations if necessary (though HTML 'required' handles some)
+  if (!shippingAddress.line1 || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
+    submissionError.value = "Please fill in all required shipping address fields.";
+    return false;
+  }
+  if (!sameAsShipping.value && (!billingAddress.line1 || !billingAddress.city || !billingAddress.postalCode || !billingAddress.country)) {
+    submissionError.value = "Please fill in all required billing address fields.";
+    return false;
+  }
+  return true;
+};
+
+const handlePlaceOrder = async (event) => { // Renamed from original handlePlaceOrder, now called by form submit
+  if (!validateForm()) {
+    return;
+  }
+  // Instead of submitting, show the mock payment modal
+  isSubmitting.value = true; // Indicate processing for the "Proceed to Payment" button
+  mockPaymentError.value = ''; // Clear previous mock payment errors
+  // Simulate a brief delay as if validating payment details before showing modal
+  await new Promise(resolve => setTimeout(resolve, 500));
+  isSubmitting.value = false;
+  showMockPaymentModal.value = true;
+};
+
+const executeOrderPlacement = async () => {
+  isPlacingOrderAfterMockPayment.value = true;
+  mockPaymentError.value = ''; // Clear previous errors specific to this modal step
 
   let orderPayload = {
     cart: cartItems.value.map(item => ({
@@ -271,14 +351,12 @@ const handlePlaceOrder = async () => {
     shippingAddress: { ...shippingAddress },
     billingAddress: sameAsShipping.value ? { ...shippingAddress } : { ...billingAddress },
     discount_code: appliedDiscount.value?.code || undefined,
+    // Add a flag to indicate mock payment was "successful"
+    mock_payment_successful: true
   };
 
   if (!isAuthenticated.value) {
-    if (!guestDetails.email || !guestDetails.firstName || !guestDetails.lastName) {
-      submissionError.value = "Please fill in all guest information fields.";
-      isSubmitting.value = false;
-      return;
-    }
+    // Guest details should have been validated by validateForm already
     orderPayload.guestDetails = { ...guestDetails };
   }
 
@@ -287,15 +365,17 @@ const handlePlaceOrder = async () => {
 
     if (response.status === 201 && response.data.order) {
       clearCart();
+      showMockPaymentModal.value = false; // Close modal on success
       router.push(`/orders/thank-you?orderId=${response.data.order.id}`);
     } else {
-      submissionError.value = 'Failed to place order. Unexpected response.';
+      // This path might not be hit if server always returns error status codes for issues
+      mockPaymentError.value = 'Failed to place order. Unexpected response from server.';
     }
   } catch (error) {
-    console.error('Order submission error:', error);
-    submissionError.value = error.response?.data?.message || 'An error occurred while placing your order.';
+    console.error('Order submission error after mock payment:', error);
+    mockPaymentError.value = error.response?.data?.message || 'An error occurred while placing your order.';
   } finally {
-    isSubmitting.value = false;
+    isPlacingOrderAfterMockPayment.value = false;
   }
 };
 

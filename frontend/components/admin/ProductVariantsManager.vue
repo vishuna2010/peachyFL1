@@ -431,31 +431,66 @@ async function handleDeleteVariant(variantId) {
 }
 
 async function fetchConfiguredProductOptions() {
-  if (!propProductId.value) return;
+  if (!propProductId.value) {
+    console.log('[ProductVariantsManager] fetchConfiguredProductOptions: propProductId is missing. Skipping fetch.');
+    configuredProductOptions.value = []; // Ensure it's empty
+    isLoadingConfiguredOptions.value = false;
+    return;
+  }
   isLoadingConfiguredOptions.value = true;
+  console.log(`[ProductVariantsManager] fetchConfiguredProductOptions: Attempting to fetch for product ID: ${propProductId.value}`);
   try {
     // This endpoint now returns assigned options with their specifically selected/allowed values
     const assignedOptionsResponse = await $axios.get(`/admin/products/${propProductId.value}/assigned-options`);
 
-    const fetchedConfiguredOptions = assignedOptionsResponse.data.map(assignedOpt => {
+    console.log('[ProductVariantsManager] Raw assignedOptionsResponse.data:', JSON.stringify(assignedOptionsResponse.data, null, 2)); // Log raw response
+
+    if (!assignedOptionsResponse || !Array.isArray(assignedOptionsResponse.data)) { // Check if it's an array
+      console.error('[ProductVariantsManager] API response.data is not an array or is undefined for assigned-options:', assignedOptionsResponse.data);
+      toast.error('Failed to retrieve valid option configuration data (not an array) from the server.');
+      configuredProductOptions.value = [];
+      fetchError.value = fetchError.value ? fetchError.value + ' Invalid options data structure.' : 'Invalid options data structure.';
+      isLoadingConfiguredOptions.value = false;
+      return;
+    }
+
+    console.log('[ProductVariantsManager] Data before .map():', JSON.stringify(assignedOptionsResponse.data, null, 2));
+
+    const fetchedConfiguredOptions = assignedOptionsResponse.data.map((assignedOpt, index) => {
+      // Unconditional log at the very start of the map callback
+      console.log(`[ProductVariantsManager] MAP ITEM ${index}: global_option_name = ${assignedOpt?.global_option_name}, global_option_id = ${assignedOpt?.global_option_id}`);
+
+      if (!assignedOpt || typeof assignedOpt !== 'object') {
+        console.warn(`[ProductVariantsManager] Item at index ${index} is not a valid object:`, assignedOpt);
+        return null; // Skip this item
+      }
+
+      if (!assignedOpt.global_option_name && assignedOpt.global_option_id === undefined) { // Check if BOTH are missing
+        console.warn('[ProductVariantsManager] Critical: Encountered an assigned option completely missing global_option_name AND global_option_id:', JSON.stringify(assignedOpt));
+      } else if (!assignedOpt.global_option_name) {
+        console.warn('[ProductVariantsManager] Encountered an assigned option without a global_option_name (ID might be present):', JSON.stringify(assignedOpt));
+      }
+
+
       // The 'selected_values' array from the backend IS the list of allowed values for this product's option assignment.
       // These are global product_option_values that have been specifically chosen for this product-option link.
       if (!assignedOpt.selected_values || assignedOpt.selected_values.length === 0) {
-        toast.warning(`Option type "${assignedOpt.global_option_name}" has no specific values configured for this product. Variants cannot be created with it until values are selected.`);
+        const optionNameForToast = assignedOpt.global_option_name || `(Unknown Option ID: ${assignedOpt.global_option_id !== undefined ? assignedOpt.global_option_id : 'undefined'})`;
+        toast.warning(`Option type "${optionNameForToast}" has no specific values configured for this product. Variants cannot be created with it until values are selected.`);
       }
+
       return {
-        assigned_option_id: assignedOpt.assigned_option_id, // This is product_assigned_options.id
-        option_id: assignedOpt.global_option_id,          // This is product_options.id (the global option type)
+        assigned_option_id: assignedOpt.assigned_option_id,
+        option_id: assignedOpt.global_option_id,
         option_name: assignedOpt.global_option_name,
-        // 'allowed_values' for the variant form should be the 'selected_values' from this product's specific configuration
         allowed_values: Array.isArray(assignedOpt.selected_values) ? assignedOpt.selected_values.map(val => ({
-          value_id: val.id,      // This is product_option_values.id
-          value_name: val.value  // This is product_option_values.value
+          value_id: val.id,
+          value_name: val.value
         })) : []
       };
-    });
+    }).filter(opt => opt !== null); // Filter out any nulls from invalid items
 
-    configuredProductOptions.value = fetchedConfiguredOptions.filter(opt => opt.allowed_values.length > 0);
+    configuredProductOptions.value = fetchedConfiguredOptions.filter(opt => opt.allowed_values && opt.allowed_values.length > 0);
 
     if (configuredProductOptions.value.length === 0 && assignedOptionsResponse.data.length > 0) {
         toast.info("None of the assigned options for this product have any specific values configured. Please configure values for each option type to enable variant creation.");

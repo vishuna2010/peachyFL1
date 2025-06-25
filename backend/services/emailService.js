@@ -196,3 +196,83 @@ module.exports = {
   // For testing/debugging if needed:
   // getTestTransporter,
 };
+
+// --- HTML Email Template for Refund Confirmation ---
+async function getRefundConfirmationHtml(refundData) {
+    // refundData expected structure:
+    // {
+    //   order: { id: orderId, /* ... other order details if needed ... */ },
+    //   user: { name: customerName, email: customerEmail },
+    //   refund: {
+    //     type: 'full' | 'partial',
+    //     reason: 'Optional reason string',
+    //     amount_this_transaction: totalAmountRefundedThisTime,
+    //     items_processed: [ { name, sku, refunded_qty, price_at_purchase }, ... ]
+    //   }
+    // }
+    try {
+        const templatePath = path.join(__dirname, '..', 'email_templates', 'refund_confirmation.ejs');
+        const templateContent = fs.readFileSync(templatePath, 'utf-8');
+
+        // Ensure numbers are formatted for display if not already
+        const displayData = {
+            ...refundData,
+            refund: {
+                ...refundData.refund,
+                amount_this_transaction: Number(refundData.refund.amount_this_transaction).toFixed(2),
+                items_processed: refundData.refund.items_processed.map(item => ({
+                    ...item,
+                    price_at_purchase: Number(item.price_at_purchase).toFixed(2)
+                }))
+            }
+        };
+        const html = ejs.render(templateContent, displayData);
+        return html;
+    } catch (error) {
+        console.error("Error rendering HTML refund email template:", error);
+        return "<p>There was an error generating the refund confirmation email. Please contact support.</p>";
+    }
+}
+
+// --- Plain Text Email Template for Refund Confirmation ---
+function getRefundConfirmationText(refundData) {
+    let itemsSummary = "";
+    if (refundData.refund.items_processed && refundData.refund.items_processed.length > 0) {
+        refundData.refund.items_processed.forEach(item => {
+            const price = Number(item.price_at_purchase).toFixed(2);
+            const lineTotal = (Number(item.price_at_purchase) * item.refunded_qty).toFixed(2);
+            itemsSummary += `- ${item.name} (SKU: ${item.sku || 'N/A'}): ${item.refunded_qty} x $${price} = $${lineTotal} (refunded)\n`;
+        });
+    }
+
+    const reasonText = refundData.refund.reason ? `Reason: ${refundData.refund.reason}\n` : "";
+
+    const text = `
+Dear ${refundData.user.name || 'Customer'},
+
+This email confirms that a ${refundData.refund.type} refund has been processed for your Order ID: #${refundData.order.id}.
+
+${reasonText}
+Total Amount Refunded in this Transaction: $${Number(refundData.refund.amount_this_transaction).toFixed(2)}
+Date Processed: ${new Date().toLocaleDateString()}
+
+Items Refunded in this Transaction:
+${itemsSummary || "No specific items listed for this refund (e.g., full order refund based on total amount).\n"}
+The refunded amount should reflect in your account within a few business days.
+If you have any questions, please contact our support team.
+
+Thank you,
+Your Company Name
+    `.trim();
+    return text;
+}
+
+module.exports = {
+  sendEmail,
+  getOrderConfirmationHtml,
+  getOrderConfirmationText,
+  getRefundConfirmationHtml,
+  getRefundConfirmationText,
+  // For testing/debugging if needed:
+  // getTestTransporter,
+};

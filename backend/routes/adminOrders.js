@@ -3,9 +3,11 @@ const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, checkPermission } = require('../auth'); // Replaced isAdmin with checkPermission
 const { generateOrderInvoicePdf, generatePackingSlipPdf } = require('../services/pdfService');
-const { param, query, validationResult } = require('express-validator');
-const { NotFoundError } = require('../utils/AppError');
+const { param, query, body, validationResult } = require('express-validator');
+const { NotFoundError, BadRequestError } = require('../utils/AppError');
 const crypto = require('crypto');
+const auditLogService = require('../services/auditLogService');
+const { sendEmail, getRefundConfirmationHtml, getRefundConfirmationText } = require('../services/emailService');
 
 // Apply auth middleware to all routes in this router
 // router.use(isAuthenticated, isAdmin); // REMOVED - will apply per route
@@ -551,5 +553,215 @@ router.get(
     }
   }
 );
+
+// POST /admin/orders/:orderId/refund - Process a (mock) full refund for an order
+router.post(
+  '/orders/:orderId/refund',
+  isAuthenticated,
+  checkPermission('orders:manage_refunds'),
+  [
+    param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt(),
+    body('reason').optional().isString().trim().withMessage('Refund reason must be a string if provided.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { orderId } = req.params;
+    // itemsToRefund expected structure: [{ order_item_id: X, quantity_to_refund: Y }, ...]
+    // If itemsToRefund is not provided or empty, it's treated as a full refund.
+    const { reason, itemsToRefund } = req.body;
+    const adminUserId = req.user.userId;
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Fetch the order
+      const orderResult = await client.query(
+        'SELECT * FROM orders WHERE id = $1 FOR UPDATE', // Lock the order row
+        [orderId]
+      );
+      if (orderResult.rows.length === 0) {
+        throw new NotFoundError(`Order with ID ${orderId} not found.`);
+      }
+      const order = orderResult.rows[0];
+
+      // 2. Check if order can be refunded
+      if (order.payment_status === 'refunded') {
+        throw new BadRequestError('This order has already been fully refunded.');
+      }
+      // For partial refunds, allow if payment_status is 'paid' or 'partially_refunded'
+      if (itemsToRefund && itemsToRefund.length > 0 && !['paid', 'partially_refunded'].includes(order.payment_status)) {
+        throw new BadRequestError(`Order payment status is '${order.payment_status}'. Partial refunds typically apply to 'paid' or 'partially_refunded' orders.`);
+      }
+
+      // 3. Determine items to refund and total refund amount
+      let itemsToProcessForRefund = [];
+      let calculatedRefundAmount = 0;
+      let isFullRefundIntent = true; // Assume full refund unless specific items are provided
+
+      if (itemsToRefund && itemsToRefund.length > 0) {
+        isFullRefundIntent = false;
+        for (const itemToRefund of itemsToRefund) {
+          if (!itemToRefund.order_item_id || typeof itemToRefund.quantity_to_refund !== 'number' || itemToRefund.quantity_to_refund <= 0) {
+            throw new BadRequestError('Each item to refund must have a valid order_item_id and a positive quantity_to_refund.');
+          }
+          const orderItemResult = await client.query(
+            'SELECT oi.*, p.name as product_name, pv.sku as variant_sku, p.sku as base_sku FROM order_items oi JOIN products p ON oi.product_id = p.id LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id WHERE oi.id = $1 AND oi.order_id = $2',
+            [itemToRefund.order_item_id, orderId]
+          );
+          if (orderItemResult.rows.length === 0) {
+            throw new NotFoundError(`Order item with ID ${itemToRefund.order_item_id} not found in order ${orderId}.`);
+          }
+          const orderItem = orderItemResult.rows[0];
+          // Basic check: cannot refund more than ordered. More complex logic would track already refunded quantities.
+          if (itemToRefund.quantity_to_refund > orderItem.quantity) {
+            throw new BadRequestError(`Cannot refund ${itemToRefund.quantity_to_refund} for item ${orderItem.product_name} (ID: ${orderItem.id}). Ordered quantity was ${orderItem.quantity}.`);
+          }
+          itemsToProcessForRefund.push({ ...orderItem, quantity_to_refund: itemToRefund.quantity_to_refund });
+          calculatedRefundAmount += parseFloat(orderItem.price_at_purchase) * itemToRefund.quantity_to_refund;
+        }
+      } else { // Full refund
+        const allOrderItemsResult = await client.query(
+          'SELECT oi.*, p.name as product_name, pv.sku as variant_sku, p.sku as base_sku FROM order_items oi JOIN products p ON oi.product_id = p.id LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id WHERE oi.order_id = $1',
+          [orderId]
+        );
+        itemsToProcessForRefund = allOrderItemsResult.rows.map(item => ({ ...item, quantity_to_refund: item.quantity }));
+        calculatedRefundAmount = parseFloat(order.total_amount) - (parseFloat(order.discount_amount_applied) || 0); // Approximate for full refund
+        // More accurately, sum of (price_at_purchase * quantity) for all items, then subtract order-level discount proportionally if any.
+        // For simplicity now, use total_amount for full refund scenario if no specific items given.
+        // However, if itemsToRefund is empty, we are treating it as full refund of original items.
+        // The order.total_amount already includes tax and discounts.
+        // For a true "full refund of items value", we should sum their price_at_purchase * quantity.
+        calculatedRefundAmount = itemsToProcessForRefund.reduce((sum, item) => sum + (parseFloat(item.price_at_purchase) * item.quantity_to_refund), 0);
+
+      }
+      calculatedRefundAmount = parseFloat(calculatedRefundAmount.toFixed(2));
+
+      // 4. Update inventory and log stock movements
+      for (const item of itemsToProcessForRefund) {
+        const qtyToRestock = item.quantity_to_refund;
+        const oldStockResult = await client.query(
+          item.product_variant_id
+            ? 'SELECT stock_quantity FROM product_variants WHERE id = $1 FOR UPDATE'
+            : 'SELECT stock_quantity FROM products WHERE id = $1 FOR UPDATE',
+          [item.product_variant_id || item.product_id]
+        );
+        const oldStockQuantity = oldStockResult.rows[0]?.stock_quantity || 0;
+        const newStockQuantity = oldStockQuantity + qtyToRestock;
+
+        if (item.product_variant_id) {
+          await client.query(
+            'UPDATE product_variants SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [qtyToRestock, item.product_variant_id]
+          );
+        } else {
+          await client.query(
+            'UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [qtyToRestock, item.product_id]
+          );
+        }
+        await client.query(
+          `INSERT INTO stock_movement_logs (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [item.product_id, item.product_variant_id || null, adminUserId, 'refund_restock', qtyToRestock, newStockQuantity, `Refund Order #${orderId}. Item ID ${item.id}. Reason: ${reason || 'N/A'}`, orderId.toString()]
+        );
+      }
+
+      // 5. Update order status and payment status
+      // This part needs more robust logic to track total amount refunded vs order total.
+      // For now, if any partial refund, mark as 'partially_refunded'. If it was a full refund intent, mark 'refunded'.
+      let newPaymentStatus = order.payment_status;
+      let newOrderStatus = order.status;
+
+      if (isFullRefundIntent) {
+        newPaymentStatus = 'refunded';
+        newOrderStatus = 'refunded';
+      } else {
+        newPaymentStatus = 'partially_refunded'; // Could also check if total refunded now matches order total
+        newOrderStatus = 'partially_refunded'; // Or keep current status if some items remain fulfilled
+      }
+      // A more precise check for full refund status:
+      // Query sum of (price_at_purchase * quantity) for all order_items.
+      // Query sum of (price_at_purchase * quantity_refunded) for all order_items after this refund.
+      // If they match, then it's fully refunded. This requires tracking refunded quantity per item.
+      // For now, this simplified status update will do.
+
+      const updatedOrderResult = await client.query(
+        `UPDATE orders SET status = $1, payment_status = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $3
+         RETURNING *`,
+        [newOrderStatus, newPaymentStatus, orderId]
+      );
+
+      // 6. Create audit log
+      await auditLogService.recordAuditEvent(
+        'ORDER_REFUND_PROCESSED',
+        { userId: adminUserId, userEmail: req.user.email },
+        { resourceType: 'ORDER', resourceId: orderId },
+        {
+          refund_type: isFullRefundIntent ? 'full' : 'partial',
+          reason: reason || 'N/A',
+          refunded_amount_this_transaction: calculatedRefundAmount, // This is the value of items refunded this time
+          previous_status: order.status,
+          previous_payment_status: order.payment_status,
+          items_restocked: itemsToProcessForRefund.map(i => ({ order_item_id: i.id, product_id: i.product_id, variant_id: i.product_variant_id, name: i.product_name, sku: i.variant_sku || i.base_sku, refunded_qty: i.quantity_to_refund }))
+        },
+        req
+      );
+
+      await client.query('COMMIT');
+      res.status(200).json({
+        message: `Order #${orderId} refund processed. Status: ${newOrderStatus}. Payment Status: ${newPaymentStatus}.`,
+        order: updatedOrderResult.rows[0]
+      });
+
+      // Send refund confirmation email (fire and forget for now, no await to block response)
+      if (order.user_email) {
+        const emailRefundData = {
+          order: { id: order.id },
+          user: { name: order.user_name || order.user_email.split('@')[0], email: order.user_email }, // Assuming user_name might be on order or fetch it
+          refund: {
+            type: isFullRefundIntent ? 'full' : 'partial',
+            reason: reason || 'N/A',
+            amount_this_transaction: calculatedRefundAmount,
+            items_processed: itemsToProcessForRefund.map(i => ({
+              name: i.product_name,
+              sku: i.variant_sku || i.base_sku,
+              refunded_qty: i.quantity_to_refund,
+              price_at_purchase: i.price_at_purchase // unit price
+            }))
+          }
+        };
+        getRefundConfirmationHtml(emailRefundData)
+          .then(html => {
+            const text = getRefundConfirmationText(emailRefundData);
+            sendEmail({
+              to: order.user_email,
+              subject: `Refund Processed for Order #${order.id}`,
+              text: text,
+              html: html,
+            }).then(emailResult => {
+                if(emailResult.success) console.log(`Refund confirmation email sent for order ${order.id} to ${order.user_email}. Preview: ${emailResult.previewUrl || 'N/A'}`);
+                else console.error(`Failed to send refund email for order ${order.id}: ${emailResult.error}`);
+            }).catch(emailSendError => console.error(`Error in sendEmail promise for refund email (Order ${order.id}):`, emailSendError));
+          })
+          .catch(templateError => console.error(`Error generating refund email template for order ${order.id}:`, templateError));
+      } else {
+        console.warn(`No customer email found for order ${order.id}. Skipping refund confirmation email.`);
+      }
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      next(error); // Pass to global error handler
+    } finally {
+      client.release();
+    }
+  }
+);
+
 
 module.exports = router;
