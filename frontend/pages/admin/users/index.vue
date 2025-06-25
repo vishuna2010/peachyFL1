@@ -212,6 +212,12 @@ const navigateToCreateUserPage = (role) => {
 };
 
 const navigateToEditUserPage = (userId) => {
+  console.log('[navigateToEditUserPage] Navigating to edit page for userId:', userId);
+  if (userId === undefined || userId === null) {
+    console.error('[navigateToEditUserPage] Attempted to navigate with undefined/null userId.');
+    toast.error('Cannot edit user: User ID is missing.');
+    return;
+  }
   navigateTo(`/admin/users/edit/${userId}`);
 };
 
