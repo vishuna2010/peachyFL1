@@ -1,8 +1,4 @@
 {
   // https://nuxt.com/docs/guide/concepts/typescript
-  "extends": "./.nuxt/tsconfig.json",
-  "exclude": [
-    "components/admin/ProductImageGalleryManager.vue",
-    "components/admin/VariantImagePickerModal.vue"
-  ]
+  "extends": "./.nuxt/tsconfig.json"
 }
