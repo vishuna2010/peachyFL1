@@ -147,36 +147,49 @@ router.post(
         );
       }
       await client.query('UPDATE products SET has_variants = TRUE, updated_at = NOW() WHERE id = $1', [productId]);
-      await client.query('COMMIT');
 
-      // Log initial stock for the new variant, if applicable
+      // If initial stock is provided for the new variant, create a batch for it.
       if (newVariant.stock_quantity > 0) {
+        const batchNumber = `INITIAL-${newVariant.sku || `VAR${newVariant.id}`}-${Date.now()}`;
+        const costPriceAtReceipt = newVariant.cost_price !== null ? newVariant.cost_price : 0; // Default if not set
+        // Assuming BASE_CURRENCY_CODE is available or can be defaulted
+        const currencyCodeAtReceipt = process.env.BASE_CURRENCY_CODE || 'USD';
+
+        const batchInsertQuery = `
+          INSERT INTO inventory_batches
+            (product_id, variant_id, batch_number, initial_quantity, current_quantity,
+             cost_price_at_receipt, currency_code_at_receipt, received_date, expiry_date)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8)
+          RETURNING id;
+        `;
+        await client.query(batchInsertQuery, [
+          newVariant.product_id, newVariant.id, batchNumber,
+          newVariant.stock_quantity, newVariant.stock_quantity,
+          costPriceAtReceipt, currencyCodeAtReceipt,
+          null // expiry_date - assuming null for initial stock batch
+        ]);
+        console.log(`Created initial inventory batch for new variant ID ${newVariant.id} with stock ${newVariant.stock_quantity}`);
+
+        // Log stock movement (this part was already there and is good)
         try {
           const logMovementQuery = `
             INSERT INTO stock_movement_logs
               (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           `;
-          // req.user should be available due to isAuthenticated middleware
           const userIdForLog = req.user ? req.user.userId : null;
-          const logMovementValues = [
-            newVariant.product_id, // This is productId from req.params
-            newVariant.id,
-            userIdForLog,
-            'initial_stock_setup',
-            newVariant.stock_quantity, // quantity_changed is the full initial stock
-            newVariant.stock_quantity, // new_quantity_on_hand is the initial stock
-            'Initial stock for new variant',
-            newVariant.id.toString() // Reference could be the variant ID itself
-          ];
-          // Use db.query for a new client from the pool, as original client related to the transaction is now released.
-          await db.query(logMovementQuery, logMovementValues);
-          console.log(`Initial stock logged for variant ID ${newVariant.id}`);
+          await client.query(logMovementQuery, [
+            newVariant.product_id, newVariant.id, userIdForLog,
+            'initial_stock_setup', newVariant.stock_quantity, newVariant.stock_quantity,
+            'Initial stock for new variant', `variant_id:${newVariant.id}`
+          ]);
+          console.log(`Initial stock movement logged for variant ID ${newVariant.id}`);
         } catch (logError) {
-          console.error(`Error logging initial stock for variant ID ${newVariant.id}:`, logError);
-          // Non-critical error, so don't fail the main request if it already succeeded.
+          console.error(`Error logging initial stock movement for variant ID ${newVariant.id}:`, logError);
         }
       }
+
+      await client.query('COMMIT');
 
       const variantDetails = await getVariantDetailsForResponse(newVariant.id);
       res.status(201).json({ ...newVariant, selected_options: variantDetails });
