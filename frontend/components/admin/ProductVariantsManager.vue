@@ -300,7 +300,7 @@ function openEditVariantModal(variantToEdit) {
         selectedOpt => selectedOpt.option_id === configOpt.option_id
       );
       if (foundSelectedOpt) {
-        newSelectedOptionValues[configOpt.option_id] = foundSelectedOpt.value_id;
+        newSelectedOptionValues[configOpt.option_id] = foundSelectedOpt.option_value_id; // Corrected to use option_value_id
       } else {
         // This option from configuredProductOptions was not in the variant's selected_options
         // This might happen if an option was removed from the product after variant creation,
