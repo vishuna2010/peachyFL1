@@ -73,8 +73,13 @@
 
           <h1 class="text-3xl lg:text-4xl font-bold text-venus-text-primary mb-2">{{ product.name }}</h1>
 
-          <p v-if="currentVariant && currentVariant.sku" class="text-xs text-venus-text-secondary mb-3">SKU: {{ currentVariant.sku }}</p>
-          <p v-else-if="!currentVariant && product.sku" class="text-xs text-venus-text-secondary mb-3">SKU: {{ product.sku }}</p>
+          <p v-if="displaySku" class="text-xs text-venus-text-secondary mb-3">SKU: {{ displaySku }}</p>
+          <!-- If displaySku can be an empty string for products/variants without SKUs,
+               and you don't want to show "SKU: " in that case, v-if="displaySku" is appropriate.
+               Otherwise, if product.sku or variant.sku might not exist but you always want the label if currentVariant/product exists:
+               <p class="text-xs text-venus-text-secondary mb-3">SKU: {{ displaySku || 'N/A' }}</p>
+               For now, v-if="displaySku" is cleaner if an empty SKU means "don't show SKU line".
+          -->
 
           <div v-if="product && product.review_count !== undefined" class="flex items-center mb-4">
             <div v-if="product.review_count > 0" class="flex items-center">
