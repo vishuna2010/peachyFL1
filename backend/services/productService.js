@@ -356,14 +356,14 @@ async function getProductById(productId) {
             po.id as option_id,
             po.name as option_name,
             COALESCE(
-              json_agg(DISTINCT jsonb_build_object('value_id', pov.id, 'value_name', pov.value, 'assigned_option_value_table_id', paov.id))
+              json_agg(DISTINCT jsonb_build_object('value_id', pov.id, 'value_name', pov.value, 'assigned_option_specific_value_table_id', paosv.id))
               FILTER (WHERE pov.id IS NOT NULL),
               '[]'::json
             ) as "values"
         FROM product_assigned_options pao
         JOIN product_options po ON pao.option_id = po.id
-        JOIN product_assigned_option_values paov ON pao.id = paov.product_assigned_option_id
-        JOIN product_option_values pov ON paov.option_value_id = pov.id
+        JOIN product_assigned_option_specific_values paosv ON pao.id = paosv.product_assigned_option_id
+        JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
         WHERE pao.product_id = $1
         GROUP BY po.id, po.name
         ORDER BY po.name;
