@@ -601,7 +601,7 @@ function updateCurrentVariant() {
     return JSON.stringify(sortedVariantValues) === JSON.stringify(selectedValuesArray);
   });
 
-  let newSelectedImage = null; // Store the determined image before assigning to selectedImage.value
+  let imageToSet = null;
 
   if (matchedVariant) {
     currentVariant.value = matchedVariant;
@@ -611,18 +611,18 @@ function updateCurrentVariant() {
     addToCartDisabled.value = matchedVariant.stock_quantity <= 0;
 
     if (matchedVariant.image_url) {
-        const galleryMatch = galleryImages.value.find(gi => gi.url === matchedVariant.image_url);
-        newSelectedImage = galleryMatch || {
-            url: matchedVariant.image_url,
-            alt_text: matchedVariant.sku || product.value.name,
-            id: 'variant_img_' + matchedVariant.id
-            // is_primary might be false or not set for a variant-specific image not in gallery
-        };
+      const galleryMatch = galleryImages.value.find(gi => gi.url === matchedVariant.image_url);
+      imageToSet = galleryMatch ? { ...galleryMatch } : {
+        url: matchedVariant.image_url,
+        alt_text: matchedVariant.sku || product.value.name,
+        id: 'variant_img_' + matchedVariant.id
+      };
     } else { // Variant has no specific image, fall back to product's primary
       if (galleryImages.value.length > 0) {
-        newSelectedImage = galleryImages.value.find(img => img.is_primary === true) || galleryImages.value[0];
+        const primaryFromGallery = galleryImages.value.find(img => img.is_primary === true) || galleryImages.value[0];
+        if (primaryFromGallery) imageToSet = { ...primaryFromGallery };
       } else if (product.value.image_url) {
-        newSelectedImage = {
+        imageToSet = {
             url: product.value.image_url,
             alt_text: product.value.name,
             id: 'product_primary_variant_fb_' + product.value.id,
@@ -678,32 +678,33 @@ watch(productData, (newProductData) => {
   if (newProductData) {
     product.value = newProductData;
     const currentGallery = newProductData.gallery_images || [];
-    galleryImages.value = currentGallery;
+    // Ensure all items in galleryImages are plain objects for reactivity & to avoid proxy issues
+    galleryImages.value = currentGallery.map(img => ({ ...img }));
 
     let initialDisplayImage = null;
-    if (currentGallery.length > 0) {
-      // Backend service sorts primary to be first if 'is_primary' is available and true on any item from product_images table,
-      // or if product.image_url was unique and added with display_order: -1 and is_primary: true.
-      initialDisplayImage = currentGallery.find(img => img.is_primary === true);
-      if (!initialDisplayImage && currentGallery.length > 0) { // If no explicit primary, take first from (sorted) gallery
-          initialDisplayImage = currentGallery[0];
+    if (galleryImages.value.length > 0) {
+      initialDisplayImage = galleryImages.value.find(img => img.is_primary === true);
+      if (!initialDisplayImage) { // If no explicit primary, take the first (already sorted by backend)
+          initialDisplayImage = galleryImages.value[0];
       }
     }
 
-    // This secondary fallback is if gallery_images array itself was empty, but product.image_url still exists.
+    // Fallback if gallery is empty but main product image_url exists
     if (!initialDisplayImage && newProductData.image_url) {
       initialDisplayImage = {
         url: newProductData.image_url,
         alt_text: newProductData.name,
         id: 'main_fallback_watcher_' + newProductData.id,
-        is_primary: true
+        is_primary: true // Treat as primary if it's the only source
       };
-      // If galleryImages was truly empty and we just created an image object from product.image_url, add it.
+      // If galleryImages was indeed empty and we created this, add it for thumbnail display
       if (galleryImages.value.length === 0 && initialDisplayImage.url) {
-          galleryImages.value.push(initialDisplayImage); // Ensures thumbnail consistency
+          galleryImages.value.push({ ...initialDisplayImage });
       }
     }
-    selectedImage.value = initialDisplayImage;
+
+    // Assign to selectedImage, ensuring it's a plain object or null
+    selectedImage.value = initialDisplayImage ? { ...initialDisplayImage } : null;
 
     initializeSelections(); // This will call updateCurrentVariant
     userHasReviewed.value = false;
