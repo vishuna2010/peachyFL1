@@ -23,6 +23,7 @@ async function getAllProducts({
   optionValueId,
   status, // New: 'active', 'draft', 'archived', etc.
   stock_status, // New: 'in_stock', 'out_of_stock', 'low_stock'
+  supplierId, // <<<< NEW PARAMETER
   is_admin_request = false, // New: boolean
   include_total_stock = false, // New: boolean, to add total stock for variant products
   page = 1,
@@ -162,6 +163,15 @@ async function getAllProducts({
     queryValues.push(categoryId);
     paramIndex++;
   }
+
+  // ++++ NEW SUPPLIER ID FILTER ++++
+  if (supplierId) {
+    whereClauses.push(`p.supplier_id = $${paramIndex}`);
+    queryValues.push(supplierId);
+    paramIndex++;
+  }
+  // +++++++++++++++++++++++++++++++
+
   if (minPrice !== undefined) {
     whereClauses.push(`p.price >= $${paramIndex}`); // Assumes p.price is base price. Variant pricing is complex.
     queryValues.push(minPrice);
@@ -220,12 +230,19 @@ async function getAllProducts({
     // Or, more simply, build whereString without the optionValueId filter for count if it was handled separately.
     // Let's rebuild whereString for count query if optionValueId was present.
     if (optionValueId && !isNaN(parseInt(optionValueId,10))) {
-        const countWhereClauses = whereClauses.filter(c => !c.startsWith('pvov_filter.'));
+        const countWhereClauses = whereClauses.filter(c => !c.startsWith('pvov_filter.')); // Exclude optionValueId filter
         if (countWhereClauses.length > 0) {
              // countBaseQuery already has its optionValueId filter if needed
             countBaseQuery += (countBaseQuery.includes('WHERE') ? ' AND ' : ' WHERE ') + countWhereClauses.join(" AND ");
         }
-    } else if (whereClauses.length > 0) { // No optionValueId, or it was invalid
+        // Add the optionValueId filter to count query if it's not already (it was in original code)
+        if (!countBaseQuery.includes('pvov_filter_count.product_option_value_id')) {
+           const optValParamIndex = queryValues.indexOf(parseInt(optionValueId,10)) + 1; // find its param index
+           if (optValParamIndex > 0) {
+             countBaseQuery += (countBaseQuery.includes('WHERE') ? ' AND ' : ' WHERE ') + `pvov_filter_count.product_option_value_id = $${optValParamIndex}`;
+           }
+        }
+    } else { // No optionValueId, or it was invalid, so all whereClauses apply to count
         countBaseQuery += whereString;
     }
   }
@@ -275,11 +292,11 @@ async function getAllProducts({
   baseSelect += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1} `;
 
   // Create a separate copy of queryValues for count to avoid mutation issues with limit/offset
-  const countQueryValues = [...queryValues];
+  const countQueryValues = [...queryValues]; // queryValues for count doesn't include limit/offset
   const finalQueryValuesForSelect = [...queryValues, numLimit, offset];
 
-  // console.log('Executing product list query:', baseSelect);
-  // console.log('With params:', finalQueryValuesForSelect);
+  // console.log('Updated Executing product list query:', baseSelect);
+  // console.log('Updated With params:', finalQueryValuesForSelect);
   // console.log('Executing count query:', countBaseQuery);
   // console.log('With params:', countQueryValues);
 

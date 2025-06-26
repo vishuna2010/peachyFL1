@@ -33,30 +33,36 @@
       </div>
 
       <h3>Line Items</h3>
-      <div v-for="(item, index) in poItems" :key="index" class="line-item-row">
-        <div class="form-group product-select">
-          <label :for="`product-${index}`">Product:</label>
-          <select :id="`product-${index}`" v-model="item.product_id" @change="updateItemDetails(index)" required>
-            <option :value="null" disabled>-- Select Product --</option>
-            <option v-for="product in availableProducts" :key="product.id" :value="product.id">
-              {{ product.name }} (SKU: {{ product.sku || 'N/A' }}, Stock: {{product.stock_quantity}})
-            </option>
-          </select>
+      <div v-if="productsLoading" class="loading-state">Loading products for selected supplier...</div>
+      <div v-else-if="!poData.supplier_id" class="info-message">Please select a supplier to see available products.</div>
+      <div v-else-if="availableProducts.length === 0 && poData.supplier_id && !productsLoading" class="info-message">No products found for the selected supplier, or products are still loading.</div>
+
+      <div v-if="!productsLoading && poData.supplier_id && availableProducts.length > 0">
+        <div v-for="(item, index) in poItems" :key="index" class="line-item-row">
+          <div class="form-group product-select">
+            <label :for="`product-${index}`">Product:</label>
+            <select :id="`product-${index}`" v-model="item.product_id" @change="updateItemDetails(index)" required :disabled="!poData.supplier_id || availableProducts.length === 0">
+              <option :value="null" disabled>-- Select Product --</option>
+              <option v-for="product in availableProducts" :key="product.id" :value="product.id">
+                {{ product.name }} (SKU: {{ product.sku || 'N/A' }})
+              </option>
+            </select>
+          </div>
+          <div class="form-group qty-input">
+            <label :for="`quantity-${index}`">Quantity Ordered:</label>
+            <input type="number" :id="`quantity-${index}`" v-model.number="item.quantity_ordered" min="1" required />
+          </div>
+          <div class="form-group cost-input">
+            <label :for="`cost-${index}`">Unit Cost Price ($):</label>
+            <input type="number" :id="`cost-${index}`" v-model.number="item.unit_cost_price" min="0" step="0.01" required />
+          </div>
+          <button type="button" @click="removeItem(index)" class="remove-item-button" :disabled="poItems.length <= 1">&times;</button>
         </div>
-        <div class="form-group qty-input">
-          <label :for="`quantity-${index}`">Quantity Ordered:</label>
-          <input type="number" :id="`quantity-${index}`" v-model.number="item.quantity_ordered" min="1" required />
-        </div>
-        <div class="form-group cost-input">
-          <label :for="`cost-${index}`">Unit Cost Price ($):</label>
-          <input type="number" :id="`cost-${index}`" v-model.number="item.unit_cost_price" min="0" step="0.01" required />
-        </div>
-        <button type="button" @click="removeItem(index)" class="remove-item-button" :disabled="poItems.length <= 1">&times;</button>
+        <button type="button" @click="addItem" class="add-item-button">Add Another Item</button>
       </div>
-      <button type="button" @click="addItem" class="add-item-button">Add Another Item</button>
 
       <div v-if="apiError" class="error-message api-error">{{ apiError }}</div>
-      <button type="submit" :disabled="isSubmitting" class="submit-button">
+      <button type="submit" :disabled="isSubmitting || !poData.supplier_id || productsLoading" class="submit-button">
         {{ isSubmitting ? 'Creating PO...' : 'Create Purchase Order' }}
       </button>
     </form>
@@ -64,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick } from 'vue';
+import { ref, reactive, onMounted, watch, nextTick } from 'vue';
 import { useNuxtApp, useRouter } from '#app';
 
 definePageMeta({
@@ -85,29 +91,78 @@ const poData = reactive({
 const poItems = reactive([{ product_id: null, quantity_ordered: 1, unit_cost_price: 0.00, productName: '' }]);
 
 const suppliers = ref([]);
-const availableProducts = ref([]); // All products for selection
-const isLoadingInitialData = ref(true);
-const fetchError = ref('');
+const availableProducts = ref([]);
+const isLoadingInitialData = ref(true); // For initial supplier load
+const productsLoading = ref(false); // For loading products of a supplier
+const fetchError = ref(''); // For initial supplier load error
 const isSubmitting = ref(false);
-const apiError = ref('');
+const apiError = ref(''); // For submission errors or product load errors related to API
 
-async function fetchInitialData() {
+async function fetchInitialSuppliers() {
   isLoadingInitialData.value = true;
   fetchError.value = '';
   try {
-    const [supResponse, prodResponse] = await Promise.all([
-      $axios.get('/admin/suppliers'), // Fetch all suppliers (assuming not too many for a dropdown)
-      $axios.get('/products?limit=100') // Fetch products (consider a searchable/paginated dropdown for large catalogs)
-    ]);
+    const supResponse = await $axios.get('/admin/suppliers');
     suppliers.value = supResponse.data.data || supResponse.data;
-    availableProducts.value = prodResponse.data.products || prodResponse.data;
   } catch (error) {
-    console.error('Error fetching initial data for PO form:', error);
-    fetchError.value = 'Failed to load suppliers or products. Please try again.';
+    console.error('Error fetching suppliers for PO form:', error);
+    fetchError.value = 'Failed to load suppliers. Please try again.';
   } finally {
     isLoadingInitialData.value = false;
   }
 }
+
+async function fetchProductsForSupplier(supplierId) {
+  if (!supplierId) {
+    availableProducts.value = [];
+    poItems.splice(0, poItems.length, { product_id: null, quantity_ordered: 1, unit_cost_price: 0.00, productName: '' });
+    return;
+  }
+  productsLoading.value = true;
+  apiError.value = ''; // Clear previous errors
+
+  try {
+    const prodResponse = await $axios.get(`/admin/products?supplier_id=${supplierId}&limit=500&status=active`);
+    availableProducts.value = prodResponse.data.data || prodResponse.data;
+
+    poItems.forEach(item => {
+      item.product_id = null;
+      item.productName = '';
+    });
+    if (poItems.length === 0) {
+      addItem();
+    } else if (poItems.length > 0 && availableProducts.value.length === 0) {
+      // If items exist but no products for new supplier, ensure at least one item remains, reset.
+      // This might be slightly aggressive, consider user experience.
+      // For now, if no products, the first item's product_id will be null.
+    }
+     // Ensure at least one item row is present if availableProducts exist
+    if (poItems.length === 0 && availableProducts.value.length > 0) {
+        addItem();
+    }
+
+
+  } catch (error) {
+    console.error(`Error fetching products for supplier ${supplierId}:`, error);
+    availableProducts.value = [];
+    apiError.value = `Failed to load products for supplier. ${error.response?.data?.message || error.message || ''}`;
+  } finally {
+    productsLoading.value = false;
+  }
+}
+
+watch(() => poData.supplier_id, (newSupplierId, oldSupplierId) => {
+  if (newSupplierId !== oldSupplierId) {
+    // Clear products and items immediately for better UX before new products load
+    availableProducts.value = [];
+    poItems.splice(0, poItems.length, { product_id: null, quantity_ordered: 1, unit_cost_price: 0.00, productName: '' });
+    if (newSupplierId) {
+      fetchProductsForSupplier(newSupplierId);
+    }
+  }
+});
+
+onMounted(fetchInitialSuppliers);
 
 function addItem() {
   poItems.push({ product_id: null, quantity_ordered: 1, unit_cost_price: 0.00, productName: '' });
@@ -117,6 +172,8 @@ function removeItem(index) {
   if (poItems.length > 1) {
     poItems.splice(index, 1);
   } else {
+    // Optionally, clear the single item instead of an alert, or prevent deletion if it's the only one
+    // For now, keeping original logic.
     alert("A purchase order must have at least one item.");
   }
 }
@@ -124,10 +181,9 @@ function removeItem(index) {
 function updateItemDetails(index) {
   const selectedProduct = availableProducts.value.find(p => p.id === poItems[index].product_id);
   if (selectedProduct) {
-    poItems[index].productName = selectedProduct.name; // Store for display or reference if needed
-    // Optionally pre-fill unit_cost_price if you have a 'last_cost' field on product,
-    // but typically cost price is entered manually for a PO.
-    // poItems[index].unit_cost_price = selectedProduct.last_cost_price || 0.00;
+    poItems[index].productName = selectedProduct.name;
+    // Optionally pre-fill cost price if available on product or supplier-product association
+    // poItems[index].unit_cost_price = selectedProduct.default_cost_price || 0.00;
   }
 }
 
@@ -141,6 +197,11 @@ async function submitPurchaseOrder() {
     apiError.value = 'Please ensure all line items have a selected product, a valid quantity (>0), and a non-negative unit cost price.';
     return;
   }
+  if (availableProducts.value.length === 0 && poData.supplier_id) {
+    apiError.value = 'Cannot create PO as no products are available or loaded for the selected supplier.';
+    return;
+  }
+
 
   isSubmitting.value = true;
   const payload = {
@@ -163,8 +224,6 @@ async function submitPurchaseOrder() {
   }
 }
 
-onMounted(fetchInitialData);
-
 useHead({
   title: 'Admin - Create Purchase Order',
 });
@@ -175,9 +234,10 @@ useHead({
 h2, h3 { text-align: center; margin-bottom: 1.5rem; }
 h3 { font-size: 1.3em; margin-top: 2rem; border-bottom: 1px solid #eee; padding-bottom: 0.5rem;}
 
-.loading-state, .error-message { text-align: center; padding: 1rem; border-radius: 4px; margin-top: 1rem; }
+.loading-state, .error-message, .info-message { text-align: center; padding: 1rem; border-radius: 4px; margin-top: 1rem; }
 .loading-state { background-color: #eef; }
 .error-message { background-color: #fdd; color: #900; }
+.info-message { background-color: #f0f8ff; color: #31708f; }
 .api-error { margin-top: 1rem; }
 
 

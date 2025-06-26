@@ -28,6 +28,7 @@ const validateGetProductsParams = [
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10),
   query('search_term').optional().isString().trim(),
   query('category_id').optional().isInt({ gt: 0 }).toInt(),
+  query('supplier_id').optional().isInt({ gt: 0 }).toInt(), // <<<< NEW VALIDATOR
   query('sort_by').optional().isString().trim(), // Specific validation is done in productService
   query('status').optional().isString().trim().isIn(['active', 'draft', 'archived', 'all', 'inactive']).default('all'), // 'inactive' is alias for 'draft' perhaps, or its own state. 'all' means no status filter.
   query('stock_status').optional().isString().trim().isIn(['in_stock', 'out_of_stock', 'low_stock', 'all']).default('all'),
@@ -48,6 +49,7 @@ router.get('/', isAuthenticated, checkPermission('products:view'), validateGetPr
       limit: req.query.limit,
       search_term: req.query.search_term,
       category_id: req.query.category_id,
+      supplierId: req.query.supplier_id, // <<<< NEW: Pass supplier_id as supplierId
       sort_by: req.query.sort_by,
       sort_order: req.query.sort_order, // Pass this to service
       status: req.query.status === 'all' ? undefined : req.query.status, // productService should handle undefined as "no filter"
