@@ -246,8 +246,8 @@ async function submitEditImageDetails() {
   isUpdating.value = true;
   editError.value = null;
   try {
-    // PUT /admin/images/:imageId
-    await $axios.put(`/admin/images/${editForm.id}`, {
+    // PUT /admin/products/images/:imageId
+    await $axios.put(`/admin/products/images/${editForm.id}`, {
       alt_text: editForm.alt_text,
       display_order: editForm.display_order,
       is_primary: editForm.is_primary,
@@ -267,8 +267,8 @@ async function submitEditImageDetails() {
 async function handleSetAsPrimary(imageId) {
   actionLoading.value = { type: 'set_primary', id: imageId };
   try {
-    // PUT /admin/images/:imageId with is_primary: true
-    await $axios.put(`/admin/images/${imageId}`, { is_primary: true });
+    // PUT /admin/products/images/:imageId with is_primary: true
+    await $axios.put(`/admin/products/images/${imageId}`, { is_primary: true });
     toast.success('Image set as primary.');
     await fetchImages(); // Refresh to show updated primary status and potentially main product image
   } catch (err) {
@@ -283,8 +283,8 @@ async function handleDeleteImage(imageId) {
   if (!window.confirm('Are you sure you want to delete this image?')) return;
   actionLoading.value = { type: 'delete', id: imageId };
   try {
-    // DELETE /admin/images/:imageId
-    await $axios.delete(`/admin/images/${imageId}`);
+    // DELETE /admin/products/images/:imageId
+    await $axios.delete(`/admin/products/images/${imageId}`);
     toast.success('Image deleted successfully.');
     await fetchImages(); // Refresh gallery
   } catch (err) {
