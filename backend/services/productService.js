@@ -320,6 +320,21 @@ async function getProductById(productId) {
     }
     const product = productResult.rows[0];
 
+    // If product has no variants, its own stock_quantity should be derived from batches
+    if (!product.has_variants) {
+      const baseProductBatchStockQuery = await client.query(
+        `SELECT COALESCE(SUM(current_quantity), 0) as total_batch_stock
+         FROM inventory_batches
+         WHERE product_id = $1 AND variant_id IS NULL AND current_quantity > 0`,
+        [productId]
+      );
+      if (baseProductBatchStockQuery.rows.length > 0) {
+        product.stock_quantity = parseInt(baseProductBatchStockQuery.rows[0].total_batch_stock, 10);
+      } else {
+        product.stock_quantity = 0; // Should not happen if COALESCE is used, but as safeguard
+      }
+    }
+
     // Fetch product gallery images
     const imagesQuery = `
       SELECT id, image_url AS url, alt_text, display_order, is_primary
@@ -384,6 +399,20 @@ async function getProductById(productId) {
       for (const variant of product.variants) {
         variant.option_value_ids = await getVariantOptionValueIds(variant.id, client);
         variant.final_price = (parseFloat(product.price) + parseFloat(variant.price_modifier)).toFixed(2);
+
+        // Get actual stock from inventory_batches for this variant
+        const batchStockQuery = await client.query(
+          `SELECT COALESCE(SUM(current_quantity), 0) as total_batch_stock
+           FROM inventory_batches
+           WHERE variant_id = $1 AND product_id = $2 AND current_quantity > 0`,
+          [variant.id, product.id]
+        );
+        if (batchStockQuery.rows.length > 0) {
+          variant.stock_quantity = parseInt(batchStockQuery.rows[0].total_batch_stock, 10);
+        } else {
+          variant.stock_quantity = 0; // Should not happen with COALESCE, but safeguard
+        }
+
         // Calculate profit margin for the variant
         // variant.cost_price is now fetched in variantsQuery
         variant.profit_margin_details = calculateProfitMargin(variant.final_price, variant.cost_price);
