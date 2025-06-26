@@ -49,14 +49,26 @@ async function getAllProducts({
       SELECT
         p_stock.id as product_id,
         CASE
-          WHEN p_stock.has_variants THEN COALESCE((SELECT SUM(pv_stock.stock_quantity) FROM product_variants pv_stock WHERE pv_stock.product_id = p_stock.id), 0)
-          ELSE p_stock.stock_quantity
+          WHEN p_stock.has_variants THEN
+            COALESCE(
+              (SELECT SUM(ib.current_quantity)
+               FROM inventory_batches ib
+               WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.current_quantity > 0),
+            0)
+          ELSE
+            COALESCE(
+              (SELECT SUM(ib.current_quantity)
+               FROM inventory_batches ib
+               WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.current_quantity > 0),
+            0)
         END as effective_stock_quantity,
         CASE
           WHEN p_stock.has_variants THEN
-            COALESCE((SELECT SUM(pv_stock.stock_quantity) FROM product_variants pv_stock WHERE pv_stock.product_id = p_stock.id), 0) > 0 AND
-            COALESCE((SELECT SUM(pv_stock.stock_quantity) FROM product_variants pv_stock WHERE pv_stock.product_id = p_stock.id), 0) < p_stock.reorder_threshold
-          ELSE p_stock.stock_quantity > 0 AND p_stock.stock_quantity < p_stock.reorder_threshold
+            (COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.current_quantity > 0), 0) > 0 AND
+             COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.current_quantity > 0), 0) < p_stock.reorder_threshold)
+          ELSE
+            (COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.current_quantity > 0), 0) > 0 AND
+             COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.current_quantity > 0), 0) < p_stock.reorder_threshold)
         END as is_low_stock
       FROM products p_stock
     )

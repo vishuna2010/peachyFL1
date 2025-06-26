@@ -287,35 +287,86 @@ router.put(
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
-      const currentVariantResult = await client.query('SELECT * FROM product_variants WHERE id = $1', [variantId]);
+      const currentVariantResult = await client.query('SELECT * FROM product_variants WHERE id = $1 FOR UPDATE', [variantId]);
       if (currentVariantResult.rows.length === 0) throw new NotFoundError(`Variant with ID ${variantId} not found.`);
       const currentVariant = currentVariantResult.rows[0];
+      const oldAggregateStockQuantity = currentVariant.stock_quantity; // The value stored on product_variants table
 
-      // Log stock adjustment if stock_quantity is changing
-      if (stock_quantity !== undefined && stock_quantity !== currentVariant.stock_quantity) {
-          const oldStock = currentVariant.stock_quantity;
-          const newStock = parseInt(stock_quantity); // Assumes stock_quantity is validated by express-validator
-          const stockChange = newStock - oldStock;
-          // req.user should be populated by isAuthenticated middleware
-          const userId = req.user && req.user.userId ? req.user.userId : null;
+      let newAggregateStockQuantity = oldAggregateStockQuantity; // Default to old if not provided in request
 
-          const logMovementQuery = `
-            INSERT INTO stock_movement_logs
-                (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          `;
-          const logMovementValues = [
-              currentVariant.product_id,
-              variantId, // from req.params
-              userId,
-              'manual_adjustment',
-              stockChange,
-              newStock,
-              reason || null, // destructured from req.body, defaults to null if not provided
-              null // reference_id for manual adjustment
-          ];
-          await client.query(logMovementQuery, logMovementValues);
+      // Handle stock_quantity update specifically to interact with inventory_batches
+      if (stock_quantity !== undefined) {
+        newAggregateStockQuantity = parseInt(stock_quantity); // This is the new desired total stock
+        if (isNaN(newAggregateStockQuantity) || newAggregateStockQuantity < 0) {
+          throw new BadRequestError('Stock quantity must be a non-negative integer.');
+        }
+
+        // Get current total stock from batches for this variant
+        const existingBatchStockResult = await client.query(
+          `SELECT COALESCE(SUM(current_quantity), 0) AS total_batch_stock FROM inventory_batches WHERE variant_id = $1 AND product_id = $2`,
+          [variantId, currentVariant.product_id]
+        );
+        const currentTotalBatchStock = parseInt(existingBatchStockResult.rows[0].total_batch_stock, 10);
+
+        const stockChange = newAggregateStockQuantity - currentTotalBatchStock;
+        const userId = req.user && req.user.userId ? req.user.userId : null;
+        const changeReason = reason || 'Manual stock adjustment via variant edit';
+
+        if (stockChange > 0) { // Increase stock - add to a new or existing manual batch
+          const manualBatchNumber = `MANUAL-${currentVariant.sku || `VAR${variantId}`}`;
+          // Try to find an existing manual batch for this variant
+          const existingManualBatch = await client.query(
+            `SELECT id, current_quantity, initial_quantity FROM inventory_batches
+             WHERE variant_id = $1 AND product_id = $2 AND batch_number = $3 FOR UPDATE`,
+            [variantId, currentVariant.product_id, manualBatchNumber]
+          );
+
+          if (existingManualBatch.rows.length > 0) {
+            // Update existing manual batch
+            const batchToUpdate = existingManualBatch.rows[0];
+            await client.query(
+              `UPDATE inventory_batches SET current_quantity = current_quantity + $1,
+               initial_quantity = initial_quantity + $2, updated_at = CURRENT_TIMESTAMP
+               WHERE id = $3`,
+              [stockChange, stockChange, batchToUpdate.id] // Increment initial_quantity as well for this simple model
+            );
+            console.log(`[SeedDB/VariantUpdate] Increased stock in existing manual batch ${manualBatchNumber} by ${stockChange} for variant ${variantId}`);
+          } else {
+            // Create new manual batch
+            const costPriceAtReceipt = currentVariant.cost_price !== null ? currentVariant.cost_price : 0;
+            const currencyCodeAtReceipt = process.env.BASE_CURRENCY_CODE || 'USD';
+            await client.query(
+              `INSERT INTO inventory_batches
+                (product_id, variant_id, batch_number, initial_quantity, current_quantity,
+                 cost_price_at_receipt, currency_code_at_receipt, received_date, expiry_date, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+              [currentVariant.product_id, variantId, manualBatchNumber, stockChange, stockChange,
+               costPriceAtReceipt, currencyCodeAtReceipt, null]
+            );
+            console.log(`[SeedDB/VariantUpdate] Created new manual batch ${manualBatchNumber} with stock ${stockChange} for variant ${variantId}`);
+          }
+        } else if (stockChange < 0) {
+          // Decrease stock - This is complex. For now, we only log and update the aggregate.
+          // The actual batch decrement should happen via a dedicated UI or process.
+          // The stock_movement_log below will capture this intended reduction.
+          console.warn(`[SeedDB/VariantUpdate] Stock decrease of ${-stockChange} requested for variant ${variantId}. This operation does not automatically decrement specific batches. Ensure manual batch adjustment if needed.`);
+        }
+
+        // Log movement if there was any change based on batch calculation vs new target
+        if (stockChange !== 0) {
+            const logMovementQuery = `
+              INSERT INTO stock_movement_logs
+                  (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `;
+            await client.query(logMovementQuery, [
+                currentVariant.product_id, variantId, userId,
+                'manual_adjustment', stockChange, newAggregateStockQuantity, // Log against the new aggregate target
+                changeReason, `variant_id:${variantId}`
+            ]);
+        }
       }
+      // The product_variants.stock_quantity will be updated later with newAggregateStockQuantity
 
       let newOptionValueIds = null;
       if (option_value_ids) {
