@@ -423,7 +423,7 @@ const stockStatusMessage = computed(() => {
 
   if (stock <= 0) return 'Out of Stock';
   if (stock > 0 && stock <= 5) return `Only ${stock} left!`;
-  return 'In Stock';
+  return `${stock} in stock`; // Changed to always show quantity when > 5
 });
 
 const isColorOption = (optionName) => {
