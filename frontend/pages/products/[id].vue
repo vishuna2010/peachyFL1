@@ -552,8 +552,7 @@ function selectOption(optionId, valueId) {
             val => val.value_id === selectedOptions[optId] && val.isPotentiallyAvailable
         );
         if (!isStillAvailable && selectedOptions[optId] !== undefined) { // Ensure selectedOptions[optId] actually exists before trying to delete
-          // Temporarily commenting out auto-deselection to diagnose "Combination unavailable"
-          // delete selectedOptions[optId];
+          delete selectedOptions[optId];
           // console.log(`Auto-deselected ${optType.option_name} because value ${selectedOptions[optId]} is no longer available with current other selections.`);
         }
       }
