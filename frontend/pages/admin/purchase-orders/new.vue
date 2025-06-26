@@ -122,7 +122,7 @@ async function fetchProductsForSupplier(supplierId) {
   apiError.value = ''; // Clear previous errors
 
   try {
-    const prodResponse = await $axios.get(`/admin/products?supplier_id=${supplierId}&limit=500&status=active`);
+    const prodResponse = await $axios.get(`/admin/products?supplier_id=${supplierId}&limit=100&status=active`);
     availableProducts.value = prodResponse.data.data || prodResponse.data;
 
     poItems.forEach(item => {
