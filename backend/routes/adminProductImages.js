@@ -8,6 +8,42 @@ const { param, body, validationResult } = require('express-validator');
 
 router.use(isAuthenticated, isAdmin); // Apply to all routes in this file
 
+// GET /products/:productId/images - List all images for a product
+router.get(
+  '/:productId/images',
+  [
+    param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { productId } = req.params;
+
+    try {
+      // Check if product exists
+      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+      if (productCheck.rows.length === 0) {
+        return res.status(404).json({ message: `Product with ID ${productId} not found.` });
+      }
+
+      const imagesQuery = `
+        SELECT id, product_id, image_url, alt_text, display_order, is_primary, created_at, updated_at
+        FROM product_images
+        WHERE product_id = $1
+        ORDER BY display_order ASC, id ASC;
+      `;
+      const { rows } = await db.query(imagesQuery, [productId]);
+      res.status(200).json(rows);
+    } catch (error) {
+      console.error(`Error fetching images for product ID ${productId}:`, error);
+      next(error);
+    }
+  }
+);
+
 // POST /products/:productId/images
 router.post(
   '/:productId/images',

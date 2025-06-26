@@ -35,6 +35,12 @@
         :can-edit-tags="can('tags:manage').value"
         :can-manage-image="can('products:edit').value" />
 
+      <!-- Image Gallery Section -->
+      <section class="bg-white shadow-md rounded-lg p-6 my-10" v-if="can('products:edit').value">
+        <h3 class="text-xl font-semibold text-gray-700 mb-5 border-b pb-3">Product Image Gallery</h3>
+        <ProductImageGalleryManager :product-id="productId" />
+      </section>
+
       <section class="bg-white shadow-md rounded-lg p-6 my-10" v-if="can('products:edit').value">
         <h3 class="text-xl font-semibold text-gray-700 mb-5 border-b pb-3">Product Specific Options</h3>
         <ProductOptionsManager :product-id="productId" />
@@ -63,6 +69,7 @@ import { useNuxtApp, useRoute, definePageMeta, useHead } from '#imports';
 import ProductForm from '~/components/admin/ProductForm.vue';
 import ProductOptionsManager from '~/components/admin/ProductOptionsManager.vue';
 import ProductVariantsManager from '~/components/admin/ProductVariantsManager.vue';
+import ProductImageGalleryManager from '~/components/admin/ProductImageGalleryManager.vue'; // Import the new component
 import { usePermissions } from '~/composables/usePermissions'; // Import usePermissions
 
 definePageMeta({ layout: 'admin' });
