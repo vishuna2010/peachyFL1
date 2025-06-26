@@ -159,8 +159,21 @@
 
             <div>
               <label for="variant_image_url" class="block text-sm font-medium text-gray-700 mb-1">Image URL (Optional)</label>
-              <input type="text" id="variant_image_url" v-model="newVariantForm.image_url" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="https://example.com/image.jpg" />
+              <div class="flex items-center space-x-2">
+                <input type="text" id="variant_image_url" v-model="newVariantForm.image_url" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="https://example.com/image.jpg" />
+                <button type="button" @click="showImagePickerModal = true" class="px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-100 rounded-md hover:bg-indigo-200 focus:outline-none whitespace-nowrap">
+                  Choose from Gallery
+                </button>
+              </div>
             </div>
+
+            <VariantImagePickerModal
+              v-if="showImagePickerModal"
+              :product-id="propProductId"
+              :is-visible="showImagePickerModal"
+              @image-selected="handleGalleryImageSelected"
+              @close="showImagePickerModal = false"
+            />
 
             <div v-if="addVariantFormError" class="my-3 p-3 bg-red-100 text-red-700 border border-red-200 rounded-lg shadow text-sm">
               {{ addVariantFormError }}
@@ -193,6 +206,7 @@
 import { ref, onMounted, watch, toRefs, reactive } from 'vue';
 import { useNuxtApp } from '#app';
 import { useToast } from 'vue-toastification';
+import VariantImagePickerModal from '~/components/admin/VariantImagePickerModal.vue'; // Import the new modal
 
 const props = defineProps({
   productId: {
@@ -226,6 +240,13 @@ const newVariantForm = reactive({
 const isSubmittingNewVariant = ref(false); // Used for Add/Edit form submission
 const addVariantFormError = ref(null);
 const actionLoading = ref({ type: null, id: null }); // For row-specific actions like delete
+
+const showImagePickerModal = ref(false);
+
+function handleGalleryImageSelected(imageUrl) {
+  newVariantForm.image_url = imageUrl;
+  showImagePickerModal.value = false;
+}
 
 // Modal Control Methods
 function openAddVariantModal() {
