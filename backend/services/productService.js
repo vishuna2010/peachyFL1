@@ -322,13 +322,28 @@ async function getProductById(productId) {
 
     // Fetch product gallery images
     const imagesQuery = `
-      SELECT id, image_url AS url, alt_text, display_order
+      SELECT id, image_url AS url, alt_text, display_order, is_primary
       FROM product_images
       WHERE product_id = $1
       ORDER BY display_order ASC, id ASC;
     `;
     const imagesResult = await client.query(imagesQuery, [productId]);
-    product.images = imagesResult.rows; // Assign the array of images
+    // product.images will hold these raw gallery images, including the is_primary flag
+    // The main products.image_url should already be synced by adminProductImages.js logic
+    // to the URL of the image where is_primary = true.
+
+    // Let's find if there's a primary image from the gallery to ensure product.image_url is consistent.
+    const primaryGalleryImage = imagesResult.rows.find(img => img.is_primary);
+    if (primaryGalleryImage) {
+      product.image_url = primaryGalleryImage.url; // Ensure product.image_url reflects the gallery's primary
+    } else if (imagesResult.rows.length > 0 && !product.image_url) {
+      // If no gallery image is marked primary, but there are gallery images,
+      // and product.image_url is null, this is a data inconsistency.
+      // For display, we could pick the first gallery image, but ideally, one should be primary.
+      // For now, we rely on product.image_url being the primary source if no gallery image is_primary.
+      // If adminProductImages correctly sets product.image_url to NULL when no primary exists, this is fine.
+    }
+
 
     // Calculate profit margin for the main product
     // product.cost_price should be available if the DB schema is updated for products table
@@ -392,35 +407,54 @@ async function getProductById(productId) {
 
     // Create consolidated gallery_images
     let gallery_images = [];
-    let imageUrlsSet = new Set();
+    let imageUrlsSet = new Set(); // To avoid duplicates if product.image_url is also in product_images
 
-    // Add images from product.images
-    if (product.images && Array.isArray(product.images)) {
-      product.images.forEach(img => {
-        if (img.url && !imageUrlsSet.has(img.url)) {
-          imageUrlsSet.add(img.url);
-          gallery_images.push({
-            id: img.id,
-            url: img.url,
-            alt_text: img.alt_text || product.name,
-            display_order: img.display_order
-          });
-        }
-      });
-    }
+    // Process actual gallery images (product_images table) first
+    // These now include the is_primary flag from the modified imagesQuery
+    const rawGalleryImages = imagesResult.rows; // Results from product_images table
 
-    // Ensure primary product.image_url is included
+    rawGalleryImages.forEach(img => {
+      if (img.url && !imageUrlsSet.has(img.url)) {
+        imageUrlsSet.add(img.url);
+        gallery_images.push({
+          id: img.id, // Actual ID from product_images table
+          url: img.url,
+          alt_text: img.alt_text || product.name,
+          display_order: img.display_order,
+          is_primary: img.is_primary || false // Carry over the is_primary flag
+        });
+      }
+    });
+
+    // Ensure product.image_url (which should be the primary image URL) is represented
+    // This also acts as a fallback if product_images table is empty but products.image_url exists
     if (product.image_url && !imageUrlsSet.has(product.image_url)) {
       imageUrlsSet.add(product.image_url);
       gallery_images.push({
-        id: 'product_primary_' + product.id,
+        id: 'main_' + product.id, // A unique ID for this entry if it's not from product_images
         url: product.image_url,
-        alt_text: product.name,
-        display_order: -1 // Prioritize if no other primary is set
+        alt_text: product.name + " (Primary)",
+        display_order: -1, // Ensure it sorts first if no other is primary
+        is_primary: true   // Mark it as primary conceptually
       });
     }
 
-    // Add images from product.variants
+    // Sort: primary first, then by display_order, then by id
+    gallery_images.sort((a, b) => {
+      if (a.is_primary && !b.is_primary) return -1;
+      if (!a.is_primary && b.is_primary) return 1;
+      if (a.display_order !== b.display_order) {
+        return (a.display_order || 0) - (b.display_order || 0);
+      }
+      // Ensure consistent sort for items with same display_order or if display_order is null
+      const aId = typeof a.id === 'string' ? a.id : String(a.id);
+      const bId = typeof b.id === 'string' ? b.id : String(b.id);
+      return aId.localeCompare(bId);
+    });
+
+    // Add images from product.variants (if they should also be in the gallery display)
+    // This part might be optional depending on desired gallery content.
+    // For now, let's keep it as it was, but ensure no duplicates with what's already added.
     if (product.variants && Array.isArray(product.variants)) {
       product.variants.forEach(variant => {
         if (variant.image_url && !imageUrlsSet.has(variant.image_url)) {
