@@ -16,7 +16,16 @@
         <div v-if="configuredProductOptions.length === 0" class="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-md">
           No options configured for this product to create variants from. Please assign options and their allowed values first.
         </div>
-        <pre v-else class="text-xs bg-gray-100 p-3 rounded-md overflow-x-auto max-h-96">{{ configuredProductOptions }}</pre>
+        <!-- Debug <pre> tag removed. The configured options are used by the 'Add New Variant' modal. -->
+        <div v-else class="text-sm text-gray-700 p-3 border border-dashed border-gray-300 bg-gray-50 rounded-md">
+          <p><strong class="font-medium">Ready to create variants.</strong> This product has the following option types configured with specific values:</p>
+          <ul class="list-disc list-inside ml-4 mt-1">
+            <li v-for="opt in configuredProductOptions" :key="opt.option_id">
+              {{ opt.option_name }} (with {{ opt.allowed_values.length }} value{{ opt.allowed_values.length === 1 ? '' : 's' }})
+            </li>
+          </ul>
+          <p class="mt-2 text-xs text-gray-500">Click 'Add New Variant' to combine these options.</p>
+        </div>
       </div>
 
       <div class="mt-6">
