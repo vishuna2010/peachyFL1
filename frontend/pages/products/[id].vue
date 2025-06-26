@@ -595,40 +595,56 @@ function updateCurrentVariant() {
     const sortedVariantValues = [...variant.option_value_ids].sort((a, b) => a - b);
     return JSON.stringify(sortedVariantValues) === JSON.stringify(selectedValuesArray);
   });
+
+  let newSelectedImage = null; // Store the determined image before assigning to selectedImage.value
+
   if (matchedVariant) {
     currentVariant.value = matchedVariant;
     displayPrice.value = parseFloat(matchedVariant.final_price);
     displaySku.value = matchedVariant.sku || product.value.sku || '';
     displayStock.value = matchedVariant.stock_quantity;
-    if (matchedVariant.image_url) {
-        const existingGalleryImage = galleryImages.value.find(img => img.url === matchedVariant.image_url);
-        if (existingGalleryImage) {
-            selectedImage.value = existingGalleryImage;
-        } else {
-            selectedImage.value = { url: matchedVariant.image_url, alt_text: currentVariant.value.sku || product.value.name, id: 'variant_' + currentVariant.value.id };
-        }
-    } else if (galleryImages.value.length > 0) {
-        selectedImage.value = galleryImages.value[0];
-    } else if (product.value.image_url) {
-        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
-    } else {
-        selectedImage.value = null;
-    }
     addToCartDisabled.value = matchedVariant.stock_quantity <= 0;
-  } else {
+
+    if (matchedVariant.image_url) {
+        const galleryMatch = galleryImages.value.find(gi => gi.url === matchedVariant.image_url);
+        newSelectedImage = galleryMatch || {
+            url: matchedVariant.image_url,
+            alt_text: matchedVariant.sku || product.value.name,
+            id: 'variant_img_' + matchedVariant.id
+            // is_primary might be false or not set for a variant-specific image not in gallery
+        };
+    } else { // Variant has no specific image, fall back to product's primary
+      if (galleryImages.value.length > 0) {
+        newSelectedImage = galleryImages.value.find(img => img.is_primary === true) || galleryImages.value[0];
+      } else if (product.value.image_url) {
+        newSelectedImage = {
+            url: product.value.image_url,
+            alt_text: product.value.name,
+            id: 'product_primary_variant_fb_' + product.value.id,
+            is_primary: true
+        };
+      }
+    }
+  } else { // No matching variant / options not fully selected
     currentVariant.value = null;
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = 0;
-    if (galleryImages.value.length > 0) {
-        selectedImage.value = galleryImages.value[0];
-    } else if (product.value.image_url) {
-        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
-    } else {
-        selectedImage.value = null;
-    }
     addToCartDisabled.value = true;
+
+    // Revert to product's primary image
+    if (galleryImages.value.length > 0) {
+      newSelectedImage = galleryImages.value.find(img => img.is_primary === true) || galleryImages.value[0];
+    } else if (product.value.image_url) {
+      newSelectedImage = {
+          url: product.value.image_url,
+          alt_text: product.value.name,
+          id: 'product_primary_no_variant_fb_' + product.value.id,
+          is_primary: true
+      };
+    }
   }
+  selectedImage.value = newSelectedImage; // Assign once at the end
   quantity.value = 1;
 }
 
@@ -656,39 +672,35 @@ const product = ref(null);
 watch(productData, (newProductData) => {
   if (newProductData) {
     product.value = newProductData;
-    const rawGalleryImages = newProductData.gallery_images || [];
-    galleryImages.value = rawGalleryImages; // For thumbnails
+    const currentGallery = newProductData.gallery_images || [];
+    galleryImages.value = currentGallery;
 
-    let primaryImgToDisplay = null;
-    if (rawGalleryImages.length > 0) {
-      primaryImgToDisplay = rawGalleryImages.find(img => img.is_primary === true);
-      if (!primaryImgToDisplay) {
-        // If no image is explicitly marked primary in the gallery data (which includes the main image_url entry),
-        // default to the very first image in the sorted gallery list.
-        // The backend service sorts to put the product.image_url (if valid) first with is_primary=true.
-        primaryImgToDisplay = rawGalleryImages[0];
+    let initialDisplayImage = null;
+    if (currentGallery.length > 0) {
+      // Backend service sorts primary to be first if 'is_primary' is available and true on any item from product_images table,
+      // or if product.image_url was unique and added with display_order: -1 and is_primary: true.
+      initialDisplayImage = currentGallery.find(img => img.is_primary === true);
+      if (!initialDisplayImage && currentGallery.length > 0) { // If no explicit primary, take first from (sorted) gallery
+          initialDisplayImage = currentGallery[0];
       }
     }
 
-    // If gallery was effectively empty or no suitable image found there,
-    // and product still has a main image_url (e.g. from direct product table, not gallery processing)
-    // This case should be rare if backend service correctly populates gallery_images.
-    if (!primaryImgToDisplay && newProductData.image_url) {
-      primaryImgToDisplay = {
+    // This secondary fallback is if gallery_images array itself was empty, but product.image_url still exists.
+    if (!initialDisplayImage && newProductData.image_url) {
+      initialDisplayImage = {
         url: newProductData.image_url,
         alt_text: newProductData.name,
-        id: 'main_fallback_' + newProductData.id,
-        is_primary: true // Treat it as primary
+        id: 'main_fallback_watcher_' + newProductData.id,
+        is_primary: true
       };
-      // If galleryImages was empty, ensure this one is added for thumbnail consistency
-      if (galleryImages.value.length === 0) {
-          galleryImages.value.push(primaryImgToDisplay);
+      // If galleryImages was truly empty and we just created an image object from product.image_url, add it.
+      if (galleryImages.value.length === 0 && initialDisplayImage.url) {
+          galleryImages.value.push(initialDisplayImage); // Ensures thumbnail consistency
       }
     }
+    selectedImage.value = initialDisplayImage;
 
-    selectedImage.value = primaryImgToDisplay; // This can be null if no images at all
-
-    initializeSelections();
+    initializeSelections(); // This will call updateCurrentVariant
     userHasReviewed.value = false;
     userReview.value = null;
     showReviewForm.value = false;
