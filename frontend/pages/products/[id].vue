@@ -15,8 +15,7 @@
       <div class="lg:grid lg:grid-cols-12 lg:gap-x-8 items-start">
 
         <!-- Image Column (e.g., takes 5 or 6 cols on lg) -->
-        <div class="lg:col-span-6 xl:col-span-5"> {/* Adjusted for potentially more image space */}
-          {/* Image Gallery - Main Image - Sticky class removed */}
+        <div class="lg:col-span-6 xl:col-span-5">
           <div class="mb-4">
             <img
               @click="openZoomModal(selectedImage.value?.url)"
@@ -548,8 +547,14 @@ function selectOption(optionId, valueId) {
         const otherSelsForThisCheck = { ...selectedOptions };
         delete otherSelsForThisCheck[optId];
         const availableValsForThisOpt = getAvailableValuesForOption(optType, otherSelsForThisCheck);
-        if (!availableValsForThisOpt.has(selectedOptions[optId])) {
-          delete selectedOptions[optId];
+        // Check if the currently selected value for optId is still potentially available
+        const isStillAvailable = availableValsForThisOpt.find(
+            val => val.value_id === selectedOptions[optId] && val.isPotentiallyAvailable
+        );
+        if (!isStillAvailable && selectedOptions[optId] !== undefined) { // Ensure selectedOptions[optId] actually exists before trying to delete
+          // Temporarily commenting out auto-deselection to diagnose "Combination unavailable"
+          // delete selectedOptions[optId];
+          // console.log(`Auto-deselected ${optType.option_name} because value ${selectedOptions[optId]} is no longer available with current other selections.`);
         }
       }
     }
