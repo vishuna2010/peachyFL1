@@ -55,7 +55,7 @@
                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                   <div v-if="variant.selected_options && variant.selected_options.length > 0">
                     <span v-for="(opt, index) in variant.selected_options" :key="opt.option_value_id">
-                      <strong>{{ opt.option_name }}:</strong> {{ opt.value_name }}<span v-if="index < variant.selected_options.length - 1">, </span>
+                      <strong>{{ opt.option_name }}:</strong> {{ opt.option_value_name }}<span v-if="index < variant.selected_options.length - 1">, </span>
                     </span>
                   </div>
                   <span v-else class="text-xs text-gray-400 italic">Base product or no options defined</span>
