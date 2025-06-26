@@ -656,14 +656,38 @@ const product = ref(null);
 watch(productData, (newProductData) => {
   if (newProductData) {
     product.value = newProductData;
-    galleryImages.value = newProductData.gallery_images || [];
-    if (galleryImages.value.length > 0) {
-      selectedImage.value = galleryImages.value[0];
-    } else if (newProductData.image_url) {
-      selectedImage.value = { url: newProductData.image_url, alt_text: newProductData.name, id: 'product_primary_' + newProductData.id };
-    } else {
-      selectedImage.value = null;
+    const rawGalleryImages = newProductData.gallery_images || [];
+    galleryImages.value = rawGalleryImages; // For thumbnails
+
+    let primaryImgToDisplay = null;
+    if (rawGalleryImages.length > 0) {
+      primaryImgToDisplay = rawGalleryImages.find(img => img.is_primary === true);
+      if (!primaryImgToDisplay) {
+        // If no image is explicitly marked primary in the gallery data (which includes the main image_url entry),
+        // default to the very first image in the sorted gallery list.
+        // The backend service sorts to put the product.image_url (if valid) first with is_primary=true.
+        primaryImgToDisplay = rawGalleryImages[0];
+      }
     }
+
+    // If gallery was effectively empty or no suitable image found there,
+    // and product still has a main image_url (e.g. from direct product table, not gallery processing)
+    // This case should be rare if backend service correctly populates gallery_images.
+    if (!primaryImgToDisplay && newProductData.image_url) {
+      primaryImgToDisplay = {
+        url: newProductData.image_url,
+        alt_text: newProductData.name,
+        id: 'main_fallback_' + newProductData.id,
+        is_primary: true // Treat it as primary
+      };
+      // If galleryImages was empty, ensure this one is added for thumbnail consistency
+      if (galleryImages.value.length === 0) {
+          galleryImages.value.push(primaryImgToDisplay);
+      }
+    }
+
+    selectedImage.value = primaryImgToDisplay; // This can be null if no images at all
+
     initializeSelections();
     userHasReviewed.value = false;
     userReview.value = null;
