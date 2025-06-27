@@ -29,6 +29,15 @@ async function getAllProducts({
   page = 1,
   limit = 10
 }) {
+  // console.log(`[productService.getAllProducts] Initial supplierId: ${supplierId}, Type: ${typeof supplierId}`);
+
+  const validatedSupplierId = supplierId ? parseInt(supplierId, 10) : undefined;
+  // console.log(`[productService.getAllProducts] Validated supplierId: ${validatedSupplierId}, Type: ${typeof validatedSupplierId}`);
+
+  if (validatedSupplierId && isNaN(validatedSupplierId)) {
+    console.warn(`[productService.getAllProducts] Invalid non-numeric supplierId received: ${supplierId}. Ignoring filter.`);
+  }
+
   const queryValues = [];
   let paramIndex = 1;
 
@@ -165,10 +174,14 @@ async function getAllProducts({
   }
 
   // ++++ NEW SUPPLIER ID FILTER ++++
-  if (supplierId) {
+  // Use validatedSupplierId for the check and for pushing to queryValues
+  if (validatedSupplierId && validatedSupplierId > 0) { // Ensure it's a positive integer
+    // console.log(`[productService.getAllProducts] Applying filter for supplierId: ${validatedSupplierId}`);
     whereClauses.push(`p.supplier_id = $${paramIndex}`);
-    queryValues.push(supplierId);
+    queryValues.push(validatedSupplierId); // Push the parsed integer
     paramIndex++;
+  } else {
+    // console.log(`[productService.getAllProducts] No valid supplierId to filter by.`);
   }
   // +++++++++++++++++++++++++++++++
 
