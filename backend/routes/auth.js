@@ -430,4 +430,83 @@ router.get('/my-permissions', authService.isAuthenticated, async (req, res, next
   }
 });
 
+// POST /api/auth/verify-email - Verify email with token
+router.post('/verify-email',
+  [ // Add express-validator rules
+    body('userId').isInt({ gt: 0 }).withMessage('Valid User ID is required.').toInt(),
+    body('verificationCode').isString().isLength({ min:6, max: 6 }).withMessage('A valid 6-digit verification code is required.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { userId, verificationCode } = req.body;
+    const client = await db.pool.connect(); // db needs to be required in this file
+
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        'SELECT id, email, name, role, email_verification_token, email_verification_token_expires_at, is_email_verified FROM users WHERE id = $1 FOR UPDATE',
+        [userId]
+      );
+
+      if (userResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        // Use AppError for consistency if available and global error handler is set up
+        // For now, direct response or pass to next if AppError is imported and configured
+        return res.status(404).json({ message: 'User not found.' });
+      }
+
+      const user = userResult.rows[0];
+
+      if (user.is_email_verified) {
+        await client.query('ROLLBACK');
+        return res.status(200).json({ message: 'Email is already verified. You can log in.' });
+      }
+
+      if (!user.email_verification_token || user.email_verification_token !== verificationCode) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Invalid verification code.' });
+      }
+
+      if (user.email_verification_token_expires_at && new Date(user.email_verification_token_expires_at) < new Date()) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Verification code has expired. Please register again or request a new code if that feature exists.' });
+      }
+
+      await client.query(
+        'UPDATE users SET is_email_verified = TRUE, email_verification_token = NULL, email_verification_token_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [userId]
+      );
+
+      await client.query('COMMIT');
+
+      const userNameForEmail = user.name || user.email.split('@')[0];
+      emailService.sendWelcomeEmail(user.email, userNameForEmail) // emailService needs to be required
+        .then(emailRes => {
+          if (emailRes.success) {
+            console.log(`Welcome email successfully sent to ${user.email} after verification.`);
+          } else {
+            console.error(`Failed to send welcome email to ${user.email} after verification: ${emailRes.error}`);
+          }
+        })
+        .catch(err => {
+          console.error(`Error dispatching welcome email for ${user.email} after verification:`, err);
+        });
+
+      res.status(200).json({ message: 'Email verified successfully. You can now log in.' });
+
+    } catch (error) {
+      if(client) await client.query('ROLLBACK');
+      console.error('Error during /verify-email route:', error);
+      next(error);
+    } finally {
+      if(client) client.release();
+    }
+  }
+);
+
 module.exports = router;
