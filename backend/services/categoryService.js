@@ -236,4 +236,21 @@ module.exports = {
   getCategoryById,
   updateCategory,
   deleteCategory,
+  getAllPublicCategories, // Added new function
 };
+
+/**
+ * Retrieves all categories for public display (typically id and name).
+ * @returns {Promise<Array<object>>} A promise that resolves to an array of category objects,
+ *          each containing { id, name }, ordered by name.
+ * @throws {AppError} If the database operation fails.
+ */
+async function getAllPublicCategories() {
+  try {
+    const result = await db.query('SELECT id, name FROM categories ORDER BY name ASC');
+    return result.rows;
+  } catch (error) {
+    console.error('[categoryService.getAllPublicCategories] Error fetching public categories:', error);
+    throw new AppError('Failed to retrieve public categories.', 500, 'PUBLIC_CATEGORIES_FETCH_FAILED');
+  }
+}

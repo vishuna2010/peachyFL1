@@ -2177,4 +2177,53 @@ module.exports = {
   updateProductVariant,
   deleteProductVariant,
   deleteProduct,
+  getPublicProductFilterOptions, // Added new function
 };
+
+/**
+ * Fetches product options and their distinct values available for public filtering.
+ * Considers only options linked to active products that have variants.
+ * @returns {Promise<Array<object>>} A promise that resolves to an array of option objects.
+ *          Each object has:
+ *            - option_id: number
+ *            - option_name: string
+ *            - values: Array of { value_id: number, value_name: string }
+ *          The options are ordered by option_name.
+ * @throws {AppError} If the database operation fails.
+ */
+async function getPublicProductFilterOptions() {
+  const query = `
+    SELECT
+        po.id AS option_id,
+        po.name AS option_name,
+        json_agg(DISTINCT jsonb_build_object('value_id', pov.id, 'value_name', pov.value) ORDER BY pov.value ASC) AS "values"
+    FROM
+        product_options po
+    JOIN
+        product_option_values pov ON po.id = pov.product_option_id
+    JOIN
+        product_variant_option_values pvov ON pov.id = pvov.product_option_value_id
+    JOIN
+        product_variants pv ON pvov.product_variant_id = pv.id
+    JOIN
+        products p ON pv.product_id = p.id
+    WHERE
+        p.product_status = 'active' AND p.has_variants = TRUE
+    GROUP BY
+        po.id, po.name
+    ORDER BY
+        po.name;
+  `;
+  try {
+    const { rows } = await db.query(query);
+    // Ensure 'values' array is always present, even if empty, and items are sorted by value_name.
+    // The ORDER BY pov.value ASC within json_agg handles sorting of values.
+    return rows.map(option => ({
+        ...option,
+        values: option.values || [] // Ensure values is an array, handles case where json_agg might return null for an option with no valid values (though unlikely with current joins)
+    }));
+  } catch (error) {
+    console.error('[productService.getPublicProductFilterOptions] Error fetching public filter options:', error);
+    throw new AppError('Failed to retrieve public product filter options.', 500, 'PUBLIC_FILTER_OPTIONS_FETCH_FAILED');
+  }
+}

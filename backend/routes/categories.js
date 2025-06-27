@@ -1,15 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const categoryService = require('../services/categoryService'); // Import categoryService
+// Removed db import as it's no longer directly used here
 
 // GET /api/categories - Fetch all categories
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => { // Added next parameter
   try {
-    const result = await db.query('SELECT id, name FROM categories ORDER BY name ASC');
-    res.status(200).json(result.rows);
+    const categories = await categoryService.getAllPublicCategories();
+    res.status(200).json(categories);
   } catch (error) {
-    console.error('Error fetching categories:', error);
-    res.status(500).json({ message: 'Error fetching categories.' });
+    // Pass errors to the global error handler
+    // The service function is expected to throw an AppError for DB issues.
+    next(error);
   }
 });
 
