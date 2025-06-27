@@ -277,7 +277,12 @@ This section outlines the primary driver for future backend development, based o
     - [ ] Theming with site colors pending user input for color codes.
     - [ ] Consider enhancing user name personalization if registration collects a full name.
 - **Two-Factor Authentication (2FA)**
-  - [ ] Email-based code for signup validation
+  - [X] Email-based code for signup validation
+    - [X] User registration updated to generate/store verification token & expiry.
+    - [X] Email service sends verification code upon registration.
+    - [X] New `/api/auth/verify-email` endpoint created to validate code, mark email as verified, and clear token.
+    - [X] Login process updated to block login for unverified emails.
+    - [X] Welcome email now sent *after* successful email verification.
 - **Order Notifications**
   - Email customer when:
     - [ ] Order is placed

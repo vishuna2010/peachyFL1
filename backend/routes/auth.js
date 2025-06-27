@@ -43,17 +43,49 @@ const changePasswordLimiter = rateLimit({
 });
 
 // Register
-router.post('/register', registerLimiter, async (req, res) => {
-  const { email, password } = req.body;
+router.post('/register', registerLimiter, async (req, res, next) => { // Added next
+  const { email, password } = req.body; // Assuming name is not part of initial public registration form yet
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
   }
-  const result = await authService.registerUser(email, password);
-  if (result.success) {
-    const userResponse = result.user ? (({ password, ...rest }) => rest)(result.user) : {};
-    res.status(201).json({ message: 'User registered successfully.', user: userResponse });
-  } else {
-    res.status(400).json({ message: result.message });
+
+  try {
+    const result = await authService.registerUser(email, password); // This now returns user with email_verification_token
+
+    if (result.success && result.user) {
+      const user = result.user;
+      const userNameForEmail = user.name || user.email.split('@')[0]; // Use name if available, else email prefix
+      const tokenExpiryMinutes = 15; // Should match what's set in authService.registerUser
+
+      // Send verification email (fire and forget)
+      emailService.sendEmailVerificationCode(user.email, userNameForEmail, user.email_verification_token, tokenExpiryMinutes)
+        .then(emailRes => {
+          if (emailRes.success) {
+            console.log(`Verification email successfully dispatched to ${user.email}`);
+          } else {
+            console.error(`Failed to dispatch verification email to ${user.email}: ${emailRes.error}`);
+            // Potentially log this more robustly or flag for retry if critical
+          }
+        })
+        .catch(err => {
+          console.error(`Error occurred while trying to send verification email for ${user.email}:`, err);
+        });
+
+      // Respond to client indicating verification is needed
+      res.status(201).json({
+        message: 'User registered successfully. Please check your email to verify your account.',
+        userId: user.id // Useful for frontend to direct to a verification page
+      });
+
+    } else {
+      // Registration failed in authService (e.g., email already in use)
+      // authService.registerUser returns { success: false, message: '...' }
+      return res.status(400).json({ message: result.message || 'User registration failed.' });
+    }
+  } catch (error) {
+    // Catch any unexpected errors from authService.registerUser or within this handler
+    console.error('Unexpected error during /register route:', error);
+    next(error); // Pass to global error handler
   }
 });
 

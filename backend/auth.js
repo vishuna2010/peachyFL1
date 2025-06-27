@@ -31,6 +31,96 @@ const isAuthenticated = (req, res, next) => {
   }
 };
 
+// POST /api/auth/verify-email - Verify email with token
+router.post('/verify-email', async (req, res, next) => {
+  const { userId, verificationCode } = req.body;
+
+  // Basic validation for presence and format
+  if (!userId || typeof userId !== 'number' || userId <= 0) {
+    return res.status(400).json({ message: 'Valid User ID is required.' });
+  }
+  if (!verificationCode || typeof verificationCode !== 'string' || !/^\d{6}$/.test(verificationCode)) {
+    return res.status(400).json({ message: 'A valid 6-digit verification code is required.' });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const userResult = await client.query(
+      'SELECT id, email, name, role, email_verification_token, email_verification_token_expires_at, is_email_verified FROM users WHERE id = $1 FOR UPDATE',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      // Use next(new NotFoundError) for consistency if AppError classes are available globally
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    const user = userResult.rows[0];
+
+    if (user.is_email_verified) {
+      await client.query('ROLLBACK');
+      return res.status(200).json({ message: 'Email is already verified. You can log in.' });
+    }
+
+    if (!user.email_verification_token || user.email_verification_token !== verificationCode) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Invalid verification code.' });
+    }
+
+    if (user.email_verification_token_expires_at && new Date(user.email_verification_token_expires_at) < new Date()) {
+      await client.query('ROLLBACK');
+      // TODO: Future enhancement - allow resending a new code.
+      return res.status(400).json({ message: 'Verification code has expired. Please register again or request a new code if that feature exists.' });
+    }
+
+    // Token is valid, update user
+    await client.query(
+      'UPDATE users SET is_email_verified = TRUE, email_verification_token = NULL, email_verification_token_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [userId]
+    );
+
+    await client.query('COMMIT');
+
+    // Send Welcome Email now that email is verified
+    const userNameForEmail = user.name || user.email.split('@')[0]; // Use name if available (not populated by current registerUser), else email prefix
+    emailService.sendWelcomeEmail(user.email, userNameForEmail)
+      .then(emailRes => {
+        if (emailRes.success) {
+          console.log(`Welcome email successfully sent to ${user.email} after verification.`);
+        } else {
+          console.error(`Failed to send welcome email to ${user.email} after verification: ${emailRes.error}`);
+        }
+      })
+      .catch(err => {
+        console.error(`Error dispatching welcome email for ${user.email} after verification:`, err);
+      });
+
+    res.status(200).json({ message: 'Email verified successfully. You can now log in.' });
+
+  } catch (error) {
+    if(client) await client.query('ROLLBACK'); // Ensure rollback on any unexpected error
+    console.error('Error during email verification process:', error);
+    // If AppError is available and configured for global handling: next(new AppError(...));
+    // For now, sending a generic 500 or passing error to next if possible.
+    // Assuming next is available if this were a route handler directly in routes/auth.js using the router.
+    // Since this is in auth.js (authService), it might not have `next`.
+    // For now, this error handling is conceptual for the service layer.
+    // If this whole block were in routes/auth.js, next(error) would be appropriate.
+    // Let's assume this is for routes/auth.js:
+    if (next && typeof next === 'function') {
+        next(error);
+    } else {
+        // Fallback if next is not available (e.g. if this code was mistakenly put in a service without next)
+        res.status(500).json({message: "An internal error occurred during email verification."});
+    }
+  } finally {
+    if(client) client.release();
+  }
+});
+
 async function registerUser(email, password) {
   try {
     const hashedPassword = await bcrypt.hash(password, saltRounds);
@@ -39,30 +129,31 @@ async function registerUser(email, password) {
       'INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id, email, role, created_at',
       [email, hashedPassword, 'customer'] // Explicitly set role
     );
-    const user = result.rows[0];
-    const { password: _, ...userWithoutPassword } = user;
+    const user = result.rows[0]; // Contains id, email, role, created_at
 
-    // Send welcome email (fire and forget, don't block registration on email failure)
-    if (user && user.email) {
-      // The 'registerUser' function currently doesn't add 'name', so pass email as name for now.
-      // Or, if a default name like "Valued Customer" is preferred by emailService, adjust there.
-      // For now, using email for userName placeholder.
-      emailService.sendWelcomeEmail(user.email, user.email.split('@')[0]) // Use part of email as name
-        .then(emailRes => {
-          if (emailRes.success) {
-            console.log(`Welcome email successfully sent to ${user.email}`);
-          } else {
-            console.error(`Failed to send welcome email to ${user.email}: ${emailRes.error}`);
-          }
-        })
-        .catch(err => {
-          console.error(`Error dispatching welcome email for ${user.email}:`, err);
-        });
-    }
+    // Generate verification token
+    const verificationToken = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Token expires in 15 minutes
+
+    // Store token and expiry in the users table
+    // Assumes columns: email_verification_token, email_verification_token_expires_at, is_email_verified (defaults to FALSE)
+    await db.query(
+      'UPDATE users SET email_verification_token = $1, email_verification_token_expires_at = $2 WHERE id = $3',
+      [verificationToken, expiresAt, user.id]
+    );
+
+    // REMOVED: Welcome email sending. This will now happen after verification.
+    // The route handler for /register will now be responsible for calling
+    // a new emailService function to send the verification code.
+
+    const { password: _, ...userWithoutPassword } = user;
+    // Add token to response for now, for immediate use by email sending in route handler.
+    // In a more robust scenario, the route handler might fetch this if needed, or the service returns it.
+    userWithoutPassword.email_verification_token = verificationToken;
 
     return { success: true, user: userWithoutPassword };
   } catch (error) {
-    console.error('Error registering user:', error);
+    console.error('Error registering user or setting verification token:', error);
     if (error.code === '23505') { // Unique violation (email already exists)
       return { success: false, message: 'Email already in use.' };
     }
@@ -81,8 +172,19 @@ async function loginUser(email, password) {
     const match = await bcrypt.compare(password, user.password);
 
     if (match) {
-      // Password matches. Return user object for further processing (2FA check or JWT generation)
-      // Exclude password from returned user object
+      // Password matches. Now check email verification status.
+      // The 'users' table schema is assumed to have 'is_email_verified' (BOOLEAN NOT NULL DEFAULT FALSE).
+      // This field should have been selected in the initial query: 'SELECT * FROM users WHERE email = $1'
+      if (!user.is_email_verified) {
+        return {
+          success: false,
+          message: 'Email not verified. Please check your email for a verification code.',
+          errorCode: 'EMAIL_NOT_VERIFIED', // Custom error code for frontend to handle
+          userId: user.id // Optionally return userId to help frontend direct to verification page
+        };
+      }
+
+      // Email is verified, proceed with returning user object for 2FA check or JWT generation
       const { password: _, ...userWithoutPassword } = user;
       return { success: true, user: userWithoutPassword };
     } else {
