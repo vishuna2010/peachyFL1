@@ -258,13 +258,8 @@ router.post(
   '/orders/:orderId/refund',
   isAuthenticated,
   checkPermission('orders:manage_refunds'),
-  [
-    param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt(),
-    body('reason').optional().isString().trim().withMessage('Refund reason must be a string if provided.')
-  ],
-  '/orders/:orderId/refund',
-  isAuthenticated,
-  checkPermission('orders:manage_refunds'),
+  // Removed duplicated path string, redundant middleware, and the first, less complete validation array.
+  // Using the more comprehensive validation array below, followed by the handler.
   [
     param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt(),
     body('reason').optional().isString().trim().isLength({ max: 255 }).withMessage('Refund reason cannot exceed 255 characters.'),
