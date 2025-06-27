@@ -30,9 +30,8 @@ router.get('/orders', isAuthenticated, checkPermission('orders:view_all'), valid
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const page = req.query.page || 1; // Default if optional and not provided
-  const limit = req.query.limit || 10; // Default if optional and not provided
-  // page and limit are validated and have defaults from express-validator
+  // page and limit are validated and have defaults from express-validator (e.g., .default(1))
+  // The declarations below will use these validated and defaulted values.
   const { page, limit } = req.query;
 
   try {
