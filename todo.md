@@ -454,3 +454,75 @@ This section outlines the primary driver for future backend development, based o
 - **Admin Layout - Duplicate Sidebar / Content Misplacement (Reported, then addressed):**
     - Issue: Content (including a second sidebar) was appearing at the bottom of the main sidebar.
     - Fix: Reverted a speculative `lg:w-[calc(...)]` style from the main content wrapper in `admin.vue`. This issue is likely resolved. User to verify.
+
+---
+
+## Purchase Order Feature Improvements
+
+### UI/UX Enhancements (Purchase Order Creation/Editing)
+
+1.  **Searchable Product Dropdown:**
+    *   Instead of a simple `<select>` for products (currently limited to 100 per supplier), implement a searchable dropdown component (e.g., using libraries like `vue-select`, `choices.js`, or a custom-built one).
+    *   This would allow users to type product names or SKUs to quickly find items, especially if a supplier has many products.
+    *   Could include server-side searching if the product list per supplier is very large (beyond a few hundred).
+
+2.  **Display Product Details on Selection:**
+    *   When a product is selected in a line item, automatically populate not just the name/SKU but also other relevant info like current stock (for reference), last cost price (if available and desired as a default), or even a small thumbnail.
+
+3.  **Supplier Details Display:**
+    *   Once a supplier is selected, display some key details about them on the form (e.g., supplier contact info, address, default currency if applicable) for quick reference.
+
+4.  **Automatic Calculation of Line Totals & Grand Total:**
+    *   As quantity and unit cost are entered for each line item, automatically calculate and display the line total (`quantity * unit_cost`).
+    *   Calculate and display a running grand total for the entire PO.
+
+5.  **Prevent Duplicate Products in Line Items:**
+    *   Optionally, add logic to warn or prevent the user from adding the exact same product multiple times as separate line items (they should typically just adjust the quantity on the existing line).
+
+6.  **Batch Actions for Line Items:**
+    *   E.g., "Remove selected items", "Apply X% discount to selected items" (if discounts on POs are a feature).
+
+7.  **Improved Date Pickers:**
+    *   Use a more user-friendly date picker component if the native browser ones are not ideal for your users.
+
+8.  **Clearer Loading/Error States:**
+    *   Ensure all async operations (supplier select, product select, submission) have clear visual feedback.
+
+### Backend/Functionality Enhancements
+
+1.  **Supplier-Specific Product Codes/Costs:**
+    *   Allow storing supplier-specific product codes (their part number for your product) and default cost prices for each product from that supplier. When creating a PO, these could auto-populate.
+
+2.  **PO Templates/Recurring POs:**
+    *   Ability to save a PO as a template for frequently ordered items from a supplier.
+    *   Functionality for setting up recurring POs.
+
+3.  **PO Approval Workflow:**
+    *   If needed, implement a system where POs above a certain value or for certain items require approval from another user/role before being sent.
+
+4.  **Emailing PO to Supplier:**
+    *   Functionality to generate a PDF of the PO and email it directly to the supplier from the system.
+
+5.  **Partial Receipts & Backorders:**
+    *   The current receiving logic seems to handle partial receipts at the item level. Ensure the overall PO status (`pending`, `ordered`, `partially_received`, `received`, `cancelled`) accurately reflects this across all items.
+    *   Consider how backordered items are managed.
+
+6.  **Landed Costs:**
+    *   Ability to add landed costs (shipping, duties, customs fees) to a PO or to received items to get a more accurate inventory valuation.
+
+7.  **Integration with Inventory Adjustments:**
+    *   Ensure that receiving PO items correctly and robustly updates inventory levels, including logging stock movements (which seems to be in place with `stock_movement_logs` and `inventory_batches`).
+
+8.  **PO Number Generation:**
+    *   Implement a configurable PO number generation system (e.g., prefix + sequential number).
+
+9.  **Reporting on POs:**
+    *   More detailed reports: POs by supplier, by status, items pending receipt, cost analysis over time, etc.
+
+10. **Link POs to Sales Orders (for dropshipping/back-to-back orders):**
+    *   If you fulfill orders by ordering directly from a supplier for a specific customer sale.
+
+11. **Currency Handling:**
+    *   If dealing with suppliers in different currencies, ensure robust handling of currency codes, exchange rates at time of order and receipt, and proper calculation of base currency costs.
+
+---
