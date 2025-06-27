@@ -31,6 +31,25 @@ const isAuthenticated = (req, res, next) => {
   }
 };
 
+// Middleware to try to authenticate user, but doesn't fail if no token
+const tryAuthenticate = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7, authHeader.length);
+    jwt.verify(token, jwtSecret, (err, decoded) => {
+      if (!err) {
+        req.user = decoded; // Populate req.user if token is valid
+      }
+      // Always call next, even if token is invalid or not present
+      // The route handler will then check req.user if it needs to differentiate
+      next();
+    });
+  } else {
+    // No token, just proceed
+    next();
+  }
+};
+
 async function registerUser(email, password) {
   try {
     const hashedPassword = await bcrypt.hash(password, saltRounds);
@@ -209,6 +228,7 @@ module.exports = {
   resetPassword,
   jwtSecret,
   isAuthenticated,
+  tryAuthenticate,    // Export tryAuthenticate
   changeUserPassword, // Export the new function
   checkPermission,    // Export the new permission checking middleware
 
