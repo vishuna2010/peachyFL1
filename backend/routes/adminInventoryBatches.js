@@ -4,6 +4,7 @@ const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
 const { param, body, query, validationResult } = require('express-validator'); // Added 'query'
 const { NotFoundError, BadRequestError, ConflictError } = require('../utils/AppError');
+const inventoryService = require('../services/inventoryService'); // Moved import to top
 
 router.use(isAuthenticated, isAdmin);
 
@@ -280,7 +281,6 @@ router.put(
     body('batch_number').optional().isString().trim().notEmpty().withMessage('Batch number cannot be empty string if provided.'),
     body('reason_for_change').isString().trim().notEmpty().withMessage('Reason for change is required.')
   ],
-const inventoryService = require('../services/inventoryService'); // Import the service
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
