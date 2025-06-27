@@ -169,6 +169,7 @@ This section outlines the primary driver for future backend development, based o
         - [~] Other public routes with DB logic as identified.
             - [X] `POST /api/cart/validate-discount` (moved to `discountService.js`)
             - [X] `POST /api/cart/calculate-taxes` (user fetching part moved to `userService.js`)
+            - [X] `GET /api/categories` (moved to `categoryService.js`)
     - [~] Review and ensure comprehensive transaction management for all multi-step DB operations.
         - [X] Addressed in C/U/D methods of `categoryService.js`.
         - [X] Addressed in C/U/D methods of `discountService.js`.
