@@ -271,5 +271,186 @@ module.exports = {
   performManualAdjustment,
   recordPhysicalCount,
   VALID_ADJUSTMENT_MOVEMENT_TYPES, // Exporting for potential use in route validation
-  VALID_PHYSICAL_COUNT_MOVEMENT_TYPES
+  VALID_PHYSICAL_COUNT_MOVEMENT_TYPES,
+  updateInventoryBatch, // Added new function
 };
+
+/**
+ * Updates an existing inventory batch and handles related stock adjustments.
+ * @param {number} batchId - The ID of the inventory batch to update.
+ * @param {object} updateData - An object containing the data to update.
+ * @param {number} [updateData.current_quantity] - The new current quantity.
+ * @param {string} [updateData.expiry_date] - The new expiry date (YYYY-MM-DD or null).
+ * @param {string} [updateData.batch_number] - The new batch number.
+ * @param {string} updateData.reason_for_change - The reason for the update.
+ * @param {number} adminUserId - The ID of the admin user performing the update.
+ * @returns {Promise<object>} The updated inventory batch object, possibly enriched with product/variant names.
+ * @throws {NotFoundError} If the batch is not found.
+ * @throws {BadRequestError} If the update data is invalid (e.g., quantity > initial, empty batch number).
+ * @throws {ConflictError} If the new batch number conflicts with an existing one for the same product/variant.
+ * @throws {AppError} For other internal errors.
+ */
+async function updateInventoryBatch(batchId, updateData, adminUserId) {
+  const { current_quantity, expiry_date, batch_number, reason_for_change } = updateData;
+
+  // reason_for_change is validated at route level for existence.
+  // Here, we ensure it's not accidentally empty if passed.
+  if (!reason_for_change || reason_for_change.trim() === '') {
+    throw new BadRequestError('Reason for change is required and cannot be empty.');
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const batchResult = await client.query('SELECT * FROM inventory_batches WHERE id = $1 FOR UPDATE', [batchId]);
+    if (batchResult.rows.length === 0) {
+      throw new NotFoundError(`Inventory batch with ID ${batchId} not found.`);
+    }
+    const currentBatch = batchResult.rows[0];
+    const old_current_quantity_for_this_batch = currentBatch.current_quantity;
+
+    const setClauses = [];
+    const values = [];
+    let paramIndex = 1;
+
+    let new_current_quantity_value_for_this_batch = current_quantity; // For logging logic later
+
+    if (current_quantity !== undefined) {
+      const num_current_quantity = parseInt(current_quantity, 10);
+      if (isNaN(num_current_quantity) || num_current_quantity < 0) {
+        throw new BadRequestError('Current quantity must be a non-negative integer.');
+      }
+      if (num_current_quantity > currentBatch.initial_quantity) {
+        throw new BadRequestError(`New current quantity (${num_current_quantity}) cannot exceed initial quantity (${currentBatch.initial_quantity}).`);
+      }
+      if (num_current_quantity !== old_current_quantity_for_this_batch) { // Only add to setClauses if it's different
+        setClauses.push(`current_quantity = $${paramIndex++}`);
+        values.push(num_current_quantity);
+      }
+      new_current_quantity_value_for_this_batch = num_current_quantity; // Use the validated numeric value
+    } else {
+      new_current_quantity_value_for_this_batch = old_current_quantity_for_this_batch; // No change intended for quantity
+    }
+
+    if (expiry_date !== undefined) {
+      // Route level validation ensures it's a date string or null.
+      const finalExpiryDate = (expiry_date === '' || expiry_date === null) ? null : expiry_date;
+      if (finalExpiryDate !== currentBatch.expiry_date) {
+         setClauses.push(`expiry_date = $${paramIndex++}`);
+         values.push(finalExpiryDate);
+      }
+    }
+
+    if (batch_number !== undefined) {
+      const trimmedBatchNumber = batch_number.trim();
+      if (trimmedBatchNumber === '') {
+        throw new BadRequestError('Batch number cannot be an empty string if provided.');
+      }
+      if (trimmedBatchNumber !== currentBatch.batch_number) {
+        const conflictCheckQuery = `
+          SELECT id FROM inventory_batches
+          WHERE product_id = $1
+            AND CASE WHEN $2::INT IS NULL THEN variant_id IS NULL ELSE variant_id = $2::INT END
+            AND batch_number = $3
+            AND id != $4`;
+        const conflictCheck = await client.query(conflictCheckQuery,
+          [currentBatch.product_id, currentBatch.variant_id, trimmedBatchNumber, batchId]
+        );
+        if (conflictCheck.rows.length > 0) {
+          throw new ConflictError(`Batch number "${trimmedBatchNumber}" already exists for this product/variant.`);
+        }
+        setClauses.push(`batch_number = $${paramIndex++}`);
+        values.push(trimmedBatchNumber);
+      }
+    }
+
+    let updatedBatchEntity = currentBatch;
+
+    if (setClauses.length > 0) {
+      setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(batchId); // The ID for the WHERE clause
+      const updateQuery = `UPDATE inventory_batches SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *;`;
+      const updateResult = await client.query(updateQuery, values);
+      updatedBatchEntity = updateResult.rows[0];
+    } else {
+      // No actual data fields were changed that are different from current values.
+      await client.query('ROLLBACK'); // Release lock
+      throw new BadRequestError('No updatable data fields provided or values are the same as current. Update not performed.');
+    }
+
+    // After batch update, recalculate and update aggregate stock on product/variant
+    // This uses the product_id and variant_id from the potentially updated batch (updatedBatchEntity)
+    const sumBatchStockQuery = await client.query(
+      `SELECT COALESCE(SUM(current_quantity), 0) AS total_stock
+       FROM inventory_batches
+       WHERE product_id = $1 AND ${updatedBatchEntity.variant_id ? `variant_id = $2` : 'variant_id IS NULL'}`,
+      updatedBatchEntity.variant_id ? [updatedBatchEntity.product_id, updatedBatchEntity.variant_id] : [updatedBatchEntity.product_id]
+    );
+    const newTotalAggregateStockForProductOrVariant = parseInt(sumBatchStockQuery.rows[0].total_stock, 10);
+
+    if (updatedBatchEntity.variant_id) {
+      await client.query(
+        'UPDATE product_variants SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [newTotalAggregateStockForProductOrVariant, updatedBatchEntity.variant_id]
+      );
+    } else {
+      await client.query(
+        'UPDATE products SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [newTotalAggregateStockForProductOrVariant, updatedBatchEntity.product_id]
+      );
+    }
+
+    // Log quantity change if it actually happened for this specific batch
+    // Compare the final quantity in the updated batch with its original quantity
+    if (updatedBatchEntity.current_quantity !== old_current_quantity_for_this_batch) {
+      const quantity_difference_for_this_batch = updatedBatchEntity.current_quantity - old_current_quantity_for_this_batch;
+      // quantity_difference_for_this_batch will be non-zero because setClauses.length > 0 check passed
+      // and current_quantity was part of setClauses only if it was different.
+
+      const logMovementQuery = `
+        INSERT INTO stock_movement_logs
+          (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+      `;
+      await client.query(logMovementQuery, [
+        updatedBatchEntity.product_id,
+        updatedBatchEntity.variant_id,
+        adminUserId,
+        'batch_adjustment', // Movement type for direct batch update
+        quantity_difference_for_this_batch, // Change in this specific batch
+        newTotalAggregateStockForProductOrVariant, // New total aggregate stock for the product/variant
+        reason_for_change,
+        `batch_id:${batchId}`
+      ]);
+    }
+
+    await client.query('COMMIT');
+
+    // Fetch the batch again to include product/variant names for the response, similar to GET route
+    const finalBatchDataResult = await db.query( // Use db.query for a fresh client connection after commit
+       `SELECT ib.*, p.name as product_name, p.sku as product_sku, pv.sku as variant_sku
+        FROM inventory_batches ib
+        LEFT JOIN products p ON ib.product_id = p.id
+        LEFT JOIN product_variants pv ON ib.variant_id = pv.id
+        WHERE ib.id = $1`, [updatedBatchEntity.id]
+    );
+
+    if (finalBatchDataResult.rows.length === 0) {
+        // Should not happen if commit was successful and batchId is correct
+        throw new AppError('Failed to re-fetch updated batch details.', 500, 'BATCH_REFETCH_FAILED');
+    }
+
+    return finalBatchDataResult.rows[0];
+
+  } catch (error) {
+    if(client) await client.query('ROLLBACK');
+    if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof ConflictError || error instanceof AppError) {
+      throw error;
+    }
+    console.error(`[InventoryService.updateInventoryBatch] Error for batch ID ${batchId}:`, error);
+    throw new AppError('Failed to update inventory batch.', 500, 'BATCH_UPDATE_FAILED', { originalError: error.message });
+  } finally {
+    if(client) client.release();
+  }
+}

@@ -161,12 +161,14 @@ This section outlines the primary driver for future backend development, based o
         - [X] Admin Reviews module (`adminReviews.js` -> `reviewService.js`)
         - [X] Admin Reports module (`adminReports.js` - for complex queries -> `reportService.js`)
         - [X] Admin Stock Adjustments module (`adminStockAdjustments.js` -> `inventoryService.js`)
-        - [ ] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route -> `inventoryService.js` or `productService.js`)
-        - [ ] Admin Tax Classes module (`adminTaxClasses.js` -> `taxService.js` or new service)
-        - [ ] Admin Tax Rates module (`adminTaxRates.js` -> `taxService.js` or new service)
-        - [ ] Public User Profile routes (`users.js` -> `userService.js`)
-        - [ ] Public Order creation route (`orders.js` -> `orderService.js`)
-        - [ ] Other public routes with DB logic as identified.
+        - [X] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route -> `inventoryService.js` or `productService.js`)
+        - [X] Admin Tax Classes module (`adminTaxClasses.js` -> `taxService.js` or new service)
+        - [X] Admin Tax Rates module (`adminTaxRates.js` -> `taxService.js` or new service)
+        - [X] Public User Profile routes (`users.js` -> `userService.js`)
+        - [X] Public Order creation route (`orders.js` -> `orderService.js`)
+        - [~] Other public routes with DB logic as identified.
+            - [X] `POST /api/cart/validate-discount` (moved to `discountService.js`)
+            - [X] `POST /api/cart/calculate-taxes` (user fetching part moved to `userService.js`)
     - [~] Review and ensure comprehensive transaction management for all multi-step DB operations.
         - [X] Addressed in C/U/D methods of `categoryService.js`.
         - [X] Addressed in C/U/D methods of `discountService.js`.
@@ -262,4 +264,63 @@ This section outlines the primary driver for future backend development, based o
 ## Purchase Order Feature Improvements
 (PO improvements remain as they were)
 ...
+---
+
+## 🔔 Notifications & Email Features (To Implement & Verify)
+- **Welcome Email**
+  - [ ] Sent immediately after user signs up
+- **Two-Factor Authentication (2FA)**
+  - [ ] Email-based code for signup validation
+- **Order Notifications**
+  - Email customer when:
+    - [ ] Order is placed
+    - [ ] Order is dispatched
+    - [ ] Order is delivered
+- **Invoice Notifications**
+  - [ ] Automatically generate and email invoices to customers upon order confirmation
+- **Tracking Updates**
+  - Email customer when:
+    - [ ] Order is dispatched (with tracking link or number)
+    - [ ] Order is delivered
+- **QR Code for Delivery Confirmation**
+  - New feature:
+    - [ ] Attach a QR code to each invoice
+    - [ ] Delivery person scans QR at hand-off
+    - [ ] Triggers delivery confirmation in system
+
+---
+
+## 📦 Fulfillment Features
+- **Print Shipping Label**
+  - [ ] Generate and print shipping label per order
+  - Include:
+    - [ ] Recipient name/address
+    - [ ] Tracking number
+    - [ ] Barcode or QR code (if supported by courier)
+
+---
+
+## 💸 Refund System
+- **Refund Notification**
+  - Email customer for:
+    - [ ] Full refunds
+    - [ ] Partial refunds
+  - [ ] Include refund details in email
+
+---
+
+## 📢 Marketing Emails
+- **Email Marketing Integration**
+  - [ ] Design promotional and newsletter templates
+  - [ ] Segment user base (e.g., by activity, order history)
+
+---
+
+## 🧾 Invoice Design
+- **Invoice Layouts**
+  - [ ] Create customizable invoice templates with:
+    - [ ] Branding (logo, colors)
+    - [ ] Tax & pricing details
+    - [ ] Optional QR for delivery scanning
+    - [ ] Custom line item notes
 ---

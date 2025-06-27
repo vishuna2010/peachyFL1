@@ -395,4 +395,143 @@ module.exports = {
   updateUserRoleLegacy,
   updateUserByAdmin,
   deleteUser,
+  updateUserProfile, // Added new function
+  getUserTaxContext, // Added for tax calculation context
 };
+
+/**
+ * Fetches tax-relevant information for a given user.
+ * @param {number} userId - The ID of the user.
+ * @param {object} [dbClientOptional] - Optional existing database client.
+ * @returns {Promise<object|null>} Object with { userIsTaxExempt, defaultAddress } or null if user not found.
+ */
+async function getUserTaxContext(userId, dbClientOptional) {
+  if (!userId) {
+    // This function expects a userId. If called without, it's an issue.
+    // Or, it could simply return a default non-exempt state.
+    // For now, let's assume userId is always provided if this function is called.
+    throw new BadRequestError('User ID is required to get tax context.');
+  }
+  const queryRunner = dbClientOptional || db; // Use provided client or default pool
+
+  try {
+    const userResult = await queryRunner.query(
+      'SELECT is_tax_exempt, country, state_province_region, postal_code FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return null; // Or throw NotFoundError if user *must* exist at this point
+    }
+
+    const userData = userResult.rows[0];
+    return {
+      userIsTaxExempt: userData.is_tax_exempt || false,
+      defaultAddress: { // Structure for tax service or route to use
+        country: userData.country || null,
+        state_province_region: userData.state_province_region || null,
+        // postal_code: userData.postal_code || null // Include if tax service might use it
+      }
+    };
+  } catch (error) {
+    console.error(`[userService.getUserTaxContext] Error for user ID ${userId}:`, error);
+    // Don't throw AppError directly if this is part of a larger operation where user not found is semi-expected
+    // However, if called independently and user *should* exist, an error is better.
+    // For its current use in cart/tax, null is acceptable to indicate user not found or no specific tax info.
+    // Throwing a generic AppError if it's not a known DB error.
+    if (error instanceof AppError) throw error;
+    throw new AppError('Failed to retrieve user tax context.', 500, 'USER_TAX_CONTEXT_FAILED');
+  }
+}
+
+/**
+ * Updates specified profile fields for a given user ID.
+ * Intended for the authenticated user to update their own profile.
+ * @param {number} userId - The ID of the user.
+ * @param {object} profileData - An object containing fields to update. e.g., { name: string }.
+ * @returns {Promise<object>} The updated user object (selected fields).
+ * @throws {NotFoundError} If the user is not found or not updated.
+ * @throws {BadRequestError} If profileData is empty or invalid.
+ * @throws {AppError} For other database errors.
+ */
+async function updateUserProfile(userId, profileData) {
+  const { name } = profileData; // Currently only 'name' is updatable by this function
+
+  if (!name || typeof name !== 'string' || name.trim() === '') {
+    // This validation can also be enforced by express-validator in the route,
+    // but a service-level check is good for direct calls or future reuse.
+    throw new BadRequestError('Name must be a non-empty string.');
+  }
+  if (name.trim().length < 2 || name.trim().length > 255) {
+    throw new BadRequestError('Name must be between 2 and 255 characters.');
+  }
+
+  // Check if any actual updatable data was provided beyond just empty object
+  const updatableFields = Object.keys(profileData).filter(key => key === 'name'); // Extend if more fields become updatable
+  if (updatableFields.length === 0) {
+      throw new BadRequestError('No updatable profile data provided.');
+  }
+
+  const client = await db.pool.connect();
+  try {
+    // Although the user is authenticated, a check for existence before update is robust.
+    // However, the UPDATE query itself with RETURNING will indicate if a row was affected.
+    // Let's rely on the UPDATE's rowCount or RETURNING result.
+
+    const setClauses = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (profileData.name !== undefined) {
+      setClauses.push(`name = $${paramIndex++}`);
+      values.push(profileData.name.trim());
+    }
+    // Add other updatable fields here if they become available
+    // e.g., if (profileData.bio !== undefined) { setClauses.push(`bio = $${paramIndex++}`); values.push(profileData.bio); }
+
+    if (setClauses.length === 0) {
+      // Should be caught by the initial check, but as a safeguard
+      throw new BadRequestError('No valid fields provided for profile update.');
+    }
+
+    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(userId); // For WHERE id = $N
+
+    const updateQuery = `
+      UPDATE users
+      SET ${setClauses.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING id, email, name, role, role_id, is_two_fa_enabled, created_at, updated_at;
+    `;
+
+    const result = await client.query(updateQuery, values);
+
+    if (result.rows.length === 0) {
+      // This implies the userId did not exist, or no row was updated for some reason.
+      throw new NotFoundError('User not found or profile not updated.');
+    }
+
+    // Ensure role_name is included if role_id is present, similar to other user fetching functions
+    const updatedUser = result.rows[0];
+    if (updatedUser.role_id) {
+        const roleResult = await client.query('SELECT name FROM roles WHERE id = $1', [updatedUser.role_id]);
+        if (roleResult.rows.length > 0) {
+            updatedUser.role_name = roleResult.rows[0].name;
+        } else {
+            updatedUser.role_name = null; // Or some default/indicator of missing role
+        }
+    }
+
+
+    return updatedUser;
+
+  } catch (error) {
+    if (error instanceof AppError) throw error; // Re-throw known errors
+    console.error(`[userService.updateUserProfile] Error for user ID ${userId}:`, error);
+    // Check for specific DB errors if necessary, e.g., unique constraint if 'name' had to be unique
+    // and was not pre-checked.
+    throw new AppError('Failed to update user profile.', 500, 'USER_PROFILE_UPDATE_FAILED');
+  } finally {
+    client.release();
+  }
+}
