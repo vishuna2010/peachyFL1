@@ -147,12 +147,10 @@ router.get(
   isAuthenticated,
   checkPermission('orders:view_details'), // Viewing/generating an invoice requires viewing order details
   [
-    param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.')
+    param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt()
   ],
-  '/orders/:orderId/invoice/pdf',
-  isAuthenticated,
-  checkPermission('orders:view_details'),
-  validateOrderIdParam, // Re-use validateOrderIdParam
+  // Removed duplicated path string and redundant middleware that caused TypeError.
+  // The async handler function below is the correct next argument.
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
