@@ -308,7 +308,8 @@ module.exports = {
   sendWelcomeEmail,
   sendEmailVerificationCode,
   sendOrderDispatchedEmail,
-  sendOrderDeliveredEmail, // Added new function
+  sendOrderDeliveredEmail,
+  sendInvoiceEmail, // Added new function
   // For testing/debugging if needed:
   // getTestTransporter,
 };
@@ -374,6 +375,80 @@ ${companyAddress}
     return { success: false, error: `Failed to send welcome email: ${error.message}` };
   }
 }
+
+// --- Invoice Email Function ---
+/**
+ * Sends an invoice email with PDF attachment to a user.
+ * @param {string} toEmail - The recipient's email address.
+ * @param {string} userName - The name of the user.
+ * @param {string|number} orderId - The ID of the order.
+ * @param {string} siteName - The name of the site/company.
+ * @param {Buffer} pdfBuffer - The buffer containing the PDF invoice.
+ * @param {string} pdfFileName - The desired filename for the PDF attachment.
+ * @param {object} [optionalData] - Optional data for the email body template e.g. { orderTotal, currencySymbol, viewOrderLink, supportEmail, companyAddress }
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendInvoiceEmail(toEmail, userName, orderId, siteName, pdfBuffer, pdfFileName, optionalData = {}) {
+  try {
+    const {
+      orderTotal,
+      currencySymbol = '$', // Default currency symbol
+      viewOrderLink,
+      supportEmail = config.email.supportAddress || config.email.fromAddress,
+      companyAddress = config.company.address || ''
+    } = optionalData;
+
+    const templatePath = path.join(__dirname, '..', 'email_templates', 'invoice_email.ejs');
+    const templateContent = fs.readFileSync(templatePath, 'utf-8');
+    const htmlContent = ejs.render(templateContent, {
+      siteName,
+      userName,
+      orderId,
+      orderTotal: orderTotal ? parseFloat(orderTotal).toFixed(2) : undefined,
+      currencySymbol,
+      viewOrderLink,
+      supportEmail,
+      companyAddress,
+    });
+
+    const textContent = `
+Dear ${userName},
+
+Thank you for your order! Please find your invoice for Order #${orderId} attached.
+
+${orderTotal ? `Order Total: ${currencySymbol}${parseFloat(orderTotal).toFixed(2)}` : ''}
+${viewOrderLink ? `You can also view your order details online: ${viewOrderLink}` : ''}
+
+If you have any questions regarding your invoice or order, please contact our support team at ${supportEmail}.
+
+We appreciate your business!
+
+Sincerely,
+The ${siteName} Team
+
+---
+&copy; ${new Date().getFullYear()} ${siteName}. All rights reserved.
+${companyAddress}
+    `.trim();
+
+    return sendEmail({
+      to: toEmail,
+      subject: `Your Invoice for Order #${orderId} from ${siteName}`,
+      text: textContent,
+      html: htmlContent,
+      attachments: [{
+        filename: pdfFileName,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }]
+    });
+
+  } catch (error) {
+    console.error(`Error preparing or sending invoice email to ${toEmail} for order #${orderId}:`, error);
+    return { success: false, error: `Failed to send invoice email: ${error.message}` };
+  }
+}
+
 
 // --- Order Delivered Email Function ---
 /**

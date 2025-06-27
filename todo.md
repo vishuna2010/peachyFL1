@@ -300,7 +300,12 @@ This section outlines the primary driver for future backend development, based o
       - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'delivered'.
       - [ ] Theming with site colors pending user input for color codes.
 - **Invoice Notifications**
-  - [ ] Automatically generate and email invoices to customers upon order confirmation
+  - [~] Automatically generate and email invoices to customers upon order confirmation
+    - [X] EJS template `invoice_email.ejs` for email body created.
+    - [X] `emailService.sendInvoiceEmail` function implemented to send email with PDF attachment.
+    - [X] Integrated into `POST /api/orders` route: after order creation, PDF is generated and invoice email is sent.
+    - [ ] Theming of email body template pending user input for site colors.
+    - [ ] Review if PDF invoice content itself needs theming/updates.
 - **Tracking Updates**
   - Email customer when:
     - [ ] Order is dispatched (with tracking link or number)
