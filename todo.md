@@ -263,3 +263,62 @@ This section outlines the primary driver for future backend development, based o
 (PO improvements remain as they were)
 ...
 ---
+
+## 🔔 Notifications & Email Features (To Implement & Verify)
+- **Welcome Email**
+  - [ ] Sent immediately after user signs up
+- **Two-Factor Authentication (2FA)**
+  - [ ] Email-based code for signup validation
+- **Order Notifications**
+  - Email customer when:
+    - [ ] Order is placed
+    - [ ] Order is dispatched
+    - [ ] Order is delivered
+- **Invoice Notifications**
+  - [ ] Automatically generate and email invoices to customers upon order confirmation
+- **Tracking Updates**
+  - Email customer when:
+    - [ ] Order is dispatched (with tracking link or number)
+    - [ ] Order is delivered
+- **QR Code for Delivery Confirmation**
+  - New feature:
+    - [ ] Attach a QR code to each invoice
+    - [ ] Delivery person scans QR at hand-off
+    - [ ] Triggers delivery confirmation in system
+
+---
+
+## 📦 Fulfillment Features
+- **Print Shipping Label**
+  - [ ] Generate and print shipping label per order
+  - Include:
+    - [ ] Recipient name/address
+    - [ ] Tracking number
+    - [ ] Barcode or QR code (if supported by courier)
+
+---
+
+## 💸 Refund System
+- **Refund Notification**
+  - Email customer for:
+    - [ ] Full refunds
+    - [ ] Partial refunds
+  - [ ] Include refund details in email
+
+---
+
+## 📢 Marketing Emails
+- **Email Marketing Integration**
+  - [ ] Design promotional and newsletter templates
+  - [ ] Segment user base (e.g., by activity, order history)
+
+---
+
+## 🧾 Invoice Design
+- **Invoice Layouts**
+  - [ ] Create customizable invoice templates with:
+    - [ ] Branding (logo, colors)
+    - [ ] Tax & pricing details
+    - [ ] Optional QR for delivery scanning
+    - [ ] Custom line item notes
+---
