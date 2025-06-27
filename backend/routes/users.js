@@ -1,53 +1,48 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
 const authService = require('../auth'); // For isAuthenticated middleware
+const userService = require('../services/userService'); // Import userService
 const { body, validationResult } = require('express-validator');
+// Removed db import, specific error types will be handled by global error handler via next(error)
 
 // PUT /api/users/me/profile - Update current user's profile
 router.put(
   '/me/profile',
   authService.isAuthenticated,
   [
-    body('name').optional().isString().trim().notEmpty().withMessage('Name must be a non-empty string.')
-      .isLength({ min: 2, max: 255 }).withMessage('Name must be between 2 and 255 characters.'),
+    // Validation ensures 'name' if provided, meets criteria.
+    // The service will also validate if 'name' is empty after trim if it's the only field.
+    body('name').optional().isString().trim()
+      .notEmpty().withMessage('Name cannot be an empty string if provided.')
+      .isLength({ min: 2, max: 255 }).withMessage('Name must be between 2 and 255 characters if provided.'),
     // Add other updatable fields here with their own validation if needed in the future
-    // For example: body('bio').optional().isString().trim().isLength({ max: 500 }).withMessage('Bio must be less than 500 characters.')
   ],
-  async (req, res) => {
+  async (req, res, next) => { // Added next parameter
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const userId = req.user.userId; // Assuming userId is on req.user from isAuthenticated middleware
-    const { name } = req.body;
+    const userId = req.user.userId;
+    const profileData = req.body; // Pass the whole body, service will pick relevant fields
 
-    if (!name) {
-      // If only 'name' is updatable for now and it's not provided (though optional() allows it)
-      // you might want to return early or handle it based on product requirements.
-      // If other fields were present, this check might be different.
-      return res.status(400).json({ message: 'No updateable fields provided or name is empty.' });
+    // A preliminary check: if body is empty or only contains non-updatable fields (currently only 'name' is updatable by user)
+    // The service will perform a more specific check if 'name' is missing or invalid.
+    if (Object.keys(profileData).length === 0 || (profileData.name === undefined && Object.keys(profileData).length === 1 && profileData.hasOwnProperty('name_is_not_the_only_key_check'))) {
+        // A more robust check if other fields were possible:
+        // const updatableFieldsInRequest = Object.keys(profileData).filter(key => ['name', 'other_field'].includes(key));
+        // if (updatableFieldsInRequest.length === 0) { ... }
+      if (profileData.name === undefined) { // Simplified: if 'name' is not in body and no other fields are updatable yet.
+        return res.status(400).json({ message: 'No profile data provided for update.' });
+      }
     }
 
     try {
-      const result = await db.query(
-        'UPDATE users SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, email, name, role, created_at, updated_at, is_two_fa_enabled',
-        [name, userId]
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ message: 'User not found.' });
-      }
-
-      // Exclude sensitive data if any were accidentally returned (password is not selected here)
-      const updatedUser = result.rows[0];
-
+      const updatedUser = await userService.updateUserProfile(userId, profileData);
       res.status(200).json({ message: 'Profile updated successfully.', user: updatedUser });
     } catch (error) {
-      console.error('Error updating user profile:', error);
-      // Check for specific DB errors if necessary, e.g., unique constraint violations if 'name' had to be unique
-      res.status(500).json({ message: 'Error updating profile.' });
+      // Service function will throw AppError instances (NotFoundError, BadRequestError, etc.)
+      next(error); // Pass to global error handler
     }
   }
 );

@@ -164,7 +164,7 @@ This section outlines the primary driver for future backend development, based o
         - [X] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route -> `inventoryService.js` or `productService.js`)
         - [X] Admin Tax Classes module (`adminTaxClasses.js` -> `taxService.js` or new service)
         - [X] Admin Tax Rates module (`adminTaxRates.js` -> `taxService.js` or new service)
-        - [ ] Public User Profile routes (`users.js` -> `userService.js`)
+        - [X] Public User Profile routes (`users.js` -> `userService.js`)
         - [ ] Public Order creation route (`orders.js` -> `orderService.js`)
         - [ ] Other public routes with DB logic as identified.
     - [~] Review and ensure comprehensive transaction management for all multi-step DB operations.
