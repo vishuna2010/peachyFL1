@@ -5,8 +5,9 @@ const { isAuthenticated, checkPermission } = require('../auth');
 const permissionService = require('../services/permissionService');
 const auditLogService = require('../services/auditLogService');
 const { query, body, param, validationResult } = require('express-validator');
-const { ConflictError, NotFoundError, BadRequestError, AppError } = require('../utils/AppError');
-const bcrypt = require('bcrypt');
+const { ConflictError, NotFoundError, BadRequestError, AppError } = require('../utils/AppError'); // AppError might still be needed for route-level logic if any
+// const bcrypt = require('bcrypt'); // No longer needed directly in routes if hashing is in service
+const userService = require('../services/userService'); // Import the new service
 
 // Validation Chains
 const validateCreateUserParams = [
@@ -59,50 +60,24 @@ router.post(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password, name, role_id } = req.body;
-    const client = await db.pool.connect();
+    const userData = req.body; // Contains validated: email, password, name, role_id
+
     try {
-      await client.query('BEGIN');
-      const existingUser = await client.query('SELECT id FROM users WHERE email = $1', [email]);
-      if (existingUser.rows.length > 0) {
-        await client.query('ROLLBACK');
-        return next(new ConflictError('A user with this email address already exists.'));
-      }
-      const roleCheck = await client.query('SELECT name FROM roles WHERE id = $1', [role_id]);
-      if (roleCheck.rows.length === 0) {
-          await client.query('ROLLBACK');
-          return next(new BadRequestError(`Role with ID ${role_id} does not exist.`));
-      }
-      const newRoleName = roleCheck.rows[0].name;
-      const saltRounds = 10;
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
-      const insertQuery = `
-        INSERT INTO users (name, email, password, role_id, role, is_tax_exempt)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, name, email, role_id, role as legacy_role, is_tax_exempt, created_at, updated_at;
-      `;
-      const result = await client.query(insertQuery, [name, email, hashedPassword, role_id, newRoleName, false]);
-      const newUser = result.rows[0];
-      await client.query('COMMIT');
+      const newUser = await userService.createUserByAdmin(userData);
+      // newUser from service already excludes password and includes role_name
+
       auditLogService.recordAuditEvent(
         'ADMIN_USER_CREATE_SUCCESS',
         { userId: req.user.userId, userEmail: req.user.email },
         { resourceType: 'USER', resourceId: newUser.id },
-        { createdUserEmail: newUser.email, createdUserRoleId: newUser.role_id, createdUserRoleName: newRoleName },
+        { createdUserEmail: newUser.email, createdUserRoleId: newUser.role_id, createdUserRoleName: newUser.role_name },
         req
       ).catch(err => console.error('Audit log failed for ADMIN_USER_CREATE_SUCCESS:', err));
-      const { password: _, ...userResponseData } = newUser;
-      userResponseData.role_name = newRoleName;
-      res.status(201).json(userResponseData);
+
+      res.status(201).json(newUser);
     } catch (error) {
-      await client.query('ROLLBACK');
-      if (error.code === '23505') {
-        return next(new ConflictError('A user with this email address already exists (database constraint).'));
-      }
-      console.error('Error creating user by admin:', error);
-      next(new AppError('Failed to create user.', 500, error));
-    } finally {
-      client.release();
+      // Service layer errors (ConflictError, BadRequestError, AppError) are passed on
+      next(error);
     }
   }
 );
@@ -121,28 +96,21 @@ router.get(
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    const { role } = req.query; // Role is now validated and sanitized
-    let queryString = `
-      SELECT u.id, u.name, u.email, u.role_id, r.name as role_name, u.role as legacy_role,
-             u.is_tax_exempt, u.tax_exemption_certificate_id, u.tax_exemption_notes,
-             u.created_at, u.updated_at
-      FROM users u
-      LEFT JOIN roles r ON u.role_id = r.id
-    `;
-    const queryParams = [];
-    let paramIndex = 1; // Keep for consistency, though only one optional param here
-    if (role) { // role is already lowercased by validator
-      queryString += ` WHERE LOWER(r.name) = LOWER($${paramIndex++})`; // Query against role name from roles table
-      queryParams.push(role);
-    }
-    queryString += ' ORDER BY u.id ASC';
-    // TODO: Add pagination using req.query.page and req.query.limit
+
+    // All query params (page, limit, role, search_term) are validated and have defaults
+    const options = {
+      page: req.query.page,
+      limit: req.query.limit,
+      role: req.query.role,
+      search_term: req.query.search_term,
+    };
+
     try {
-      const result = await db.query(queryString, queryParams);
-      res.status(200).json(result.rows);
+      const result = await userService.getAllUsers(options);
+      // Service returns { data: users, pagination: {...} }
+      res.status(200).json(result);
     } catch (error) {
-      console.error('Error listing users:', error);
-      next(new AppError('Error listing users.', 500, error));
+      next(error);
     }
   }
 );
@@ -158,17 +126,14 @@ router.get(
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    const { id } = req.params; // id is now a validated integer
-    // Manual validation `if (isNaN(parseInt(id)))` is removed.
+    const { id } = req.params; // id is a validated integer from validateUserIdParam
+
     try {
-      const result = await db.query('SELECT u.id, u.name, u.email, u.role_id, r.name as role_name, u.role as legacy_role, u.is_tax_exempt, u.tax_exemption_certificate_id, u.tax_exemption_notes, u.created_at, u.updated_at FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.id = $1', [id]);
-      if (result.rows.length === 0) {
-        return next(new NotFoundError('User not found.'));
-      }
-      res.status(200).json(result.rows[0]);
+      const user = await userService.getUserById(id);
+      // userService.getUserById throws NotFoundError if not found
+      res.status(200).json(user);
     } catch (error) {
-      console.error(`Error fetching user ${id}:`, error);
-      next(new AppError('Error fetching user.', 500, error));
+      next(error); // Pass errors (including NotFoundError) to global handler
     }
   }
 );
@@ -184,50 +149,27 @@ router.put(
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    const { id } = req.params; // id is validated integer
-    const { role } = req.body; // role is validated string, trimmed, lowercased
+    const { id } = req.params; // Validated integer
+    const { role } = req.body; // Validated string, trimmed, lowercased
 
-    // Manual ID validation `if (isNaN(parseInt(id)))` is removed.
     console.warn(`[PUT /api/admin/users/:${id}/role] Legacy role update endpoint hit. Consider migrating to main PUT /:id endpoint with role_id.`);
 
-    const client = await db.pool.connect();
     try {
-      await client.query('BEGIN');
-      const roleResult = await client.query('SELECT id FROM roles WHERE LOWER(name) = LOWER($1)', [role]);
-      if (roleResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return next(new BadRequestError(`Role '${role}' not found.`));
-      }
-      const roleIdToUpdate = roleResult.rows[0].id;
-
-      const result = await client.query(
-        'UPDATE users SET role_id = $1, role = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING id, email, role_id',
-        [roleIdToUpdate, role, id] // Storing the validated role name in legacy 'role' field
-      );
-
-      if (result.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return next(new NotFoundError('User not found.'));
-      }
-      const updatedUser = result.rows[0];
-      await client.query('COMMIT');
+      const updatedUserWithRoleName = await userService.updateUserRoleLegacy(id, role);
+      // Service method handles transaction, role lookup, user update, and fetching final user details.
 
       auditLogService.recordAuditEvent(
-        'USER_ROLE_UPDATE_SUCCESS',
+        'USER_ROLE_UPDATE_SUCCESS', // Consider a more specific audit event if needed
         { userId: req.user.userId, userEmail: req.user.email },
-        { resourceType: 'USER', resourceId: updatedUser.id },
-        { message: `User ID ${updatedUser.id} legacy role endpoint updated to role_id ${updatedUser.role_id} (text: ${role}).`},
+        { resourceType: 'USER', resourceId: updatedUserWithRoleName.id },
+        { message: `User ID ${updatedUserWithRoleName.id} legacy role endpoint updated to role_id ${updatedUserWithRoleName.role_id} (name: ${updatedUserWithRoleName.role_name}).`},
         req
-      ).catch(err => console.error('Audit log failed:', err));
+      ).catch(err => console.error('Audit log failed for USER_ROLE_UPDATE_SUCCESS (legacy):', err));
 
-      const finalUser = await db.query('SELECT u.*, r.name as role_name FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.id = $1', [updatedUser.id]);
-      res.status(200).json({ message: 'User role updated successfully.', user: finalUser.rows[0] });
+      res.status(200).json({ message: 'User role updated successfully.', user: updatedUserWithRoleName });
     } catch (error) {
-      await client.query('ROLLBACK');
-      console.error(`Error updating role for user ${id} via legacy endpoint:`, error);
-      next(new AppError('Error updating user role.', 500, error));
-    } finally {
-      client.release();
+      // Service layer errors (NotFoundError, BadRequestError, AppError) passed on.
+      next(error);
     }
   }
 );
@@ -249,127 +191,68 @@ router.put(
   // ],
   validateUpdateUserParams, // Applied validation
   async (req, res, next) => {
-    const { id } = req.params; // id is validated by validateUpdateUserParams
+    const { id } = req.params; // Validated integer
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const updates = { ...req.body }; // updates contains validated and sanitized data
-    if (Object.keys(updates).length === 0) {
-      return next(new BadRequestError('No fields provided for update.'));
+    const updateData = req.body; // Validated and sanitized data
+    if (Object.keys(updateData).length === 0) {
+      // If no actual fields to update were provided in the body after validation (e.g. only extraneous fields sent)
+      // It's good practice to fetch and return current user data or a specific message.
+      // For now, let's assume `userService.updateUserByAdmin` handles this by returning current if no changes.
+      // Or we can explicitly check:
+      const updatableFields = ['name', 'email', 'role_id', 'is_tax_exempt', 'tax_exemption_certificate_id', 'tax_exemption_notes'];
+      const hasActualUpdate = updatableFields.some(field => updateData.hasOwnProperty(field));
+      if (!hasActualUpdate) {
+          try {
+            const currentUserData = await userService.getUserById(id);
+            return res.status(200).json(currentUserData);
+          } catch(err) { return next(err); }
+      }
     }
 
-    const client = await db.pool.connect();
-    try {
-      if (updates.role_id !== undefined) {
-        const hasAssignRolesPermission = await permissionService.userHasPermission(req.user.userId, 'users:assign_roles');
-        if (!hasAssignRolesPermission) {
-           throw new AppError("Forbidden: You do not have permission to assign roles.", 403);
-        }
-        // role_id is already validated as int > 0 by express-validator
-        updates.role_id = updates.role_id; // No change needed if already int
-
-        const targetRoleResult = await client.query('SELECT name FROM roles WHERE id = $1', [updates.role_id]);
-        if (targetRoleResult.rows.length === 0) {
-          throw new BadRequestError(`Role with ID ${updates.role_id} not found.`);
-        }
-        const newRoleName = targetRoleResult.rows[0].name;
-        updates.role = newRoleName; // Also update the legacy role column for now
-
-        // Prevent admin self-demotion logic
-        if (parseInt(id) === req.user.userId) { // req.params.id is now an int
-            if (newRoleName.toLowerCase() !== 'super admin' && newRoleName.toLowerCase() !== 'admin') { // Example admin role names
-                const currentUserRoleResult = await client.query('SELECT r.name FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = $1', [req.user.userId]);
-                if (currentUserRoleResult.rows.length > 0 && (currentUserRoleResult.rows[0].name.toLowerCase() === 'super admin' || currentUserRoleResult.rows[0].name.toLowerCase() === 'admin')) {
-                    throw new BadRequestError("Administrators cannot change their own role to a non-administrator role.");
-                }
+    // Permission check for role_id update MUST happen BEFORE calling service if service doesn't handle it.
+    // The service's updateUserByAdmin will handle the logic of fetching role name, admin self-demotion.
+    // However, the permission to *initiate* a role change should be checked here.
+    if (updateData.role_id !== undefined) {
+        try {
+            const hasAssignRolesPermission = await permissionService.userHasPermission(req.user.userId, 'users:assign_roles');
+            if (!hasAssignRolesPermission) {
+               throw new AppError("Forbidden: You do not have permission to assign roles.", 403, "FORBIDDEN_ROLE_ASSIGNMENT");
             }
+        } catch (permError) {
+            return next(permError);
         }
-      }
+    }
 
-      await client.query('BEGIN');
-      const currentUserResult = await client.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [id]);
-      if (currentUserResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        throw new NotFoundError(`User with ID ${id} not found.`);
-      }
-      const currentUser = currentUserResult.rows[0];
-
-      if (updates.email && updates.email.toLowerCase() !== currentUser.email.toLowerCase()) {
-        const existingUser = await client.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND id != $2', [updates.email, id]);
-        if (existingUser.rows.length > 0) {
-          await client.query('ROLLBACK');
-          throw new ConflictError('This email address is already in use by another account.');
-        }
-      }
-
-      const setClauses = [];
-      const values = [];
-      let paramIndex = 1;
-      const fieldsToUpdate = ['name', 'email', 'role_id', 'role', 'is_tax_exempt', 'tax_exemption_certificate_id', 'tax_exemption_notes'];
-      for (const field of fieldsToUpdate) {
-        if (updates.hasOwnProperty(field)) { // Use hasOwnProperty to ensure field was in request
-          // For nullable fields that can be explicitly set to null via empty string in request
-          if ((field === 'tax_exemption_certificate_id' || field === 'tax_exemption_notes') && updates[field] === '') {
-            values.push(null);
-          } else {
-            values.push(updates[field]);
-          }
-          setClauses.push(`${field} = $${paramIndex++}`);
-        }
-      }
-
-      if (setClauses.length === 0) {
-        await client.query('ROLLBACK'); // Release lock
-        const userWithRoleName = await db.query('SELECT u.*, r.name as role_name FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.id = $1', [currentUser.id]);
-        return res.status(200).json(userWithRoleName.rows[0] || currentUser); // Return current data if no changes
-      }
-
-      setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
-      values.push(id);
-
-      const updateQuery = `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING id;`;
-      await client.query(updateQuery, values);
-      await client.query('COMMIT');
-
-      const updatedUserResult = await db.query(
-        `SELECT u.id, u.name, u.email, u.role_id, r.name as role_name, u.is_tax_exempt,
-                u.tax_exemption_certificate_id, u.tax_exemption_notes, u.created_at, u.updated_at, u.role as legacy_role
-         FROM users u
-         LEFT JOIN roles r ON u.role_id = r.id
-         WHERE u.id = $1`, [id]
-      );
-      const finalUpdatedUserWithRole = updatedUserResult.rows[0];
+    try {
+      const updatedUser = await userService.updateUserByAdmin(id, updateData, req.user.userId);
 
       auditLogService.recordAuditEvent(
         'USER_UPDATE_SUCCESS',
         { userId: req.user.userId, userEmail: req.user.email },
-        { resourceType: 'USER', resourceId: finalUpdatedUserWithRole.id },
+        { resourceType: 'USER', resourceId: updatedUser.id },
         {
-          message: `User ID ${finalUpdatedUserWithRole.id} details updated by admin.`,
-          inputData: { ...updates }, // Log the actual updates sent
-          updatedSnapshot: {
-              name: finalUpdatedUserWithRole.name,
-              email: finalUpdatedUserWithRole.email,
-              role_id: finalUpdatedUserWithRole.role_id,
-              role_name: finalUpdatedUserWithRole.role_name,
-              is_tax_exempt: finalUpdatedUserWithRole.is_tax_exempt
+          message: `User ID ${updatedUser.id} details updated by admin.`,
+          inputData: updateData, // Log the actual updates sent
+          updatedSnapshot: { // Log key fields from the result
+              name: updatedUser.name,
+              email: updatedUser.email,
+              role_id: updatedUser.role_id,
+              role_name: updatedUser.role_name,
+              is_tax_exempt: updatedUser.is_tax_exempt
           }
         },
         req
       ).catch(err => console.error('Audit log failed for USER_UPDATE_SUCCESS:', err));
-      res.status(200).json(finalUpdatedUserWithRole);
+
+      res.status(200).json(updatedUser);
 
     } catch (error) {
-      if (client) await client.query('ROLLBACK').catch(rbErr => console.error('Rollback error:', rbErr));
-      if (!(error instanceof AppError || error instanceof ConflictError || error instanceof NotFoundError || error instanceof BadRequestError)) {
-         console.error(`[PUT /api/admin/users/:${id}] Caught non-AppError:`, error);
-         return next(new AppError(error.message || 'Error updating user.', error.statusCode || 500, error));
-      }
+      // Service layer errors (NotFoundError, ConflictError, BadRequestError, AppError) passed on.
       next(error);
-    } finally {
-      if (client) client.release();
     }
   }
 );
@@ -385,34 +268,25 @@ router.delete(
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    const { id } = req.params; // id is validated integer
-
-    // Manual ID validation `if (isNaN(parseInt(id)))` is removed.
-
-    if (parseInt(id) === req.user.userId) { // id is already an int from validator
-      return res.status(400).json({ message: "Cannot delete currently logged-in admin user." });
-    }
+    const { id: userIdToDelete } = req.params; // Validated integer
+    const currentUserId = req.user.userId;
 
     try {
-      const result = await db.query('DELETE FROM users WHERE id = $1 RETURNING id, email', [id]);
-      if (result.rowCount === 0) {
-        return next(new NotFoundError('User not found.'));
-      }
-      const deletedUserInfo = result.rows[0];
+      const deletedUser = await userService.deleteUser(userIdToDelete, currentUserId);
+      // Service method handles self-deletion check, not found, and FK conflicts.
+
       auditLogService.recordAuditEvent(
         'USER_DELETE_SUCCESS',
-        { userId: req.user.userId, userEmail: req.user.email },
-        { resourceType: 'USER', resourceId: deletedUserInfo.id },
-        { deletedUserEmail: deletedUserInfo.email },
+        { userId: currentUserId, userEmail: req.user.email },
+        { resourceType: 'USER', resourceId: deletedUser.id }, // Use ID from returned deletedUser
+        { deletedUserEmail: deletedUser.email, deletedUserName: deletedUser.name },
         req
       ).catch(err => console.error('Audit log failed for USER_DELETE_SUCCESS:', err));
-      res.status(200).json({ message: 'User deleted successfully.', user: deletedUserInfo });
+
+      res.status(200).json({ message: 'User deleted successfully.', user: deletedUser });
     } catch (error) {
-      console.error(`Error deleting user ${id}:`, error);
-      if (error.code === '23503') {
-          return next(new ConflictError('Cannot delete user: They are referenced in other records. Please reassign or delete those records first.'));
-      }
-      next(new AppError('Error deleting user.', 500, error));
+      // Service layer errors (NotFoundError, BadRequestError, ConflictError, AppError) passed on.
+      next(error);
     }
   }
 );
