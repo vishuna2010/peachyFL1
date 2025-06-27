@@ -396,7 +396,53 @@ module.exports = {
   updateUserByAdmin,
   deleteUser,
   updateUserProfile, // Added new function
+  getUserTaxContext, // Added for tax calculation context
 };
+
+/**
+ * Fetches tax-relevant information for a given user.
+ * @param {number} userId - The ID of the user.
+ * @param {object} [dbClientOptional] - Optional existing database client.
+ * @returns {Promise<object|null>} Object with { userIsTaxExempt, defaultAddress } or null if user not found.
+ */
+async function getUserTaxContext(userId, dbClientOptional) {
+  if (!userId) {
+    // This function expects a userId. If called without, it's an issue.
+    // Or, it could simply return a default non-exempt state.
+    // For now, let's assume userId is always provided if this function is called.
+    throw new BadRequestError('User ID is required to get tax context.');
+  }
+  const queryRunner = dbClientOptional || db; // Use provided client or default pool
+
+  try {
+    const userResult = await queryRunner.query(
+      'SELECT is_tax_exempt, country, state_province_region, postal_code FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return null; // Or throw NotFoundError if user *must* exist at this point
+    }
+
+    const userData = userResult.rows[0];
+    return {
+      userIsTaxExempt: userData.is_tax_exempt || false,
+      defaultAddress: { // Structure for tax service or route to use
+        country: userData.country || null,
+        state_province_region: userData.state_province_region || null,
+        // postal_code: userData.postal_code || null // Include if tax service might use it
+      }
+    };
+  } catch (error) {
+    console.error(`[userService.getUserTaxContext] Error for user ID ${userId}:`, error);
+    // Don't throw AppError directly if this is part of a larger operation where user not found is semi-expected
+    // However, if called independently and user *should* exist, an error is better.
+    // For its current use in cart/tax, null is acceptable to indicate user not found or no specific tax info.
+    // Throwing a generic AppError if it's not a known DB error.
+    if (error instanceof AppError) throw error;
+    throw new AppError('Failed to retrieve user tax context.', 500, 'USER_TAX_CONTEXT_FAILED');
+  }
+}
 
 /**
  * Updates specified profile fields for a given user ID.
