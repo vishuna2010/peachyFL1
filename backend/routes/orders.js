@@ -4,7 +4,7 @@ const router = express.Router();
 const { isAuthenticated, tryAuthenticate } = require('../auth'); // Using tryAuthenticate for POST /
 const { sendEmail, getOrderConfirmationHtml, getOrderConfirmationText } = require('../services/emailService');
 const orderService = require('../services/orderService'); // Import orderService
-const { body, validationResult } = require('express-validator'); // For validation
+const { body, query, param, validationResult } = require('express-validator'); // Corrected import
 const { NotFoundError, BadRequestError, ConflictError } = require('../utils/AppError'); // For direct error handling if needed pre-service call
 
 // POST /api/orders - Create a new order
