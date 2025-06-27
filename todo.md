@@ -225,6 +225,7 @@ This section outlines the primary driver for future backend development, based o
   - [X] Phase 1: Refactored `createSchema` for robust column additions.
   - [X] Phase 1a: Ensured unique index on `product_variants.sku`.
   - [X] Phase 1b: Ensured unique constraint/index on `product_images(product_id, image_url)`.
+- [X] Updated `seed.js` `createSchema` for `users` table to include email verification fields (`email_verification_token`, `email_verification_token_expires_at`, `is_email_verified`).
 
 ## IV. Tax Engine & Invoicing Module (New Specification)
 (This section remains largely unchanged as it was mostly [X] already)
