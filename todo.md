@@ -294,7 +294,11 @@ This section outlines the primary driver for future backend development, based o
       - [X] `orders` table schema in `seed.js` updated with `shipping_carrier`, `tracking_number`.
       - [X] Admin route `PUT /admin/orders/:id/status` and validators updated for tracking info.
       - [ ] Theming with site colors pending user input for color codes.
-    - [ ] Order is delivered
+    - [X] Order is delivered
+      - [X] EJS template `order_delivered.ejs` created.
+      - [X] `emailService.sendOrderDeliveredEmail` function implemented.
+      - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'delivered'.
+      - [ ] Theming with site colors pending user input for color codes.
 - **Invoice Notifications**
   - [ ] Automatically generate and email invoices to customers upon order confirmation
 - **Tracking Updates**

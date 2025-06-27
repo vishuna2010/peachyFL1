@@ -307,7 +307,8 @@ module.exports = {
   getRefundConfirmationText,
   sendWelcomeEmail,
   sendEmailVerificationCode,
-  sendOrderDispatchedEmail, // Added new function
+  sendOrderDispatchedEmail,
+  sendOrderDeliveredEmail, // Added new function
   // For testing/debugging if needed:
   // getTestTransporter,
 };
@@ -373,6 +374,86 @@ ${companyAddress}
     return { success: false, error: `Failed to send welcome email: ${error.message}` };
   }
 }
+
+// --- Order Delivered Email Function ---
+/**
+ * Sends an order delivered email to a user.
+ * @param {string} toEmail - The recipient's email address.
+ * @param {string} userName - The name of the user.
+ * @param {object} orderDetails - Object containing order details (id, items, reviewLink, viewOrderLink etc.)
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendOrderDeliveredEmail(toEmail, userName, orderDetails) {
+  try {
+    const siteName = config.company.name || 'Our Platform';
+    const supportEmail = config.email.supportAddress || config.email.fromAddress;
+    const companyAddress = config.company.address || '';
+
+    // Ensure orderDetails.items exists and is an array for the template
+    const itemsForTemplate = (orderDetails.items && Array.isArray(orderDetails.items)) ? orderDetails.items : [];
+
+    // Construct default links if not provided, based on frontend structure
+    const baseFrontendUrl = config.frontendUrlBase || 'http://localhost:3000';
+    const reviewLink = orderDetails.reviewLink || `${baseFrontendUrl}/profile/orders/${orderDetails.id}?action=review`; // Example link
+    const viewOrderLink = orderDetails.viewOrderLink || `${baseFrontendUrl}/profile/orders/${orderDetails.id}`;
+
+
+    const templatePath = path.join(__dirname, '..', 'email_templates', 'order_delivered.ejs');
+    const templateContent = fs.readFileSync(templatePath, 'utf-8');
+    const htmlContent = ejs.render(templateContent, {
+      siteName,
+      userName,
+      order: { // Nest orderDetails under 'order' as expected by the template
+        ...orderDetails,
+        items: itemsForTemplate,
+        reviewLink,
+        viewOrderLink
+      },
+      supportEmail,
+      companyAddress,
+    });
+
+    // Basic plain text version
+    let textItemsSummary = "Items in this order:\n";
+    itemsForTemplate.forEach(item => {
+      textItemsSummary += `- ${item.product_name_at_purchase || item.name} (Qty: ${item.quantity})\n`;
+    });
+     if (itemsForTemplate.length === 0) {
+        textItemsSummary = "Your order items have been delivered.\n";
+    }
+
+    const textContent = `
+Hi ${userName},
+
+Good news! Your ${siteName} order #${orderDetails.id} has been successfully delivered.
+
+We hope you love your purchase! We'd love to hear your thoughts:
+Review Your Products: ${reviewLink}
+
+${textItemsSummary}
+View your full order details here: ${viewOrderLink}
+
+If you have any questions, please contact us at ${supportEmail}.
+
+Thank you for choosing ${siteName}!
+---
+&copy; ${new Date().getFullYear()} ${siteName}. All rights reserved.
+${companyAddress}
+    `.trim();
+
+    return sendEmail({
+      to: toEmail,
+      subject: `Your ${siteName} Order #${orderDetails.id} Has Been Delivered!`,
+      text: textContent,
+      html: htmlContent,
+    });
+
+  } catch (error) {
+    console.error(`Error preparing or sending order delivered email to ${toEmail} for order #${orderDetails.id}:`, error);
+    return { success: false, error: `Failed to send order delivered email: ${error.message}` };
+  }
+}
+
 
 // --- Order Dispatched Email Function ---
 /**

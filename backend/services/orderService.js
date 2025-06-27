@@ -201,54 +201,52 @@ async function updateOrderStatus(orderId, data, adminUserId /* for potential fut
     // If status changed to 'shipped', send dispatch email
     if (newStatus && newStatus.toLowerCase() === 'shipped' && updatedOrder) {
       try {
-        // Fetch user details for the email
         const userDetailsQuery = await db.query('SELECT email, name FROM users WHERE id = $1', [updatedOrder.user_id]);
         if (userDetailsQuery.rows.length > 0) {
           const user = userDetailsQuery.rows[0];
-
-          // Construct tracking link (basic example, can be carrier-specific)
           let tracking_link = null;
           if (updatedOrder.shipping_carrier && updatedOrder.tracking_number) {
-            // Example: Generic Google search link, replace with actual carrier links if possible
-            tracking_link = `https://www.google.com/search?q=${encodeURIComponent(updatedOrder.shipping_carrier + ' ' + updatedOrder.tracking_number)}`;
             if (updatedOrder.shipping_carrier.toLowerCase().includes('fedex')) {
                 tracking_link = `https://www.fedex.com/fedextrack/?trknbr=${updatedOrder.tracking_number}`;
             } else if (updatedOrder.shipping_carrier.toLowerCase().includes('ups')) {
                 tracking_link = `https://www.ups.com/track?loc=en_US&tracknum=${updatedOrder.tracking_number}`;
             } else if (updatedOrder.shipping_carrier.toLowerCase().includes('usps')) {
                 tracking_link = `https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=${updatedOrder.tracking_number}`;
+            } else {
+                tracking_link = `https://www.google.com/search?q=${encodeURIComponent(updatedOrder.shipping_carrier + ' ' + updatedOrder.tracking_number)}`;
             }
           }
-
-          // Fetch order items for the email
-          const itemsResult = await db.query( // Use db.query as it's outside the transaction now
-            `SELECT oi.product_name_at_purchase, oi.quantity
-             FROM order_items oi WHERE oi.order_id = $1`, [updatedOrder.id]
-          );
-
-          const emailOrderDetails = {
-            ...updatedOrder, // Contains id, shipping_address_*, etc.
-            items: itemsResult.rows, // Add items to the details
-            tracking_link: tracking_link, // Add constructed tracking link
-            // shipping_carrier and tracking_number are already on updatedOrder if they were set
-          };
-
+          const itemsResult = await db.query(`SELECT oi.product_name_at_purchase, oi.quantity FROM order_items oi WHERE oi.order_id = $1`, [updatedOrder.id]);
+          const emailOrderDetails = { ...updatedOrder, items: itemsResult.rows, tracking_link };
           emailService.sendOrderDispatchedEmail(user.email, user.name || user.email.split('@')[0], emailOrderDetails)
-            .then(emailRes => {
-              if (emailRes.success) {
-                console.log(`Order dispatched email successfully sent for order ${updatedOrder.id}`);
-              } else {
-                console.error(`Failed to send order dispatched email for order ${updatedOrder.id}: ${emailRes.error}`);
-              }
-            })
+            .then(emailRes => console.log(emailRes.success ? `Order dispatched email sent for order ${updatedOrder.id}` : `Failed to send dispatch email for order ${updatedOrder.id}: ${emailRes.error}`))
             .catch(err => console.error(`Error dispatching order dispatched email for ${updatedOrder.id}:`, err));
         } else {
-            console.warn(`Could not find user details for user ID ${updatedOrder.user_id} to send dispatch email for order ${updatedOrder.id}`);
+            console.warn(`User details not found for user ID ${updatedOrder.user_id} (Order ID ${updatedOrder.id}) - dispatch email not sent.`);
         }
       } catch (emailError) {
-        // Log error but don't let email failure break the main operation
-        console.error(`Error preparing or sending order dispatched email for order ${updatedOrder.id} (after commit):`, emailError);
+        console.error(`Error preparing/sending order dispatched email for order ${updatedOrder.id}:`, emailError);
       }
+    }
+
+    // If status changed to 'delivered', send delivered email
+    if (newStatus && newStatus.toLowerCase() === 'delivered' && updatedOrder) {
+        try {
+            const userDetailsQuery = await db.query('SELECT email, name FROM users WHERE id = $1', [updatedOrder.user_id]);
+            if (userDetailsQuery.rows.length > 0) {
+                const user = userDetailsQuery.rows[0];
+                const itemsResult = await db.query(`SELECT oi.product_name_at_purchase, oi.quantity FROM order_items oi WHERE oi.order_id = $1`, [updatedOrder.id]);
+                // reviewLink and viewOrderLink will be constructed by emailService using frontendUrlBase and order.id
+                const emailOrderDetails = { ...updatedOrder, items: itemsResult.rows };
+                emailService.sendOrderDeliveredEmail(user.email, user.name || user.email.split('@')[0], emailOrderDetails)
+                    .then(emailRes => console.log(emailRes.success ? `Order delivered email sent for order ${updatedOrder.id}` : `Failed to send delivered email for order ${updatedOrder.id}: ${emailRes.error}`))
+                    .catch(err => console.error(`Error dispatching order delivered email for ${updatedOrder.id}:`, err));
+            } else {
+                 console.warn(`User details not found for user ID ${updatedOrder.user_id} (Order ID ${updatedOrder.id}) - delivered email not sent.`);
+            }
+        } catch (emailError) {
+            console.error(`Error preparing/sending order delivered email for order ${updatedOrder.id}:`, emailError);
+        }
     }
     return updatedOrder;
 
