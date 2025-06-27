@@ -31,6 +31,25 @@ const isAuthenticated = (req, res, next) => {
   }
 };
 
+// Middleware to try to authenticate user, but doesn't fail if no token
+const tryAuthenticate = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7, authHeader.length);
+    jwt.verify(token, jwtSecret, (err, decoded) => {
+      if (!err) {
+        req.user = decoded; // Populate req.user if token is valid
+      }
+      // Always call next, even if token is invalid or not present
+      // The route handler will then check req.user if it needs to differentiate
+      next();
+    });
+  } else {
+    // No token, just proceed
+    next();
+  }
+};
+
 async function registerUser(email, password) {
   try {
     const hashedPassword = await bcrypt.hash(password, saltRounds);
@@ -39,30 +58,31 @@ async function registerUser(email, password) {
       'INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id, email, role, created_at',
       [email, hashedPassword, 'customer'] // Explicitly set role
     );
-    const user = result.rows[0];
-    const { password: _, ...userWithoutPassword } = user;
+    const user = result.rows[0]; // Contains id, email, role, created_at
 
-    // Send welcome email (fire and forget, don't block registration on email failure)
-    if (user && user.email) {
-      // The 'registerUser' function currently doesn't add 'name', so pass email as name for now.
-      // Or, if a default name like "Valued Customer" is preferred by emailService, adjust there.
-      // For now, using email for userName placeholder.
-      emailService.sendWelcomeEmail(user.email, user.email.split('@')[0]) // Use part of email as name
-        .then(emailRes => {
-          if (emailRes.success) {
-            console.log(`Welcome email successfully sent to ${user.email}`);
-          } else {
-            console.error(`Failed to send welcome email to ${user.email}: ${emailRes.error}`);
-          }
-        })
-        .catch(err => {
-          console.error(`Error dispatching welcome email for ${user.email}:`, err);
-        });
-    }
+    // Generate verification token
+    const verificationToken = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Token expires in 15 minutes
+
+    // Store token and expiry in the users table
+    // Assumes columns: email_verification_token, email_verification_token_expires_at, is_email_verified (defaults to FALSE)
+    await db.query(
+      'UPDATE users SET email_verification_token = $1, email_verification_token_expires_at = $2 WHERE id = $3',
+      [verificationToken, expiresAt, user.id]
+    );
+
+    // REMOVED: Welcome email sending. This will now happen after verification.
+    // The route handler for /register will now be responsible for calling
+    // a new emailService function to send the verification code.
+
+    const { password: _, ...userWithoutPassword } = user;
+    // Add token to response for now, for immediate use by email sending in route handler.
+    // In a more robust scenario, the route handler might fetch this if needed, or the service returns it.
+    userWithoutPassword.email_verification_token = verificationToken;
 
     return { success: true, user: userWithoutPassword };
   } catch (error) {
-    console.error('Error registering user:', error);
+    console.error('Error registering user or setting verification token:', error);
     if (error.code === '23505') { // Unique violation (email already exists)
       return { success: false, message: 'Email already in use.' };
     }
@@ -81,8 +101,19 @@ async function loginUser(email, password) {
     const match = await bcrypt.compare(password, user.password);
 
     if (match) {
-      // Password matches. Return user object for further processing (2FA check or JWT generation)
-      // Exclude password from returned user object
+      // Password matches. Now check email verification status.
+      // The 'users' table schema is assumed to have 'is_email_verified' (BOOLEAN NOT NULL DEFAULT FALSE).
+      // This field should have been selected in the initial query: 'SELECT * FROM users WHERE email = $1'
+      if (!user.is_email_verified) {
+        return {
+          success: false,
+          message: 'Email not verified. Please check your email for a verification code.',
+          errorCode: 'EMAIL_NOT_VERIFIED', // Custom error code for frontend to handle
+          userId: user.id // Optionally return userId to help frontend direct to verification page
+        };
+      }
+
+      // Email is verified, proceed with returning user object for 2FA check or JWT generation
       const { password: _, ...userWithoutPassword } = user;
       return { success: true, user: userWithoutPassword };
     } else {
@@ -197,6 +228,7 @@ module.exports = {
   resetPassword,
   jwtSecret,
   isAuthenticated,
+  tryAuthenticate,    // Export tryAuthenticate
   changeUserPassword, // Export the new function
   checkPermission,    // Export the new permission checking middleware
 
