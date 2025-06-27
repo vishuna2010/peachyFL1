@@ -160,7 +160,7 @@ This section outlines the primary driver for future backend development, based o
         - [X] Admin Purchase Orders module (`purchaseOrderService.js` - All existing routes refactored)
         - [X] Admin Reviews module (`adminReviews.js` -> `reviewService.js`)
         - [X] Admin Reports module (`adminReports.js` - for complex queries -> `reportService.js`)
-        - [ ] Admin Stock Adjustments module (`adminStockAdjustments.js` -> `inventoryService.js` or `productService.js`)
+        - [X] Admin Stock Adjustments module (`adminStockAdjustments.js` -> `inventoryService.js`)
         - [ ] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route -> `inventoryService.js` or `productService.js`)
         - [ ] Admin Tax Classes module (`adminTaxClasses.js` -> `taxService.js` or new service)
         - [ ] Admin Tax Rates module (`adminTaxRates.js` -> `taxService.js` or new service)
