@@ -1,5 +1,5 @@
 const db = require('../db');
-const { BadRequestError, NotFoundError } = require('../utils/AppError');
+const { AppError, BadRequestError, NotFoundError, ConflictError } = require('../utils/AppError'); // Added AppError, ConflictError
 
 // Helper function to get the array of global product_option_value_ids for a variant
 async function getVariantOptionValueIds(variantId, client) {
@@ -13,48 +13,10 @@ async function getVariantOptionValueIds(variantId, client) {
   return result.rows.map(r => r.product_option_value_id);
 }
 
-async function getAllProducts({
-  searchTerm,
-  categoryId,
-  minPrice,
-  maxPrice,
-  sortBy,
-  sort_order = 'ASC', // New: 'ASC' or 'DESC'
-  optionValueId,
-  status, // New: 'active', 'draft', 'archived', etc.
-  stock_status, // New: 'in_stock', 'out_of_stock', 'low_stock'
-  supplierId, // <<<< NEW PARAMETER
-  is_admin_request = false, // New: boolean
-  include_total_stock = false, // New: boolean, to add total stock for variant products
-  page = 1,
-  limit = 10
-}) {
-  // console.log(`[productService.getAllProducts] Initial supplierId: ${supplierId}, Type: ${typeof supplierId}`);
+// --- Internal Helper Functions for getAllProducts ---
 
-  const validatedSupplierId = supplierId ? parseInt(supplierId, 10) : undefined;
-  // console.log(`[productService.getAllProducts] Validated supplierId: ${validatedSupplierId}, Type: ${typeof validatedSupplierId}`);
-
-  if (validatedSupplierId && isNaN(validatedSupplierId)) {
-    console.warn(`[productService.getAllProducts] Invalid non-numeric supplierId received: ${supplierId}. Ignoring filter.`);
-  }
-
-  const queryValues = [];
-  let paramIndex = 1;
-
-  // Base columns to select from products p.
-  const productColumns = `
-    p.id, p.name, p.description, p.price, p.category_id, p.image_url,
-    p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold,
-    p.has_variants, p.average_rating, p.review_count, p.product_status,
-    p.tax_class_id, -- Added tax_class_id
-    p.created_at, p.updated_at
-  `;
-  // Note: p.product_status is added
-
-  let ctes = []; // Common Table Expressions
-
-  // CTE for effective stock (handles variants)
-  const stockCte = `
+function _buildProductStockCTEString() {
+  return `
     product_effective_stock AS (
       SELECT
         p_stock.id as product_id,
@@ -83,21 +45,27 @@ async function getAllProducts({
       FROM products p_stock
     )
   `;
-  ctes.push(stockCte);
+}
 
-  let withClause = "";
-  if (ctes.length > 0) {
-    withClause = `WITH ${ctes.join(", ")} `;
+function _buildProductBaseQueryParts(options = {}) {
+  const { optionValueId, include_total_stock } = options;
+
+  const productColumns = `
+    p.id, p.name, p.description, p.price, p.category_id, p.image_url,
+    p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold,
+    p.has_variants, p.average_rating, p.review_count, p.product_status,
+    p.tax_class_id, p.created_at, p.updated_at
+  `;
+
+  let selectColumns = `${productColumns},
+    c.name as category_name, s.name as supplier_name,
+    tc.name as tax_class_name,
+    COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags,
+    pes.effective_stock_quantity, pes.is_low_stock`;
+
+  if (include_total_stock) {
+    selectColumns += `, pes.effective_stock_quantity as total_stock_display`;
   }
-
-  // Determine if product_variants table needs to be joined in the main query
-  // It's needed for optionValueId filter or if searchTerm needs to check variant SKUs.
-  let needsVariantJoinForFilter = !!optionValueId;
-  if (searchTerm && !needsVariantJoinForFilter) { // if searchTerm is present and we haven't decided to join variants yet
-      // This simple flag is not enough, as the join must be conditional in the query string itself.
-      // For now, let's assume searchTerm might apply to variants if they exist.
-  }
-
 
   let fromClause = `
     FROM products p
@@ -106,54 +74,57 @@ async function getAllProducts({
     LEFT JOIN product_tags pt ON p.id = pt.product_id
     LEFT JOIN tags t ON pt.tag_id = t.id
     LEFT JOIN product_effective_stock pes ON p.id = pes.product_id
-    LEFT JOIN tax_classes tc ON p.tax_class_id = tc.id -- Added join for tax_classes
+    LEFT JOIN tax_classes tc ON p.tax_class_id = tc.id
   `;
 
-  let selectColumns = `${productColumns},
-    c.name as category_name, s.name as supplier_name,
-    tc.name as tax_class_name, -- Added tax_class_name
-    COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags,
-    pes.effective_stock_quantity, pes.is_low_stock`;
-
-  if (include_total_stock) { // This is somewhat redundant if pes.effective_stock_quantity is already what's needed
-    selectColumns += `, pes.effective_stock_quantity as total_stock_display`;
-  }
-
-
-  let selectPrefix = `SELECT ${selectColumns}`;
-  if (optionValueId) { // If filtering by optionValueId, ensure distinct products
-    selectPrefix = `SELECT DISTINCT ON (p.id) ${selectColumns}`; // Use DISTINCT ON (p.id) and matching ORDER BY p.id first
+  let selectDistinctOn = "";
+  if (optionValueId) {
+    selectDistinctOn = "DISTINCT ON (p.id)";
     fromClause += `
       LEFT JOIN product_variants pv_filter ON p.id = pv_filter.product_id
       LEFT JOIN product_variant_option_values pvov_filter ON pv_filter.id = pvov_filter.product_variant_id
     `;
-  } else if (searchTerm) { // General search might need to check variant SKU
-     // No explicit join here, search term logic will handle conditional pv.sku search if needed
   }
 
-  let baseSelect = withClause + selectPrefix + fromClause;
-  let countBaseQuery = withClause + `SELECT COUNT(DISTINCT p.id) as total_count FROM products p LEFT JOIN product_effective_stock pes ON p.id = pes.product_id `;
-   // Add joins to countBaseQuery if they are part of filtering conditions
+  // Base for count query needs to adapt if optionValueId is present
+  let countFromClause = `
+    FROM products p
+    LEFT JOIN product_effective_stock pes ON p.id = pes.product_id
+  `;
   if (optionValueId) {
-    countBaseQuery += `
+    countFromClause += `
       LEFT JOIN product_variants pv_filter_count ON p.id = pv_filter_count.product_id
       LEFT JOIN product_variant_option_values pvov_filter_count ON pv_filter_count.id = pvov_filter_count.product_variant_id
     `;
   }
 
 
-  let whereClauses = [];
+  return {
+    selectColumns,     // The columns string for the main data query (without SELECT or DISTINCT ON)
+    selectDistinctOn,  // "DISTINCT ON (p.id)" or ""
+    fromClause,        // FROM and JOIN clauses for the main data query
+    groupByClause: `GROUP BY ${productColumns}, c.name, s.name, tc.name, pes.effective_stock_quantity, pes.is_low_stock`, // GROUP BY for main data query
+    countFromClause    // FROM and JOIN clauses for the count query (simpler than main fromClause usually)
+  };
+}
+
+function _buildProductFilterConditions(options = {}, startingParamIndex = 1) {
+  const {
+    searchTerm, categoryId, minPrice, maxPrice, optionValueId,
+    status, stock_status, supplierId, is_admin_request
+  } = options;
+
+  const whereClauses = [];
+  const queryParams = [];
+  let paramIndex = startingParamIndex;
 
   if (!is_admin_request) {
-    // Non-admins should only see active products by default
     whereClauses.push(`p.product_status = 'active'`);
   }
 
   if (searchTerm) {
     const searchTermPattern = `%${searchTerm}%`;
-    queryValues.push(searchTermPattern);
-    // Search in product name, desc, sku, AND variant skus if product has_variants.
-    // This requires a more complex sub-condition for variants.
+    queryParams.push(searchTermPattern); // Add once for all ILIKEs using the same param index
     let searchCondition = `(
       p.name ILIKE $${paramIndex} OR
       p.description ILIKE $${paramIndex} OR
@@ -169,58 +140,45 @@ async function getAllProducts({
 
   if (categoryId) {
     whereClauses.push(`p.category_id = $${paramIndex}`);
-    queryValues.push(categoryId);
+    queryParams.push(categoryId);
     paramIndex++;
   }
 
-  // ++++ NEW SUPPLIER ID FILTER ++++
-  // Use validatedSupplierId for the check and for pushing to queryValues
-  if (validatedSupplierId && validatedSupplierId > 0) { // Ensure it's a positive integer
-    // console.log(`[productService.getAllProducts] Applying filter for supplierId: ${validatedSupplierId}`);
+  const validatedSupplierId = supplierId ? parseInt(supplierId, 10) : undefined;
+  if (validatedSupplierId && validatedSupplierId > 0) {
     whereClauses.push(`p.supplier_id = $${paramIndex}`);
-    queryValues.push(validatedSupplierId); // Push the parsed integer
+    queryParams.push(validatedSupplierId);
     paramIndex++;
-  } else {
-    // console.log(`[productService.getAllProducts] No valid supplierId to filter by.`);
   }
-  // +++++++++++++++++++++++++++++++
 
   if (minPrice !== undefined) {
-    whereClauses.push(`p.price >= $${paramIndex}`); // Assumes p.price is base price. Variant pricing is complex.
-    queryValues.push(minPrice);
+    whereClauses.push(`p.price >= $${paramIndex}`);
+    queryParams.push(minPrice);
     paramIndex++;
   }
   if (maxPrice !== undefined) {
     whereClauses.push(`p.price <= $${paramIndex}`);
-    queryValues.push(maxPrice);
+    queryParams.push(maxPrice);
     paramIndex++;
   }
+
   if (optionValueId) {
     const intOptionValueId = parseInt(optionValueId, 10);
     if (!isNaN(intOptionValueId)) {
-      // Add to main query's whereClauses and queryValues
+      // This condition refers to aliases pv_filter and pvov_filter
+      // which must be present in the FROM clause if this filter is active.
+      // _buildProductBaseQueryParts handles adding these joins if optionValueId is present.
       whereClauses.push(`pvov_filter.product_option_value_id = $${paramIndex}`);
-      queryValues.push(intOptionValueId);
-      // paramIndex will be incremented after this block for the next potential filter
-
-      // Add the condition specifically for countBaseQuery using its alias and the same parameter
-      // This relies on intOptionValueId being present in countQueryValues at the same relative position.
-      if (!countBaseQuery.includes('WHERE')) {
-        countBaseQuery += ' WHERE ';
-      } else {
-        countBaseQuery += ' AND ';
-      }
-      countBaseQuery += `pvov_filter_count.product_option_value_id = $${paramIndex}`;
-      // Note: queryValues (and thus countQueryValues) will have intOptionValueId at the position $paramIndex refers to.
+      queryParams.push(intOptionValueId);
       paramIndex++;
     } else {
-      console.warn(`Invalid optionValueId encountered: ${optionValueId}. Skipping filter.`);
+      console.warn(`Invalid optionValueId encountered in _buildProductFilterConditions: ${optionValueId}. Skipping filter.`);
     }
   }
 
   if (status && status !== 'all') {
     whereClauses.push(`p.product_status = $${paramIndex}`);
-    queryValues.push(status);
+    queryParams.push(status);
     paramIndex++;
   }
 
@@ -234,106 +192,162 @@ async function getAllProducts({
     }
   }
 
+  const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-  if (whereClauses.length > 0) {
-    const whereString = " WHERE " + whereClauses.join(" AND ");
-    baseSelect += whereString;
-    // For countBaseQuery, we need to apply only those whereClauses that DO NOT involve pvov_filter
-    // because the pvov_filter_count condition was added manually above.
-    // Or, more simply, build whereString without the optionValueId filter for count if it was handled separately.
-    // Let's rebuild whereString for count query if optionValueId was present.
-    if (optionValueId && !isNaN(parseInt(optionValueId,10))) {
-        const countWhereClauses = whereClauses.filter(c => !c.startsWith('pvov_filter.')); // Exclude optionValueId filter
-        if (countWhereClauses.length > 0) {
-             // countBaseQuery already has its optionValueId filter if needed
-            countBaseQuery += (countBaseQuery.includes('WHERE') ? ' AND ' : ' WHERE ') + countWhereClauses.join(" AND ");
-        }
-        // Add the optionValueId filter to count query if it's not already (it was in original code)
-        if (!countBaseQuery.includes('pvov_filter_count.product_option_value_id')) {
-           const optValParamIndex = queryValues.indexOf(parseInt(optionValueId,10)) + 1; // find its param index
-           if (optValParamIndex > 0) {
-             countBaseQuery += (countBaseQuery.includes('WHERE') ? ' AND ' : ' WHERE ') + `pvov_filter_count.product_option_value_id = $${optValParamIndex}`;
-           }
-        }
-    } else { // No optionValueId, or it was invalid, so all whereClauses apply to count
-        countBaseQuery += whereString;
-    }
-  }
+  // For count query, some filters might need different aliases (e.g., pvov_filter_count)
+  // This helper will produce whereClauses and queryParams. The main getAllProducts
+  // will need to adapt them for the count query if aliases differ.
+  // For now, assuming aliases are consistent or handled by how count query is built.
+  // If pvov_filter.product_option_value_id was added, a similar one for pvov_filter_count
+  // needs to be in the count query's WHERE string.
 
-  // Group by for main query if not using DISTINCT ON or if other aggregations are added
-  // For DISTINCT ON (p.id) to work, p.id must be the first item in ORDER BY
-  // If using array_agg, GROUP BY is necessary.
-  const groupByColumns = `${productColumns}, c.name, s.name, tc.name, pes.effective_stock_quantity, pes.is_low_stock`; // Added tc.name
-  baseSelect += ` GROUP BY ${groupByColumns} `;
-  if (include_total_stock) { // Already covered by pes.effective_stock_quantity
-      // baseSelect += `, total_stock_display`; // No, total_stock_display is from pes
-  }
+  return { whereString, queryParams, finalParamIndex: paramIndex };
+}
 
-
-  let orderByClause = "";
+function _buildProductSortLogic(options = {}) {
+  const { sortBy, sort_order = 'ASC', optionValueId } = options;
   const sortOrderSql = (sort_order && sort_order.toUpperCase() === 'DESC') ? 'DESC' : 'ASC';
 
   const allowedSorts = {
     'price': `p.price ${sortOrderSql} NULLS LAST`,
     'name': `p.name ${sortOrderSql}`,
     'created_at': `p.created_at ${sortOrderSql}`,
-    'stock': `pes.effective_stock_quantity ${sortOrderSql} NULLS LAST`, // Sort by effective stock
-    // Add more as needed, e.g., 'status', 'sku'
+    'stock': `pes.effective_stock_quantity ${sortOrderSql} NULLS LAST`,
     'product_status': `p.product_status ${sortOrderSql}`,
     'sku': `p.sku ${sortOrderSql}`
   };
 
+  let orderByClause = "";
   if (optionValueId) { // When DISTINCT ON (p.id) is used for optionValueId filter
-    orderByClause = ` ORDER BY p.id ${sortOrderSql} `; // p.id must be first
-    if (sortBy && allowedSorts[sortBy]) {
+    orderByClause = `ORDER BY p.id ${sortOrderSql}`; // p.id must be first
+    if (sortBy && allowedSorts[sortBy] && sortBy !== 'id') { // Do not duplicate p.id sort
         orderByClause += `, ${allowedSorts[sortBy]}`;
-    } else { // Default secondary sort if sortBy is not valid or not 'p.id'
+    } else if (!sortBy || sortBy === 'id') {
+        // Default secondary sort if sortBy is not valid, not provided, or is 'id'
         orderByClause += `, p.created_at ${sortOrderSql}`;
     }
   } else if (sortBy && allowedSorts[sortBy]) {
-    orderByClause = ` ORDER BY ${allowedSorts[sortBy]} `;
+    orderByClause = `ORDER BY ${allowedSorts[sortBy]}`;
   } else {
-    orderByClause = ` ORDER BY p.created_at ${sortOrderSql} `; // Default sort
+    orderByClause = `ORDER BY p.created_at ${sortOrderSql}`; // Default sort
   }
-  baseSelect += orderByClause;
+  return orderByClause;
+}
 
+
+// --- Public Service Methods ---
+
+async function getAllProducts(options = {}) {
+  const {
+    page = 1,
+    limit = 10,
+    // Other options will be passed directly to helpers
+    ...filterAndSortOptions
+  } = options;
+
+  // 1. Build CTEs
+  const stockCteString = _buildProductStockCTEString();
+  const withClause = `WITH ${stockCteString}`;
+
+  // 2. Build Base Query Parts (SELECT, FROM, GROUP BY for data; FROM for count)
+  const baseQueryParts = _buildProductBaseQueryParts(filterAndSortOptions);
+
+  // 3. Build Filter Conditions
+  // startingParamIndex = 1 because queryParams are fresh for this execution.
+  const filterConditions = _buildProductFilterConditions(filterAndSortOptions, 1);
+
+  // 4. Build Sort Logic
+  const orderByClause = _buildProductSortLogic(filterAndSortOptions);
+
+  // 5. Construct Data Query
+  const selectPrefix = filterAndSortOptions.optionValueId ? `SELECT ${baseQueryParts.selectDistinctOn}` : "SELECT";
+  let dataQueryString = `
+    ${withClause}
+    ${selectPrefix} ${baseQueryParts.selectColumns}
+    ${baseQueryParts.fromClause}
+    ${filterConditions.whereString}
+    ${baseQueryParts.groupByClause}
+    ${orderByClause}
+  `;
 
   const numPage = Number(page) || 1;
   const numLimit = Number(limit) || 10;
   const offset = (numPage - 1) * numLimit;
 
-  baseSelect += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1} `;
+  dataQueryString += ` LIMIT $${filterConditions.finalParamIndex} OFFSET $${filterConditions.finalParamIndex + 1}`;
+  const finalDataParams = [...filterConditions.queryParams, numLimit, offset];
 
-  // Create a separate copy of queryValues for count to avoid mutation issues with limit/offset
-  const countQueryValues = [...queryValues]; // queryValues for count doesn't include limit/offset
-  const finalQueryValuesForSelect = [...queryValues, numLimit, offset];
+  // 6. Construct Count Query
+  //    The count query needs its own WHERE string if aliases differ significantly,
+  //    especially for optionValueId filtering.
+  //    _buildProductFilterConditions provides a generic whereString.
+  //    We need to ensure that if `optionValueId` is used, the `pvov_filter_count` alias is used in the WHERE.
+  //    For simplicity here, we'll reuse the whereString from filterConditions,
+  //    assuming that if `optionValueId` is present, the main `getAllProducts` will ensure
+  //    the `countFromClause` from `_buildProductBaseQueryParts` already has the correct joins
+  //    and the `whereString` from `_buildProductFilterConditions` will use the correct alias if it's specific.
+  //    This might need refinement if aliases are an issue.
+  //    The original code manually adjusted the count query's WHERE for optionValueId.
+  //    Let's try to make _buildProductFilterConditions more flexible or add a helper for count's WHERE.
 
-  // console.log('Updated Executing product list query:', baseSelect);
-  // console.log('Updated With params:', finalQueryValuesForSelect);
-  // console.log('Executing count query:', countBaseQuery);
-  // console.log('With params:', countQueryValues);
+  // For now, let's assume a simplified count WHERE clause generation for this refactor step.
+  // A more robust solution would pass a context to _buildProductFilterConditions (e.g., 'data' or 'count')
+  // or have a separate helper for the count query's WHERE clause if aliases for joins differ.
+  const countFilterConditions = _buildProductFilterConditions({ ...filterAndSortOptions, optionValueIdAlias: 'pvov_filter_count' }, 1);
 
-  const productsResult = await db.query(baseSelect, finalQueryValuesForSelect);
-  const countResult = await db.query(countBaseQuery, countQueryValues);
 
-  const totalProducts = parseInt(countResult.rows[0].total_count);
+  let countQueryString = `
+    ${withClause}
+    SELECT COUNT(DISTINCT p.id) as total_count
+    ${baseQueryParts.countFromClause}
+    ${countFilterConditions.whereString}
+  `;
+  // If optionValueId is used, the join for it is in countFromClause.
+  // The whereString from countFilterConditions should use the pvov_filter_count alias.
+  // This is a slight simplification; the original code had more complex logic for count query's WHERE.
+  // We will need to ensure `_buildProductFilterConditions` can handle alias changes or the main method adapts.
 
-  // The `products` field name is what the admin route expects in its response object's `data` field.
-  // The pagination field names also match what the admin route expects.
-  return {
-    products: productsResult.rows,
-    totalProducts: totalProducts, // For admin route to construct its pagination.currentPage, etc.
-    page: numPage,
-    limit: numLimit,
-    totalPages: Math.ceil(totalProducts / numLimit)
-    // Old structure for reference (frontend/routes/products.js may use this):
-    // pagination: {
-    //   total_products: totalProducts,
-    //   current_page: numPage,
-    //   limit: numLimit,
-    //   total_pages: Math.ceil(totalProducts / numLimit)
-    // }
-  };
+  // For now, using the same filterConditions for count as for data, assuming aliases are compatible or handled by join structure.
+  // This part might need more careful handling of aliases if count query joins differ significantly.
+  // The original complex logic for count query WHERE clause construction has been simplified here.
+  // A more robust solution would involve a dedicated filter builder for the count query
+  // or making _buildProductFilterConditions context-aware (data vs count).
+
+  // Re-evaluating the count query WHERE clause based on original logic:
+  let countWhereString = filterConditions.whereString;
+  if (filterAndSortOptions.optionValueId) {
+      // The original code had specific handling for optionValueId in count.
+      // Let's ensure the count query's WHERE clause correctly uses the count-specific alias if pvov_filter is used.
+      // The `_buildProductBaseQueryParts` already provides a `countFromClause` with `pv_filter_count` and `pvov_filter_count`.
+      // The `_buildProductFilterConditions` would need to be aware of this alias.
+      // For now, let's make a simple adaptation:
+      countWhereString = filterConditions.whereString.replace('pvov_filter.product_option_value_id', 'pvov_filter_count.product_option_value_id');
+  }
+   countQueryString = `
+    ${withClause}
+    SELECT COUNT(DISTINCT p.id) as total_count
+    ${baseQueryParts.countFromClause}
+    ${countWhereString}
+  `;
+
+
+  try {
+    const productsResult = await db.query(dataQueryString, finalDataParams);
+    const countResult = await db.query(countQueryString, countFilterConditions.queryParams); // Use params from count-specific filter build
+
+    const totalProducts = parseInt(countResult.rows[0].total_count);
+
+    return {
+      products: productsResult.rows,
+      totalProducts: totalProducts,
+      page: numPage,
+      limit: numLimit,
+      totalPages: Math.ceil(totalProducts / numLimit)
+    };
+  } catch (error) {
+    console.error("Error in getAllProducts service:", error);
+    throw new AppError("Failed to retrieve products.", 500, "PRODUCT_FETCH_ALL_FAILED", { originalError: error.message });
+  }
 }
 
 async function getProductById(productId) {
