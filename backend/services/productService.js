@@ -2031,6 +2031,135 @@ async function deleteProductVariant(variantId) {
 }
 
 
+/**
+ * Deletes a product and all its associated data including variants, images, tags, etc.
+ * Performs dependency checks for orders and purchase orders.
+ * Handles S3 image deletions after successful database transaction.
+ * @param {number} productId - The ID of the product to delete.
+ * @returns {Promise<object>} The data of the product that was deleted.
+ * @throws {NotFoundError} If the product is not found.
+ * @throws {BadRequestError} If the product is linked to orders or purchase orders.
+ * @throws {AppError} If any other database or S3 operation fails critically.
+ */
+async function deleteProduct(productId) {
+  const client = await db.pool.connect();
+  const s3KeysToDelete = new Set(); // Use a Set to avoid duplicate keys
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. Product Existence & Locking (also get image_url and has_variants)
+    const productResult = await client.query('SELECT id, image_url, has_variants FROM products WHERE id = $1 FOR UPDATE', [productId]);
+    if (productResult.rows.length === 0) {
+      await client.query('ROLLBACK'); // No need to proceed if product not found
+      throw new NotFoundError(`Product with ID ${productId} not found.`);
+    }
+    const product = productResult.rows[0];
+    if (product.image_url) {
+      const key = getS3KeyFromUrl(product.image_url);
+      if (key) s3KeysToDelete.add(key);
+    }
+
+    // 2. Dependency Checks
+    const orderItemCheck = await client.query('SELECT 1 FROM order_items WHERE product_id = $1 LIMIT 1', [productId]);
+    if (orderItemCheck.rows.length > 0) {
+      await client.query('ROLLBACK');
+      throw new BadRequestError(`Product ID ${productId} cannot be deleted: it is part of existing orders.`);
+    }
+
+    const poItemCheck = await client.query('SELECT 1 FROM purchase_order_items WHERE product_id = $1 LIMIT 1', [productId]);
+    if (poItemCheck.rows.length > 0) {
+      await client.query('ROLLBACK');
+      throw new BadRequestError(`Product ID ${productId} cannot be deleted: it is part of existing purchase orders.`);
+    }
+
+    // 3. Collect S3 keys from gallery images
+    const galleryImagesResult = await client.query('SELECT image_url FROM product_images WHERE product_id = $1', [productId]);
+    galleryImagesResult.rows.forEach(img => {
+      if (img.image_url) {
+        const key = getS3KeyFromUrl(img.image_url);
+        if (key) s3KeysToDelete.add(key);
+      }
+    });
+
+    // 4. Handle Variants (if any)
+    if (product.has_variants) {
+      const variantsResult = await client.query('SELECT id, image_url FROM product_variants WHERE product_id = $1', [productId]);
+      for (const variant of variantsResult.rows) {
+        if (variant.image_url) {
+          const key = getS3KeyFromUrl(variant.image_url);
+          if (key) s3KeysToDelete.add(key);
+        }
+        // Delete inventory batches for this variant
+        await client.query('DELETE FROM inventory_batches WHERE variant_id = $1', [variant.id]);
+        // product_variant_option_values will be deleted by cascade when product_variants are deleted
+      }
+      // Delete all variants for the product
+      await client.query('DELETE FROM product_variants WHERE product_id = $1', [productId]);
+    } else {
+      // Delete inventory batches for the base product (no variants)
+      await client.query('DELETE FROM inventory_batches WHERE product_id = $1 AND variant_id IS NULL', [productId]);
+    }
+
+    // 5. Delete other associated data
+    await client.query('DELETE FROM product_images WHERE product_id = $1', [productId]);
+    await client.query('DELETE FROM product_tags WHERE product_id = $1', [productId]);
+
+    // Must delete from product_assigned_option_specific_values before product_assigned_options
+    await client.query(`
+      DELETE FROM product_assigned_option_specific_values
+      WHERE product_assigned_option_id IN (SELECT id FROM product_assigned_options WHERE product_id = $1)
+    `, [productId]);
+    await client.query('DELETE FROM product_assigned_options WHERE product_id = $1', [productId]);
+
+    await client.query('DELETE FROM product_cost_history WHERE product_id = $1', [productId]);
+    await client.query('DELETE FROM product_reviews WHERE product_id = $1', [productId]);
+
+    // 6. Delete Main Product Record
+    const deletedProductResult = await client.query('DELETE FROM products WHERE id = $1 RETURNING *', [productId]);
+    // This should always return a row due to the FOR UPDATE select earlier, but good to have.
+    if (deletedProductResult.rowCount === 0) {
+        // This implies a concurrent deletion or an issue, rollback.
+        await client.query('ROLLBACK');
+        throw new AppError(`Product with ID ${productId} was unexpectedly not found during final delete operation.`, 500, 'PRODUCT_DELETE_RACE_CONDITION');
+    }
+    const deletedProductData = deletedProductResult.rows[0];
+
+    // 7. Commit Transaction
+    await client.query('COMMIT');
+
+    // 8. Delete S3 Objects (After Successful Commit)
+    if (s3KeysToDelete.size > 0 && isS3Configured()) {
+      console.log(`Attempting to delete ${s3KeysToDelete.size} S3 objects for product ID ${productId}.`);
+      for (const key of s3KeysToDelete) {
+        try {
+          await deleteFileFromS3(key);
+          console.log(`Successfully deleted S3 object: ${key}`);
+        } catch (s3Error) {
+          // Log S3 deletion errors but do not fail the overall operation at this point
+          console.error(`Failed to delete S3 object ${key} for product ID ${productId}:`, s3Error.message);
+        }
+      }
+    }
+
+    return deletedProductData;
+
+  } catch (error) {
+    // Ensure rollback if not already done
+    if (client && client.activeQuery === null && !client._ending && client._connected ) { // Check if client is in a state where rollback is possible
+        try { await client.query('ROLLBACK'); } catch (rbErr) { console.error('Rollback error in deleteProduct catch block:', rbErr); }
+    }
+    if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof AppError) {
+      throw error; // Re-throw known application errors
+    }
+    console.error(`Error in productService.deleteProduct for ID ${productId}:`, error);
+    throw new AppError(`Failed to delete product ID ${productId}.`, 500, 'PRODUCT_DELETE_FAILED', { originalError: error.message });
+  } finally {
+    if (client) client.release();
+  }
+}
+
+
 module.exports = {
   getAllProducts,
   getProductById,
@@ -2048,4 +2177,5 @@ module.exports = {
   createProductVariant,
   updateProductVariant,
   deleteProductVariant,
+  deleteProduct,
 };

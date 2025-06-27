@@ -550,4 +550,47 @@ router.get(
   }
 );
 
+// DELETE /api/admin/products/:id - Delete a product
+router.delete(
+  '/:id',
+  isAuthenticated,
+  checkPermission('products:delete'), // Specific permission for deleting products
+  [
+    param('id').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt()
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id: productId } = req.params; // Validated productId
+
+    try {
+      const deletedProduct = await productService.deleteProduct(productId);
+      // Service method handles NotFoundError, BadRequestError (if dependencies exist), and internal transaction.
+
+      auditLogService.recordAuditEvent(
+        'PRODUCT_DELETE_SUCCESS',
+        { userId: req.user.userId, userEmail: req.user.email },
+        { resourceType: 'PRODUCT', resourceId: productId }, // Log original ID
+        { deletedProductData: { id: deletedProduct.id, name: deletedProduct.name, sku: deletedProduct.sku } }, // Log some identifying info
+        req
+      ).catch(err => console.error(`Audit log failed for PRODUCT_DELETE_SUCCESS (ID: ${productId}):`, err));
+
+      res.status(200).json({
+        message: `Product "${deletedProduct.name}" (ID: ${productId}) and its associated data deleted successfully.`,
+        product: deletedProduct
+      });
+      // Or, for a more conventional RESTful DELETE: res.status(204).send();
+      // Returning the deleted object can be useful for the client.
+
+    } catch (error) {
+      // Errors from productService (NotFoundError, BadRequestError, AppError) will be passed to the global handler.
+      next(error);
+    }
+  }
+);
+
+
 module.exports = router;
