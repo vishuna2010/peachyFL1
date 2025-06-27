@@ -5,6 +5,7 @@ const auditLogService = require('../services/auditLogService');
 const db = require('../db'); // For 2FA direct DB check
 const { authenticator } = require('otplib');
 const rateLimit = require('express-rate-limit');
+const { body, validationResult } = require('express-validator'); // Added for /verify-email route
 
 // Rate limiter for login attempts
 const loginLimiter = rateLimit({
