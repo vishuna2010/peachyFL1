@@ -1248,6 +1248,101 @@ async function getProductInventoryBatches(productId, options = {}) {
 }
 
 
+/**
+ * Retrieves a paginated list of cost history for a specific product.
+ * @param {number} productId - The ID of the product.
+ * @param {object} options - Filtering and pagination options.
+ * @param {number} [options.variant_id] - Optional variant ID.
+ * @param {number} [options.supplier_id] - Optional supplier ID.
+ * @param {number} [options.page=1]
+ * @param {number} [options.limit=10]
+ * @returns {Promise<object>} An object containing { data: costHistory, pagination: {...} }.
+ * @throws {NotFoundError} If the product is not found.
+ * @throws {AppError} If database operation fails.
+ */
+async function getProductCostHistory(productId, options = {}) {
+  const {
+    variant_id,
+    supplier_id,
+    page = 1,
+    limit = 10
+  } = options;
+
+  const offset = (page - 1) * limit;
+  const queryParams = [productId];
+  let paramIndex = 1; // Starts at 1 for productId
+
+  // First, check if product exists
+  const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+  if (productCheck.rows.length === 0) {
+    throw new NotFoundError(`Product with ID ${productId} not found.`);
+  }
+
+  let whereClauses = ['pch.product_id = $1'];
+  if (variant_id) {
+    paramIndex++;
+    queryParams.push(variant_id);
+    whereClauses.push(`pch.variant_id = $${paramIndex}`);
+  }
+  if (supplier_id) {
+    paramIndex++;
+    queryParams.push(supplier_id);
+    whereClauses.push(`pch.supplier_id = $${paramIndex}`);
+  }
+  const whereString = whereClauses.join(' AND ');
+
+  const dataQuery = `
+    SELECT pch.id, pch.product_id, p.name as product_name,
+           pch.variant_id, pv.sku as variant_sku,
+           pch.supplier_id, s.name as supplier_name,
+           pch.currency_code, pch.cost_price, pch.quantity_received,
+           pch.purchase_order_item_id, poi.quantity_ordered as po_item_quantity_ordered,
+           po.id as purchase_order_id,
+           pch.effective_date, pch.created_at
+    FROM product_cost_history pch
+    JOIN products p ON pch.product_id = p.id
+    LEFT JOIN product_variants pv ON pch.variant_id = pv.id
+    LEFT JOIN suppliers s ON pch.supplier_id = s.id
+    LEFT JOIN purchase_order_items poi ON pch.purchase_order_item_id = poi.id
+    LEFT JOIN purchase_orders po ON poi.purchase_order_id = po.id
+    WHERE ${whereString}
+    ORDER BY pch.effective_date DESC, pch.id DESC
+    LIMIT $${paramIndex + 1} OFFSET $${paramIndex + 2};
+  `;
+  const dataParams = [...queryParams, limit, offset];
+
+  const countQuery = `
+    SELECT COUNT(*) as total_count
+    FROM product_cost_history pch
+    WHERE ${whereString};
+  `;
+  // Count query uses only filter params (productId, variant_id, supplier_id if present)
+  const countParams = queryParams.slice(0, paramIndex);
+
+  try {
+    const dataResult = await db.query(dataQuery, dataParams);
+    const countResult = await db.query(countQuery, countParams);
+
+    const totalRecords = parseInt(countResult.rows[0].total_count);
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    return {
+      data: dataResult.rows,
+      pagination: {
+        total: totalRecords,
+        page,
+        limit,
+        totalPages,
+        // sort_by is fixed in this query to 'effective_date DESC, id DESC'
+      }
+    };
+  } catch (error) {
+    console.error(`Error in productService.getProductCostHistory for product ID ${productId}:`, error);
+    throw new AppError('Failed to retrieve product cost history.', 500, 'PRODUCT_COST_HISTORY_FETCH_FAILED');
+  }
+}
+
+
 module.exports = {
   getAllProducts,
   getProductById,
@@ -1257,4 +1352,5 @@ module.exports = {
   updateProductStock,
   getAllStockLevels,
   getProductInventoryBatches,
+  getProductCostHistory,
 };

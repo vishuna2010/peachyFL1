@@ -728,79 +728,36 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { productId } = req.params; // Now an integer
-    const { variant_id, supplier_id, page, limit } = req.query; // variant_id, supplier_id, page, limit are integers or undefined
-    const offset = (page - 1) * limit;
+    const { productId } = req.params; // Validated
+    // All query params are validated and have defaults from express-validator
+    const options = {
+      variant_id: req.query.variant_id,
+      supplier_id: req.query.supplier_id,
+      page: req.query.page,
+      limit: req.query.limit
+    };
 
     try {
-      // Check if product exists
-      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
-      if (productCheck.rows.length === 0) {
-        throw new NotFoundError(`Product with ID ${productId} not found.`);
-      }
-
-      const queryParams = [];
-      let whereClauses = ['pch.product_id = $1'];
-      queryParams.push(productId);
-      let currentParamIndex = 1; // For $1, $2 etc.
-
-      if (variant_id) {
-        currentParamIndex++;
-        queryParams.push(variant_id);
-        whereClauses.push(`pch.variant_id = $${currentParamIndex}`);
-      }
-      if (supplier_id) {
-        currentParamIndex++;
-        queryParams.push(supplier_id);
-        whereClauses.push(`pch.supplier_id = $${currentParamIndex}`);
-      }
-
-      const whereString = whereClauses.join(' AND ');
-
-      const dataQuery = `
-        SELECT pch.id, pch.product_id, p.name as product_name,
-               pch.variant_id, pv.sku as variant_sku,
-               pch.supplier_id, s.name as supplier_name,
-               pch.currency_code, pch.cost_price, pch.quantity_received,
-               pch.purchase_order_item_id, poi.quantity_ordered as po_item_quantity_ordered,
-               po.id as purchase_order_id,
-               pch.effective_date, pch.created_at
-        FROM product_cost_history pch
-        JOIN products p ON pch.product_id = p.id
-        LEFT JOIN product_variants pv ON pch.variant_id = pv.id
-        LEFT JOIN suppliers s ON pch.supplier_id = s.id
-        LEFT JOIN purchase_order_items poi ON pch.purchase_order_item_id = poi.id
-        LEFT JOIN purchase_orders po ON poi.purchase_order_id = po.id
-        WHERE ${whereString}
-        ORDER BY pch.effective_date DESC, pch.id DESC
-        LIMIT $${currentParamIndex + 1} OFFSET $${currentParamIndex + 2};
-      `;
-      const dataParams = [...queryParams, limit, offset];
-
-      const countQuery = `SELECT COUNT(*) FROM product_cost_history pch WHERE ${whereString};`;
-
-      const dataResult = await db.query(dataQuery, dataParams);
-      const countResult = await db.query(countQuery, queryParams); // Count query uses only filter params
-
-      const totalRecords = parseInt(countResult.rows[0].count);
-      const totalPages = Math.ceil(totalRecords / limit);
+      const result = await productService.getProductCostHistory(productId, options);
+      // The service returns an object like { data: costHistory, pagination: {...} }
+      // which matches the expected response structure.
+      // The pagination from service does not include hasNextPage/hasPrevPage, but that's fine.
+      // The route can add it if needed, or frontend can derive it.
+      // For consistency with other routes, let's add hasNextPage/hasPrevPage here.
+      const { data, pagination } = result;
+      const responsePagination = {
+        ...pagination,
+        hasNextPage: pagination.page < pagination.totalPages,
+        hasPrevPage: pagination.page > 1
+      };
 
       res.status(200).json({
-        data: dataResult.rows,
-        pagination: {
-          total: totalRecords,
-          page,
-          limit,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPrevPage: page > 1
-        }
+        data: data,
+        pagination: responsePagination
       });
 
     } catch (error) {
-      if (error instanceof NotFoundError) {
-        return res.status(404).json({ message: error.message });
-      }
+      // Errors from productService (NotFoundError, AppError) are passed to the global handler.
       next(error);
     }
   }
