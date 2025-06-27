@@ -1343,6 +1343,115 @@ async function getProductCostHistory(productId, options = {}) {
 }
 
 
+const config = require('../config'); // Import config for URLs and currency
+const taxService = require('../services/taxService'); // Assumed path, adjust if necessary
+
+/**
+ * Retrieves and formats data suitable for generating product labels.
+ * Can return data for a single product/variant or all variants of a product.
+ * @param {number} productId - The ID of the product.
+ * @param {number} [requestedVariantId=null] - Optional specific variant ID for a single label.
+ * @param {boolean} [forAllVariants=false] - If true, returns label data for all variants (or base product if no variants).
+ * @returns {Promise<object|Array<object>>} A single labelData object or an array of them.
+ * @throws {NotFoundError} If the product or specified variant is not found.
+ * @throws {AppError} If any other error occurs.
+ */
+async function getFormattedLabelData(productId, requestedVariantId = null, forAllVariants = false) {
+  const product = await this.getProductById(productId); // `this` refers to productService instance if methods are part of class, else direct call. Assuming direct call for now.
+                                                        // Corrected: getProductById is a standalone function in this module.
+
+  const
+
+STORE_CURRENCY_CODE = config.company.currencyCode || config.currency.defaultStoreCurrency || 'USD'; // Example: Get from config
+  const
+
+STORE_CURRENCY_SYMBOL = config.company.currencySymbol || config.currency.defaultStoreSymbol || '$'; // Example: Get from config
+  const PRODUCT_PAGE_BASE_URL = config.frontendUrlBase || 'http://localhost:3001';
+
+
+  const labelsData = [];
+
+  const processItemForLabel = async (item, isVariant) => {
+    const baseSellingPrice = parseFloat(isVariant ? item.final_price : product.price);
+    let taxDetails = { taxAmount: 0, priceWithTax: baseSellingPrice, appliedRates: [] };
+
+    if (product.tax_class_id) {
+      try {
+        taxDetails = await taxService.calculatePriceWithAppliedTaxes(baseSellingPrice, product.tax_class_id);
+      } catch (taxError) {
+        console.error(`Error calculating tax for item (Product: ${product.id}, Variant: ${isVariant ? item.id : 'N/A'}):`, taxError.message);
+        // Proceed with 0 tax if calculation fails, or rethrow/handle as critical
+      }
+    }
+
+    let full_display_name = product.name;
+    let itemSku = product.sku;
+    let itemSpecificIdPart = product.id; // For QR code URLs if no variant
+    let variantIdForQr = null;
+
+    if (isVariant) {
+      let suffixParts = [];
+      if (product.available_options && item.option_value_ids) {
+        for (const valId of item.option_value_ids) {
+          for (const opt of product.available_options) {
+            const foundValue = opt.values.find(v => v.value_id === valId);
+            if (foundValue) {
+              suffixParts.push(`${opt.option_name}: ${foundValue.value_name}`);
+              break;
+            }
+          }
+        }
+      }
+      const constructed_suffix = suffixParts.length > 0 ? ` - ${suffixParts.join(', ')}` : (item.sku ? ` - ${item.sku}` : ` - Variant ${item.id}`);
+      full_display_name += constructed_suffix;
+      itemSku = item.sku || product.sku;
+      itemSpecificIdPart = item.id;
+      variantIdForQr = item.id;
+    }
+
+    const barcodeValue = itemSku || product.id.toString() + (isVariant ? `-${item.id}` : '');
+
+    return {
+      product_id: product.id,
+      variant_id: isVariant ? item.id : null,
+      product_name: product.name, // Base product name
+      variant_name_suffix: isVariant ? full_display_name.substring(product.name.length) : null,
+      full_display_name: full_display_name,
+      sku: itemSku,
+      barcode_value: barcodeValue,
+      selling_price: baseSellingPrice.toFixed(2), // Pre-tax price
+      price_incl_tax: parseFloat(taxDetails.priceWithTax).toFixed(2), // Price with tax
+      tax_amount: parseFloat(taxDetails.taxAmount).toFixed(2),
+      applied_tax_rates: taxDetails.appliedRates,
+      currency_code: STORE_CURRENCY_CODE,
+      currency_symbol: STORE_CURRENCY_SYMBOL,
+      qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}${variantIdForQr ? `?variantId=${variantIdForQr}` : ''}`,
+      qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}${variantIdForQr ? `&variantId=${variantIdForQr}` : ''}&quantity=1`,
+      qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}${variantIdForQr ? `&ref_variant=${variantIdForQr}` : ''}`
+    };
+  };
+
+  if (forAllVariants) {
+    if (product.has_variants && product.variants && product.variants.length > 0) {
+      for (const variant of product.variants) {
+        labelsData.push(await processItemForLabel(variant, true));
+      }
+    } else { // Product without variants, or variants array empty
+      labelsData.push(await processItemForLabel(product, false));
+    }
+    return labelsData;
+  } else if (requestedVariantId && product.has_variants) {
+    const variant = product.variants.find(v => v.id === requestedVariantId);
+    if (!variant) {
+      throw new NotFoundError(`Variant with ID ${requestedVariantId} not found for product ${productId}.`);
+    }
+    return processItemForLabel(variant, true);
+  } else { // Single label for base product (either no variants, or no specific variant requested for a variant product)
+    return processItemForLabel(product, false);
+  }
+}
+
+
 module.exports = {
   getAllProducts,
   getProductById,
@@ -1353,4 +1462,5 @@ module.exports = {
   getAllStockLevels,
   getProductInventoryBatches,
   getProductCostHistory,
+  getFormattedLabelData,
 };

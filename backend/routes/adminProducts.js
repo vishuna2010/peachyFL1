@@ -422,118 +422,19 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { id: productId } = req.params; // productId is now an integer
-    const { variant_id: requestedVariantId, count } = req.query; // count is available here
-
-    // Placeholders for currency and base URL - ensure consistency with /label-data or use a config service
-    // const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD'; // Defined inside try
-    // const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$'; // Defined inside try
-    // const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com'; // Defined inside try
+    const { id: productId } = req.params; // Renamed from 'id' to 'productId' for clarity with service
+    const { variant_id: requestedVariantId, count } = req.query;
 
     try {
-      const product = await productService.getProductById(productId); // productId is from req.params
-      let labelDataItem = null;
+      // Call the service to get the single labelDataItem
+      // forAllVariants is false by default in getFormattedLabelData
+      const labelDataItem = await productService.getFormattedLabelData(productId, requestedVariantId);
 
-      // These constants should be defined within the try block or be accessible in this scope
-      const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD';
-      const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$';
-      const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com';
-      // count is from req.query, requestedVariantId is from req.query.variant_id
-
-      if (product.has_variants && requestedVariantId) {
-        // Case 1: Product has variants, AND a specific variant_id was requested.
-        const variant = product.variants.find(v => v.id === requestedVariantId);
-        if (!variant) {
-          return res.status(404).json({ message: `Variant with ID ${requestedVariantId} not found for product ${productId}.` });
-        }
-
-        // Construct labelDataItem for the specific variant
-        let suffixParts = [];
-        if (product.available_options && variant.option_value_ids) {
-          for (const valId of variant.option_value_ids) {
-            for (const opt of product.available_options) {
-              const foundValue = opt.values.find(v => v.value_id === valId);
-              if (foundValue) {
-                suffixParts.push(`${opt.option_name}: ${foundValue.value_name}`);
-                break;
-              }
-            }
-          }
-        }
-        const constructed_suffix = suffixParts.length > 0 ? ` - ${suffixParts.join(', ')}` : '';
-
-        labelDataItem = {
-          product_id: product.id,
-          variant_id: variant.id,
-          product_name: product.name,
-          variant_name_suffix: constructed_suffix,
-          full_display_name: `${product.name}${constructed_suffix}`,
-          sku: variant.sku || product.sku,
-          barcode_value: variant.sku || product.sku || `${product.id}-${variant.id}`,
-          selling_price: parseFloat(variant.final_price).toFixed(2),
-          currency_code: STORE_CURRENCY_CODE,
-          currency_symbol: STORE_CURRENCY_SYMBOL,
-          qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`
-        };
-
-        let taxDetailsVariant = { priceWithTax: parseFloat(variant.final_price), taxAmount: 0, appliedRates: [] };
-        if (product.tax_class_id) {
-          try {
-            taxDetailsVariant = await taxService.calculatePriceWithAppliedTaxes(parseFloat(variant.final_price), product.tax_class_id);
-          } catch (taxError) {
-            console.error(`Error calculating tax for variant ${variant.id}:`, taxError);
-            // Decide if you want to proceed without tax or throw error. For labels, proceeding without tax might be acceptable.
-          }
-        }
-        labelDataItem.price_incl_tax = parseFloat(taxDetailsVariant.priceWithTax).toFixed(2);
-        labelDataItem.tax_amount = parseFloat(taxDetailsVariant.taxAmount).toFixed(2);
-        // labelDataItem.selling_price should already be variant.final_price (base price for variant)
-
-      } else {
-        // Case 2: Handles multiple sub-cases:
-        //   a) Product has no variants (`!product.has_variants`).
-        //   b) Product has variants, but NO specific `requestedVariantId` was provided (default to base product).
-
-        // Sub-case check: If product does NOT have variants, but a `requestedVariantId` was still sent. This is an error.
-        if (!product.has_variants && requestedVariantId) {
-            return res.status(400).json({ message: `Product ID ${productId} does not have variants; variant_id parameter is not applicable.` });
-        }
-
-        // Proceed to construct labelDataItem for the base product for sub-cases 2a and 2b.
-        labelDataItem = {
-          product_id: product.id,
-          variant_id: null,
-          product_name: product.name,
-          variant_name_suffix: null,
-          full_display_name: product.name,
-          sku: product.sku,
-          barcode_value: product.sku || product.id.toString(),
-          selling_price: parseFloat(product.price).toFixed(2),
-          currency_code: STORE_CURRENCY_CODE,
-          currency_symbol: STORE_CURRENCY_SYMBOL,
-          qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`
-        };
-
-        let taxDetailsBase = { priceWithTax: parseFloat(product.price), taxAmount: 0, appliedRates: [] };
-        if (product.tax_class_id) {
-          try {
-            taxDetailsBase = await taxService.calculatePriceWithAppliedTaxes(parseFloat(product.price), product.tax_class_id);
-          } catch (taxError) {
-            console.error(`Error calculating tax for product ${product.id}:`, taxError);
-          }
-        }
-        labelDataItem.price_incl_tax = parseFloat(taxDetailsBase.priceWithTax).toFixed(2);
-        labelDataItem.tax_amount = parseFloat(taxDetailsBase.taxAmount).toFixed(2);
-        // labelDataItem.selling_price should already be product.price
+      if (!labelDataItem) { // Should be handled by NotFoundError in service, but as safeguard
+        return next(new Error("Could not determine data for label."));
       }
 
-      if (!labelDataItem) {
-        // This condition should ideally not be met if the logic above is exhaustive.
-        console.error(`[Critical] Label data item could not be constructed for product ${productId}, variant ${requestedVariantId}`);
-        return next(new Error("Could not determine data for label due to an unexpected server issue."));
-      }
-
-      const pdfBuffer = await generateProductLabelPdf(labelDataItem, count); // count is from req.query
+      const pdfBuffer = await generateProductLabelPdf(labelDataItem, count);
 
       res.setHeader('Content-Type', 'application/pdf');
       const safeSku = (labelDataItem.sku || `product_${labelDataItem.product_id}`).replace(/[^a-z0-9_.-]/gi, '_');
@@ -542,13 +443,8 @@ router.get(
       res.send(pdfBuffer);
 
     } catch (error) {
-      // Existing catch block
-      if (error instanceof NotFoundError) {
-        return res.status(404).json({ message: error.message });
-      }
-      // Log other errors for server-side inspection
-      console.error(`[Error in /:id/label for product ${productId}]:`, error);
-      next(error); // Pass to global error handler
+      // Errors from productService (NotFoundError, AppError) or generateProductLabelPdf will be passed to global handler.
+      next(error);
     }
   }
 );
@@ -612,99 +508,18 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { productId } = req.params;
-    const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com';
+    const { productId } = req.params; // Validated and toInt() by middleware
 
     try {
-      const product = await productService.getProductById(parseInt(productId));
-      // productService.getProductById should throw NotFoundError if product doesn't exist.
-      // product.tax_class_id should be available from getProductById
+      // Call the service to get label data.
+      // Pass forAllVariants = true to get data for base product or all its variants.
+      // requestedVariantId is null because this route is for the whole product (all its printable labels).
+      const labelsData = await productService.getFormattedLabelData(productId, null, true);
 
-      const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD';
-      const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$';
-
-      const labelsData = [];
-
-      if (product.has_variants && product.variants && product.variants.length > 0) {
-        for (const variant of product.variants) {
-          const baseSellingPrice = parseFloat(variant.final_price);
-          let taxDetails = { taxAmount: 0, priceWithTax: baseSellingPrice, appliedRates: [] };
-
-          if (product.tax_class_id) {
-            taxDetails = await taxService.calculatePriceWithAppliedTaxes(baseSellingPrice, product.tax_class_id);
-          }
-
-          let suffixParts = [];
-          if (product.available_options && variant.option_value_ids) {
-            for (const valId of variant.option_value_ids) {
-              for (const opt of product.available_options) {
-                const foundValue = opt.values.find(v => v.value_id === valId);
-                if (foundValue) {
-                  suffixParts.push(`${opt.option_name}: ${foundValue.value_name}`);
-                  break;
-                }
-              }
-            }
-          }
-          const constructed_suffix = suffixParts.length > 0 ? ` - ${suffixParts.join(', ')}` : '';
-          const variantSku = variant.sku || product.sku;
-
-          labelsData.push({
-            product_id: product.id,
-            variant_id: variant.id,
-            product_name: product.name,
-            variant_name_suffix: constructed_suffix,
-            full_display_name: `${product.name}${constructed_suffix}`,
-            sku: variantSku,
-            barcode_value: variantSku, // Prioritize variant SKU, then product SKU
-            selling_price: baseSellingPrice.toFixed(2), // Pre-tax price
-            vat_price: parseFloat(taxDetails.priceWithTax).toFixed(2), // Price with tax
-            base_price_for_tax_calc: baseSellingPrice.toFixed(2),
-            tax_amount: parseFloat(taxDetails.taxAmount).toFixed(2),
-            applied_tax_rates: taxDetails.appliedRates,
-            currency_code: STORE_CURRENCY_CODE,
-            currency_symbol: STORE_CURRENCY_SYMBOL,
-            qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`,
-            qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&variantId=${variant.id}&quantity=1`,
-            qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}&ref_variant=${variant.id}`
-          });
-        }
-      } else { // Product without variants
-        const baseSellingPrice = parseFloat(product.price);
-        let taxDetails = { taxAmount: 0, priceWithTax: baseSellingPrice, appliedRates: [] };
-
-        if (product.tax_class_id) {
-          taxDetails = await taxService.calculatePriceWithAppliedTaxes(baseSellingPrice, product.tax_class_id);
-        }
-        const productSku = product.sku || product.id.toString();
-
-        labelsData.push({
-          product_id: product.id,
-          variant_id: null,
-          product_name: product.name,
-          variant_name_suffix: null,
-          full_display_name: product.name,
-          sku: productSku,
-          barcode_value: productSku, // Product SKU or ID
-          selling_price: baseSellingPrice.toFixed(2), // Pre-tax price
-          vat_price: parseFloat(taxDetails.priceWithTax).toFixed(2), // Price with tax
-          base_price_for_tax_calc: baseSellingPrice.toFixed(2),
-          tax_amount: parseFloat(taxDetails.taxAmount).toFixed(2),
-          applied_tax_rates: taxDetails.appliedRates,
-          currency_code: STORE_CURRENCY_CODE,
-          currency_symbol: STORE_CURRENCY_SYMBOL,
-          qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`,
-          qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&quantity=1`,
-          qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}`
-        });
-      }
       res.status(200).json(labelsData);
 
     } catch (error) {
-      if (error instanceof NotFoundError) {
-        return res.status(404).json({ message: error.message });
-      }
-      // Pass other errors to global error handler
+      // Errors from productService (NotFoundError, AppError) will be passed to global handler.
       next(error);
     }
   }
