@@ -306,7 +306,8 @@ module.exports = {
   getRefundConfirmationHtml,
   getRefundConfirmationText,
   sendWelcomeEmail,
-  sendEmailVerificationCode, // Added new function
+  sendEmailVerificationCode,
+  sendOrderDispatchedEmail, // Added new function
   // For testing/debugging if needed:
   // getTestTransporter,
 };
@@ -372,6 +373,85 @@ ${companyAddress}
     return { success: false, error: `Failed to send welcome email: ${error.message}` };
   }
 }
+
+// --- Order Dispatched Email Function ---
+/**
+ * Sends an order dispatched/shipped email to a user.
+ * @param {string} toEmail - The recipient's email address.
+ * @param {string} userName - The name of the user.
+ * @param {object} orderDetails - Object containing order details (id, items, shipping_carrier, tracking_number, tracking_link, shipping_address_*, etc.)
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendOrderDispatchedEmail(toEmail, userName, orderDetails) {
+  try {
+    const siteName = config.company.name || 'Our Platform';
+    const supportEmail = config.email.supportAddress || config.email.fromAddress;
+    const companyAddress = config.company.address || '';
+
+    // Ensure orderDetails.items exists and is an array for the template
+    const itemsForTemplate = (orderDetails.items && Array.isArray(orderDetails.items)) ? orderDetails.items : [];
+
+    const templatePath = path.join(__dirname, '..', 'email_templates', 'order_dispatched.ejs');
+    const templateContent = fs.readFileSync(templatePath, 'utf-8');
+    const htmlContent = ejs.render(templateContent, {
+      siteName,
+      userName,
+      order: { // Nest orderDetails under 'order' as expected by the template
+        ...orderDetails,
+        items: itemsForTemplate
+      },
+      supportEmail,
+      companyAddress,
+    });
+
+    // Basic plain text version
+    let textItemsSummary = "Items in this shipment:\n";
+    itemsForTemplate.forEach(item => {
+      textItemsSummary += `- ${item.product_name_at_purchase || item.name} - Qty: ${item.quantity}\n`;
+    });
+    if (itemsForTemplate.length === 0) {
+        textItemsSummary = "Your order items have been dispatched.\n";
+    }
+
+    const textContent = `
+Hi ${userName},
+
+Great news! Your order #${orderDetails.id} from ${siteName} has been dispatched.
+${orderDetails.shipping_carrier && orderDetails.tracking_number ? `
+Carrier: ${orderDetails.shipping_carrier}
+Tracking Number: ${orderDetails.tracking_number}` : ''}
+${orderDetails.tracking_link ? `Track Your Shipment: ${orderDetails.tracking_link}` : ''}
+${orderDetails.estimated_delivery_date ? `Estimated Delivery: ${new Date(orderDetails.estimated_delivery_date).toLocaleDateString()}` : ''}
+
+Shipping To:
+${userName}
+${orderDetails.shipping_address_line1 || ''}
+${orderDetails.shipping_address_line2 || ''}
+${orderDetails.shipping_city || ''}, ${orderDetails.shipping_state_province_region || ''} ${orderDetails.shipping_postal_code || ''}
+${orderDetails.shipping_country || ''}
+
+${textItemsSummary}
+If you have any questions, please contact us at ${supportEmail}.
+
+Thank you for shopping with ${siteName}!
+---
+&copy; ${new Date().getFullYear()} ${siteName}. All rights reserved.
+${companyAddress}
+    `.trim();
+
+    return sendEmail({
+      to: toEmail,
+      subject: `Your ${siteName} Order #${orderDetails.id} Has Shipped!`,
+      text: textContent,
+      html: htmlContent,
+    });
+
+  } catch (error) {
+    console.error(`Error preparing or sending order dispatched email to ${toEmail} for order #${orderDetails.id}:`, error);
+    return { success: false, error: `Failed to send order dispatched email: ${error.message}` };
+  }
+}
+
 
 // --- Email Verification Code Function ---
 /**

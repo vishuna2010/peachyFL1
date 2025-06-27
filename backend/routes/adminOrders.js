@@ -86,9 +86,14 @@ const validateUpdateStatusParams = [
     .withMessage(`Invalid status. Allowed: ${ALLOWED_ORDER_STATUSES.join(', ')}`),
   body('payment_status').optional().trim().toLowerCase().isIn(ALLOWED_PAYMENT_STATUSES)
     .withMessage(`Invalid payment_status. Allowed: ${ALLOWED_PAYMENT_STATUSES.join(', ')}`),
+  body('shipping_carrier').optional({checkFalsy: true}).isString().trim().isLength({max: 100}).withMessage('Shipping carrier cannot exceed 100 characters.'),
+  body('tracking_number').optional({checkFalsy: true}).isString().trim().isLength({max: 100}).withMessage('Tracking number cannot exceed 100 characters.'),
   body().custom((value, { req }) => {
-    if (!req.body.status && !req.body.payment_status) {
-      throw new Error('At least one of status or payment_status is required.');
+    if (!req.body.status && !req.body.payment_status && !req.body.shipping_carrier && !req.body.tracking_number) {
+      throw new Error('At least one of status, payment_status, shipping_carrier, or tracking_number is required.');
+    }
+    if (req.body.status && req.body.status.toLowerCase() === 'shipped' && (!req.body.shipping_carrier || !req.body.tracking_number)) {
+      throw new Error('Shipping carrier and tracking number are required when status is "shipped".');
     }
     return true;
   })
@@ -107,13 +112,17 @@ router.put(
     }
 
     const { id } = req.params; // Validated integer
-    const { status: newStatus, payment_status: newPaymentStatus } = req.body; // Validated
+    const { status: newStatus, payment_status: newPaymentStatus, shipping_carrier, tracking_number } = req.body; // Validated
     const adminUserId = req.user.userId;
 
     try {
+      const updateData = { status: newStatus, payment_status: newPaymentStatus };
+      if (shipping_carrier !== undefined) updateData.shipping_carrier = shipping_carrier;
+      if (tracking_number !== undefined) updateData.tracking_number = tracking_number;
+
       const updatedOrder = await orderService.updateOrderStatus(
         id,
-        { status: newStatus, payment_status: newPaymentStatus },
+        updateData,
         adminUserId
       );
 
