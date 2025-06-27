@@ -1452,6 +1452,52 @@ STORE_CURRENCY_SYMBOL = config.company.currencySymbol || config.currency.default
 }
 
 
+/**
+ * Retrieves all options assigned to a specific product, along with their specifically selected values.
+ * @param {number} productId - The ID of the product.
+ * @returns {Promise<Array<object>>} An array of assigned option objects, each with a 'selected_values' array.
+ * @throws {NotFoundError} If the product with the given ID is not found.
+ * @throws {AppError} If any other database error occurs.
+ */
+async function getProductAssignedOptions(productId) {
+  // Check if product exists first
+  const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+  if (productCheck.rows.length === 0) {
+    throw new NotFoundError(`Product with ID ${productId} not found.`);
+  }
+
+  const query = `
+    SELECT
+      pao.id AS assigned_option_id,
+      pao.option_id AS global_option_id,
+      po.name AS global_option_name,
+      pao.created_at,
+      pao.updated_at,
+      COALESCE(
+        (
+          SELECT json_agg(json_build_object('id', pov.id, 'value', pov.value) ORDER BY pov.value ASC)
+          FROM product_assigned_option_specific_values paosv
+          JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
+          WHERE paosv.product_assigned_option_id = pao.id
+        ),
+        '[]'::json
+      ) AS selected_values
+    FROM product_assigned_options pao
+    JOIN product_options po ON pao.option_id = po.id
+    WHERE pao.product_id = $1
+    ORDER BY po.name;
+  `;
+
+  try {
+    const result = await db.query(query, [productId]);
+    return result.rows;
+  } catch (error) {
+    console.error(`Error fetching assigned options for product ID ${productId} in service:`, error);
+    throw new AppError(`Failed to retrieve assigned options for product ID ${productId}.`, 500, 'PRODUCT_ASSIGNED_OPTIONS_FETCH_FAILED');
+  }
+}
+
+
 module.exports = {
   getAllProducts,
   getProductById,
@@ -1463,4 +1509,5 @@ module.exports = {
   getProductInventoryBatches,
   getProductCostHistory,
   getFormattedLabelData,
+  getProductAssignedOptions,
 };

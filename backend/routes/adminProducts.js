@@ -146,42 +146,14 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { productId } = req.params;
+    const { productId } = req.params; // Validated by express-validator
 
     try {
-      // Check if product exists
-      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
-      if (productCheck.rows.length === 0) {
-        return next(new NotFoundError(`Product with ID ${productId} not found.`));
-      }
-
-      const optimizedQuery = `
-        SELECT
-          pao.id AS assigned_option_id,
-          pao.option_id AS global_option_id,
-          po.name AS global_option_name, // Intended final field name
-          pao.created_at,
-          pao.updated_at,
-          COALESCE(
-            (
-              SELECT json_agg(json_build_object('id', pov.id, 'value', pov.value) ORDER BY pov.value ASC)
-              FROM product_assigned_option_specific_values paosv
-              JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
-              WHERE paosv.product_assigned_option_id = pao.id
-            ),
-            '[]'::json
-          ) AS selected_values
-        FROM product_assigned_options pao
-        JOIN product_options po ON pao.option_id = po.id
-        WHERE pao.product_id = $1
-        ORDER BY po.name;
-      `;
-      const result = await db.query(optimizedQuery, [productId]);
-
-      res.status(200).json(result.rows);
-
+      const assignedOptions = await productService.getProductAssignedOptions(productId);
+      // The service method handles the product existence check and throws NotFoundError if necessary.
+      res.status(200).json(assignedOptions);
     } catch (error) {
-      console.error(`Error fetching assigned options for product ID ${productId}:`, error);
+      // Errors from productService (NotFoundError, AppError) are passed to the global handler.
       next(error);
     }
   }
