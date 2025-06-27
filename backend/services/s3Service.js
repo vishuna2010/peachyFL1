@@ -1,45 +1,33 @@
 const AWS = require('aws-sdk');
+const config = require('../config'); // Import the centralized config
 
 // --- AWS S3 Configuration ---
-// These environment variables are CRUCIAL for S3 operations.
-// Ensure they are set in your deployment environment.
-// For local development, you might use a .env file (ensure it's in .gitignore)
-// or configure AWS shared credentials (~/.aws/credentials).
+// Configuration is now sourced from the central config module.
+// The config module itself handles checking for critical AWS env vars if S3 is intended to be used.
 
-const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
-const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
-const AWS_S3_BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME;
-const AWS_REGION = process.env.AWS_REGION;
+let s3 = null; // Initialize s3 as null
 
-let s3;
-
-if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY || !AWS_S3_BUCKET_NAME || !AWS_REGION) {
-  console.warn(
-    'AWS S3 environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET_NAME, AWS_REGION) are not fully configured. ' +
-    'S3 functionality will be disabled or may fail. This is expected if not using S3 for uploads.'
-  );
-  // Optionally, you could have a fallback storage mechanism or disable S3 features.
-  // For this service, we'll let it attempt to initialize, and calls will fail if not configured.
-} else {
-    console.log(`S3 Service: Initializing S3 client for region ${AWS_REGION} and bucket ${AWS_S3_BUCKET_NAME}.`);
-}
-
-// Initialize S3 client
-// The SDK will automatically pick up credentials from environment variables if set,
-// or from shared credentials files, or IAM roles if running on EC2/ECS.
-// Explicitly passing them is also an option but generally less secure if hardcoded.
-// We rely on the environment variables being set.
-try {
+// Check if essential S3 configuration is available
+if (config.aws.accessKeyId && config.aws.secretAccessKey && config.aws.s3BucketName && config.aws.region) {
+  try {
     s3 = new AWS.S3({
-        accessKeyId: AWS_ACCESS_KEY_ID,         // Optional if using other auth methods like IAM roles
-        secretAccessKey: AWS_SECRET_ACCESS_KEY, // Optional if using other auth methods
-        region: AWS_REGION,
-        // signatureVersion: 'v4' // Often recommended for security
+      accessKeyId: config.aws.accessKeyId,
+      secretAccessKey: config.aws.secretAccessKey,
+      region: config.aws.region,
+      // signatureVersion: 'v4' // Often recommended, can be added to config if needed
     });
+    console.log(`S3 Service: Initializing S3 client for region ${config.aws.region} and bucket ${config.aws.s3BucketName}.`);
     console.log("S3 client initialized successfully.");
-} catch (error) {
+  } catch (error) {
     console.error("Error initializing S3 client:", error);
     s3 = null; // Ensure s3 is null if initialization fails
+  }
+} else {
+  console.warn(
+    'AWS S3 configuration (accessKeyId, secretAccessKey, s3BucketName, region) is not fully set in the config. ' +
+    'S3 functionality will be disabled. This is expected if not using S3 for uploads.'
+  );
+  // s3 remains null, functions below will check for this.
 }
 
 
@@ -56,13 +44,16 @@ async function uploadFileToS3(fileBuffer, fileName, mimeType) {
     console.error('S3 client not initialized. Upload aborted. Check AWS configuration.');
     throw new Error('S3 client not initialized. Cannot upload file.');
   }
-  if (!AWS_S3_BUCKET_NAME) {
-    console.error('AWS_S3_BUCKET_NAME is not configured. Upload aborted.');
+  // AWS_S3_BUCKET_NAME is now config.aws.s3BucketName
+  // The check for s3 initialization already implies that config.aws.s3BucketName was present if s3 is not null.
+  // However, an explicit check against config.aws.s3BucketName is safer if s3 could be partially initialized.
+  if (!config.aws.s3BucketName) {
+    console.error('AWS_S3_BUCKET_NAME is not configured in config. Upload aborted.');
     throw new Error('S3 bucket name not configured.');
   }
 
   const params = {
-    Bucket: AWS_S3_BUCKET_NAME,
+    Bucket: config.aws.s3BucketName,
     Key: fileName, // File name to save as in S3 (e.g., product-images/image.jpg)
     Body: fileBuffer,
     ContentType: mimeType,
@@ -92,13 +83,14 @@ async function deleteFileFromS3(fileKey) {
     console.error('S3 client not initialized. Deletion aborted. Check AWS configuration.');
     throw new Error('S3 client not initialized. Cannot delete file.');
   }
-   if (!AWS_S3_BUCKET_NAME) {
-    console.error('AWS_S3_BUCKET_NAME is not configured. Deletion aborted.');
+   // AWS_S3_BUCKET_NAME is now config.aws.s3BucketName
+   if (!config.aws.s3BucketName) {
+    console.error('AWS_S3_BUCKET_NAME is not configured in config. Deletion aborted.');
     throw new Error('S3 bucket name not configured.');
   }
 
   const params = {
-    Bucket: AWS_S3_BUCKET_NAME,
+    Bucket: config.aws.s3BucketName,
     Key: fileKey,
   };
 
@@ -115,5 +107,5 @@ async function deleteFileFromS3(fileKey) {
 module.exports = {
   uploadFileToS3,
   deleteFileFromS3,
-  isS3Configured: () => !!(s3 && AWS_S3_BUCKET_NAME) // Helper to check if S3 is likely usable
+  isS3Configured: () => !!(s3 && config.aws.s3BucketName) // Use config for the check
 };

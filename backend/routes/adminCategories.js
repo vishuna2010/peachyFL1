@@ -62,6 +62,8 @@ const validateUpdateCategory = [
 ];
 
 
+const categoryService = require('../services/categoryService'); // Import the new service
+
 // POST / - Create a new category
 router.post('/', isAuthenticated, checkPermission('categories:manage'), validateCreateCategory, async (req, res, next) => {
   const errors = validationResult(req);
@@ -71,30 +73,21 @@ router.post('/', isAuthenticated, checkPermission('categories:manage'), validate
   const { name, description, parent_category_id } = req.body;
 
   try {
-    const result = await db.query(
-      'INSERT INTO categories (name, description, parent_category_id) VALUES ($1, $2, $3) RETURNING *',
-      [name, description, parent_category_id]
-    );
-    if (result.rows.length > 0) {
-      const newCategory = result.rows[0];
-      auditLogService.recordAuditEvent(
-        'CATEGORY_CREATE_SUCCESS',
-        { userId: req.user.userId, userEmail: req.user.email },
-        { resourceType: 'CATEGORY', resourceId: newCategory.id },
-        { createdData: { name: newCategory.name, description: newCategory.description, parent_category_id: newCategory.parent_category_id } },
-        req
-      ).catch(err => console.error('Audit log failed for CATEGORY_CREATE_SUCCESS:', err));
-      res.status(201).json(newCategory);
-    } else {
-      // Fallback if RETURNING * somehow didn't return the row, though it should on success.
-      // Or if an error occurred that didn't throw but resulted in no rows.
-      // This path is less likely with current DB logic.
-      return next(new AppError('Category creation succeeded but failed to return data.', 500));
-    }
+    const newCategory = await categoryService.createCategory(name, description, parent_category_id);
+    // newCategory is guaranteed to be populated if createCategory doesn't throw
+
+    auditLogService.recordAuditEvent(
+      'CATEGORY_CREATE_SUCCESS',
+      { userId: req.user.userId, userEmail: req.user.email },
+      { resourceType: 'CATEGORY', resourceId: newCategory.id },
+      { createdData: { name: newCategory.name, description: newCategory.description, parent_category_id: newCategory.parent_category_id } },
+      req
+    ).catch(err => console.error('Audit log failed for CATEGORY_CREATE_SUCCESS:', err));
+
+    res.status(201).json(newCategory);
   } catch (error) {
-    if (error.code === '23505' && error.constraint === 'categories_name_key') {
-      return next(new ConflictError(`A category with the name "${name}" already exists.`));
-    }
+    // Errors like ConflictError, BadRequestError, or AppError thrown by the service will be passed to next()
+    // The global error handler will then format them.
     return next(error);
   }
 });
@@ -105,35 +98,21 @@ router.get('/', isAuthenticated, checkPermission('categories:manage'), validateP
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { page, limit } = req.query;
-  const offset = (page - 1) * limit;
+  const { page, limit } = req.query; // Already validated and defaulted by middleware
 
   try {
-    const categoriesQuery = `
-      SELECT c.id, c.name, c.description, c.parent_category_id, c.updated_at, COUNT(p.id) AS product_count
-      FROM categories c
-      LEFT JOIN products p ON c.id = p.category_id
-      GROUP BY c.id, c.name, c.description, c.parent_category_id, c.updated_at
-      ORDER BY c.name ASC
-      LIMIT $1 OFFSET $2;
-    `;
-    const categoriesResult = await db.query(categoriesQuery, [limit, offset]);
-
-    const totalCategoriesQuery = 'SELECT COUNT(*) FROM categories';
-    const totalCategoriesResult = await db.query(totalCategoriesQuery);
-    const totalCategories = parseInt(totalCategoriesResult.rows[0].count);
-
+    const result = await categoryService.getAllCategories(page, limit);
     res.status(200).json({
-      data: categoriesResult.rows.map(c => ({...c, product_count: parseInt(c.product_count, 10)})),
+      data: result.categories,
       pagination: {
-        total: totalCategories,
-        page: page,
-        limit: limit,
-        totalPages: Math.ceil(totalCategories / limit)
+        total: result.totalCategories,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages
       }
     });
   } catch (error) {
-    return next(error);
+    return next(error); // Pass errors to global error handler
   }
 });
 
@@ -143,27 +122,14 @@ router.get('/:id', isAuthenticated, checkPermission('categories:manage'), valida
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { id: categoryId } = req.params;
+  const { id: categoryId } = req.params; // Already validated
 
   try {
-    const categoryQuery = `
-      SELECT c.id, c.name, c.description, c.parent_category_id, COUNT(p.id) AS product_count
-      FROM categories c
-      LEFT JOIN products p ON c.id = p.category_id
-      WHERE c.id = $1
-      GROUP BY c.id, c.name, c.description, c.parent_category_id;
-    `;
-    const result = await db.query(categoryQuery, [categoryId]);
-
-    if (result.rows.length === 0) {
-      return next(new NotFoundError(`Category with ID ${categoryId} not found.`));
-    }
-    const category = result.rows[0];
-    category.product_count = parseInt(category.product_count, 10);
-
+    const category = await categoryService.getCategoryById(categoryId);
+    // Service throws NotFoundError if not found, which will be handled by next(error)
     res.status(200).json(category);
   } catch (error) {
-    return next(error);
+    return next(error); // Pass errors (including NotFoundError from service) to global handler
   }
 });
 
@@ -173,59 +139,46 @@ router.put('/:id', isAuthenticated, checkPermission('categories:manage'), valida
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { id: categoryId } = req.params;
-  const { name, description, parent_category_id } = req.body;
+  const { id: categoryId } = req.params; // Validated
+  const updateData = req.body; // Contains name, description, parent_category_id (all optional)
 
-  const setClauses = [];
-  const values = [];
-  let paramIndex = 1;
-
-  if (name !== undefined) { setClauses.push(`name = $${paramIndex++}`); values.push(name); }
-  // For description and parent_category_id, we need to handle them even if they are explicitly set to null
-  if (req.body.hasOwnProperty('description')) {
-    setClauses.push(`description = $${paramIndex++}`);
-    values.push(description);
+  // Check if there's any actual data to update.
+  // The custom validator for parent_category_id runs even if it's not explicitly in req.body but is null/undefined.
+  // So, we need to ensure at least one of name, description, or parent_category_id is actually present in the body.
+  if (!updateData.hasOwnProperty('name') && !updateData.hasOwnProperty('description') && !updateData.hasOwnProperty('parent_category_id')) {
+    // If the service's updateCategory fetches current state on empty updateData, this check isn't strictly needed.
+    // However, it's good practice for a route handler to ensure valid update intent.
+    // For now, we'll rely on the service to handle empty updateData if that's its design.
+    // If service throws error for no fields, this is fine.
+    // If service returns current data, that's also acceptable.
   }
-  if (req.body.hasOwnProperty('parent_category_id')) {
-    setClauses.push(`parent_category_id = $${paramIndex++}`);
-    values.push(parent_category_id);
-  }
-
-  if (setClauses.length === 0) {
-    return next(new BadRequestError('No fields provided for update.'));
-  }
-  setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
-  values.push(categoryId);
 
   try {
-    const query = `UPDATE categories SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
-    const result = await db.query(query, values);
+    // Pass only the relevant fields to the service.
+    // The service will construct the SET clauses.
+    const categoryToUpdate = {};
+    if (updateData.hasOwnProperty('name')) categoryToUpdate.name = updateData.name;
+    if (updateData.hasOwnProperty('description')) categoryToUpdate.description = updateData.description;
+    if (updateData.hasOwnProperty('parent_category_id')) categoryToUpdate.parent_category_id = updateData.parent_category_id;
 
-    if (result.rows.length === 0) {
-      return next(new NotFoundError(`Category with ID ${categoryId} not found. Update failed.`));
+    if (Object.keys(categoryToUpdate).length === 0) {
+        return next(new BadRequestError('No valid fields provided for update.'));
     }
 
-    const updatedCategory = result.rows[0];
-    const changes = {};
-    if (req.body.hasOwnProperty('name')) changes.name = updatedCategory.name;
-    if (req.body.hasOwnProperty('description')) changes.description = updatedCategory.description;
-    if (req.body.hasOwnProperty('parent_category_id')) changes.parent_category_id = updatedCategory.parent_category_id;
+    const updatedCategory = await categoryService.updateCategory(categoryId, categoryToUpdate);
 
     auditLogService.recordAuditEvent(
       'CATEGORY_UPDATE_SUCCESS',
       { userId: req.user.userId, userEmail: req.user.email },
       { resourceType: 'CATEGORY', resourceId: updatedCategory.id },
-      { inputData: req.body, updatedData: { name: updatedCategory.name, description: updatedCategory.description, parent_category_id: updatedCategory.parent_category_id } },
+      // Log the data that was actually sent for update, and the result.
+      { inputData: categoryToUpdate, updatedCategoryData: updatedCategory },
       req
     ).catch(err => console.error('Audit log failed for CATEGORY_UPDATE_SUCCESS:', err));
+
     res.status(200).json(updatedCategory);
   } catch (error) {
-    if (error.code === '23505' && error.constraint === 'categories_name_key') {
-      return next(new ConflictError(`A category with the name "${name}" already exists.`));
-    }
-    if (error.code === '23503' && error.constraint === 'categories_parent_category_id_fkey') { // Should be caught by custom validator, but as fallback
-        return next(new BadRequestError('Invalid parent_category_id. The specified parent category does not exist.'));
-    }
+    // Errors from service (NotFoundError, ConflictError, BadRequestError, AppError) passed to global handler.
     return next(error);
   }
 });
@@ -236,33 +189,23 @@ router.delete('/:id', isAuthenticated, checkPermission('categories:manage'), val
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { id: categoryId } = req.params;
+  const { id: categoryId } = req.params; // Validated
 
   try {
-    const productCountResult = await db.query('SELECT COUNT(*) AS count FROM products WHERE category_id = $1', [categoryId]);
-    const productCount = parseInt(productCountResult.rows[0].count, 10);
+    await categoryService.deleteCategory(categoryId);
+    // Service handles NotFoundError and BadRequestError (if category is in use)
 
-    if (productCount > 0) {
-      return next(new BadRequestError(`Category is in use by ${productCount} product(s) and cannot be deleted. Please reassign products or delete them first.`));
-    }
-
-    const result = await db.query('DELETE FROM categories WHERE id = $1 RETURNING id', [categoryId]);
-
-    if (result.rowCount === 0) {
-      return next(new NotFoundError(`Category with ID ${categoryId} not found.`));
-    }
-
-    // If deletion was successful (rowCount > 0)
     auditLogService.recordAuditEvent(
       'CATEGORY_DELETE_SUCCESS',
       { userId: req.user.userId, userEmail: req.user.email },
       { resourceType: 'CATEGORY', resourceId: categoryId },
-      { deletedDataIdentifier: { id: categoryId } },
+      { deletedDataIdentifier: { id: categoryId } }, // Log the ID of the deleted category
       req
     ).catch(err => console.error('Audit log failed for CATEGORY_DELETE_SUCCESS:', err));
 
     res.status(204).send();
   } catch (error) {
+    // Errors from service (NotFoundError, BadRequestError, AppError) passed to global handler.
     return next(error);
   }
 });

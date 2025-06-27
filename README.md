@@ -62,39 +62,60 @@ Each directory has its own `package.json` and dependencies.
     *   The backend application, upon starting, will attempt to create necessary tables if they don't already exist (due to `CREATE TABLE IF NOT EXISTS ...` statements in `backend/db.js`). For manual control or initial setup in specific environments, you can extract the SQL statements from `backend/db.js` and execute them using a PostgreSQL client.
 4.  **Environment Variables:**
     *   In the `backend/` directory, copy the `backend/.env.example` template to a new file named `backend/.env`.
-    *   Update the following environment variables in `backend/.env`, replacing placeholder values:
+    *   All backend configurations are centralized in `backend/config/index.js`. This module reads environment variables from the `.env` file (or the environment itself) and provides default values where applicable.
+    *   Update the following environment variables in `backend/.env`, replacing placeholder values. Refer to `backend/config/index.js` for a comprehensive list of all configurable options and their corresponding environment variables.
         ```dotenv
-        # Database Connection (PostgreSQL)
+        # --- CRITICAL ---
         DATABASE_URL=postgresql://your_db_user:your_db_password@your_db_host:5432/your_db_name
-
-        # Server Configuration
-        PORT=3000 # Or your preferred port for the backend
-        NODE_ENV=development # Or 'production'
-
-        # JWT Authentication
         JWT_SECRET=your_super_secret_jwt_key_at_least_32_chars_long
 
-        # AWS S3 for Image Uploads (Optional: Leave blank if not testing S3)
+        # --- GENERAL ---
+        NODE_ENV=development # Or 'production'
+        PORT=3000 # Or your preferred port for the backend
+        LOG_LEVEL=info # e.g., 'trace', 'debug', 'info', 'warn', 'error', 'fatal'
+
+        # --- AWS S3 for Image Uploads (Optional) ---
+        # AWS_REGION=your_aws_s3_bucket_region
         # AWS_ACCESS_KEY_ID=your_aws_access_key_id
         # AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
         # AWS_S3_BUCKET_NAME=your_s3_bucket_name
-        # AWS_REGION=your_aws_s3_bucket_region
+        # AWS_S3_PRODUCT_IMAGE_UPLOAD_PATH=product-images/ # Optional, defaults to 'product-images/'
 
-        # Email Service (Ethereal.email test account used by default if real SMTP is not set)
-        # For production, configure a real SMTP provider or email service:
-        # SMTP_HOST=your_smtp_host
-        # SMTP_PORT=your_smtp_port
-        # SMTP_USER=your_smtp_user
-        # SMTP_PASS=your_smtp_password
-        # SMTP_SECURE=true # Typically 'true' for port 465, 'false' for 587 (STARTTLS)
-        # SENDER_EMAIL_ADDRESS="My Awesome E-Commerce <noreply@example.com>"
+        # --- Email Service ---
+        # EMAIL_SERVICE=ethereal # 'ethereal', 'console', or your SMTP provider (e.g., 'gmail', 'sendgrid')
+        # EMAIL_HOST=your_smtp_host         # Required if not 'ethereal' or 'console'
+        # EMAIL_PORT=your_smtp_port         # Required if not 'ethereal' or 'console'
+        # EMAIL_USER=your_smtp_user         # Required if not 'ethereal' or 'console'
+        # EMAIL_PASS=your_smtp_password     # Required if not 'ethereal' or 'console'
+        # EMAIL_SECURE=true                 # Typically 'true' for port 465, 'false' for 587
+        # EMAIL_FROM_ADDRESS="My Awesome Store <noreply@example.com>"
 
-        # Application Name (used in 2FA OTPAuth URL & Email Subjects)
-        # APP_NAME="My Awesome E-Commerce"
+        # --- ETHEREAL (if EMAIL_SERVICE=ethereal and you want to use specific account) ---
+        # ETHEREAL_HOST=
+        # ETHEREAL_PORT=
+        # ETHEREAL_USER=
+        # ETHEREAL_PASS=
+
+        # --- URLs ---
+        # FRONTEND_URL_BASE=http://localhost:3001
+        # FRONTEND_INVOICE_VIEW_URL_BASE=http://localhost:3001/invoices
+
+        # --- Company Details (for PDFs, emails etc.) ---
+        # COMPANY_NAME="My Awesome Store"
+        # COMPANY_ADDRESS="123 Commerce St, Business City, BC 12345"
+        # COMPANY_LOGO_URL="https://example.com/Logo.svg" # Full public URL
+        # COMPANY_PHONE="Your Company Phone"
+        # COMPANY_EMAIL="contact@example.com"
+        # COMPANY_WEBSITE="www.example.com"
+
+        # --- PAGINATION ---
+        # PAGINATION_DEFAULT_LIMIT=10
+        # PAGINATION_MAX_LIMIT=100
         ```
+    *   The application will perform a check for critical environment variables (`DATABASE_URL`, `JWT_SECRET`) upon startup and will exit if they are not found.
 5.  **Run the Backend Server:**
     `npm start`
-    The API server should now be running (e.g., on `http://localhost:3000`).
+    The API server should now be running (e.g., on `http://localhost:3000`), with logs formatted by Pino (JSON in production, pretty-printed in development).
 6.  **Seed Initial Data (Optional but Recommended for Development):**
     *   After setting up your `.env` file and ensuring your database is accessible, you can run the seed script to populate the database with initial data.
     *   This script will:
@@ -190,6 +211,29 @@ Each directory has its own `package.json` and dependencies.
 -   `/api/admin/reports/best-sellers` (GET)
 
 *(This is a summary; actual route definitions and parameter details are in the `backend/routes/` subdirectories.)*
+
+### API Error Responses
+The backend API aims to provide standardized JSON error responses.
+- **Operational Errors (e.g., validation errors, resource not found):**
+  ```json
+  {
+    "status": "fail", // Or "error" for 5xx operational issues
+    "message": "Descriptive error message.",
+    "code": "APPLICATION_SPECIFIC_ERROR_CODE", // Optional e.g., "INVALID_INPUT", "RESOURCE_NOT_FOUND"
+    "details": { /* Optional, additional structured details */ }
+  }
+  ```
+- **Programming or Unknown Server Errors:**
+  - In `development`, detailed error information including stack trace may be returned.
+  - In `production`, a generic error message is returned:
+    ```json
+    {
+      "status": "error",
+      "message": "Internal Server Error. Please try again later.",
+      "code": "INTERNAL_SERVER_ERROR"
+    }
+    ```
+  Specific error codes (e.g., `INVALID_TOKEN`, `TOKEN_EXPIRED`, `DUPLICATE_FIELD`) are used for common issues like authentication failures or database constraint violations.
 
 ## 10. Deployment
 

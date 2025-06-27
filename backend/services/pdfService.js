@@ -2,6 +2,7 @@ const puppeteer = require('puppeteer');
 // const JsBarcode = require('jsbarcode'); // Commented out
 // const { createCanvas } = require('canvas'); // Commented out
 const qrcode = require('qrcode');
+const config = require('../config'); // Import the centralized config
 
 /**
  * Generates a barcode as a data URL.
@@ -192,10 +193,13 @@ async function generateQrCodeDataURL(text) {
 }
 
 function getInvoiceHtml(orderDetails) {
-  // --- Company Details (Placeholders or from orderDetails if available) ---
-  const companyName = orderDetails.company_name || 'Your Awesome Store';
-  const companyAddress = orderDetails.company_address || '123 Commerce St, Business City, BC 12345';
-  const companyLogoUrl = orderDetails.company_logo_url || null; // e.g., 'https://yourstore.com/logo.png'
+  // --- Company Details from config, overridden by orderDetails if present ---
+  const companyName = orderDetails.company_name || config.company.name;
+  const companyAddress = orderDetails.company_address || config.company.address;
+  const companyLogoUrl = orderDetails.company_logo_url || config.company.logoUrl;
+  const companyPhone = orderDetails.company_phone || config.company.phone;
+  const companyEmail = orderDetails.company_email || config.company.email;
+  const companyWebsite = orderDetails.company_website || config.company.website;
 
   // --- Format Dates ---
   const orderDate = new Date(orderDetails.created_at).toLocaleDateString();
@@ -309,9 +313,9 @@ function getInvoiceHtml(orderDetails) {
           ${companyLogoUrl ? `<img src="${companyLogoUrl}" alt="${companyName} Logo" class="logo"><br>` : ''}
           <h1>${companyName}</h1>
           <p>${companyAddress}</p>
-          ${orderDetails.company_phone ? `<p>Phone: ${orderDetails.company_phone}</p>` : ''}
-          ${orderDetails.company_email ? `<p>Email: ${orderDetails.company_email}</p>` : ''}
-          ${orderDetails.company_website ? `<p>Website: ${orderDetails.company_website}</p>` : ''}
+          ${companyPhone ? `<p>Phone: ${companyPhone}</p>` : ''}
+          ${companyEmail ? `<p>Email: ${companyEmail}</p>` : ''}
+          ${companyWebsite ? `<p>Website: ${companyWebsite}</p>` : ''}
         </header>
 
         <section class="invoice-details">
@@ -416,8 +420,8 @@ async function generateOrderInvoicePdf(orderDetails) {
 // --- Packing Slip Generation ---
 
 function getPackingSlipHtml(packingSlipData) {
-  const companyName = packingSlipData.company_name || 'Your Awesome Store';
-  const companyLogoUrl = packingSlipData.company_logo_url || null;
+  const companyName = packingSlipData.company_name || config.company.name;
+  const companyLogoUrl = packingSlipData.company_logo_url || config.company.logoUrl;
   const orderDate = new Date(packingSlipData.order_date).toLocaleDateString();
 
   const formatAddress = (addr, type) => {

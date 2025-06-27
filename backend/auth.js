@@ -1,9 +1,10 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
+const config = require('./config'); // Import the centralized config
 
-const saltRounds = 10;
-const jwtSecret = process.env.JWT_SECRET || 'your-super-secret-key'; // Use environment variable
+const saltRounds = 10; // This could also be moved to config if desired
+const jwtSecret = config.jwtSecret; // Use jwtSecret from config
 
 const permissionService = require('./services/permissionService'); // Import the permission service
 const { AppError } = require('./utils/AppError'); // For sending 403/500 errors consistently

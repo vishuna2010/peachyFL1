@@ -1,22 +1,26 @@
 const { Pool } = require('pg');
+const config = require('./config'); // Import the centralized config
 
 const placeholderConnectionString = 'postgresql://user:password@host:port/database';
-let connectionString = process.env.DATABASE_URL;
+// connectionString will now primarily come from config.databaseUrl
+// The config module already checks for DATABASE_URL and exits if not found.
+let connectionString = config.databaseUrl;
 
 if (!connectionString) {
+  // This block should ideally not be reached if config.checkCriticalConfig() is effective.
+  // However, keeping it as a fallback or for scenarios where config check might be bypassed during tests.
   console.warn(`
     *****************************************************************************
-    WARNING: DATABASE_URL environment variable is not set.
+    WARNING: DATABASE_URL environment variable is not set OR not found in config.
     Falling back to a placeholder connection string: ${placeholderConnectionString}
-    Please create a backend/.env file and set DATABASE_URL for the application
-    to connect to your actual database.
+    Please ensure DATABASE_URL is set in your .env file and accessible via the config module.
     *****************************************************************************
   `);
   connectionString = placeholderConnectionString;
 }
 
 const pool = new Pool({
-  connectionString: connectionString,
+  connectionString: connectionString, // Use the determined connectionString
 });
 
 pool.on('connect', () => {
