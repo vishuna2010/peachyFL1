@@ -9,13 +9,16 @@ const { productImageUploadMiddleware, handleMulterError } = require('../middlewa
 
 // Protect all routes in this file with a general products:manage_variants permission or similar
 // This can be overridden per route if needed.
-router.use(isAuthenticated, checkPermission('products:manage_variants')); // Example permission
+// router.use(isAuthenticated, checkPermission('products:manage_variants')); // Temporarily commented out to diagnose widespread 403s.
+// Individual routes below will now have their own isAuthenticated and checkPermission.
 
 // Note: The helper function getVariantDetailsForResponse is now _getVariantOptionDetails in productService.
 
 // POST /products/:productId/variants - Create a Product Variant
 router.post(
   '/products/:productId/variants',
+  isAuthenticated,
+  checkPermission('products:create'), // Using existing permission admin has
   productImageUploadMiddleware, // Use the same middleware as product images for consistency
   handleMulterError,
   [
@@ -59,6 +62,8 @@ router.post(
 // GET /products/:productId/variants - List Variants for a Product
 router.get(
   '/products/:productId/variants',
+  isAuthenticated,
+  checkPermission('products:view'),
   [param('productId').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt()],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -77,6 +82,8 @@ router.get(
 // GET /variants/:variantId - Get a Specific Variant
 router.get(
   '/variants/:variantId',
+  isAuthenticated,
+  checkPermission('products:view'),
   [param('variantId').isInt({ gt: 0 }).withMessage('Variant ID must be a positive integer.').toInt()],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -95,6 +102,8 @@ router.get(
 // PUT /variants/:variantId - Update a Product Variant
 router.put(
   '/variants/:variantId',
+  isAuthenticated,
+  checkPermission('products:edit'),
   [
     param('variantId').isInt({ gt: 0 }).withMessage('Variant ID must be a positive integer.'),
     body('sku').optional({ checkFalsy: true }).isString().trim().isLength({ min: 1, max: 100 }).withMessage('SKU must be between 1 and 100 characters.'),
@@ -157,6 +166,8 @@ router.put(
 // DELETE /variants/:variantId - Delete a Product Variant
 router.delete(
   '/variants/:variantId',
+  isAuthenticated,
+  checkPermission('products:delete'),
   [param('variantId').isInt({ gt: 0 }).withMessage('Variant ID must be a positive integer.').toInt()],
   async (req, res, next) => {
     const errors = validationResult(req);
