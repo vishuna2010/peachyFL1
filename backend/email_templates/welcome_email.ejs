@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to <%= siteName %></title>
+  <style>
+    body {
+      font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+      color: #333333;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border: 1px solid #dddddd;
+      border-radius: 8px;
+      overflow: hidden; /* Ensures border-radius clips inner elements */
+    }
+    .header {
+      background-color: #4A90E2; /* Placeholder Primary Color */
+      color: #ffffff;
+      padding: 20px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .content {
+      padding: 25px 30px;
+      text-align: left;
+      line-height: 1.6;
+    }
+    .content p {
+      margin: 0 0 15px 0;
+    }
+    .button-container {
+      text-align: center;
+      margin: 25px 0;
+    }
+    .button {
+      display: inline-block;
+      background-color: #50C878; /* Placeholder Accent Color */
+      color: #ffffff !important; /* Important to override link styles */
+      padding: 12px 25px;
+      text-decoration: none;
+      border-radius: 5px;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 0.85em;
+      color: #777777; /* Placeholder Secondary Color */
+      background-color: #f9f9f9;
+      border-top: 1px solid #eeeeee;
+    }
+    .footer p {
+      margin: 5px 0;
+    }
+    a {
+      color: #4A90E2; /* Placeholder Primary/Link Color */
+      text-decoration: underline;
+    }
+    .site-name {
+        font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>Welcome to <span class="site-name"><%= siteName %></span>!</h1>
+    </div>
+    <div class="content">
+      <p>Hi <%= userName %>,</p>
+      <p>Thank you for signing up at <span class="site-name"><%= siteName %></span>. We're thrilled to have you join our community!</p>
+      <p>Get started by exploring our latest products or setting up your profile.</p>
+      <div class="button-container">
+        <a href="<%= shopLink %>" class="button">Start Shopping</a>
+      </div>
+      <% if (typeof profileLink !== 'undefined' && profileLink) { %>
+        <p style="text-align:center; font-size: 0.9em;">
+            Or, <a href="<%= profileLink %>">complete your profile</a>.
+        </p>
+      <% } %>
+      <p>If you have any questions, feel free to <a href="mailto:<%= supportEmail %>">contact our support team</a>.</p>
+      <p>Best regards,<br>The <span class="site-name"><%= siteName %></span> Team</p>
+    </div>
+    <div class="footer">
+      <p>&copy; <%= new Date().getFullYear() %> <span class="site-name"><%= siteName %></span>. All rights reserved.</p>
+      <% if (typeof companyAddress !== 'undefined' && companyAddress) { %>
+        <p><%= companyAddress %></p>
+      <% } %>
+      <% if (typeof unsubscribeLink !== 'undefined' && unsubscribeLink) { %>
+        <!-- <p><a href="<%= unsubscribeLink %>">Unsubscribe</a> from these emails.</p> -->
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

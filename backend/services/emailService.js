@@ -305,6 +305,69 @@ module.exports = {
   getOrderConfirmationText,
   getRefundConfirmationHtml,
   getRefundConfirmationText,
+  sendWelcomeEmail, // Added new function
   // For testing/debugging if needed:
   // getTestTransporter,
 };
+
+
+// --- Welcome Email Function ---
+/**
+ * Sends a welcome email to a new user.
+ * @param {string} toEmail - The recipient's email address.
+ * @param {string} userName - The name of the user.
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendWelcomeEmail(toEmail, userName) {
+  try {
+    const siteName = config.company.name || 'Our Platform'; // Get from config
+    const shopLink = config.frontendUrlBase || 'http://localhost:3000'; // Get from config
+    const profileLink = `${shopLink}/profile`; // Example profile link
+    const supportEmail = config.email.supportAddress || config.email.fromAddress; // Get from config
+    const companyAddress = config.company.address || '';
+
+
+    const templatePath = path.join(__dirname, '..', 'email_templates', 'welcome_email.ejs');
+    const templateContent = fs.readFileSync(templatePath, 'utf-8');
+    const htmlContent = ejs.render(templateContent, {
+      siteName,
+      userName,
+      shopLink,
+      profileLink,
+      supportEmail,
+      companyAddress,
+      // unsubscribeLink: `${shopLink}/unsubscribe?email=${encodeURIComponent(toEmail)}` // Optional
+    });
+
+    // Basic plain text version (can be improved or generated from HTML)
+    const textContent = `
+Welcome to ${siteName}, ${userName}!
+
+Thank you for signing up. We're thrilled to have you join our community!
+
+Get started by exploring our latest products: ${shopLink}
+Or complete your profile: ${profileLink}
+
+If you have any questions, contact our support team at ${supportEmail}.
+
+Best regards,
+The ${siteName} Team
+
+---
+&copy; ${new Date().getFullYear()} ${siteName}. All rights reserved.
+${companyAddress}
+    `.trim();
+
+    return sendEmail({
+      to: toEmail,
+      subject: `Welcome to ${siteName}!`,
+      text: textContent,
+      html: htmlContent,
+    });
+
+  } catch (error) {
+    console.error(`Error preparing or sending welcome email to ${toEmail}:`, error);
+    // Return a similar structure as sendEmail for consistency in error handling by caller
+    return { success: false, error: `Failed to send welcome email: ${error.message}` };
+  }
+}

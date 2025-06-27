@@ -272,7 +272,10 @@ This section outlines the primary driver for future backend development, based o
 
 ## 🔔 Notifications & Email Features (To Implement & Verify)
 - **Welcome Email**
-  - [ ] Sent immediately after user signs up
+  - [~] Sent immediately after user signs up
+    - [X] Core functionality implemented (EJS template, emailService function, integration with registration).
+    - [ ] Theming with site colors pending user input for color codes.
+    - [ ] Consider enhancing user name personalization if registration collects a full name.
 - **Two-Factor Authentication (2FA)**
   - [ ] Email-based code for signup validation
 - **Order Notifications**
