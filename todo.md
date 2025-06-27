@@ -130,11 +130,12 @@ This section outlines the primary driver for future backend development, based o
 - [ ] **Configuration Management:** Centralize environment variable access into a dedicated config module (e.g., `backend/config/index.js`).
 - [ ] **Error Handling & Validation:**
     - [ ] Ensure consistent error response structures across all APIs.
-    - [ ] Systematically review and expand input validation (`express-validator` or similar) for all API endpoints.
-    - [ ] Refine global error handler for better logging and to prevent leaking sensitive details.
-- [ ] **Database Interactions & Services:**
-    - [ ] Enforce service layer pattern: Ensure all DB logic is within services, minimize direct `db.query` in route handlers.
-    - [ ] Review and ensure comprehensive transaction management for all multi-step DB operations.
+    - [X] Ensure consistent error response structures across all APIs. (Standardized structure with status, message, code, details implemented in errorHandler.js and AppError.js)
+    - [~] Systematically review and expand input validation (`express-validator` or similar) for all API endpoints. (Example applied to admin product creation; further review pending for all other endpoints)
+    - [X] Refine global error handler for better logging (structured logging of stack traces for non-operational errors in prod) and to prevent leaking sensitive details.
+- [~] **Database Interactions & Services:**
+    - [~] Enforce service layer pattern: Ensure all DB logic is within services, minimize direct `db.query` in route handlers. (Completed for Categories module; pending for others)
+    - [ ] Review and ensure comprehensive transaction management for all multi-step DB operations. (Addressed in CategoryService delete; needs broader review)
     - [ ] (Consider for Future) Evaluate ORM/Query Builder (e.g., Sequelize, Knex.js) for potential adoption if complexity warrants.
 - [ ] **Stock Management Logic:**
     - [ ] **Critical:** Reconcile `productService.getAllProducts` stock determination (currently `products.stock_quantity`) with batch-aware stock logic used in order processing. Public listings should reflect actual sellable batch inventory.
@@ -147,25 +148,25 @@ This section outlines the primary driver for future backend development, based o
 - [ ] **API Design & Documentation:**
     - [ ] Maintain/improve consistency in API endpoint paths and naming.
     - [ ] Consider implementing API documentation using Swagger/OpenAPI.
-- [ ] **Testing:**
-    - [ ] Expand unit test coverage for services and utility functions.
+- [~] **Testing:**
+    - [~] Expand unit test coverage for services and utility functions. (Service layer refactor makes this easier, noted areas for testing)
     - [ ] Increase integration test coverage for critical API endpoints.
 
-- **[ ] Enhanced Configuration Management:**
-    -   **Suggestion:** Centralize all environment variable access and configuration settings (e.g., database URLs, API keys, pagination defaults, feature flags) into a dedicated configuration module (e.g., `backend/config/index.js`).
+- **[X] Enhanced Configuration Management:**
+    -   **Suggestion:** Centralize all environment variable access and configuration settings (e.g., database URLs, API keys, pagination defaults, feature flags) into a dedicated configuration module (e.g., `backend/config/index.js`). (DONE - `backend/config/index.js` created and integrated)
     -   **Benefit:** Makes configuration easier to manage, reduces magic strings/numbers scattered in the code, and simplifies environment-specific setups (dev, staging, prod).
 
-- **[ ] Comprehensive Error Handling & Validation:**
+- **[X] Comprehensive Error Handling & Validation:**
     -   **Suggestion:**
-        *   Ensure a globally consistent error response structure for all API endpoints (building on `AppError` and `errorHandler.js`).
-        *   Systematically review and expand input validation (`express-validator`) for *all* API endpoints, ensuring all expected parameters, body fields, and their types/constraints are covered.
-        *   Refine the global error handler (`errorHandler.js`) for more detailed logging (e.g., stack traces for 500 errors, request identifiers) while ensuring no sensitive details are leaked in client-facing error messages.
+        *   Ensure a globally consistent error response structure for all API endpoints (building on `AppError` and `errorHandler.js`). (DONE - Standardized structure with status, message, code, details)
+        *   Systematically review and expand input validation (`express-validator`) for *all* API endpoints, ensuring all expected parameters, body fields, and their types/constraints are covered. (PARTIALLY DONE - Example applied to admin product creation, further review pending)
+        *   Refine the global error handler (`errorHandler.js`) for more detailed logging (e.g., stack traces for 500 errors, request identifiers) while ensuring no sensitive details are leaked in client-facing error messages. (DONE - Structured logging of stack traces for non-operational errors in prod, client still gets generic message)
     -   **Benefit:** Improves API robustness, provides clearer error feedback to clients, and enhances security.
 
-- **[ ] Strict Database Interactions & Service Layer Enforcement:**
+- **[~] Strict Database Interactions & Service Layer Enforcement:**
     -   **Suggestion:**
-        *   Strictly enforce the service layer pattern: All database interaction logic should reside within service functions. Route handlers should only be responsible for request/response handling and calling services.
-        *   Review and ensure comprehensive transaction management (`BEGIN`, `COMMIT`, `ROLLBACK`) for all operations that involve multiple database writes.
+        *   Strictly enforce the service layer pattern: All database interaction logic should reside within service functions. Route handlers should only be responsible for request/response handling and calling services. (PARTIALLY DONE - Categories module refactored to `categoryService.js`)
+        *   Review and ensure comprehensive transaction management (`BEGIN`, `COMMIT`, `ROLLBACK`) for all operations that involve multiple database writes. (PARTIALLY DONE - Addressed in `categoryService.js` delete method, broader review needed)
         *   For complex queries or if direct SQL becomes unwieldy, consider evaluating a Query Builder (like Knex.js) which can work alongside direct `db.query` calls.
     -   **Benefit:** Better separation of concerns, more testable code, improved data consistency, and potentially more maintainable database logic.
 
@@ -177,12 +178,12 @@ This section outlines the primary driver for future backend development, based o
     *   **Suggestion:** For operations that can be slow or are not critical to the immediate API response (e.g., sending emails, complex report generation, S3 cleanup on failure), evaluate using a message queue (e.g., RabbitMQ, Redis streams, AWS SQS) and background workers.
     *   **Benefit:** Improves API responsiveness and resilience.
 
-- **[ ] Proactive Security Enhancements:**
+- **[~] Proactive Security Enhancements:**
     *   **Suggestion:**
         *   Periodically review RBAC permission granularity.
-        *   Ensure no sensitive data is inadvertently exposed in API responses or general `console.log` statements.
+        *   Ensure no sensitive data is inadvertently exposed in API responses or general `console.log` statements. (PARTIALLY DONE - Moved to structured logging which helps, but code review still needed)
         *   Regularly review dependencies for known vulnerabilities (`npm audit`).
-    *   **Benefit:** Strengthens the security posture of the application.
+    -   **Benefit:** Strengthens the security posture of the application.
 
 - **[ ] API Design Consistency & Documentation Standards:**
     *   **Suggestion:**
@@ -190,15 +191,15 @@ This section outlines the primary driver for future backend development, based o
         *   Consider implementing API documentation using tools like Swagger/OpenAPI.
     *   **Benefit:** Makes the API easier to understand, consume, and maintain.
 
-- **[ ] Expanded Testing Strategy:**
+- **[~] Expanded Testing Strategy:**
     *   **Suggestion:**
-        *   Expand unit test coverage for services (especially complex business logic like in `productService`, `taxService`, `orderService`) and utility functions.
+        *   Expand unit test coverage for services (especially complex business logic like in `productService`, `taxService`, `orderService`) and utility functions. (PARTIALLY DONE - Service layer refactor makes this easier, noted areas for testing)
         *   Increase integration test coverage for critical API endpoints, testing the full request-response cycle including database interaction.
     *   **Benefit:** Improves code quality, reduces regressions, and makes refactoring safer.
 
-- **[ ] Advanced Logging Enhancements:**
-    *   **Suggestion:** Implement structured logging (e.g., JSON format) with consistent fields like request ID, user ID (if available), timestamp, log level, and message.
-    *   Ensure important events, errors, and decision points are logged appropriately.
+- **[X] Advanced Logging Enhancements:**
+    *   **Suggestion:** Implement structured logging (e.g., JSON format) with consistent fields like request ID, user ID (if available), timestamp, log level, and message. (DONE - Basic setup with Pino and pino-http for request/response and error logging)
+    *   Ensure important events, errors, and decision points are logged appropriately. (PARTIALLY DONE - Key areas like error handler and server start are covered, more specific business logic logging can be added)
     *   **Benefit:** Greatly improves debugging, monitoring, and auditing capabilities.
 
 ### E. Development Utilities: Data Seeding (Existing)

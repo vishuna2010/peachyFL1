@@ -1,4 +1,7 @@
-require('dotenv').config();
+// require('dotenv').config(); // Moved to config/index.js
+const config = require('./config'); // Import the centralized config
+const logger = require('./utils/logger'); // Import the structured logger
+const pinoHttp = require('pino-http'); // Import pino-http
 const express = require('express');
 const cors = require('cors'); // Import CORS
 const helmet = require('helmet'); // Import Helmet
@@ -41,7 +44,7 @@ const path = require('path'); // Import path module
 const globalErrorHandler = require('./middleware/errorHandler'); // Import global error handler
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = config.port; // Use port from config
 
 // Commented out specific options for diagnostics
 // const corsOptions = {
@@ -55,6 +58,51 @@ const port = process.env.PORT || 3000;
 app.use(cors()); // Enable CORS for all routes with defaults
 app.use(express.json()); // Middleware to parse JSON bodies
 app.use(helmet()); // Use Helmet for security headers
+
+// Add pino-http request logger middleware
+// This should be one of the first middleware
+app.use(pinoHttp({
+  logger: logger, // Use our existing pino instance
+  serializers: { // Customize what to log for req and res
+    req(req) {
+      return {
+        method: req.method,
+        url: req.url,
+        // headers: req.headers, // Can be too verbose, enable if needed
+        remoteAddress: req.remoteAddress,
+        params: req.params,
+        query: req.query,
+      };
+    },
+    res(res) {
+      return {
+        statusCode: res.statusCode,
+        // headers: res.getHeaders(), // Can be too verbose
+      };
+    }
+  },
+  customLogLevel: function (req, res, err) {
+    if (res.statusCode >= 400 && res.statusCode < 500) {
+      return 'warn'
+    } else if (res.statusCode >= 500 || err) {
+      return 'error'
+    } else if (res.statusCode >= 300 && res.statusCode < 400) {
+      return 'silent' // Don't log redirects by default
+    }
+    return 'info'
+  },
+  // Define a custom message for successful requests
+  customSuccessMessage: function (req, res) {
+    if (res.statusCode === 404) {
+      return `${req.method} ${req.url} ${res.statusCode} - Not Found`
+    }
+    return `${req.method} ${req.url} ${res.statusCode}`
+  },
+    // Define a custom message for error requests
+  customErrorMessage: function (req, res, err) {
+    return `${req.method} ${req.url} ${res.statusCode} - Error: ${err.message}`
+  }
+}));
 
 // Serve static files from the 'uploads' directory - REMOVING THIS as S3 is now primary for product images
 // If other uploads still use this, it might need to stay or be refined. Assuming only product images used it.
@@ -146,12 +194,12 @@ app.use('/api/admin/roles', adminRolesRoutes);
 // The db.js file already tries to connect and create tables upon import.
 // If db.pool is not undefined, we can assume it's trying to connect.
 if (db.pool) {
-  console.log('Database module loaded, connection and table creation initiated.');
+  logger.info('Database module loaded, connection and table creation initiated.');
 }
 
 // Global Error Handling Middleware - MUST BE LAST
 app.use(globalErrorHandler);
 
 app.listen(port, () => {
-  console.log(`Server listening at http://localhost:${port}`);
+  logger.info(`Server listening at http://localhost:${port} in ${config.nodeEnv} mode`);
 });

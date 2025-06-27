@@ -295,6 +295,155 @@ router.get(
   }
 );
 
+// POST /api/admin/products - Create a new product
+const validateCreateProductParams = [
+  body('name').isString().trim().notEmpty().withMessage('Product name is required and cannot be empty.'),
+  body('description').optional({ checkFalsy: true }).isString().trim(),
+  body('price').isFloat({ gt: 0 }).withMessage('Price is required and must be greater than 0.').toFloat(),
+  body('category_id').optional({ nullable: true }).isInt({ gt: 0 }).withMessage('Category ID must be a positive integer.').toInt(),
+  body('supplier_id').optional({ nullable: true }).isInt({ gt: 0 }).withMessage('Supplier ID must be a positive integer.').toInt(),
+  body('sku').optional({ nullable: true }).isString().trim(),
+  // stock_quantity for a new base product. If it has_variants, this will be ignored later or variants define stock.
+  body('stock_quantity').optional().isInt({ min: 0 }).withMessage('Stock quantity must be a non-negative integer.').default(0).toInt(),
+  body('reorder_threshold').optional({ nullable: true }).isInt({ min: 0 }).withMessage('Reorder threshold must be non-negative.').toInt(),
+  body('product_status').optional().isIn(['active', 'inactive', 'archived', 'draft']).withMessage('Invalid product status.').default('draft'),
+  body('tax_class_id').optional({ nullable: true }).isInt({ gt: 0 }).withMessage('Tax Class ID must be a positive integer.').toInt(),
+  body('cost_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Cost price must be non-negative.').toFloat(),
+  body('wholesale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Wholesale price must be non-negative.').toFloat(),
+  body('brand_manufacturer').optional({ nullable: true }).isString().trim(),
+  body('supplier_reference').optional({ nullable: true }).isString().trim(),
+  body('specifications').optional({ nullable: true }), // Can be JSON string or object
+  body('tags').optional({ nullable: true }).isArray().withMessage('Tags must be an array of strings or null.'),
+  body('tags.*').optional().isString().trim(),
+  // image_url is not typically set directly on creation via this field; image upload is separate.
+  // has_variants is determined by whether variants are created, not a direct input here.
+];
+
+router.post(
+  '/',
+  isAuthenticated,
+  checkPermission('products:create'),
+  productImageUploadMiddleware, // Handles req.file for optional image upload during creation
+  handleMulterError,
+  validateCreateProductParams,
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const {
+      name, description, price, category_id, supplier_id, sku,
+      stock_quantity, reorder_threshold, product_status, tax_class_id,
+      cost_price, wholesale_price, brand_manufacturer, supplier_reference,
+      specifications, tags: tagNames
+    } = req.body;
+
+    const client = await db.pool.connect();
+    let s3FileKeyToStore = null;
+    let imageUrlToStoreInDb = null;
+
+    try {
+      await client.query('BEGIN');
+
+      // Image handling if a file is uploaded
+      if (req.file) {
+        if (isS3Configured()) {
+          try {
+            const uniqueFileName = `product-images/product-${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
+            const s3Data = await uploadFileToS3(req.file.buffer, uniqueFileName, req.file.mimetype);
+            imageUrlToStoreInDb = s3Data.Location;
+            s3FileKeyToStore = s3Data.Key;
+          } catch (s3Error) {
+            await client.query('ROLLBACK');
+            console.error("S3 Upload Error on product creation:", s3Error);
+            return res.status(500).json({ message: "Failed to upload image to S3." });
+          }
+        } else {
+          await client.query('ROLLBACK');
+          console.warn("Attempted to upload image during product creation, but S3 is not configured.");
+          return res.status(500).json({ message: "Image upload service is not configured." });
+        }
+      }
+
+      const insertQuery = `
+        INSERT INTO products (
+          name, description, price, category_id, supplier_id, sku, stock_quantity,
+          reorder_threshold, product_status, image_url, tax_class_id, cost_price,
+          wholesale_price, brand_manufacturer, supplier_reference, specifications,
+          has_variants, average_rating, review_count, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+          FALSE, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ) RETURNING *;
+      `;
+
+      // Ensure correct handling of nulls for optional fields
+      const values = [
+        name,
+        description || null,
+        price,
+        category_id || null,
+        supplier_id || null,
+        sku || null,
+        stock_quantity, // Defaulted to 0 by validator if not provided
+        reorder_threshold || null,
+        product_status, // Defaulted by validator
+        imageUrlToStoreInDb, // From S3 upload or null
+        tax_class_id || null,
+        cost_price || null,
+        wholesale_price || null,
+        brand_manufacturer || null,
+        supplier_reference || null,
+        specifications ? (typeof specifications === 'string' ? specifications : JSON.stringify(specifications)) : null,
+      ];
+
+      const result = await client.query(insertQuery, values);
+      const newProduct = result.rows[0];
+
+      // Tags handling
+      if (Array.isArray(tagNames) && tagNames.length > 0) {
+        const tagIds = await getOrCreateTagIds(tagNames, client);
+        for (const tagId of tagIds) {
+          await client.query('INSERT INTO product_tags (product_id, tag_id) VALUES ($1, $2)', [newProduct.id, tagId]);
+        }
+      }
+
+      await client.query('COMMIT');
+
+      // Fetch the newly created product with all necessary details for the response (including any generated tags)
+      const createdProductDetails = await productService.getProductById(newProduct.id);
+
+      auditLogService.recordAuditEvent(
+        'PRODUCT_CREATE_SUCCESS',
+        { userId: req.user.userId, userEmail: req.user.email },
+        { resourceType: 'PRODUCT', resourceId: newProduct.id },
+        { inputData: req.body, createdProduct: createdProductDetails },
+        req
+      ).catch(err => console.error(`Audit log failed for PRODUCT_CREATE_SUCCESS (ID: ${newProduct.id}):`, err));
+
+      res.status(201).json({ data: createdProductDetails });
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (s3FileKeyToStore && isS3Configured()) {
+        try {
+          await deleteFileFromS3(s3FileKeyToStore);
+          console.log(`Rolled back S3 upload for key: ${s3FileKeyToStore} due to DB error on product creation.`);
+        } catch (s3RollbackError) {
+          console.error(`Critical: Failed to rollback S3 upload for key ${s3FileKeyToStore} after DB error:`, s3RollbackError);
+        }
+      }
+      if (error.code === '23505' && error.constraint === 'products_sku_key') {
+        return res.status(409).json({ message: `SKU "${sku}" already exists.` });
+      }
+      next(error);
+    } finally {
+      client.release();
+    }
+  }
+);
+
 // GET /api/admin/products/:productId - Get a single product by ID (admin)
 router.get(
   '/:productId',

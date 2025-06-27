@@ -2,79 +2,111 @@ const nodemailer = require('nodemailer');
 const ejs = require('ejs');
 const fs = require('fs');
 const path = require('path');
+const config = require('../config'); // Import the centralized config
 
 // --- Transporter Setup ---
-// This is an async function because createTestAccount is async
-// In a real app, you'd initialize the transporter once when the app starts,
-// using environment variables for a real SMTP provider.
-let testAccount = null; // Cache the test account
-let transporter = null;
+let transporterInstance = null;
+let etherealTestAccount = null; // To store Ethereal account details if used
 
-async function getTestTransporter() {
-  if (transporter && testAccount) { // Use cached transporter if available
-    // Verify connection only if needed, or periodically. For Ethereal, it's usually fine.
-    // console.log("Using cached Ethereal transporter.");
-    return transporter;
+async function initializeTransporter() {
+  if (transporterInstance) {
+    return transporterInstance;
   }
 
   try {
-    testAccount = await nodemailer.createTestAccount();
-    console.log('Ethereal test account created/retrieved:', testAccount);
-
-    transporter = nodemailer.createTransport({
-      host: testAccount.smtp.host,
-      port: testAccount.smtp.port,
-      secure: testAccount.smtp.secure, // true for 465, false for other ports
-      auth: {
-        user: testAccount.user, // generated ethereal user
-        pass: testAccount.pass, // generated ethereal password
-      },
-      // IMPORTANT: In a real app, use environment variables for these:
-      // host: process.env.SMTP_HOST,
-      // port: process.env.SMTP_PORT,
-      // secure: process.env.SMTP_SECURE === 'true',
-      // auth: {
-      //   user: process.env.SMTP_USER,
-      //   pass: process.env.SMTP_PASS,
-      // },
-      // tls: {
-      //   // do not fail on invalid certs if using self-signed or local dev server
-      //   rejectUnauthorized: process.env.NODE_ENV === 'production',
-      // }
-    });
-    console.log("Ethereal transporter configured.");
-    return transporter;
+    if (config.email.service === 'ethereal' || (!config.email.host && config.nodeEnv === 'development')) {
+      // Use Ethereal for development if explicitly set or no other config provided
+      if (!etherealTestAccount) { // Create account only once
+        etherealTestAccount = await nodemailer.createTestAccount();
+        console.log('Ethereal test account created/retrieved:', etherealTestAccount.user);
+      }
+      transporterInstance = nodemailer.createTransport({
+        host: etherealTestAccount.smtp.host,
+        port: etherealTestAccount.smtp.port,
+        secure: etherealTestAccount.smtp.secure,
+        auth: {
+          user: etherealTestAccount.user,
+          pass: etherealTestAccount.pass,
+        },
+      });
+      console.log("Ethereal transporter configured.");
+    } else if (config.email.service === 'console') {
+        // Simple console logger for email, useful for CI or when no email service is configured
+        transporterInstance = {
+            sendMail: async (mailOptions) => {
+                console.log("--- CONSOLE EMAIL ---");
+                console.log("To:", mailOptions.to);
+                console.log("From:", mailOptions.from);
+                console.log("Subject:", mailOptions.subject);
+                console.log("Text Body:", mailOptions.text);
+                // console.log("HTML Body:", mailOptions.html); // Optional: log HTML too
+                console.log("--- END CONSOLE EMAIL ---");
+                const messageId = `console-${Date.now()}@example.com`;
+                return { messageId, response: "250 OK: message queued for delivery via console." };
+            }
+        };
+        console.log("Console email transporter configured.");
+    } else if (config.email.host) {
+      // Use configured SMTP provider
+      transporterInstance = nodemailer.createTransport({
+        host: config.email.host,
+        port: config.email.port,
+        secure: config.email.secure,
+        auth: {
+          user: config.email.user,
+          pass: config.email.pass,
+        },
+        tls: {
+          rejectUnauthorized: config.nodeEnv === 'production', // Stricter in prod
+        }
+      });
+      console.log(`SMTP transporter configured for host: ${config.email.host}`);
+    } else {
+      console.warn("Email service is not configured. Emails will not be sent. Consider setting up Ethereal for development or a real SMTP provider.");
+      // Fallback to a dummy transporter that does nothing but logs a warning
+      transporterInstance = {
+        sendMail: async (mailOptions) => {
+          console.warn(`Email not sent (service not configured): To: ${mailOptions.to}, Subject: ${mailOptions.subject}`);
+          return { messageId: `dummy-${Date.now()}`, response: "dummy - not sent" };
+        }
+      };
+    }
+    return transporterInstance;
   } catch (error) {
-    console.error("Error creating Ethereal test account or transporter:", error);
-    // Fallback or throw error, depending on how critical email is at this stage
-    // For now, we'll let it fail if it can't create a test account.
+    console.error("Error creating email transporter:", error);
     throw new Error("Could not create email transporter.");
   }
 }
 
+// Initialize transporter when module loads or on first call
+// initializeTransporter(); // Optional: initialize on load, or let sendEmail handle it.
 
 // --- Send Email Function ---
 async function sendEmail({ to, subject, text, html }) {
   try {
-    const mailTransporter = await getTestTransporter();
+    const mailTransporter = await initializeTransporter(); // Ensures transporter is ready
 
     const mailOptions = {
-      from: '"My E-commerce Store" <noreply@my-ecommerce.example.com>', // sender address
-      to: to, // list of receivers (string or array)
-      subject: subject, // Subject line
-      text: text, // plain text body
-      html: html, // html body
+      from: config.email.fromAddress, // Use fromAddress from config
+      to: to,
+      subject: subject,
+      text: text,
+      html: html,
     };
 
-    // Send mail with defined transport object
     let info = await mailTransporter.sendMail(mailOptions);
 
-    console.log('Message sent: %s', info.messageId);
-    // Preview URL will only be available if you are using Ethereal.email
-    if (testAccount) { // Check if we are using an Ethereal test account
-      console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
+    // console.log('Message sent: %s', info.messageId); // Less verbose logging
+    let previewUrl = null;
+    if (etherealTestAccount && info.messageId && nodemailer.getTestMessageUrl(info)) {
+      previewUrl = nodemailer.getTestMessageUrl(info);
+      console.log(`Email sent via Ethereal. Message ID: ${info.messageId}. Preview URL: ${previewUrl}`);
+    } else if (config.email.service === 'console') {
+        console.log(`Email logged to console. Message ID: ${info.messageId}`);
+    } else {
+      console.log(`Email sent. Message ID: ${info.messageId}.`);
     }
-    return { success: true, messageId: info.messageId, previewUrl: nodemailer.getTestMessageUrl(info) };
+    return { success: true, messageId: info.messageId, previewUrl: previewUrl };
   } catch (error) {
     console.error('Error sending email:', error);
     return { success: false, error: error.message };
@@ -184,7 +216,7 @@ ${orderData.shippingAddress?.line2 ? (orderData.shippingAddress.line2 + '\n') : 
 ${orderData.shippingAddress?.country || orderData.shipping_address?.country || ''}
 
 If you have any questions, please contact our support team.
-&copy; ${new Date().getFullYear()} Your Company Name
+&copy; ${new Date().getFullYear()} ${config.company.name}
     `.trim();
     return text;
 }
@@ -262,7 +294,7 @@ The refunded amount should reflect in your account within a few business days.
 If you have any questions, please contact our support team.
 
 Thank you,
-Your Company Name
+${config.company.name}
     `.trim();
     return text;
 }
