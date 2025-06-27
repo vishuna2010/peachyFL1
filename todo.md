@@ -151,6 +151,56 @@ This section outlines the primary driver for future backend development, based o
     - [ ] Expand unit test coverage for services and utility functions.
     - [ ] Increase integration test coverage for critical API endpoints.
 
+- **[ ] Enhanced Configuration Management:**
+    -   **Suggestion:** Centralize all environment variable access and configuration settings (e.g., database URLs, API keys, pagination defaults, feature flags) into a dedicated configuration module (e.g., `backend/config/index.js`).
+    -   **Benefit:** Makes configuration easier to manage, reduces magic strings/numbers scattered in the code, and simplifies environment-specific setups (dev, staging, prod).
+
+- **[ ] Comprehensive Error Handling & Validation:**
+    -   **Suggestion:**
+        *   Ensure a globally consistent error response structure for all API endpoints (building on `AppError` and `errorHandler.js`).
+        *   Systematically review and expand input validation (`express-validator`) for *all* API endpoints, ensuring all expected parameters, body fields, and their types/constraints are covered.
+        *   Refine the global error handler (`errorHandler.js`) for more detailed logging (e.g., stack traces for 500 errors, request identifiers) while ensuring no sensitive details are leaked in client-facing error messages.
+    -   **Benefit:** Improves API robustness, provides clearer error feedback to clients, and enhances security.
+
+- **[ ] Strict Database Interactions & Service Layer Enforcement:**
+    -   **Suggestion:**
+        *   Strictly enforce the service layer pattern: All database interaction logic should reside within service functions. Route handlers should only be responsible for request/response handling and calling services.
+        *   Review and ensure comprehensive transaction management (`BEGIN`, `COMMIT`, `ROLLBACK`) for all operations that involve multiple database writes.
+        *   For complex queries or if direct SQL becomes unwieldy, consider evaluating a Query Builder (like Knex.js) which can work alongside direct `db.query` calls.
+    -   **Benefit:** Better separation of concerns, more testable code, improved data consistency, and potentially more maintainable database logic.
+
+- **[ ] Stock Management Logic Reconciliation & Accuracy:**
+    *   **Suggestion:** **Critically review** how stock quantities are determined and presented. Ensure `productService.getAllProducts` (and thus public product listings) stock (e.g. `effective_stock_quantity` CTE) is perfectly aligned with the batch-aware stock deduction logic used in sales order fulfillment (`inventory_batches` table) and accurately reflects sellable quantities.
+    *   **Benefit:** Prevents overselling and ensures customers see accurate stock availability.
+
+- **[ ] Asynchronous Operations & Background Jobs Strategy:**
+    *   **Suggestion:** For operations that can be slow or are not critical to the immediate API response (e.g., sending emails, complex report generation, S3 cleanup on failure), evaluate using a message queue (e.g., RabbitMQ, Redis streams, AWS SQS) and background workers.
+    *   **Benefit:** Improves API responsiveness and resilience.
+
+- **[ ] Proactive Security Enhancements:**
+    *   **Suggestion:**
+        *   Periodically review RBAC permission granularity.
+        *   Ensure no sensitive data is inadvertently exposed in API responses or general `console.log` statements.
+        *   Regularly review dependencies for known vulnerabilities (`npm audit`).
+    *   **Benefit:** Strengthens the security posture of the application.
+
+- **[ ] API Design Consistency & Documentation Standards:**
+    *   **Suggestion:**
+        *   Maintain consistency in API endpoint paths, naming conventions, and response structures.
+        *   Consider implementing API documentation using tools like Swagger/OpenAPI.
+    *   **Benefit:** Makes the API easier to understand, consume, and maintain.
+
+- **[ ] Expanded Testing Strategy:**
+    *   **Suggestion:**
+        *   Expand unit test coverage for services (especially complex business logic like in `productService`, `taxService`, `orderService`) and utility functions.
+        *   Increase integration test coverage for critical API endpoints, testing the full request-response cycle including database interaction.
+    *   **Benefit:** Improves code quality, reduces regressions, and makes refactoring safer.
+
+- **[ ] Advanced Logging Enhancements:**
+    *   **Suggestion:** Implement structured logging (e.g., JSON format) with consistent fields like request ID, user ID (if available), timestamp, log level, and message.
+    *   Ensure important events, errors, and decision points are logged appropriately.
+    *   **Benefit:** Greatly improves debugging, monitoring, and auditing capabilities.
+
 ### E. Development Utilities: Data Seeding (Existing)
 - [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
 - [X] Major `seed.js` overhaul: Implemented full schema creation (`CREATE TABLE IF NOT EXISTS` for all tables including all new columns/features) and added comprehensive sample data for new entities (product images, stock logs, cost history) and new fields in existing entities.
