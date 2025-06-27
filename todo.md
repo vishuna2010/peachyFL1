@@ -171,6 +171,7 @@ This section outlines the primary driver for future backend development, based o
             - [X] `POST /api/cart/calculate-taxes` (user fetching part moved to `userService.js`)
             - [X] `GET /api/categories` (moved to `categoryService.js`)
             - [X] `GET /api/options/public-filters` (moved to `productService.js`)
+            - [X] `GET /api/orders/my-history` and `GET /api/orders/my-history/:orderId` (moved to `orderService.js`)
     - [~] Review and ensure comprehensive transaction management for all multi-step DB operations.
         - [X] Addressed in C/U/D methods of `categoryService.js`.
         - [X] Addressed in C/U/D methods of `discountService.js`.
