@@ -286,7 +286,7 @@ This section outlines the primary driver for future backend development, based o
     - [X] Welcome email now sent *after* successful email verification.
 - **Order Notifications**
   - Email customer when:
-    - [ ] Order is placed
+    - [X] Order is placed (covered by existing Order Confirmation email sent after successful order creation)
     - [ ] Order is dispatched
     - [ ] Order is delivered
 - **Invoice Notifications**
