@@ -131,10 +131,10 @@ This section outlines the primary driver for future backend development, based o
 - [ ] **Error Handling & Validation:**
     - [ ] Ensure consistent error response structures across all APIs.
     - [X] Ensure consistent error response structures across all APIs. (Standardized structure with status, message, code, details implemented in errorHandler.js and AppError.js)
-    - [~] Systematically review and expand input validation (`express-validator` or similar) for all API endpoints. (Example applied to admin product creation, admin suppliers, admin product stock update; further review pending for all other endpoints)
+    - [~] Systematically review and expand input validation (`express-validator` or similar) for all API endpoints. (Example applied to admin product creation, admin suppliers, admin product stock update, admin stock levels; further review pending for all other endpoints)
     - [X] Refine global error handler for better logging (structured logging of stack traces for non-operational errors in prod) and to prevent leaking sensitive details.
 - [~] **Database Interactions & Services:**
-    - [~] Enforce service layer pattern: Ensure all DB logic is within services, minimize direct `db.query` in route handlers. (Completed for Categories, Discounts, Suppliers modules; Product create/update/stock update refactored; pending for others)
+    - [~] Enforce service layer pattern: Ensure all DB logic is within services, minimize direct `db.query` in route handlers. (Completed for Categories, Discounts, Suppliers modules; Product create/update/stock update/stock levels refactored; pending for others)
     - [~] Review and ensure comprehensive transaction management for all multi-step DB operations. (Addressed in CategoryService delete, DiscountService update, SupplierService update/delete, ProductService create/update/stock update; needs broader review)
     - [ ] (Consider for Future) Evaluate ORM/Query Builder (e.g., Sequelize, Knex.js) for potential adoption if complexity warrants.
 - [ ] **Stock Management Logic:**
@@ -165,8 +165,8 @@ This section outlines the primary driver for future backend development, based o
 
 - **[~] Strict Database Interactions & Service Layer Enforcement:**
     -   **Suggestion:**
-        *   Strictly enforce the service layer pattern: All database interaction logic should reside within service functions. Route handlers should only be responsible for request/response handling and calling services. (PARTIALLY DONE - Categories, Discounts, Suppliers modules, and Product create/update/stock update refactored to services)
-        *   Review and ensure comprehensive transaction management (`BEGIN`, `COMMIT`, `ROLLBACK`) for all operations that involve multiple database writes. (PARTIALLY DONE - Addressed in `categoryService.js` delete, `discountService.js` update, `supplierService.js` update/delete, and `productService.js` create/update/stock update methods; broader review needed)
+        *   Strictly enforce the service layer pattern: All database interaction logic should reside within service functions. Route handlers should only be responsible for request/response handling and calling services. (PARTIALLY DONE - Categories, Discounts, Suppliers modules, and Product create/update/stock update/stock levels refactored to services)
+        *   Review and ensure comprehensive transaction management (`BEGIN`, `COMMIT`, `ROLLBACK`) for all operations that involve multiple database writes. (PARTIALLY DONE - Addressed in `categoryService.js` delete, `discountService.js` update, `supplierService.js` update/delete, and `productService.js` create/update/stock update methods; broader review needed for complex queries like stock levels if they were to become write operations)
         *   For complex queries or if direct SQL becomes unwieldy, consider evaluating a Query Builder (like Knex.js) which can work alongside direct `db.query` calls.
     -   **Benefit:** Better separation of concerns, more testable code, improved data consistency, and potentially more maintainable database logic.
 

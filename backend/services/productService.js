@@ -952,6 +952,165 @@ async function updateProductStock(productId, newStockQuantity) {
 }
 
 
+/**
+ * Retrieves a paginated list of stock levels for all products and variants.
+ * Stock quantities are derived from inventory_batches.
+ * @param {object} options - Filtering and pagination options.
+ * @param {number} [options.page=1]
+ * @param {number} [options.limit=20]
+ * @param {string} [options.search_term]
+ * @param {number} [options.category_id]
+ * @param {number} [options.supplier_id]
+ * @param {boolean} [options.low_stock_only]
+ * @param {string} [options.sort_by='product_name'] - Allowed: 'product_name', 'sku', 'stock_quantity', 'reorder_threshold'.
+ * @param {string} [options.sort_order='ASC'] - Allowed: 'ASC', 'DESC'.
+ * @returns {Promise<object>} An object containing the list of stock items and pagination details.
+ * @throws {AppError} If database operation fails.
+ */
+async function getAllStockLevels(options = {}) {
+  const {
+    page = 1,
+    limit = 20,
+    search_term,
+    category_id,
+    supplier_id,
+    low_stock_only = false, // Ensure boolean
+    sort_by = 'product_name',
+    sort_order = 'ASC'
+  } = options;
+
+  const offset = (page - 1) * limit;
+  const queryParams = [];
+  let paramIndex = 1;
+
+  // CTE to calculate effective stock from inventory_batches for each product/variant
+  const batchStockCte = `
+    effective_batch_stock AS (
+      SELECT
+        product_id,
+        variant_id,
+        COALESCE(SUM(current_quantity), 0) AS actual_stock_from_batches
+      FROM inventory_batches
+      WHERE current_quantity > 0
+      GROUP BY product_id, variant_id
+    )
+  `;
+
+  // Main CTE to list all products and variants with their details and effective stock
+  const stockItemsCte = `
+    stock_items_base AS (
+      -- Products without variants
+      SELECT
+        p.id AS product_id,
+        NULL::INT AS variant_id,
+        p.name AS item_name,
+        p.sku AS item_sku,
+        COALESCE(ebs_prod.actual_stock_from_batches, 0) AS stock_quantity,
+        p.reorder_threshold,
+        p.has_variants,
+        p.category_id,
+        c.name AS category_name,
+        p.supplier_id,
+        s.name AS supplier_name,
+        'product' AS item_type,
+        p.name AS sort_product_name,
+        p.sku AS sort_sku
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN suppliers s ON p.supplier_id = s.id
+      LEFT JOIN effective_batch_stock ebs_prod ON p.id = ebs_prod.product_id AND ebs_prod.variant_id IS NULL
+      WHERE p.has_variants = FALSE
+      UNION ALL
+      -- Product variants
+      SELECT
+        p.id AS product_id,
+        pv.id AS variant_id,
+        p.name || ' - ' || COALESCE(pv.sku, 'Variant ' || pv.id) AS item_name,
+        pv.sku AS item_sku,
+        COALESCE(ebs_var.actual_stock_from_batches, 0) AS stock_quantity,
+        p.reorder_threshold, -- Reorder threshold is on the base product
+        TRUE AS has_variants,
+        p.category_id,
+        c.name AS category_name,
+        p.supplier_id,
+        s.name AS supplier_name,
+        'variant' AS item_type,
+        p.name AS sort_product_name,
+        pv.sku AS sort_sku
+      FROM product_variants pv
+      JOIN products p ON pv.product_id = p.id
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN suppliers s ON p.supplier_id = s.id
+      LEFT JOIN effective_batch_stock ebs_var ON p.id = ebs_var.product_id AND pv.id = ebs_var.variant_id
+    )
+  `;
+
+  const finalCtes = `WITH ${batchStockCte}, ${stockItemsCte}`;
+
+  let conditions = [];
+  if (search_term) {
+    conditions.push(`(item_name ILIKE $${paramIndex} OR item_sku ILIKE $${paramIndex})`);
+    queryParams.push(`%${search_term}%`);
+    paramIndex++;
+  }
+  if (category_id) {
+    conditions.push(`category_id = $${paramIndex}`);
+    queryParams.push(category_id);
+    paramIndex++;
+  }
+  if (supplier_id) {
+    conditions.push(`supplier_id = $${paramIndex}`);
+    queryParams.push(supplier_id);
+    paramIndex++;
+  }
+  if (low_stock_only === true) {
+    conditions.push(`(stock_quantity <= reorder_threshold AND reorder_threshold IS NOT NULL AND reorder_threshold > 0)`);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  try {
+    const countQueryString = `${finalCtes} SELECT COUNT(*) as total_count FROM stock_items_base ${whereClause}`;
+    const countResult = await db.query(countQueryString, queryParams);
+    const totalItems = parseInt(countResult.rows[0].total_count);
+
+    let sortColumn = 'sort_product_name'; // Default sort
+    if (sort_by === 'sku') sortColumn = 'item_sku';
+    else if (sort_by === 'stock_quantity') sortColumn = 'stock_quantity';
+    else if (sort_by === 'reorder_threshold') sortColumn = 'reorder_threshold';
+
+    const safeSortOrder = sort_order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    const orderByClause = `ORDER BY ${sortColumn} ${safeSortOrder} NULLS LAST, product_id ${safeSortOrder}, variant_id ${safeSortOrder} NULLS LAST`;
+
+    const dataQueryString = `
+      ${finalCtes}
+      SELECT * FROM stock_items_base
+      ${whereClause}
+      ${orderByClause}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+    const dataFinalParams = [...queryParams, limit, offset];
+
+    const itemsResult = await db.query(dataQueryString, dataFinalParams);
+
+    return {
+      data: itemsResult.rows,
+      pagination: {
+        total: totalItems,
+        page,
+        limit,
+        totalPages: Math.ceil(totalItems / limit),
+        sort_by, // Return current sort options
+        sort_order: safeSortOrder
+      }
+    };
+  } catch (error) {
+    console.error('Error in productService.getAllStockLevels:', error);
+    throw new AppError('Failed to retrieve stock levels.', 500, 'STOCK_LEVELS_FETCH_FAILED');
+  }
+}
+
+
 module.exports = {
   getAllProducts,
   getProductById,
@@ -959,4 +1118,5 @@ module.exports = {
   createProduct,
   updateProduct,
   updateProductStock,
+  getAllStockLevels,
 };

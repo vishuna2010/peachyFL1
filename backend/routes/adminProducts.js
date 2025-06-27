@@ -82,159 +82,51 @@ router.get('/', isAuthenticated, checkPermission('products:view'), validateGetPr
 
 // GET /api/admin/products/stock-levels - Get paginated stock levels for all products/variants
 const validateGetStockLevelsParams = [
-  // Only validate parameters that are expected to be sent and are used by the frontend
-  query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'),
-  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('Limit must be an integer between 1 and 100.'),
-  query('sort_by').optional().trim().isIn(['product_name', 'sku', 'stock_quantity', 'reorder_threshold']).withMessage("Invalid sort_by value. Allowed: product_name, sku, stock_quantity, reorder_threshold."),
-  query('sort_order').optional().trim().isIn(['ASC', 'DESC', 'asc', 'desc']).withMessage("Invalid sort_order value. Allowed: ASC, DESC, asc, desc.")
-  // Temporarily removed:
-  // query('search_term').optional().isString().trim().escape(),
-  // query('category_id').optional({ checkFalsy: true }).isInt({ min: 1 }).toInt().withMessage('Category ID must be a positive integer if provided.'),
-  // query('supplier_id').optional({ checkFalsy: true }).isInt({ min: 1 }).toInt().withMessage('Supplier ID must be a positive integer if provided.'),
-  // query('low_stock_only').optional().isBoolean().toBoolean().withMessage('low_stock_only must be a boolean.'),
+  query('page').optional().isInt({ min: 1 }).toInt().default(1),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(20),
+  query('sort_by').optional().trim().isIn(['product_name', 'sku', 'stock_quantity', 'reorder_threshold']).default('product_name'),
+  query('sort_order').optional().trim().toUpperCase().isIn(['ASC', 'DESC']).default('ASC'),
+  query('search_term').optional().isString().trim(),
+  query('category_id').optional({ checkFalsy: true }).isInt({ min: 1 }).toInt().withMessage('Category ID must be a positive integer if provided.'),
+  query('supplier_id').optional({ checkFalsy: true }).isInt({ min: 1 }).toInt().withMessage('Supplier ID must be a positive integer if provided.'),
+  query('low_stock_only').optional().isBoolean().toBoolean().withMessage('low_stock_only must be a boolean.'),
 ];
 
-router.get('/stock-levels', isAuthenticated, checkPermission('products:view'), validateGetStockLevelsParams, async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
+router.get(
+  '/stock-levels',
+  isAuthenticated,
+  checkPermission('products:view_stock'), // Potentially a more specific permission
+  validateGetStockLevelsParams,
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
 
-  // Use destructured defaults for page and limit if not provided or if validator's default didn't catch all edge cases
-  const pageQuery = parseInt(req.query.page, 10);
-  const limitQuery = parseInt(req.query.limit, 10);
+    // All query parameters are now validated and sanitized by express-validator
+    // including defaults.
+    const options = {
+      page: req.query.page,
+      limit: req.query.limit,
+      search_term: req.query.search_term,
+      category_id: req.query.category_id,
+      supplier_id: req.query.supplier_id,
+      low_stock_only: req.query.low_stock_only,
+      sort_by: req.query.sort_by,
+      sort_order: req.query.sort_order,
+    };
 
-  const page = (!isNaN(pageQuery) && pageQuery >= 1) ? pageQuery : 1;
-  const limit = (!isNaN(limitQuery) && limitQuery >= 1 && limitQuery <= 100) ? limitQuery : 20; // Max 100 as per validator
+    try {
+      const result = await productService.getAllStockLevels(options);
 
-  const {
-    search_term, // Will be undefined if not present
-    category_id, // Will be undefined if not present
-    supplier_id, // Will be undefined if not present
-    low_stock_only, // Will be undefined if not present, or boolean if present
-  } = req.query;
+      // The service returns data in the structure: { data: items, pagination: {total, page, limit, totalPages, sort_by, sort_order} }
+      // This matches the expected response structure for the frontend.
+      res.status(200).json(result);
 
-  // For sort_by and sort_order, use validated values or handler defaults
-  const sort_by = req.query.sort_by || 'product_name';
-  let sort_order = req.query.sort_order || 'ASC';
-  // Ensure sort_order is one of the accepted values after potential trim by validator
-  if (!['ASC', 'DESC', 'asc', 'desc'].includes(sort_order)) {
-      sort_order = 'ASC'; // Fallback if somehow an invalid value bypassed validator (e.g. from direct req.query use before this block)
-  }
-
-
-  const offset = (page - 1) * limit;
-  let queryParams = [];
-
-  let baseCteQuery = `
-    WITH stock_items AS (
-        SELECT
-            p.id as product_id,
-            NULL::INT as variant_id,
-            p.name as item_name,
-            p.sku as item_sku,
-            p.stock_quantity,
-            p.reorder_threshold,
-            p.has_variants,
-            p.category_id,
-            c.name as category_name,
-            p.supplier_id,
-            s.name as supplier_name,
-            'product' as item_type,
-            p.name as sort_product_name,
-            p.sku as sort_sku
-        FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN suppliers s ON p.supplier_id = s.id
-        WHERE p.has_variants = FALSE
-        UNION ALL
-        SELECT
-            p.id as product_id,
-            pv.id as variant_id,
-            p.name || ' - ' || pv.sku as item_name,
-            pv.sku as item_sku,
-            pv.stock_quantity,
-            p.reorder_threshold,
-            TRUE as has_variants,
-            p.category_id,
-            c.name as category_name,
-            p.supplier_id,
-            s.name as supplier_name,
-            'variant' as item_type,
-            p.name as sort_product_name,
-            pv.sku as sort_sku
-        FROM product_variants pv
-        JOIN products p ON pv.product_id = p.id
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN suppliers s ON p.supplier_id = s.id
-    )
-  `;
-
-  let conditions = [];
-  let paramIndex = 1;
-
-  if (search_term) {
-    conditions.push(`(item_name ILIKE $${paramIndex} OR item_sku ILIKE $${paramIndex})`);
-    queryParams.push(`%${search_term}%`);
-    paramIndex++;
-  }
-  if (category_id) {
-    conditions.push(`category_id = $${paramIndex}`);
-    queryParams.push(category_id);
-    paramIndex++;
-  }
-  if (supplier_id) {
-    conditions.push(`supplier_id = $${paramIndex}`);
-    queryParams.push(supplier_id);
-    paramIndex++;
-  }
-  if (low_stock_only === true) {
-    conditions.push(`(stock_quantity <= reorder_threshold AND reorder_threshold > 0)`);
-  }
-
-  let whereClause = "";
-  if (conditions.length > 0) {
-    whereClause = " WHERE " + conditions.join(" AND ");
-  }
-
-  try {
-    const countQueryString = baseCteQuery + `SELECT COUNT(*) as total_count FROM stock_items` + whereClause;
-    const countResult = await db.query(countQueryString, queryParams);
-    const totalItems = parseInt(countResult.rows[0].total_count);
-
-    let sortColumn = 'sort_product_name';
-    if (sort_by === 'sku') sortColumn = 'item_sku';
-    else if (sort_by === 'stock_quantity') sortColumn = 'stock_quantity';
-    else if (sort_by === 'reorder_threshold') sortColumn = 'reorder_threshold';
-
-    const safeSortOrder = sort_order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-
-    const dataQueryString = baseCteQuery +
-      `SELECT * FROM stock_items` +
-      whereClause +
-      ` ORDER BY ${sortColumn} ${safeSortOrder}, product_id ${safeSortOrder}, variant_id ${safeSortOrder} NULLS LAST ` +
-      `LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-
-    const dataFinalParams = [...queryParams, limit, offset];
-    const itemsResult = await db.query(dataQueryString, dataFinalParams);
-
-    res.status(200).json({
-        data: itemsResult.rows,
-        pagination: {
-            total: totalItems,
-            page: page,
-            limit: limit,
-            totalPages: Math.ceil(totalItems / limit),
-            hasNextPage: page < Math.ceil(totalItems / limit),
-            hasPrevPage: page > 1,
-            sort_by: sort_by,
-            sort_order: sort_order
-        }
-    });
-  } catch (error) {
-    console.error('Error fetching stock levels:', error);
-    next(error);
-  }
+    } catch (error) {
+      // Errors from productService (e.g., AppError for DB issues) will be passed to the global handler.
+      next(error);
+    }
 });
 
 // GET /api/admin/products/:productId/assigned-options - List options assigned to a product, with their selected values
