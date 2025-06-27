@@ -139,7 +139,7 @@ This section outlines the primary driver for future backend development, based o
         - [X] Admin Product Variants module (`adminProductVariants.js` - C/U/D Variants)
         - [X] Admin Users module (`adminUsers.js` - C/U/D, Role Update)
         - [X] Admin Orders module (`adminOrders.js` - List, GetByID, UpdateStatus, GetPDFData, ProcessRefund)
-        - [ ] Admin Purchase Orders module (`adminPurchaseOrders.js`)
+        - [X] Admin Purchase Orders module (`adminPurchaseOrders.js` - All existing routes)
         - [ ] Admin Reviews module (`adminReviews.js`)
         - [ ] Admin Reports module (`adminReports.js` - query parameters)
         - [ ] Admin Stock Adjustments module (`adminStockAdjustments.js`)
@@ -157,7 +157,7 @@ This section outlines the primary driver for future backend development, based o
         - [X] Product Management module (`productService.js` - C/U/D Product, C/U/D Variants, Stock Update, Stock Levels, Inventory Batches, Cost History, Label Data, Assigned Options; internal `getAllProducts` refactor)
         - [X] Admin Users module (`userService.js`)
         - [X] Admin Orders module (`orderService.js` - List, GetByID, UpdateStatus, GetPDFData, ProcessRefund)
-        - [ ] Admin Purchase Orders module (`adminPurchaseOrders.js` -> `purchaseOrderService.js`)
+        - [X] Admin Purchase Orders module (`purchaseOrderService.js` - All existing routes refactored)
         - [ ] Admin Reviews module (`adminReviews.js` -> `reviewService.js`)
         - [ ] Admin Reports module (`adminReports.js` - for complex queries -> `reportService.js`)
         - [ ] Admin Stock Adjustments module (`adminStockAdjustments.js` -> `inventoryService.js` or `productService.js`)
@@ -174,7 +174,8 @@ This section outlines the primary driver for future backend development, based o
         - [X] Addressed in C/U/D methods of `productService.js` (including product and variant C/U/D operations).
         - [X] Addressed in C/U/D methods of `userService.js`.
         - [X] Addressed in C/U/D methods of `orderService.js` (status update, refund).
-        - [ ] Broader review for overall transactional integrity in remaining complex operations (e.g., public order processing, PO management, stock adjustments).
+        - [X] Addressed in C/U/D methods of `purchaseOrderService.js` (create PO with items, receive stock, item C/U/D).
+        - [ ] Broader review for overall transactional integrity in remaining complex operations (e.g., public order processing, stock adjustments).
     - [ ] (Consider for Future) Evaluate ORM/Query Builder (e.g., Sequelize, Knex.js) for potential adoption if complexity warrants.
     -   Benefit: Better separation of concerns, more testable code, improved data consistency, and potentially more maintainable database logic.
 
