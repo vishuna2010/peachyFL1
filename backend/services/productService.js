@@ -1111,6 +1111,129 @@ async function getAllStockLevels(options = {}) {
 }
 
 
+/**
+ * Retrieves a paginated list of inventory batches for a specific product, optionally filtered by variant.
+ * @param {number} productId - The ID of the product.
+ * @param {object} options - Filtering and pagination options.
+ * @param {number} [options.variant_id] - Optional variant ID to filter batches.
+ * @param {number} [options.page=1]
+ * @param {number} [options.limit=10]
+ * @param {string} [options.sort_by='received_date_desc'] - Sorting criteria.
+ * @returns {Promise<object>} An object containing { data: batches, pagination: {...} }.
+ * @throws {NotFoundError} If the product is not found.
+ * @throws {AppError} If database operation fails.
+ */
+async function getProductInventoryBatches(productId, options = {}) {
+  const {
+    variant_id,
+    page = 1,
+    limit = 10,
+    sort_by = 'received_date_desc' // Default sort
+  } = options;
+
+  const offset = (page - 1) * limit;
+  const queryParams = [productId];
+  let paramIndex = 1; // Starts at 1 for productId
+
+  // First, check if product exists
+  const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+  if (productCheck.rows.length === 0) {
+    throw new NotFoundError(`Product with ID ${productId} not found.`);
+  }
+
+  let whereClauses = ['ib.product_id = $1'];
+  if (variant_id) {
+    paramIndex++;
+    queryParams.push(variant_id);
+    whereClauses.push(`ib.variant_id = $${paramIndex}`);
+  } else {
+    // If no variant_id is specified, ensure we are only getting batches for the base product (variant_id IS NULL)
+    // This might need adjustment based on whether base products can have batches directly
+    // or if batches are *always* variant-specific (even for non-variant products, where variant_id might be null).
+    // Assuming for now: if variant_id is not given, we list all for the product, or only base-product batches.
+    // The original route implies it lists all for the product if variant_id is omitted.
+    // Let's stick to that: if variant_id is not passed, all batches for product_id are listed.
+    // If a product has_variants=false, its batches would have variant_id=NULL.
+    // If a product has_variants=true, its batches could have variant_id=X or variant_id=Y.
+    // The current filter `ib.product_id = $1` handles product association.
+    // Adding `ib.variant_id = $X` correctly filters for a specific variant.
+    // If no variant_id, it gets all for product_id.
+  }
+
+  const whereString = whereClauses.join(' AND ');
+
+  let orderByClause = 'ORDER BY ib.received_date DESC, ib.id DESC'; // Default from route
+  switch (sort_by) {
+    case 'received_date_asc':
+      orderByClause = 'ORDER BY ib.received_date ASC, ib.id ASC';
+      break;
+    case 'expiry_date_asc':
+      orderByClause = 'ORDER BY ib.expiry_date ASC NULLS LAST, ib.id ASC';
+      break;
+    case 'expiry_date_desc':
+      orderByClause = 'ORDER BY ib.expiry_date DESC NULLS FIRST, ib.id DESC';
+      break;
+    case 'current_quantity_asc':
+      orderByClause = 'ORDER BY ib.current_quantity ASC, ib.id ASC';
+      break;
+    case 'current_quantity_desc':
+      orderByClause = 'ORDER BY ib.current_quantity DESC, ib.id DESC';
+      break;
+    // 'received_date_desc' is the default
+  }
+
+  const dataQuery = `
+    SELECT
+      ib.*,
+      p.name as product_name,
+      pv.sku as variant_sku,
+      po.id as purchase_order_id,
+      s.name as supplier_name
+    FROM inventory_batches ib
+    JOIN products p ON ib.product_id = p.id
+    LEFT JOIN product_variants pv ON ib.variant_id = pv.id
+    LEFT JOIN purchase_order_items poi ON ib.purchase_order_item_id = poi.id
+    LEFT JOIN purchase_orders po ON poi.purchase_order_id = po.id
+    LEFT JOIN suppliers s ON po.supplier_id = s.id
+    WHERE ${whereString}
+    ${orderByClause}
+    LIMIT $${paramIndex + 1} OFFSET $${paramIndex + 2};
+  `;
+  const dataParams = [...queryParams, limit, offset];
+
+  const countQuery = `
+    SELECT COUNT(*) as total_count
+    FROM inventory_batches ib
+    WHERE ${whereString};
+  `;
+  // Count query uses only filter params (productId, variant_id if present)
+  const countParams = queryParams.slice(0, paramIndex);
+
+
+  try {
+    const dataResult = await db.query(dataQuery, dataParams);
+    const countResult = await db.query(countQuery, countParams);
+
+    const totalRecords = parseInt(countResult.rows[0].total_count);
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    return {
+      data: dataResult.rows,
+      pagination: {
+        total: totalRecords,
+        page,
+        limit,
+        totalPages,
+        sort_by // Return current sort options
+      }
+    };
+  } catch (error) {
+    console.error(`Error in productService.getProductInventoryBatches for product ID ${productId}:`, error);
+    throw new AppError('Failed to retrieve inventory batches.', 500, 'PRODUCT_INV_BATCHES_FETCH_FAILED');
+  }
+}
+
+
 module.exports = {
   getAllProducts,
   getProductById,
@@ -1119,4 +1242,5 @@ module.exports = {
   updateProduct,
   updateProductStock,
   getAllStockLevels,
+  getProductInventoryBatches,
 };

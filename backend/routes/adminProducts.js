@@ -577,100 +577,23 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { productId } = req.params; // isInt by validator
-    const { variant_id, page, limit, sort_by } = req.query; // types validated
-    const offset = (page - 1) * limit;
+    const { productId } = req.params; // Validated
+    // All query params are validated and have defaults set by express-validator
+    const options = {
+      variant_id: req.query.variant_id,
+      page: req.query.page,
+      limit: req.query.limit,
+      sort_by: req.query.sort_by
+    };
 
     try {
-      // Check if product exists
-      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
-      if (productCheck.rows.length === 0) {
-        throw new NotFoundError(`Product with ID ${productId} not found.`);
-      }
-
-      const queryParams = [productId];
-      let whereClauses = ['ib.product_id = $1'];
-      let currentParamIndex = 1;
-
-      if (variant_id) {
-        currentParamIndex++;
-        queryParams.push(variant_id);
-        whereClauses.push(`ib.variant_id = $${currentParamIndex}`);
-      }
-
-      const whereString = whereClauses.join(' AND ');
-
-      let orderByClause = 'ORDER BY ib.received_date DESC, ib.id DESC'; // Default
-      switch (sort_by) {
-        case 'received_date_asc':
-          orderByClause = 'ORDER BY ib.received_date ASC, ib.id ASC';
-          break;
-        case 'expiry_date_asc':
-          orderByClause = 'ORDER BY ib.expiry_date ASC NULLS LAST, ib.id ASC';
-          break;
-        case 'expiry_date_desc':
-          orderByClause = 'ORDER BY ib.expiry_date DESC NULLS FIRST, ib.id DESC';
-          break;
-        case 'current_quantity_asc':
-          orderByClause = 'ORDER BY ib.current_quantity ASC, ib.id ASC';
-          break;
-        case 'current_quantity_desc':
-          orderByClause = 'ORDER BY ib.current_quantity DESC, ib.id DESC';
-          break;
-        // Default case 'received_date_desc' is already set
-      }
-
-      const dataQuery = `
-        SELECT
-          ib.*,
-          p.name as product_name,
-          pv.sku as variant_sku,
-          po.id as purchase_order_id,
-          s.name as supplier_name
-        FROM inventory_batches ib
-        JOIN products p ON ib.product_id = p.id
-        LEFT JOIN product_variants pv ON ib.variant_id = pv.id
-        LEFT JOIN purchase_order_items poi ON ib.purchase_order_item_id = poi.id
-        LEFT JOIN purchase_orders po ON poi.purchase_order_id = po.id
-        LEFT JOIN suppliers s ON po.supplier_id = s.id
-        WHERE ${whereString}
-        ${orderByClause}
-        LIMIT $${currentParamIndex + 1} OFFSET $${currentParamIndex + 2};
-      `;
-      const dataParams = [...queryParams, limit, offset];
-
-      const countQuery = `
-        SELECT COUNT(*)
-        FROM inventory_batches ib
-        WHERE ${whereString};
-      `;
-      // Count query uses only filter params (productId, variant_id)
-      const countParams = queryParams.slice(0, currentParamIndex);
-
-      const dataResult = await db.query(dataQuery, dataParams);
-      const countResult = await db.query(countQuery, countParams);
-
-      const totalRecords = parseInt(countResult.rows[0].count);
-      const totalPages = Math.ceil(totalRecords / limit);
-
-      res.status(200).json({
-        data: dataResult.rows,
-        pagination: {
-          total: totalRecords,
-          page,
-          limit,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPrevPage: page > 1,
-          sort_by: sort_by
-        }
-      });
-
+      const result = await productService.getProductInventoryBatches(productId, options);
+      // The service returns an object like { data: batches, pagination: {...} }
+      // which matches the expected response structure.
+      res.status(200).json(result);
     } catch (error) {
-      if (error instanceof NotFoundError) {
-        return res.status(404).json({ message: error.message });
-      }
-      next(error); // Pass to global error handler
+      // Errors from productService (NotFoundError, AppError) are passed to the global handler.
+      next(error);
     }
   }
 );
