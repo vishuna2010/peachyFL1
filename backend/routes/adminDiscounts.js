@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
-const { isAuthenticated, checkPermission } = require('../auth'); // Replaced isAdmin with checkPermission
+// const db = require('../db'); // No longer directly needed in this file
+const { isAuthenticated, checkPermission } = require('../auth');
 const { body, param, query, validationResult } = require('express-validator');
-const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppError');
+const { ConflictError, NotFoundError, BadRequestError } = require('../utils/AppError'); // AppError might still be needed for route-level logic if any
+const discountService = require('../services/discountService'); // Import the new service
 
 // Apply auth middleware to all routes in this router
 // router.use(isAuthenticated, isAdmin); // REMOVED - will apply per route
@@ -135,48 +136,18 @@ router.post('/', isAuthenticated, checkPermission('discounts:manage'), validateC
   // Values are already validated and sanitized by express-validator
   const {
     code, type, value, description, is_active, // is_active is boolean due to toBoolean()
-    valid_from, valid_until, // these are Date objects due to toDate()
-    usage_limit, min_order_amount
-  } = req.body;
+    // Values are already validated and sanitized by express-validator
+    // is_active is boolean due to toBoolean()
+    // valid_from, valid_until are Date objects due to toDate()
+  } = req.body; // Destructure all validated fields
 
-  const client = await db.pool.connect();
   try {
-    // Check for code uniqueness (case-insensitive for robustness, DB constraint is case-sensitive)
-    // The DB constraint will enforce actual uniqueness. This is a pre-check.
-    const existingCode = await client.query('SELECT id FROM discounts WHERE code = $1', [code.toUpperCase()]);
-    if (existingCode.rows.length > 0) {
-        return next(new ConflictError('Discount code already exists.'));
-    }
-
-    const insertQuery = `
-      INSERT INTO discounts
-        (code, type, value, description, is_active, valid_from, valid_until, usage_limit, min_order_amount, updated_at, created_at)
-      VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      RETURNING *;
-    `;
-    const queryValues = [
-      code.toUpperCase(), // Store codes in uppercase for consistency
-      type, // Already toLowerCase() by validator
-      value, // Already toFloat() by validator
-      description, // Optional, trim handled
-      is_active === undefined ? true : is_active, // Default if not provided
-      valid_from, // Date object or null
-      valid_until, // Date object or null
-      usage_limit, // Integer or null
-      min_order_amount, // Float or null
-    ];
-
-    const result = await client.query(insertQuery, queryValues);
-    res.status(201).json(result.rows[0]);
+    // discountData directly uses field names from req.body which match service expectations
+    const newDiscount = await discountService.createDiscount(req.body);
+    res.status(201).json(newDiscount);
   } catch (error) {
-    if (error.code === '23505') { // Unique constraint violation (e.g., code already exists)
-      return next(new ConflictError('Discount code already exists (database constraint).'));
-    }
-    console.error('Error creating discount code:', error);
-    next(error); // Pass to global error handler
-  } finally {
-    client.release();
+    // Service layer errors (ConflictError, BadRequestError, AppError) are passed on
+    next(error);
   }
 });
 
@@ -193,27 +164,21 @@ router.get('/', isAuthenticated, checkPermission('discounts:manage'), validateLi
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const page = req.query.page || 1; // Default if optional and not provided
-  const limit = req.query.limit || 20; // Default if optional and not provided
-  const offset = (page - 1) * limit;
+  // page and limit are validated and defaulted by express-validator middleware
+  const { page, limit } = req.query;
 
   try {
-    const countResult = await db.query('SELECT COUNT(*) FROM discounts');
-    const totalDiscounts = parseInt(countResult.rows[0].count);
-
-    const result = await db.query('SELECT * FROM discounts ORDER BY created_at DESC LIMIT $1 OFFSET $2', [limit, offset]);
-
+    const result = await discountService.getAllDiscounts({ page, limit });
     res.status(200).json({
-        data: result.rows,
+        data: result.discounts,
         pagination: {
-            total: totalDiscounts,
-            page: page,
-            limit: limit,
-            totalPages: Math.ceil(totalDiscounts / limit)
+            total: result.totalDiscounts,
+            page: result.page,
+            limit: result.limit,
+            totalPages: result.totalPages,
         }
     });
   } catch (error) {
-    console.error('Error listing discount codes:', error);
     next(error);
   }
 });
@@ -227,13 +192,10 @@ router.get('/:id', isAuthenticated, checkPermission('discounts:manage'), validat
   const { id } = req.params; // id is validated and sanitized (toInt)
 
   try {
-    const result = await db.query('SELECT * FROM discounts WHERE id = $1', [id]);
-    if (result.rows.length === 0) {
-      throw new NotFoundError(`Discount code with ID ${id} not found.`);
-    }
-    res.status(200).json(result.rows[0]);
+    const discount = await discountService.getDiscountById(id);
+    // Service throws NotFoundError if not found
+    res.status(200).json(discount);
   } catch (error) {
-    console.error(`Error fetching discount code ${id}:`, error);
     next(error);
   }
 });
@@ -246,67 +208,35 @@ router.put('/:id', isAuthenticated, checkPermission('discounts:manage'), validat
   }
 
   const { id } = req.params; // Validated id
-  const updates = req.body; // Validated and sanitized fields
+  const updateData = req.body; // Validated and sanitized fields by express-validator
 
-  // Check if there's anything to update
+  // Construct an object with only the fields that are actually present in the request body
+  // to avoid sending undefined fields to the service layer, which might interpret them.
+  const fieldsToUpdate = {};
   const updatableFields = ['type', 'value', 'description', 'is_active', 'valid_from', 'valid_until', 'usage_limit', 'min_order_amount'];
-  const providedUpdates = updatableFields.filter(field => updates[field] !== undefined);
-  if (providedUpdates.length === 0) {
-    return next(new BadRequestError('No fields provided for update.'));
+
+  let hasUpdate = false;
+  for (const field of updatableFields) {
+    if (updateData.hasOwnProperty(field)) {
+      fieldsToUpdate[field] = updateData[field];
+      hasUpdate = true;
+    }
   }
 
-  const client = await db.pool.connect();
+  if (!hasUpdate) {
+    // Although the service might return current data if no fields are updated,
+    // it's good practice for the route to respond if no actual update operation is requested.
+    // Alternatively, fetch current data here if that's the desired behavior for no-op updates.
+    // For now, let's consider it a bad request if no valid fields for update are provided.
+    return next(new BadRequestError('No valid fields provided for update.'));
+  }
+
   try {
-    await client.query('BEGIN');
-    // Fetch current discount to compare for complex validations if needed (e.g. valid_until vs existing valid_from)
-    // And to return if no actual change is made.
-    const currentDiscountResult = await client.query('SELECT * FROM discounts WHERE id = $1 FOR UPDATE', [id]);
-    if (currentDiscountResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      throw new NotFoundError(`Discount code with ID ${id} not found.`);
-    }
-    // req.currentDiscount = currentDiscountResult.rows[0]; // Make available to custom validators if they were more complex
-
-    // More robust valid_until check against current or new valid_from
-    let finalValidFrom = updates.valid_from !== undefined ? updates.valid_from : currentDiscountResult.rows[0].valid_from;
-    if (updates.valid_until !== undefined && finalValidFrom && updates.valid_until < finalValidFrom) {
-        await client.query('ROLLBACK');
-        throw new BadRequestError('valid_until must be after or the same as valid_from.');
-    }
-    // More robust value check if type is not in req.body but value is.
-    if (updates.value !== undefined && updates.type === undefined && currentDiscountResult.rows[0].type === 'percentage') {
-        if (updates.value < 0.01 || updates.value > 100) {
-             await client.query('ROLLBACK');
-             throw new Error('Percentage discount value must be between 0.01 and 100.');
-        }
-    }
-
-
-    const setClauses = [];
-    const values = [];
-    let paramIndex = 1;
-
-    for (const field of providedUpdates) {
-        setClauses.push(`${field} = $${paramIndex++}`);
-        values.push(updates[field]);
-    }
-
-    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
-    values.push(id);
-
-    const updateQuery = `UPDATE discounts SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *;`;
-    const result = await client.query(updateQuery, values);
-
-    await client.query('COMMIT');
-    res.status(200).json(result.rows[0]);
-
+    const updatedDiscount = await discountService.updateDiscount(id, fieldsToUpdate);
+    res.status(200).json(updatedDiscount);
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error(`Error updating discount code ${id}:`, error);
-    // Note: Unique constraint on 'code' is not an issue here as 'code' is not updatable.
+    // Service layer handles NotFoundError, BadRequestError, AppError
     next(error);
-  } finally {
-    client.release();
   }
 });
 
@@ -319,13 +249,10 @@ router.delete('/:id', isAuthenticated, checkPermission('discounts:manage'), vali
   const { id } = req.params; // Validated id
 
   try {
-    const result = await db.query('DELETE FROM discounts WHERE id = $1 RETURNING *', [id]);
-    if (result.rowCount === 0) {
-      throw new NotFoundError(`Discount code with ID ${id} not found.`);
-    }
-    res.status(200).json({ message: 'Discount code deleted successfully.', discount: result.rows[0] });
+    const deletedDiscount = await discountService.deleteDiscount(id);
+    // Service throws NotFoundError if not found
+    res.status(200).json({ message: 'Discount code deleted successfully.', discount: deletedDiscount });
   } catch (error) {
-    console.error(`Error deleting discount code ${id}:`, error);
     next(error);
   }
 });

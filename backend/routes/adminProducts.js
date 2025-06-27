@@ -82,159 +82,51 @@ router.get('/', isAuthenticated, checkPermission('products:view'), validateGetPr
 
 // GET /api/admin/products/stock-levels - Get paginated stock levels for all products/variants
 const validateGetStockLevelsParams = [
-  // Only validate parameters that are expected to be sent and are used by the frontend
-  query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'),
-  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('Limit must be an integer between 1 and 100.'),
-  query('sort_by').optional().trim().isIn(['product_name', 'sku', 'stock_quantity', 'reorder_threshold']).withMessage("Invalid sort_by value. Allowed: product_name, sku, stock_quantity, reorder_threshold."),
-  query('sort_order').optional().trim().isIn(['ASC', 'DESC', 'asc', 'desc']).withMessage("Invalid sort_order value. Allowed: ASC, DESC, asc, desc.")
-  // Temporarily removed:
-  // query('search_term').optional().isString().trim().escape(),
-  // query('category_id').optional({ checkFalsy: true }).isInt({ min: 1 }).toInt().withMessage('Category ID must be a positive integer if provided.'),
-  // query('supplier_id').optional({ checkFalsy: true }).isInt({ min: 1 }).toInt().withMessage('Supplier ID must be a positive integer if provided.'),
-  // query('low_stock_only').optional().isBoolean().toBoolean().withMessage('low_stock_only must be a boolean.'),
+  query('page').optional().isInt({ min: 1 }).toInt().default(1),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(20),
+  query('sort_by').optional().trim().isIn(['product_name', 'sku', 'stock_quantity', 'reorder_threshold']).default('product_name'),
+  query('sort_order').optional().trim().toUpperCase().isIn(['ASC', 'DESC']).default('ASC'),
+  query('search_term').optional().isString().trim(),
+  query('category_id').optional({ checkFalsy: true }).isInt({ min: 1 }).toInt().withMessage('Category ID must be a positive integer if provided.'),
+  query('supplier_id').optional({ checkFalsy: true }).isInt({ min: 1 }).toInt().withMessage('Supplier ID must be a positive integer if provided.'),
+  query('low_stock_only').optional().isBoolean().toBoolean().withMessage('low_stock_only must be a boolean.'),
 ];
 
-router.get('/stock-levels', isAuthenticated, checkPermission('products:view'), validateGetStockLevelsParams, async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
+router.get(
+  '/stock-levels',
+  isAuthenticated,
+  checkPermission('products:view_stock'), // Potentially a more specific permission
+  validateGetStockLevelsParams,
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
 
-  // Use destructured defaults for page and limit if not provided or if validator's default didn't catch all edge cases
-  const pageQuery = parseInt(req.query.page, 10);
-  const limitQuery = parseInt(req.query.limit, 10);
+    // All query parameters are now validated and sanitized by express-validator
+    // including defaults.
+    const options = {
+      page: req.query.page,
+      limit: req.query.limit,
+      search_term: req.query.search_term,
+      category_id: req.query.category_id,
+      supplier_id: req.query.supplier_id,
+      low_stock_only: req.query.low_stock_only,
+      sort_by: req.query.sort_by,
+      sort_order: req.query.sort_order,
+    };
 
-  const page = (!isNaN(pageQuery) && pageQuery >= 1) ? pageQuery : 1;
-  const limit = (!isNaN(limitQuery) && limitQuery >= 1 && limitQuery <= 100) ? limitQuery : 20; // Max 100 as per validator
+    try {
+      const result = await productService.getAllStockLevels(options);
 
-  const {
-    search_term, // Will be undefined if not present
-    category_id, // Will be undefined if not present
-    supplier_id, // Will be undefined if not present
-    low_stock_only, // Will be undefined if not present, or boolean if present
-  } = req.query;
+      // The service returns data in the structure: { data: items, pagination: {total, page, limit, totalPages, sort_by, sort_order} }
+      // This matches the expected response structure for the frontend.
+      res.status(200).json(result);
 
-  // For sort_by and sort_order, use validated values or handler defaults
-  const sort_by = req.query.sort_by || 'product_name';
-  let sort_order = req.query.sort_order || 'ASC';
-  // Ensure sort_order is one of the accepted values after potential trim by validator
-  if (!['ASC', 'DESC', 'asc', 'desc'].includes(sort_order)) {
-      sort_order = 'ASC'; // Fallback if somehow an invalid value bypassed validator (e.g. from direct req.query use before this block)
-  }
-
-
-  const offset = (page - 1) * limit;
-  let queryParams = [];
-
-  let baseCteQuery = `
-    WITH stock_items AS (
-        SELECT
-            p.id as product_id,
-            NULL::INT as variant_id,
-            p.name as item_name,
-            p.sku as item_sku,
-            p.stock_quantity,
-            p.reorder_threshold,
-            p.has_variants,
-            p.category_id,
-            c.name as category_name,
-            p.supplier_id,
-            s.name as supplier_name,
-            'product' as item_type,
-            p.name as sort_product_name,
-            p.sku as sort_sku
-        FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN suppliers s ON p.supplier_id = s.id
-        WHERE p.has_variants = FALSE
-        UNION ALL
-        SELECT
-            p.id as product_id,
-            pv.id as variant_id,
-            p.name || ' - ' || pv.sku as item_name,
-            pv.sku as item_sku,
-            pv.stock_quantity,
-            p.reorder_threshold,
-            TRUE as has_variants,
-            p.category_id,
-            c.name as category_name,
-            p.supplier_id,
-            s.name as supplier_name,
-            'variant' as item_type,
-            p.name as sort_product_name,
-            pv.sku as sort_sku
-        FROM product_variants pv
-        JOIN products p ON pv.product_id = p.id
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN suppliers s ON p.supplier_id = s.id
-    )
-  `;
-
-  let conditions = [];
-  let paramIndex = 1;
-
-  if (search_term) {
-    conditions.push(`(item_name ILIKE $${paramIndex} OR item_sku ILIKE $${paramIndex})`);
-    queryParams.push(`%${search_term}%`);
-    paramIndex++;
-  }
-  if (category_id) {
-    conditions.push(`category_id = $${paramIndex}`);
-    queryParams.push(category_id);
-    paramIndex++;
-  }
-  if (supplier_id) {
-    conditions.push(`supplier_id = $${paramIndex}`);
-    queryParams.push(supplier_id);
-    paramIndex++;
-  }
-  if (low_stock_only === true) {
-    conditions.push(`(stock_quantity <= reorder_threshold AND reorder_threshold > 0)`);
-  }
-
-  let whereClause = "";
-  if (conditions.length > 0) {
-    whereClause = " WHERE " + conditions.join(" AND ");
-  }
-
-  try {
-    const countQueryString = baseCteQuery + `SELECT COUNT(*) as total_count FROM stock_items` + whereClause;
-    const countResult = await db.query(countQueryString, queryParams);
-    const totalItems = parseInt(countResult.rows[0].total_count);
-
-    let sortColumn = 'sort_product_name';
-    if (sort_by === 'sku') sortColumn = 'item_sku';
-    else if (sort_by === 'stock_quantity') sortColumn = 'stock_quantity';
-    else if (sort_by === 'reorder_threshold') sortColumn = 'reorder_threshold';
-
-    const safeSortOrder = sort_order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-
-    const dataQueryString = baseCteQuery +
-      `SELECT * FROM stock_items` +
-      whereClause +
-      ` ORDER BY ${sortColumn} ${safeSortOrder}, product_id ${safeSortOrder}, variant_id ${safeSortOrder} NULLS LAST ` +
-      `LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-
-    const dataFinalParams = [...queryParams, limit, offset];
-    const itemsResult = await db.query(dataQueryString, dataFinalParams);
-
-    res.status(200).json({
-        data: itemsResult.rows,
-        pagination: {
-            total: totalItems,
-            page: page,
-            limit: limit,
-            totalPages: Math.ceil(totalItems / limit),
-            hasNextPage: page < Math.ceil(totalItems / limit),
-            hasPrevPage: page > 1,
-            sort_by: sort_by,
-            sort_order: sort_order
-        }
-    });
-  } catch (error) {
-    console.error('Error fetching stock levels:', error);
-    next(error);
-  }
+    } catch (error) {
+      // Errors from productService (e.g., AppError for DB issues) will be passed to the global handler.
+      next(error);
+    }
 });
 
 // GET /api/admin/products/:productId/assigned-options - List options assigned to a product, with their selected values
@@ -254,42 +146,14 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { productId } = req.params;
+    const { productId } = req.params; // Validated by express-validator
 
     try {
-      // Check if product exists
-      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
-      if (productCheck.rows.length === 0) {
-        return next(new NotFoundError(`Product with ID ${productId} not found.`));
-      }
-
-      const optimizedQuery = `
-        SELECT
-          pao.id AS assigned_option_id,
-          pao.option_id AS global_option_id,
-          po.name AS global_option_name, // Intended final field name
-          pao.created_at,
-          pao.updated_at,
-          COALESCE(
-            (
-              SELECT json_agg(json_build_object('id', pov.id, 'value', pov.value) ORDER BY pov.value ASC)
-              FROM product_assigned_option_specific_values paosv
-              JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
-              WHERE paosv.product_assigned_option_id = pao.id
-            ),
-            '[]'::json
-          ) AS selected_values
-        FROM product_assigned_options pao
-        JOIN product_options po ON pao.option_id = po.id
-        WHERE pao.product_id = $1
-        ORDER BY po.name;
-      `;
-      const result = await db.query(optimizedQuery, [productId]);
-
-      res.status(200).json(result.rows);
-
+      const assignedOptions = await productService.getProductAssignedOptions(productId);
+      // The service method handles the product existence check and throws NotFoundError if necessary.
+      res.status(200).json(assignedOptions);
     } catch (error) {
-      console.error(`Error fetching assigned options for product ID ${productId}:`, error);
+      // Errors from productService (NotFoundError, AppError) are passed to the global handler.
       next(error);
     }
   }
@@ -332,114 +196,26 @@ router.post(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const {
-      name, description, price, category_id, supplier_id, sku,
-      stock_quantity, reorder_threshold, product_status, tax_class_id,
-      cost_price, wholesale_price, brand_manufacturer, supplier_reference,
-      specifications, tags: tagNames
-    } = req.body;
-
-    const client = await db.pool.connect();
-    let s3FileKeyToStore = null;
-    let imageUrlToStoreInDb = null;
+    // req.body contains validated and sanitized data
+    // req.file contains the uploaded file data, if any
 
     try {
-      await client.query('BEGIN');
-
-      // Image handling if a file is uploaded
-      if (req.file) {
-        if (isS3Configured()) {
-          try {
-            const uniqueFileName = `product-images/product-${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
-            const s3Data = await uploadFileToS3(req.file.buffer, uniqueFileName, req.file.mimetype);
-            imageUrlToStoreInDb = s3Data.Location;
-            s3FileKeyToStore = s3Data.Key;
-          } catch (s3Error) {
-            await client.query('ROLLBACK');
-            console.error("S3 Upload Error on product creation:", s3Error);
-            return res.status(500).json({ message: "Failed to upload image to S3." });
-          }
-        } else {
-          await client.query('ROLLBACK');
-          console.warn("Attempted to upload image during product creation, but S3 is not configured.");
-          return res.status(500).json({ message: "Image upload service is not configured." });
-        }
-      }
-
-      const insertQuery = `
-        INSERT INTO products (
-          name, description, price, category_id, supplier_id, sku, stock_quantity,
-          reorder_threshold, product_status, image_url, tax_class_id, cost_price,
-          wholesale_price, brand_manufacturer, supplier_reference, specifications,
-          has_variants, average_rating, review_count, created_at, updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-          FALSE, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-        ) RETURNING *;
-      `;
-
-      // Ensure correct handling of nulls for optional fields
-      const values = [
-        name,
-        description || null,
-        price,
-        category_id || null,
-        supplier_id || null,
-        sku || null,
-        stock_quantity, // Defaulted to 0 by validator if not provided
-        reorder_threshold || null,
-        product_status, // Defaulted by validator
-        imageUrlToStoreInDb, // From S3 upload or null
-        tax_class_id || null,
-        cost_price || null,
-        wholesale_price || null,
-        brand_manufacturer || null,
-        supplier_reference || null,
-        specifications ? (typeof specifications === 'string' ? specifications : JSON.stringify(specifications)) : null,
-      ];
-
-      const result = await client.query(insertQuery, values);
-      const newProduct = result.rows[0];
-
-      // Tags handling
-      if (Array.isArray(tagNames) && tagNames.length > 0) {
-        const tagIds = await getOrCreateTagIds(tagNames, client);
-        for (const tagId of tagIds) {
-          await client.query('INSERT INTO product_tags (product_id, tag_id) VALUES ($1, $2)', [newProduct.id, tagId]);
-        }
-      }
-
-      await client.query('COMMIT');
-
-      // Fetch the newly created product with all necessary details for the response (including any generated tags)
-      const createdProductDetails = await productService.getProductById(newProduct.id);
+      const createdProductDetails = await productService.createProduct(req.body, req.file);
 
       auditLogService.recordAuditEvent(
         'PRODUCT_CREATE_SUCCESS',
         { userId: req.user.userId, userEmail: req.user.email },
-        { resourceType: 'PRODUCT', resourceId: newProduct.id },
-        { inputData: req.body, createdProduct: createdProductDetails },
+        { resourceType: 'PRODUCT', resourceId: createdProductDetails.id },
+        { inputData: req.body, createdProductSummary: { id: createdProductDetails.id, name: createdProductDetails.name, sku: createdProductDetails.sku } },
         req
-      ).catch(err => console.error(`Audit log failed for PRODUCT_CREATE_SUCCESS (ID: ${newProduct.id}):`, err));
+      ).catch(err => console.error(`Audit log failed for PRODUCT_CREATE_SUCCESS (ID: ${createdProductDetails.id}):`, err));
 
       res.status(201).json({ data: createdProductDetails });
 
     } catch (error) {
-      await client.query('ROLLBACK');
-      if (s3FileKeyToStore && isS3Configured()) {
-        try {
-          await deleteFileFromS3(s3FileKeyToStore);
-          console.log(`Rolled back S3 upload for key: ${s3FileKeyToStore} due to DB error on product creation.`);
-        } catch (s3RollbackError) {
-          console.error(`Critical: Failed to rollback S3 upload for key ${s3FileKeyToStore} after DB error:`, s3RollbackError);
-        }
-      }
-      if (error.code === '23505' && error.constraint === 'products_sku_key') {
-        return res.status(409).json({ message: `SKU "${sku}" already exists.` });
-      }
+      // productService.createProduct will throw AppError, ConflictError, etc.
+      // These will be handled by the global error handler.
       next(error);
-    } finally {
-      client.release();
     }
   }
 );
@@ -514,310 +290,92 @@ router.put(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { productId } = req.params;
-    const { /* extract all validated fields from req.body */
-      name, description, price, category_id, tags: tagNames,
-      stock_quantity, image_url: newImageUrlFromRequest, supplier_id, sku, reorder_threshold,
-      brand_manufacturer, supplier_reference, product_status,
-      cost_price, wholesale_price, tax_class_id, specifications
-    } = req.body;
+    const { productId } = req.params; // Validated
+    const productData = req.body;    // Validated by express-validator
+    const fileData = req.file;       // From multer middleware
 
-    const client = await db.pool.connect();
-    let s3FileKeyToStore = null;
-    let finalImageUrlToStoreInDb = undefined;
-    let oldS3KeyToDelete = null;
+    // Determine if image removal is intended based on image_url field
+    // If image_url is explicitly set to null in the request, it means remove.
+    // If image_url is not in productData, and no new file is uploaded, existing image is kept.
+    const removeImageFlag = productData.hasOwnProperty('image_url') && productData.image_url === null;
 
     try {
-      await client.query('BEGIN');
-
-      const currentProductResult = await client.query('SELECT image_url, sku, has_variants FROM products WHERE id = $1 FOR UPDATE', [productId]);
-      if (currentProductResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return next(new NotFoundError(`Product with ID ${productId} not found.`));
-      }
-      const currentProduct = currentProductResult.rows[0];
-      finalImageUrlToStoreInDb = currentProduct.image_url; // Default to current image
-
-      // Image handling
-      if (req.file) { // New image uploaded
-        if (isS3Configured()) {
-          try {
-            const uniqueFileName = `product-images/product-${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
-            const s3Data = await uploadFileToS3(req.file.buffer, uniqueFileName, req.file.mimetype);
-            finalImageUrlToStoreInDb = s3Data.Location;
-            s3FileKeyToStore = s3Data.Key; // Keep track of new key for potential rollback
-            if (currentProduct.image_url) {
-              oldS3KeyToDelete = getS3KeyFromUrl(currentProduct.image_url);
-            }
-          } catch (s3Error) {
-            await client.query('ROLLBACK');
-            console.error("S3 Upload Error on product update:", s3Error);
-            return res.status(500).json({ message: "Failed to upload new image to S3." });
-          }
-        } else {
-          await client.query('ROLLBACK');
-          console.warn("Attempted to upload new image, but S3 is not configured.");
-          return res.status(500).json({ message: "Image upload service is not configured." });
-        }
-      } else if (newImageUrlFromRequest === null && currentProduct.image_url) { // Explicitly removing image
-        if (isS3Configured()) {
-          oldS3KeyToDelete = getS3KeyFromUrl(currentProduct.image_url);
-        }
-        finalImageUrlToStoreInDb = null;
-      }
-      // If newImageUrlFromRequest is a string, it means client wants to keep the existing one or set a new one by URL (not supported by this flow directly, image_url field is for this)
-      // If newImageUrlFromRequest is undefined, it means no change to image from form-data text fields, rely on req.file or current image.
-
-      const setClauses = [];
-      const queryUpdateValues = [];
-      let currentParamIndex = 1;
-
-      const addClause = (field, value) => {
-        if (value !== undefined) {
-          setClauses.push(`${field} = $${currentParamIndex++}`);
-          queryUpdateValues.push(value);
-        }
-      };
-
-      // Add fields from req.body to update query if they exist
-      addClause('name', name);
-      addClause('description', description === '' ? null : description); // Handle empty string for nullable text fields
-      addClause('price', price);
-      addClause('category_id', category_id === '' || category_id === null ? null : parseInt(category_id));
-      addClause('supplier_id', supplier_id === '' || supplier_id === null ? null : parseInt(supplier_id));
-      addClause('sku', sku === '' ? null : sku);
-
-      if (stock_quantity !== undefined) {
-        if (!currentProduct.has_variants) {
-          addClause('stock_quantity', parseInt(stock_quantity));
-        } else {
-          console.warn(`Attempt to update base stock_quantity for product ID ${productId} which has variants. Update to stock_quantity ignored.`);
-        }
-      }
-
-      addClause('reorder_threshold', reorder_threshold === '' || reorder_threshold === null ? null : parseInt(reorder_threshold));
-      addClause('product_status', product_status);
-      addClause('tax_class_id', tax_class_id === '' || tax_class_id === null ? null : parseInt(tax_class_id));
-      addClause('cost_price', cost_price === '' || cost_price === null ? null : parseFloat(cost_price));
-      addClause('wholesale_price', wholesale_price === '' || wholesale_price === null ? null : parseFloat(wholesale_price));
-      addClause('brand_manufacturer', brand_manufacturer === '' ? null : brand_manufacturer);
-      addClause('supplier_reference', supplier_reference === '' ? null : supplier_reference);
-
-      if (specifications !== undefined) {
-        if (specifications === '' || specifications === null) {
-          addClause('specifications', null);
-        } else {
-          // Pass the string directly. The database will handle it based on column type (JSONB).
-          addClause('specifications', specifications);
-        }
-      }
-
-      // Ensure image_url is added to clauses only if it actually changed or was explicitly set to null
-      if (req.file || (newImageUrlFromRequest === null && currentProduct.image_url !== null) || (newImageUrlFromRequest !== undefined && newImageUrlFromRequest !== currentProduct.image_url) ) {
-         addClause('image_url', finalImageUrlToStoreInDb);
-      }
-
-
-      if (setClauses.length > 0) {
-        setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
-        const updateQueryString = `UPDATE products SET ${setClauses.join(", ")} WHERE id = $${currentParamIndex} RETURNING id`;
-        queryUpdateValues.push(productId);
-
-        const updateResult = await client.query(updateQueryString, queryUpdateValues);
-        if (updateResult.rowCount === 0) {
-          await client.query('ROLLBACK');
-          // This should ideally not happen if FOR UPDATE lock was successful and ID is correct
-          return next(new NotFoundError(`Product with ID ${productId} not found during update attempt.`));
-        }
-      }
-
-      // Tags handling
-      if (tagNames !== undefined) { // tagNames can be an empty array to remove all tags
-        await client.query('DELETE FROM product_tags WHERE product_id = $1', [productId]);
-        if (Array.isArray(tagNames) && tagNames.length > 0) {
-          const tagIds = await getOrCreateTagIds(tagNames, client); // client from this scope
-          for (const tagId of tagIds) {
-            await client.query('INSERT INTO product_tags (product_id, tag_id) VALUES ($1, $2)', [productId, tagId]);
-          }
-        }
-        // If only tags changed, and no other fields, ensure updated_at is touched
-        if (setClauses.length === 0) {
-           await client.query('UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [productId]);
-        }
-      }
-
-      await client.query('COMMIT');
-
-      // If commit was successful, delete old S3 image if applicable
-      if (oldS3KeyToDelete && isS3Configured()) {
-        try {
-          await deleteFileFromS3(oldS3KeyToDelete);
-          console.log(`Successfully deleted old S3 image: ${oldS3KeyToDelete}`);
-        } catch (s3DeleteError) {
-          // Log this error but don't fail the request as the main DB update was successful
-          console.error(`Failed to delete old S3 image ${oldS3KeyToDelete} after product update:`, s3DeleteError);
-        }
-      }
-
-      // Fetch the updated product with all necessary details for the response
-      const updatedProduct = await productService.getProductById(productId); // Uses its own client connection
-
-      // Prepare details for audit log
-      const fieldsAttemptedToUpdate = { ...req.body };
-      // Remove sensitive or very large data not suitable for a summary audit log, if necessary.
-      // For example, if req.body might contain uploaded file objects or very large text fields:
-      // delete fieldsAttemptedToUpdate.file; // Example if 'file' was a field
-      // delete fieldsAttemptedToUpdate.description; // Example if description is too long for audit 'details' summary
-
-      // It's also good to remove the password if it were ever part of a user update DTO,
-      // though this is a product update. For products, most fields are probably fine.
+      const updatedProductDetails = await productService.updateProduct(
+        productId,
+        productData,
+        fileData,
+        removeImageFlag
+      );
 
       auditLogService.recordAuditEvent(
         'PRODUCT_UPDATE_SUCCESS',
         { userId: req.user.userId, userEmail: req.user.email },
-        { resourceType: 'PRODUCT', resourceId: productId },
+        { resourceType: 'PRODUCT', resourceId: updatedProductDetails.id },
         {
-          inputData: fieldsAttemptedToUpdate,
-          updatedDataSnapshot: {
-              name: updatedProduct.name,
-              description: updatedProduct.description,
-              price: updatedProduct.price,
-              sku: updatedProduct.sku,
-              stock_quantity: updatedProduct.stock_quantity,
-              product_status: updatedProduct.product_status
-          }
+          inputData: productData, // Log what was sent in request
+          updatedProductSummary: { id: updatedProductDetails.id, name: updatedProductDetails.name, sku: updatedProductDetails.sku }
         },
         req
-      ).catch(err => console.error(`Audit log failed for PRODUCT_UPDATE_SUCCESS (ID: ${productId}):`, err));
+      ).catch(err => console.error(`Audit log failed for PRODUCT_UPDATE_SUCCESS (ID: ${updatedProductDetails.id}):`, err));
 
-      res.status(200).json({ data: updatedProduct });
+      res.status(200).json({ data: updatedProductDetails });
 
     } catch (error) {
-      await client.query('ROLLBACK');
-      // If a new image was uploaded to S3 but DB transaction failed, delete the new S3 image
-      if (s3FileKeyToStore && isS3Configured()) {
-        try {
-          await deleteFileFromS3(s3FileKeyToStore);
-          console.log(`Rolled back S3 upload for key: ${s3FileKeyToStore} due to DB error on product update.`);
-        } catch (s3RollbackError) {
-          console.error(`Critical: Failed to rollback S3 upload for key ${s3FileKeyToStore} after DB error:`, s3RollbackError);
-          // This situation might require manual cleanup in S3.
-        }
-      }
-      // Handle specific DB errors like unique constraint violations (e.g., SKU)
-      if (error.code === '23505' && error.constraint === 'products_sku_key') {
-        return res.status(409).json({ message: `SKU "${sku}" already exists.` });
-      }
-      next(error); // Pass to global error handler
-    } finally {
-      client.release();
+      // productService.updateProduct will throw AppError, NotFoundError, ConflictError, etc.
+      next(error);
     }
   }
 );
 
+const validateStockUpdateParams = [
+  param('id').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt(),
+  body('new_stock_quantity')
+    .notEmpty().withMessage('new_stock_quantity is required.')
+    .isInt({ min: 0 }).withMessage('New stock quantity must be a non-negative integer.')
+    .toInt()
+];
+
 // PUT /api/admin/products/:id/stock - Update a product's stock quantity
-router.put('/:id/stock', isAuthenticated, checkPermission('products:edit'), async (req, res) => {
-  // Note: The permission 'products:edit' might be too broad if you want separate control over stock.
-  // Could use a more specific 'products:edit_inventory' if defined and assigned.
-  const { id } = req.params;
-  const { new_stock_quantity } = req.body;
-
-  // Validate product ID
-  if (isNaN(parseInt(id))) {
-    return res.status(400).json({ message: 'Invalid product ID format.' });
-  }
-
-  // Validate new_stock_quantity
-  if (new_stock_quantity === undefined) {
-    return res.status(400).json({ message: 'new_stock_quantity is required in the request body.' });
-  }
-  const stockQuantity = parseInt(new_stock_quantity);
-  if (isNaN(stockQuantity) || stockQuantity < 0) {
-    return res.status(400).json({ message: 'new_stock_quantity must be a non-negative integer.' });
-  }
-
-  const client = await db.pool.connect();
-  try {
-    // We could start a transaction here if other operations were involved,
-    // but for a single update, it's often optional unless strict atomicity with checks is needed.
-    // For simplicity, let's proceed without an explicit transaction for this single update.
-    // However, checking if product exists first is a good practice.
-
-    // Check if product exists
-    const productExistsResult = await client.query('SELECT id FROM products WHERE id = $1', [id]);
-    if (productExistsResult.rows.length === 0) {
-      return res.status(404).json({ message: `Product with ID ${id} not found.` });
+router.put(
+  '/:id/stock',
+  isAuthenticated,
+  checkPermission('products:edit_inventory'), // Using a more specific permission
+  validateStockUpdateParams,
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
 
-    // Fetch product details to check has_variants
-    const productDetailsResult = await client.query('SELECT id, has_variants FROM products WHERE id = $1', [id]);
-    // This check is technically redundant due to productExistsResult, but good for clarity
-    if (productDetailsResult.rows.length === 0) {
-      return res.status(404).json({ message: `Product with ID ${id} not found (unexpected after initial check).` });
+    const { id } = req.params; // Validated productId
+    const { new_stock_quantity } = req.body; // Validated new_stock_quantity
+
+    try {
+      const updatedProduct = await productService.updateProductStock(id, new_stock_quantity);
+
+      // It might be useful for the audit log to know the old stock quantity.
+      // The service currently doesn't return it. For a more complete audit,
+      // the service could fetch old stock before updating or the audit log could be adapted.
+      // For now, logging new stock.
+      auditLogService.recordAuditEvent(
+        'PRODUCT_STOCK_UPDATE',
+        { userId: req.user.userId, userEmail: req.user.email },
+        { resourceType: 'PRODUCT', resourceId: id },
+        {
+          updated_product_name: updatedProduct.name, // Get name from returned product
+          new_stock_quantity: new_stock_quantity
+        },
+        req
+      ).catch(err => console.error(`Audit log failed for PRODUCT_STOCK_UPDATE (ID: ${id}):`, err));
+
+      res.status(200).json({
+        message: `Stock quantity for product #${id} (${updatedProduct.name}) updated to ${new_stock_quantity}.`,
+        product: updatedProduct
+      });
+    } catch (error) {
+      // Errors from productService (NotFoundError, BadRequestError, AppError) will be passed to the global handler.
+      next(error);
     }
-    const product = productDetailsResult.rows[0];
-
-    if (product.has_variants) {
-      return res.status(400).json({ message: `Stock for product ID ${id} is managed at the variant level. Please update variant stock instead.` });
-    }
-
-    // Update the product's stock quantity and updated_at timestamp
-    // Note: The products table does not have an updated_at column currently.
-    // If it's needed, it should be added to the products table schema.
-    // For now, we'll just update stock_quantity.
-    // If an updated_at column (e.g., named 'updated_at') existed:
-    // const updateQuery = `
-    //   UPDATE products
-    //   SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP
-    //   WHERE id = $2
-    //   RETURNING *;
-    // `;
-    const updateQuery = `
-      UPDATE products
-      SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-      RETURNING id;
-      -- Only need to know it succeeded, will re-fetch full details.
-    `;
-    const updatedProductResult = await client.query(updateQuery, [stockQuantity, id]);
-
-    if (updatedProductResult.rowCount === 0) {
-        // This case should ideally not be hit if the existence check passed and ID is valid.
-        return res.status(404).json({ message: `Product with ID ${id} found but update failed to apply.`});
-    }
-
-    // Re-fetch the product with all details including supplier, category, and tags
-    const finalProductQuery = `
-        SELECT p.*,
-               c.name as category_name,
-               s.name as supplier_name,
-               COALESCE(array_agg(DISTINCT t.name) FILTER (WHERE t.name IS NOT NULL), '{}') as tags
-        FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id
-        LEFT JOIN suppliers s ON p.supplier_id = s.id
-        LEFT JOIN product_tags pt ON p.id = pt.product_id
-        LEFT JOIN tags t ON pt.tag_id = t.id
-        WHERE p.id = $1
-        GROUP BY p.id, c.name, s.name;
-    `;
-    const finalProductResponse = await client.query(finalProductQuery, [id]);
-
-    if (finalProductResponse.rows.length === 0) {
-        // Should not happen if update was successful
-        return res.status(404).json({ message: `Product with ID ${id} could not be re-fetched after update.`});
-    }
-
-    res.status(200).json({
-      message: `Stock quantity for product #${id} updated to ${stockQuantity}.`,
-      product: finalProductResponse.rows[0]
-    });
-
-  } catch (error) {
-    console.error(`Error updating stock for product ID ${id}:`, error);
-    res.status(500).json({ message: 'Failed to update product stock quantity.' });
-  } finally {
-    client.release();
-  }
 });
 
 // GET /api/admin/products/:id/label - Generate a PDF label for a product
@@ -836,118 +394,19 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { id: productId } = req.params; // productId is now an integer
-    const { variant_id: requestedVariantId, count } = req.query; // count is available here
-
-    // Placeholders for currency and base URL - ensure consistency with /label-data or use a config service
-    // const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD'; // Defined inside try
-    // const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$'; // Defined inside try
-    // const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com'; // Defined inside try
+    const { id: productId } = req.params; // Renamed from 'id' to 'productId' for clarity with service
+    const { variant_id: requestedVariantId, count } = req.query;
 
     try {
-      const product = await productService.getProductById(productId); // productId is from req.params
-      let labelDataItem = null;
+      // Call the service to get the single labelDataItem
+      // forAllVariants is false by default in getFormattedLabelData
+      const labelDataItem = await productService.getFormattedLabelData(productId, requestedVariantId);
 
-      // These constants should be defined within the try block or be accessible in this scope
-      const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD';
-      const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$';
-      const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com';
-      // count is from req.query, requestedVariantId is from req.query.variant_id
-
-      if (product.has_variants && requestedVariantId) {
-        // Case 1: Product has variants, AND a specific variant_id was requested.
-        const variant = product.variants.find(v => v.id === requestedVariantId);
-        if (!variant) {
-          return res.status(404).json({ message: `Variant with ID ${requestedVariantId} not found for product ${productId}.` });
-        }
-
-        // Construct labelDataItem for the specific variant
-        let suffixParts = [];
-        if (product.available_options && variant.option_value_ids) {
-          for (const valId of variant.option_value_ids) {
-            for (const opt of product.available_options) {
-              const foundValue = opt.values.find(v => v.value_id === valId);
-              if (foundValue) {
-                suffixParts.push(`${opt.option_name}: ${foundValue.value_name}`);
-                break;
-              }
-            }
-          }
-        }
-        const constructed_suffix = suffixParts.length > 0 ? ` - ${suffixParts.join(', ')}` : '';
-
-        labelDataItem = {
-          product_id: product.id,
-          variant_id: variant.id,
-          product_name: product.name,
-          variant_name_suffix: constructed_suffix,
-          full_display_name: `${product.name}${constructed_suffix}`,
-          sku: variant.sku || product.sku,
-          barcode_value: variant.sku || product.sku || `${product.id}-${variant.id}`,
-          selling_price: parseFloat(variant.final_price).toFixed(2),
-          currency_code: STORE_CURRENCY_CODE,
-          currency_symbol: STORE_CURRENCY_SYMBOL,
-          qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`
-        };
-
-        let taxDetailsVariant = { priceWithTax: parseFloat(variant.final_price), taxAmount: 0, appliedRates: [] };
-        if (product.tax_class_id) {
-          try {
-            taxDetailsVariant = await taxService.calculatePriceWithAppliedTaxes(parseFloat(variant.final_price), product.tax_class_id);
-          } catch (taxError) {
-            console.error(`Error calculating tax for variant ${variant.id}:`, taxError);
-            // Decide if you want to proceed without tax or throw error. For labels, proceeding without tax might be acceptable.
-          }
-        }
-        labelDataItem.price_incl_tax = parseFloat(taxDetailsVariant.priceWithTax).toFixed(2);
-        labelDataItem.tax_amount = parseFloat(taxDetailsVariant.taxAmount).toFixed(2);
-        // labelDataItem.selling_price should already be variant.final_price (base price for variant)
-
-      } else {
-        // Case 2: Handles multiple sub-cases:
-        //   a) Product has no variants (`!product.has_variants`).
-        //   b) Product has variants, but NO specific `requestedVariantId` was provided (default to base product).
-
-        // Sub-case check: If product does NOT have variants, but a `requestedVariantId` was still sent. This is an error.
-        if (!product.has_variants && requestedVariantId) {
-            return res.status(400).json({ message: `Product ID ${productId} does not have variants; variant_id parameter is not applicable.` });
-        }
-
-        // Proceed to construct labelDataItem for the base product for sub-cases 2a and 2b.
-        labelDataItem = {
-          product_id: product.id,
-          variant_id: null,
-          product_name: product.name,
-          variant_name_suffix: null,
-          full_display_name: product.name,
-          sku: product.sku,
-          barcode_value: product.sku || product.id.toString(),
-          selling_price: parseFloat(product.price).toFixed(2),
-          currency_code: STORE_CURRENCY_CODE,
-          currency_symbol: STORE_CURRENCY_SYMBOL,
-          qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`
-        };
-
-        let taxDetailsBase = { priceWithTax: parseFloat(product.price), taxAmount: 0, appliedRates: [] };
-        if (product.tax_class_id) {
-          try {
-            taxDetailsBase = await taxService.calculatePriceWithAppliedTaxes(parseFloat(product.price), product.tax_class_id);
-          } catch (taxError) {
-            console.error(`Error calculating tax for product ${product.id}:`, taxError);
-          }
-        }
-        labelDataItem.price_incl_tax = parseFloat(taxDetailsBase.priceWithTax).toFixed(2);
-        labelDataItem.tax_amount = parseFloat(taxDetailsBase.taxAmount).toFixed(2);
-        // labelDataItem.selling_price should already be product.price
+      if (!labelDataItem) { // Should be handled by NotFoundError in service, but as safeguard
+        return next(new Error("Could not determine data for label."));
       }
 
-      if (!labelDataItem) {
-        // This condition should ideally not be met if the logic above is exhaustive.
-        console.error(`[Critical] Label data item could not be constructed for product ${productId}, variant ${requestedVariantId}`);
-        return next(new Error("Could not determine data for label due to an unexpected server issue."));
-      }
-
-      const pdfBuffer = await generateProductLabelPdf(labelDataItem, count); // count is from req.query
+      const pdfBuffer = await generateProductLabelPdf(labelDataItem, count);
 
       res.setHeader('Content-Type', 'application/pdf');
       const safeSku = (labelDataItem.sku || `product_${labelDataItem.product_id}`).replace(/[^a-z0-9_.-]/gi, '_');
@@ -956,13 +415,8 @@ router.get(
       res.send(pdfBuffer);
 
     } catch (error) {
-      // Existing catch block
-      if (error instanceof NotFoundError) {
-        return res.status(404).json({ message: error.message });
-      }
-      // Log other errors for server-side inspection
-      console.error(`[Error in /:id/label for product ${productId}]:`, error);
-      next(error); // Pass to global error handler
+      // Errors from productService (NotFoundError, AppError) or generateProductLabelPdf will be passed to global handler.
+      next(error);
     }
   }
 );
@@ -991,100 +445,23 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { productId } = req.params; // isInt by validator
-    const { variant_id, page, limit, sort_by } = req.query; // types validated
-    const offset = (page - 1) * limit;
+    const { productId } = req.params; // Validated
+    // All query params are validated and have defaults set by express-validator
+    const options = {
+      variant_id: req.query.variant_id,
+      page: req.query.page,
+      limit: req.query.limit,
+      sort_by: req.query.sort_by
+    };
 
     try {
-      // Check if product exists
-      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
-      if (productCheck.rows.length === 0) {
-        throw new NotFoundError(`Product with ID ${productId} not found.`);
-      }
-
-      const queryParams = [productId];
-      let whereClauses = ['ib.product_id = $1'];
-      let currentParamIndex = 1;
-
-      if (variant_id) {
-        currentParamIndex++;
-        queryParams.push(variant_id);
-        whereClauses.push(`ib.variant_id = $${currentParamIndex}`);
-      }
-
-      const whereString = whereClauses.join(' AND ');
-
-      let orderByClause = 'ORDER BY ib.received_date DESC, ib.id DESC'; // Default
-      switch (sort_by) {
-        case 'received_date_asc':
-          orderByClause = 'ORDER BY ib.received_date ASC, ib.id ASC';
-          break;
-        case 'expiry_date_asc':
-          orderByClause = 'ORDER BY ib.expiry_date ASC NULLS LAST, ib.id ASC';
-          break;
-        case 'expiry_date_desc':
-          orderByClause = 'ORDER BY ib.expiry_date DESC NULLS FIRST, ib.id DESC';
-          break;
-        case 'current_quantity_asc':
-          orderByClause = 'ORDER BY ib.current_quantity ASC, ib.id ASC';
-          break;
-        case 'current_quantity_desc':
-          orderByClause = 'ORDER BY ib.current_quantity DESC, ib.id DESC';
-          break;
-        // Default case 'received_date_desc' is already set
-      }
-
-      const dataQuery = `
-        SELECT
-          ib.*,
-          p.name as product_name,
-          pv.sku as variant_sku,
-          po.id as purchase_order_id,
-          s.name as supplier_name
-        FROM inventory_batches ib
-        JOIN products p ON ib.product_id = p.id
-        LEFT JOIN product_variants pv ON ib.variant_id = pv.id
-        LEFT JOIN purchase_order_items poi ON ib.purchase_order_item_id = poi.id
-        LEFT JOIN purchase_orders po ON poi.purchase_order_id = po.id
-        LEFT JOIN suppliers s ON po.supplier_id = s.id
-        WHERE ${whereString}
-        ${orderByClause}
-        LIMIT $${currentParamIndex + 1} OFFSET $${currentParamIndex + 2};
-      `;
-      const dataParams = [...queryParams, limit, offset];
-
-      const countQuery = `
-        SELECT COUNT(*)
-        FROM inventory_batches ib
-        WHERE ${whereString};
-      `;
-      // Count query uses only filter params (productId, variant_id)
-      const countParams = queryParams.slice(0, currentParamIndex);
-
-      const dataResult = await db.query(dataQuery, dataParams);
-      const countResult = await db.query(countQuery, countParams);
-
-      const totalRecords = parseInt(countResult.rows[0].count);
-      const totalPages = Math.ceil(totalRecords / limit);
-
-      res.status(200).json({
-        data: dataResult.rows,
-        pagination: {
-          total: totalRecords,
-          page,
-          limit,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPrevPage: page > 1,
-          sort_by: sort_by
-        }
-      });
-
+      const result = await productService.getProductInventoryBatches(productId, options);
+      // The service returns an object like { data: batches, pagination: {...} }
+      // which matches the expected response structure.
+      res.status(200).json(result);
     } catch (error) {
-      if (error instanceof NotFoundError) {
-        return res.status(404).json({ message: error.message });
-      }
-      next(error); // Pass to global error handler
+      // Errors from productService (NotFoundError, AppError) are passed to the global handler.
+      next(error);
     }
   }
 );
@@ -1103,99 +480,18 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { productId } = req.params;
-    const PRODUCT_PAGE_BASE_URL = process.env.FRONTEND_URL || 'https://yourstore.com';
+    const { productId } = req.params; // Validated and toInt() by middleware
 
     try {
-      const product = await productService.getProductById(parseInt(productId));
-      // productService.getProductById should throw NotFoundError if product doesn't exist.
-      // product.tax_class_id should be available from getProductById
+      // Call the service to get label data.
+      // Pass forAllVariants = true to get data for base product or all its variants.
+      // requestedVariantId is null because this route is for the whole product (all its printable labels).
+      const labelsData = await productService.getFormattedLabelData(productId, null, true);
 
-      const STORE_CURRENCY_CODE = process.env.STORE_CURRENCY_CODE || 'USD';
-      const STORE_CURRENCY_SYMBOL = process.env.STORE_CURRENCY_SYMBOL || '$';
-
-      const labelsData = [];
-
-      if (product.has_variants && product.variants && product.variants.length > 0) {
-        for (const variant of product.variants) {
-          const baseSellingPrice = parseFloat(variant.final_price);
-          let taxDetails = { taxAmount: 0, priceWithTax: baseSellingPrice, appliedRates: [] };
-
-          if (product.tax_class_id) {
-            taxDetails = await taxService.calculatePriceWithAppliedTaxes(baseSellingPrice, product.tax_class_id);
-          }
-
-          let suffixParts = [];
-          if (product.available_options && variant.option_value_ids) {
-            for (const valId of variant.option_value_ids) {
-              for (const opt of product.available_options) {
-                const foundValue = opt.values.find(v => v.value_id === valId);
-                if (foundValue) {
-                  suffixParts.push(`${opt.option_name}: ${foundValue.value_name}`);
-                  break;
-                }
-              }
-            }
-          }
-          const constructed_suffix = suffixParts.length > 0 ? ` - ${suffixParts.join(', ')}` : '';
-          const variantSku = variant.sku || product.sku;
-
-          labelsData.push({
-            product_id: product.id,
-            variant_id: variant.id,
-            product_name: product.name,
-            variant_name_suffix: constructed_suffix,
-            full_display_name: `${product.name}${constructed_suffix}`,
-            sku: variantSku,
-            barcode_value: variantSku, // Prioritize variant SKU, then product SKU
-            selling_price: baseSellingPrice.toFixed(2), // Pre-tax price
-            vat_price: parseFloat(taxDetails.priceWithTax).toFixed(2), // Price with tax
-            base_price_for_tax_calc: baseSellingPrice.toFixed(2),
-            tax_amount: parseFloat(taxDetails.taxAmount).toFixed(2),
-            applied_tax_rates: taxDetails.appliedRates,
-            currency_code: STORE_CURRENCY_CODE,
-            currency_symbol: STORE_CURRENCY_SYMBOL,
-            qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}?variantId=${variant.id}`,
-            qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&variantId=${variant.id}&quantity=1`,
-            qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}&ref_variant=${variant.id}`
-          });
-        }
-      } else { // Product without variants
-        const baseSellingPrice = parseFloat(product.price);
-        let taxDetails = { taxAmount: 0, priceWithTax: baseSellingPrice, appliedRates: [] };
-
-        if (product.tax_class_id) {
-          taxDetails = await taxService.calculatePriceWithAppliedTaxes(baseSellingPrice, product.tax_class_id);
-        }
-        const productSku = product.sku || product.id.toString();
-
-        labelsData.push({
-          product_id: product.id,
-          variant_id: null,
-          product_name: product.name,
-          variant_name_suffix: null,
-          full_display_name: product.name,
-          sku: productSku,
-          barcode_value: productSku, // Product SKU or ID
-          selling_price: baseSellingPrice.toFixed(2), // Pre-tax price
-          vat_price: parseFloat(taxDetails.priceWithTax).toFixed(2), // Price with tax
-          base_price_for_tax_calc: baseSellingPrice.toFixed(2),
-          tax_amount: parseFloat(taxDetails.taxAmount).toFixed(2),
-          applied_tax_rates: taxDetails.appliedRates,
-          currency_code: STORE_CURRENCY_CODE,
-          currency_symbol: STORE_CURRENCY_SYMBOL,
-          qr_code_data_product_url: `${PRODUCT_PAGE_BASE_URL}/products/${product.id}`,
-          qr_code_data_reorder_url: `${PRODUCT_PAGE_BASE_URL}/cart?action=add&productId=${product.id}&quantity=1`,
-          qr_code_data_promotion_url: `${PRODUCT_PAGE_BASE_URL}/promotions?ref_product=${product.id}`
-        });
-      }
       res.status(200).json(labelsData);
 
     } catch (error) {
-      if (error instanceof NotFoundError) {
-        return res.status(404).json({ message: error.message });
-      }
-      // Pass other errors to global error handler
+      // Errors from productService (NotFoundError, AppError) will be passed to global handler.
       next(error);
     }
   }
@@ -1219,82 +515,82 @@ router.get(
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { productId } = req.params; // Now an integer
-    const { variant_id, supplier_id, page, limit } = req.query; // variant_id, supplier_id, page, limit are integers or undefined
-    const offset = (page - 1) * limit;
+    const { productId } = req.params; // Validated
+    // All query params are validated and have defaults from express-validator
+    const options = {
+      variant_id: req.query.variant_id,
+      supplier_id: req.query.supplier_id,
+      page: req.query.page,
+      limit: req.query.limit
+    };
 
     try {
-      // Check if product exists
-      const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
-      if (productCheck.rows.length === 0) {
-        throw new NotFoundError(`Product with ID ${productId} not found.`);
-      }
-
-      const queryParams = [];
-      let whereClauses = ['pch.product_id = $1'];
-      queryParams.push(productId);
-      let currentParamIndex = 1; // For $1, $2 etc.
-
-      if (variant_id) {
-        currentParamIndex++;
-        queryParams.push(variant_id);
-        whereClauses.push(`pch.variant_id = $${currentParamIndex}`);
-      }
-      if (supplier_id) {
-        currentParamIndex++;
-        queryParams.push(supplier_id);
-        whereClauses.push(`pch.supplier_id = $${currentParamIndex}`);
-      }
-
-      const whereString = whereClauses.join(' AND ');
-
-      const dataQuery = `
-        SELECT pch.id, pch.product_id, p.name as product_name,
-               pch.variant_id, pv.sku as variant_sku,
-               pch.supplier_id, s.name as supplier_name,
-               pch.currency_code, pch.cost_price, pch.quantity_received,
-               pch.purchase_order_item_id, poi.quantity_ordered as po_item_quantity_ordered,
-               po.id as purchase_order_id,
-               pch.effective_date, pch.created_at
-        FROM product_cost_history pch
-        JOIN products p ON pch.product_id = p.id
-        LEFT JOIN product_variants pv ON pch.variant_id = pv.id
-        LEFT JOIN suppliers s ON pch.supplier_id = s.id
-        LEFT JOIN purchase_order_items poi ON pch.purchase_order_item_id = poi.id
-        LEFT JOIN purchase_orders po ON poi.purchase_order_id = po.id
-        WHERE ${whereString}
-        ORDER BY pch.effective_date DESC, pch.id DESC
-        LIMIT $${currentParamIndex + 1} OFFSET $${currentParamIndex + 2};
-      `;
-      const dataParams = [...queryParams, limit, offset];
-
-      const countQuery = `SELECT COUNT(*) FROM product_cost_history pch WHERE ${whereString};`;
-
-      const dataResult = await db.query(dataQuery, dataParams);
-      const countResult = await db.query(countQuery, queryParams); // Count query uses only filter params
-
-      const totalRecords = parseInt(countResult.rows[0].count);
-      const totalPages = Math.ceil(totalRecords / limit);
+      const result = await productService.getProductCostHistory(productId, options);
+      // The service returns an object like { data: costHistory, pagination: {...} }
+      // which matches the expected response structure.
+      // The pagination from service does not include hasNextPage/hasPrevPage, but that's fine.
+      // The route can add it if needed, or frontend can derive it.
+      // For consistency with other routes, let's add hasNextPage/hasPrevPage here.
+      const { data, pagination } = result;
+      const responsePagination = {
+        ...pagination,
+        hasNextPage: pagination.page < pagination.totalPages,
+        hasPrevPage: pagination.page > 1
+      };
 
       res.status(200).json({
-        data: dataResult.rows,
-        pagination: {
-          total: totalRecords,
-          page,
-          limit,
-          totalPages,
-          hasNextPage: page < totalPages,
-          hasPrevPage: page > 1
-        }
+        data: data,
+        pagination: responsePagination
       });
 
     } catch (error) {
-      if (error instanceof NotFoundError) {
-        return res.status(404).json({ message: error.message });
-      }
+      // Errors from productService (NotFoundError, AppError) are passed to the global handler.
       next(error);
     }
   }
 );
+
+// DELETE /api/admin/products/:id - Delete a product
+router.delete(
+  '/:id',
+  isAuthenticated,
+  checkPermission('products:delete'), // Specific permission for deleting products
+  [
+    param('id').isInt({ gt: 0 }).withMessage('Product ID must be a positive integer.').toInt()
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id: productId } = req.params; // Validated productId
+
+    try {
+      const deletedProduct = await productService.deleteProduct(productId);
+      // Service method handles NotFoundError, BadRequestError (if dependencies exist), and internal transaction.
+
+      auditLogService.recordAuditEvent(
+        'PRODUCT_DELETE_SUCCESS',
+        { userId: req.user.userId, userEmail: req.user.email },
+        { resourceType: 'PRODUCT', resourceId: productId }, // Log original ID
+        { deletedProductData: { id: deletedProduct.id, name: deletedProduct.name, sku: deletedProduct.sku } }, // Log some identifying info
+        req
+      ).catch(err => console.error(`Audit log failed for PRODUCT_DELETE_SUCCESS (ID: ${productId}):`, err));
+
+      res.status(200).json({
+        message: `Product "${deletedProduct.name}" (ID: ${productId}) and its associated data deleted successfully.`,
+        product: deletedProduct
+      });
+      // Or, for a more conventional RESTful DELETE: res.status(204).send();
+      // Returning the deleted object can be useful for the client.
+
+    } catch (error) {
+      // Errors from productService (NotFoundError, BadRequestError, AppError) will be passed to the global handler.
+      next(error);
+    }
+  }
+);
+
 
 module.exports = router;

@@ -131,11 +131,11 @@ This section outlines the primary driver for future backend development, based o
 - [ ] **Error Handling & Validation:**
     - [ ] Ensure consistent error response structures across all APIs.
     - [X] Ensure consistent error response structures across all APIs. (Standardized structure with status, message, code, details implemented in errorHandler.js and AppError.js)
-    - [~] Systematically review and expand input validation (`express-validator` or similar) for all API endpoints. (Example applied to admin product creation; further review pending for all other endpoints)
+    - [~] Systematically review and expand input validation (`express-validator` or similar) for all API endpoints. (Examples applied for admin products [C/U/D variants, C/U/D product, stock, stock levels, inventory batches, cost history, label data, assigned options], admin categories, discounts, suppliers; further review pending)
     - [X] Refine global error handler for better logging (structured logging of stack traces for non-operational errors in prod) and to prevent leaking sensitive details.
 - [~] **Database Interactions & Services:**
-    - [~] Enforce service layer pattern: Ensure all DB logic is within services, minimize direct `db.query` in route handlers. (Completed for Categories module; pending for others)
-    - [ ] Review and ensure comprehensive transaction management for all multi-step DB operations. (Addressed in CategoryService delete; needs broader review)
+    - [~] Enforce service layer pattern: Ensure all DB logic is within services, minimize direct `db.query` in route handlers. (Completed for Categories, Discounts, Suppliers modules; Product Management [C/U/D variants, C/U/D product, stock, stock levels, inventory batches, cost history, label data, assigned options] refactored. `productService.getAllProducts` internally refactored; pending for others)
+    - [~] Review and ensure comprehensive transaction management for all multi-step DB operations. (Addressed in C/U/D methods of Category, Discount, Supplier, Product services [including variants and product deletion]; needs broader review)
     - [ ] (Consider for Future) Evaluate ORM/Query Builder (e.g., Sequelize, Knex.js) for potential adoption if complexity warrants.
 - [ ] **Stock Management Logic:**
     - [ ] **Critical:** Reconcile `productService.getAllProducts` stock determination (currently `products.stock_quantity`) with batch-aware stock logic used in order processing. Public listings should reflect actual sellable batch inventory.
@@ -165,8 +165,8 @@ This section outlines the primary driver for future backend development, based o
 
 - **[~] Strict Database Interactions & Service Layer Enforcement:**
     -   **Suggestion:**
-        *   Strictly enforce the service layer pattern: All database interaction logic should reside within service functions. Route handlers should only be responsible for request/response handling and calling services. (PARTIALLY DONE - Categories module refactored to `categoryService.js`)
-        *   Review and ensure comprehensive transaction management (`BEGIN`, `COMMIT`, `ROLLBACK`) for all operations that involve multiple database writes. (PARTIALLY DONE - Addressed in `categoryService.js` delete method, broader review needed)
+        *   Strictly enforce the service layer pattern: All database interaction logic should reside within service functions. Route handlers should only be responsible for request/response handling and calling services. (PARTIALLY DONE - Categories, Discounts, Suppliers modules refactored. Extensive refactoring of Product Management admin routes [C/U/D Product, C/U/D Variants, Stock Update, Stock Levels, Inventory Batches, Cost History, Label Data, Assigned Options] into `productService.js`. `productService.getAllProducts` also internally refactored for maintainability.)
+        *   Review and ensure comprehensive transaction management (`BEGIN`, `COMMIT`, `ROLLBACK`) for all operations that involve multiple database writes. (PARTIALLY DONE - Addressed in C/U/D methods in `categoryService.js`, `discountService.js`, `supplierService.js`, and `productService.js` [including product and variant C/U/D]. Broader review for overall transactional integrity still beneficial.)
         *   For complex queries or if direct SQL becomes unwieldy, consider evaluating a Query Builder (like Knex.js) which can work alongside direct `db.query` calls.
     -   **Benefit:** Better separation of concerns, more testable code, improved data consistency, and potentially more maintainable database logic.
 
