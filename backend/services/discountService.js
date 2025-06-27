@@ -281,4 +281,84 @@ module.exports = {
   getDiscountByCode,
   updateDiscount,
   deleteDiscount,
+  validateDiscountForCart,
 };
+
+/**
+ * Validates a discount code against a cart subtotal and calculates its value.
+ * @param {string} discountCode - The discount code to validate.
+ * @param {number} cartSubtotal - The subtotal of the cart.
+ * @returns {Promise<object>} An object with discount details and calculated amount.
+ * @throws {NotFoundError} If the discount code is not found.
+ * @throws {BadRequestError} If the discount is not applicable (e.g., expired, min amount not met).
+ * @throws {AppError} For other database errors.
+ */
+async function validateDiscountForCart(discountCode, cartSubtotal) {
+  if (!discountCode || typeof discountCode !== 'string' || discountCode.trim() === '') {
+    throw new BadRequestError('Discount code is required.');
+  }
+  if (cartSubtotal === undefined || typeof cartSubtotal !== 'number' || cartSubtotal < 0) {
+    throw new BadRequestError('Valid cart_subtotal is required.');
+  }
+
+  const codeToValidate = discountCode.trim().toUpperCase();
+  const subtotal = parseFloat(cartSubtotal);
+
+  try {
+    // Fetch discount - no FOR UPDATE needed as this is a read-only validation.
+    const discountResult = await db.query('SELECT * FROM discounts WHERE code = $1', [codeToValidate]);
+
+    if (discountResult.rows.length === 0) {
+      throw new NotFoundError('Invalid or unknown discount code.');
+    }
+    const discount = discountResult.rows[0];
+
+    // Perform Validations
+    if (!discount.is_active) {
+      throw new BadRequestError('This discount code is no longer active.');
+    }
+    const currentDate = new Date();
+    if (discount.valid_from && new Date(discount.valid_from) > currentDate) {
+      throw new BadRequestError('This discount code is not yet valid.');
+    }
+    if (discount.valid_until && new Date(discount.valid_until) < currentDate) {
+      throw new BadRequestError('This discount code has expired.');
+    }
+    if (discount.usage_limit !== null && discount.times_used >= discount.usage_limit) {
+      throw new BadRequestError('This discount code has reached its usage limit.');
+    }
+    if (discount.min_order_amount !== null && subtotal < parseFloat(discount.min_order_amount)) {
+      throw new BadRequestError(`Minimum order subtotal of $${parseFloat(discount.min_order_amount).toFixed(2)} not met for this discount.`);
+    }
+
+    // Calculate Discount Value
+    let calculatedDiscountAmount = 0;
+    if (discount.type === 'percentage') {
+      calculatedDiscountAmount = subtotal * (parseFloat(discount.value) / 100.0);
+    } else if (discount.type === 'fixed_amount') {
+      calculatedDiscountAmount = parseFloat(discount.value);
+    } else {
+        // Should not happen if DB types are constrained
+        throw new AppError(`Unknown discount type: ${discount.type}`, 500, 'UNKNOWN_DISCOUNT_TYPE');
+    }
+
+    calculatedDiscountAmount = Math.min(calculatedDiscountAmount, subtotal);
+    calculatedDiscountAmount = parseFloat(calculatedDiscountAmount.toFixed(2));
+
+    return {
+      code: discount.code,
+      type: discount.type,
+      value: parseFloat(discount.value).toFixed(2), // Original value of the discount
+      description: discount.description,
+      calculated_discount_amount_for_cart: calculatedDiscountAmount,
+      message: 'Discount code is valid.', // Can be enhanced in the route handler if needed
+    };
+
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof AppError) {
+      throw error;
+    }
+    console.error(`Error in discountService.validateDiscountForCart for code ${discountCode}:`, error);
+    throw new AppError('Failed to validate discount code due to a server error.', 500, 'DISCOUNT_VALIDATION_FAILED');
+  }
+}

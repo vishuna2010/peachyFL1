@@ -495,4 +495,339 @@ module.exports = {
   updateOrderStatus,
   getOrderDetailsForPdf,
   processOrderRefund,
+  createPublicOrder, // Added new function
 };
+
+const bcrypt = require('bcrypt');
+const taxService = require('./taxService'); // Assuming it's in the same directory
+const { BadRequestError, ConflictError } = require('../utils/AppError'); // Already have NotFoundError, AppError from top
+
+/**
+ * Creates a new public order, handling guest or authenticated users,
+ * stock checks, inventory updates, tax calculation, and discount application.
+ * All operations are performed within a single database transaction.
+ *
+ * @param {object} orderRequestData - Data related to the order request.
+ * @param {Array<object>} orderRequestData.cartItems - Array of items from the cart.
+ *        Each item: { productId: number, productVariantId?: number, quantity: number, name?: string, unit_price?: number (optional, for validation/reference) }
+ * @param {object} orderRequestData.shippingAddress - Shipping address object.
+ * @param {object} [orderRequestData.billingAddress] - Optional billing address. Defaults to shipping if not provided.
+ * @param {string} [orderRequestData.discount_code] - Optional discount code.
+ * @param {object} [orderRequestData.guestDetails] - Details for guest checkout: { email, firstName, lastName }.
+ * @param {boolean} [orderRequestData.mock_payment_successful=false] - Flag for mock payment status.
+ * @param {object} [authenticatedUser] - Optional authenticated user object from req.user.
+ *        If provided: { userId: number, email?: string, name?: string, is_tax_exempt?: boolean }
+ *
+ * @returns {Promise<object>} The newly created order object, including order items and other relevant details.
+ * @throws {BadRequestError} For invalid input, insufficient stock, or other business rule violations.
+ * @throws {NotFoundError} If products/variants in cart are not found.
+ * @throws {ConflictError} If guest email conflicts with an existing non-guest user.
+ * @throws {AppError} For other internal or unexpected errors.
+ */
+async function createPublicOrder(orderRequestData, authenticatedUser) {
+  const {
+    cartItems, // Renamed from 'cart' for clarity within service
+    shippingAddress,
+    billingAddress,
+    discount_code,
+    guestDetails,
+    mock_payment_successful = false // Default to false
+  } = orderRequestData;
+
+  let userId;
+  let userEmailForOrder;
+  let userNameForOrder;
+  let userIsTaxExempt = false;
+
+  const client = await db.pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // 1. User Handling
+    if (authenticatedUser && authenticatedUser.userId) {
+      userId = authenticatedUser.userId;
+      // Fetch user details, especially is_tax_exempt, as it might not be on req.user
+      const userResult = await client.query('SELECT email, name, is_tax_exempt FROM users WHERE id = $1', [userId]);
+      if (userResult.rows.length === 0) {
+        throw new NotFoundError('Authenticated user record not found.'); // Should not happen if token is valid
+      }
+      userEmailForOrder = userResult.rows[0].email;
+      userNameForOrder = userResult.rows[0].name;
+      userIsTaxExempt = userResult.rows[0].is_tax_exempt || false;
+    } else if (guestDetails) {
+      if (!guestDetails.email || !guestDetails.firstName || !guestDetails.lastName) {
+        throw new BadRequestError('Guest email and name are required for guest checkout.');
+      }
+      userEmailForOrder = guestDetails.email.trim().toLowerCase();
+      userNameForOrder = `${guestDetails.firstName.trim()} ${guestDetails.lastName.trim()}`;
+
+      const existingUserCheck = await client.query('SELECT id, name, role, is_tax_exempt FROM users WHERE email = $1', [userEmailForOrder]);
+      if (existingUserCheck.rows.length > 0) {
+        const existingUser = existingUserCheck.rows[0];
+        if (existingUser.role !== 'guest') {
+          throw new ConflictError('An account with this email already exists. Please log in or use a different email.');
+        }
+        userId = existingUser.id;
+        userIsTaxExempt = existingUser.is_tax_exempt || false;
+        if (userNameForOrder !== existingUser.name) {
+          await client.query('UPDATE users SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [userNameForOrder, userId]);
+        }
+      } else {
+        const tempPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
+        const saltRounds = 10; // Consider moving to config
+        const hashedPassword = await bcrypt.hash(tempPassword, saltRounds);
+        const guestUserInsertResult = await client.query(
+          'INSERT INTO users (name, email, password, role, is_tax_exempt, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING id, is_tax_exempt',
+          [userNameForOrder, userEmailForOrder, hashedPassword, 'guest', false]
+        );
+        userId = guestUserInsertResult.rows[0].id;
+        userIsTaxExempt = guestUserInsertResult.rows[0].is_tax_exempt;
+      }
+    } else {
+      throw new BadRequestError('User authentication or guest details are required.');
+    }
+
+    // 2. Validate Addresses (Basic validation, route level should be more comprehensive)
+    if (!shippingAddress || !shippingAddress.line1 || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
+      throw new BadRequestError('Complete shipping address is required.');
+    }
+    const finalBillingAddress = (billingAddress && billingAddress.line1 && billingAddress.city && billingAddress.postalCode && billingAddress.country)
+      ? billingAddress
+      : shippingAddress;
+
+    // 3. Validate Cart
+    if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
+      throw new BadRequestError('Cart is required and cannot be empty.');
+    }
+    for (const item of cartItems) {
+      if (!item.productId || typeof item.productId !== 'number' || !item.quantity || typeof item.quantity !== 'number' || item.quantity <= 0) {
+        throw new BadRequestError('Each cart item must have a valid base productId and a positive quantity.');
+      }
+      if (item.productVariantId && (typeof item.productVariantId !== 'number' || item.productVariantId <=0) ) {
+         throw new BadRequestError(`Invalid productVariantId format for product ${item.productId}. Must be a positive number if provided.`);
+      }
+    }
+
+    // 4. Process Cart Items & Stock
+    let subtotalForItems = 0;
+    const orderItemsToInsert = [];
+    const stockUpdates = []; // For aggregate stock and logging
+
+    for (const item of cartItems) {
+      let priceAtPurchase;
+      let productNameForDisplay; // Used for messages and order item record
+      let productSkuForRecord;
+      let aggregate_old_stock_quantity; // For logging
+
+      if (item.productVariantId) {
+        const variantResult = await client.query(
+          `SELECT pv.stock_quantity, pv.price_modifier, pv.sku as variant_sku,
+                  p.price as base_price, p.name as base_product_name, p.sku as base_product_sku
+           FROM product_variants pv
+           JOIN products p ON pv.product_id = p.id
+           WHERE pv.id = $1 AND pv.product_id = $2 FOR UPDATE OF pv, p`,
+          [item.productVariantId, item.productId]
+        );
+        if (variantResult.rows.length === 0) {
+          throw new NotFoundError(`Product variant with ID ${item.productVariantId} for product ID ${item.productId} not found.`);
+        }
+        const dbVariant = variantResult.rows[0];
+        aggregate_old_stock_quantity = dbVariant.stock_quantity;
+        priceAtPurchase = parseFloat(dbVariant.base_price) + parseFloat(dbVariant.price_modifier);
+        productNameForDisplay = `${dbVariant.base_product_name} (Variant: ${dbVariant.variant_sku || item.productVariantId})`;
+        productSkuForRecord = dbVariant.variant_sku || dbVariant.base_product_sku;
+
+        // Batch deduction for variant
+        const batches = await client.query(
+          `SELECT id, current_quantity FROM inventory_batches
+           WHERE product_id = $1 AND variant_id = $2 AND current_quantity > 0
+           ORDER BY expiry_date ASC NULLS LAST, received_date ASC, id ASC FOR UPDATE`,
+          [item.productId, item.productVariantId]
+        );
+        let totalBatchStock = batches.rows.reduce((sum, batch) => sum + batch.current_quantity, 0);
+        if (totalBatchStock < item.quantity) {
+          throw new BadRequestError(`Insufficient batch stock for variant "${productNameForDisplay}". Available: ${totalBatchStock}, Requested: ${item.quantity}.`);
+        }
+        let qtyToFulfill = item.quantity;
+        for (const batch of batches.rows) {
+          if (qtyToFulfill === 0) break;
+          const qtyFromThisBatch = Math.min(qtyToFulfill, batch.current_quantity);
+          await client.query(
+            'UPDATE inventory_batches SET current_quantity = current_quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [qtyFromThisBatch, batch.id]
+          );
+          qtyToFulfill -= qtyFromThisBatch;
+        }
+        stockUpdates.push({ type: 'variant', id: item.productVariantId, productId: item.productId, quantityToDecrement: item.quantity, old_stock_quantity: aggregate_old_stock_quantity });
+      } else { // Base Product
+        const productResult = await client.query(
+          'SELECT name, price, stock_quantity, sku FROM products WHERE id = $1 AND has_variants = FALSE FOR UPDATE',
+          [item.productId]
+        );
+        if (productResult.rows.length === 0) {
+          throw new NotFoundError(`Product with ID ${item.productId} not found or it has variants (must specify variantId).`);
+        }
+        const dbProduct = productResult.rows[0];
+        aggregate_old_stock_quantity = dbProduct.stock_quantity;
+        priceAtPurchase = parseFloat(dbProduct.price);
+        productNameForDisplay = dbProduct.name;
+        productSkuForRecord = dbProduct.sku;
+
+        // Batch deduction for base product
+        const batches = await client.query(
+          `SELECT id, current_quantity FROM inventory_batches
+           WHERE product_id = $1 AND variant_id IS NULL AND current_quantity > 0
+           ORDER BY expiry_date ASC NULLS LAST, received_date ASC, id ASC FOR UPDATE`,
+          [item.productId]
+        );
+        let totalBatchStock = batches.rows.reduce((sum, batch) => sum + batch.current_quantity, 0);
+        if (totalBatchStock < item.quantity) {
+          throw new BadRequestError(`Insufficient batch stock for product "${productNameForDisplay}". Available: ${totalBatchStock}, Requested: ${item.quantity}.`);
+        }
+        let qtyToFulfill = item.quantity;
+        for (const batch of batches.rows) {
+          if (qtyToFulfill === 0) break;
+          const qtyFromThisBatch = Math.min(qtyToFulfill, batch.current_quantity);
+          await client.query(
+            'UPDATE inventory_batches SET current_quantity = current_quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [qtyFromThisBatch, batch.id]
+          );
+          qtyToFulfill -= qtyFromThisBatch;
+        }
+        stockUpdates.push({ type: 'base', id: item.productId, productId: item.productId, quantityToDecrement: item.quantity, old_stock_quantity: aggregate_old_stock_quantity });
+      }
+
+      subtotalForItems += priceAtPurchase * item.quantity;
+      orderItemsToInsert.push({
+        productId: item.productId,
+        productVariantId: item.productVariantId || null,
+        product_name_at_purchase: productNameForDisplay, // Store the descriptive name
+        product_sku_at_purchase: productSkuForRecord,
+        quantity: item.quantity,
+        price_at_purchase: priceAtPurchase, // This is pre-tax, pre-discount unit price
+      });
+    }
+    subtotalForItems = parseFloat(subtotalForItems.toFixed(2));
+
+    // 5. Calculate Taxes
+    const cartItemsForTaxCalc = orderItemsToInsert.map(item => ({
+      product_id: item.productId, variant_id: item.productVariantId,
+      quantity: item.quantity, unit_price: item.price_at_purchase
+    }));
+
+    const taxCalculationResult = await taxService.calculateTaxForCartItems(cartItemsForTaxCalc, userId, finalBillingAddress, userIsTaxExempt, client);
+    const orderTotalTaxAmount = taxCalculationResult.total_tax_amount;
+    const itemsWithTaxDetails = taxCalculationResult.line_items_with_tax_details;
+    const orderTaxSummaryDetails = taxCalculationResult.tax_summary_details;
+
+    let subtotalExclusiveForDiscount = itemsWithTaxDetails.reduce((acc, item) => acc + (parseFloat(item.calculated_exclusive_unit_price) * item.quantity), 0);
+    subtotalExclusiveForDiscount = parseFloat(subtotalExclusiveForDiscount.toFixed(2));
+
+    // 6. Apply Discount
+    let finalAmountPreTax = subtotalExclusiveForDiscount;
+    let appliedDiscountId = null;
+    let appliedDiscountCode = null;
+    let appliedDiscountAmount = 0; // Initialize to 0
+
+    if (discount_code) {
+      const discountResult = await client.query('SELECT * FROM discounts WHERE UPPER(code) = UPPER($1) FOR UPDATE', [discount_code]);
+      if (discountResult.rows.length === 0) throw new BadRequestError('Invalid discount code.');
+      const discount = discountResult.rows[0];
+      if (!discount.is_active || (discount.valid_from && new Date(discount.valid_from) > new Date()) || (discount.valid_until && new Date(discount.valid_until) < new Date()) || (discount.usage_limit !== null && discount.times_used >= discount.usage_limit) || (discount.min_order_amount !== null && subtotalExclusiveForDiscount < parseFloat(discount.min_order_amount))) {
+        throw new BadRequestError('Discount code cannot be applied (inactive, expired, limit reached, or minimum order not met).');
+      }
+      if (discount.type === 'percentage') {
+        appliedDiscountAmount = subtotalExclusiveForDiscount * (parseFloat(discount.value) / 100.0);
+      } else if (discount.type === 'fixed_amount') {
+        appliedDiscountAmount = parseFloat(discount.value);
+      }
+      appliedDiscountAmount = parseFloat(Math.min(subtotalExclusiveForDiscount, appliedDiscountAmount).toFixed(2));
+      finalAmountPreTax = parseFloat((subtotalExclusiveForDiscount - appliedDiscountAmount).toFixed(2));
+      appliedDiscountId = discount.id;
+      appliedDiscountCode = discount.code;
+      await client.query('UPDATE discounts SET times_used = times_used + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [discount.id]);
+    }
+
+    // 7. Calculate Final Total
+    const grandTotal = parseFloat((finalAmountPreTax + orderTotalTaxAmount).toFixed(2));
+
+    // 8. Create Order Record
+    const initialOrderStatus = 'pending';
+    const initialPaymentStatus = mock_payment_successful ? 'paid' : 'pending';
+    const orderInsertResult = await client.query(
+      `INSERT INTO orders (
+          user_id, status, payment_status, total_amount, original_total_amount,
+          discount_id, discount_code_applied, discount_amount_applied,
+          total_tax_amount, tax_summary_details,
+          shipping_address_line1, shipping_address_line2, shipping_city, shipping_postal_code, shipping_country,
+          billing_address_line1, billing_address_line2, billing_city, billing_postal_code, billing_country,
+          created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      RETURNING *`,
+      [
+        userId, initialOrderStatus, initialPaymentStatus, grandTotal, subtotalExclusiveForDiscount,
+        appliedDiscountId, appliedDiscountCode, appliedDiscountAmount,
+        orderTotalTaxAmount, orderTaxSummaryDetails ? JSON.stringify(orderTaxSummaryDetails) : null,
+        shippingAddress.line1, shippingAddress.line2 || null, shippingAddress.city, shippingAddress.postalCode, shippingAddress.country,
+        finalBillingAddress.line1, finalBillingAddress.line2 || null, finalBillingAddress.city, finalBillingAddress.postalCode, finalBillingAddress.country
+      ]
+    );
+    const newOrder = orderInsertResult.rows[0];
+
+    // 9. Create Order Item Records
+    const orderItemInsertQuery = `
+      INSERT INTO order_items (
+        order_id, product_id, product_variant_id, product_name_at_purchase, product_sku_at_purchase,
+        quantity, price_at_purchase, line_item_tax_amount, applied_tax_rate_percentage, tax_class_id_at_purchase
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);`;
+
+    for (let i = 0; i < orderItemsToInsert.length; i++) {
+      const baseItem = orderItemsToInsert[i];
+      const taxDetailForItem = itemsWithTaxDetails.find(tdi => tdi.product_id === baseItem.productId && (tdi.variant_id || null) === (baseItem.productVariantId || null) );
+
+      await client.query(orderItemInsertQuery, [
+        newOrder.id, baseItem.productId, baseItem.productVariantId, baseItem.product_name_at_purchase, baseItem.product_sku_at_purchase,
+        baseItem.quantity, baseItem.price_at_purchase, // Storing unit price pre-tax
+        taxDetailForItem ? taxDetailForItem.line_item_tax_amount : 0,
+        taxDetailForItem ? taxDetailForItem.applied_tax_rate_percentage : null,
+        taxDetailForItem ? taxDetailForItem.tax_class_id_at_purchase : null
+      ]);
+    }
+
+    // 10. Update Aggregate Stock & Log Movements
+    for (const stockUpdate of stockUpdates) {
+      const newAggregateStock = stockUpdate.old_stock_quantity - stockUpdate.quantityToDecrement;
+      if (stockUpdate.type === 'variant') {
+        await client.query('UPDATE product_variants SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2;', [newAggregateStock, stockUpdate.id]);
+      } else {
+        await client.query('UPDATE products SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2;', [newAggregateStock, stockUpdate.id]);
+      }
+      await client.query(
+        `INSERT INTO stock_movement_logs (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [stockUpdate.productId, stockUpdate.type === 'variant' ? stockUpdate.id : null, userId, 'sale_deduction', -stockUpdate.quantityToDecrement, newAggregateStock, `Sale - Order #${newOrder.id}`, newOrder.id.toString()]
+      );
+    }
+
+    // 11. (Optional) Clear User's Cart - This logic would depend on how carts are stored (e.g., DB table, session)
+    // For now, assume this is handled by the frontend or a separate cart service call after order success.
+
+    await client.query('COMMIT');
+
+    // Fetch full order details for response (similar to getAdminOrderById)
+    const finalCreatedOrder = await this.getAdminOrderById(newOrder.id); // Assuming 'this' context or direct call if standalone
+
+    return finalCreatedOrder;
+
+  } catch (error) {
+    if (client) await client.query('ROLLBACK');
+    if (error instanceof AppError || error instanceof NotFoundError || error instanceof BadRequestError || error instanceof ConflictError) {
+      throw error;
+    }
+    console.error('[orderService.createPublicOrder] Error:', error);
+    throw new AppError('Failed to create order due to an internal server error.', 500, 'ORDER_CREATION_FAILED', { originalError: error.message });
+  } finally {
+    if (client) client.release();
+  }
+}

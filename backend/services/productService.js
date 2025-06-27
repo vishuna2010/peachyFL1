@@ -1555,8 +1555,7 @@ async function getVariantById(variantId) {
   return { ...variant, selected_options: details };
 }
 
-
-const { AppError, BadRequestError, NotFoundError, ConflictError } = require('../utils/AppError'); // Ensure all error types are available
+// Error classes are already imported at the top of the file.
 
 /**
  * Creates a new product variant.

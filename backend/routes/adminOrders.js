@@ -30,9 +30,8 @@ router.get('/orders', isAuthenticated, checkPermission('orders:view_all'), valid
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const page = req.query.page || 1; // Default if optional and not provided
-  const limit = req.query.limit || 10; // Default if optional and not provided
-  // page and limit are validated and have defaults from express-validator
+  // page and limit are validated and have defaults from express-validator (e.g., .default(1))
+  // The declarations below will use these validated and defaulted values.
   const { page, limit } = req.query;
 
   try {
@@ -148,12 +147,10 @@ router.get(
   isAuthenticated,
   checkPermission('orders:view_details'), // Viewing/generating an invoice requires viewing order details
   [
-    param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.')
+    param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt()
   ],
-  '/orders/:orderId/invoice/pdf',
-  isAuthenticated,
-  checkPermission('orders:view_details'),
-  validateOrderIdParam, // Re-use validateOrderIdParam
+  // Removed duplicated path string and redundant middleware that caused TypeError.
+  // The async handler function below is the correct next argument.
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -261,13 +258,8 @@ router.post(
   '/orders/:orderId/refund',
   isAuthenticated,
   checkPermission('orders:manage_refunds'),
-  [
-    param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt(),
-    body('reason').optional().isString().trim().withMessage('Refund reason must be a string if provided.')
-  ],
-  '/orders/:orderId/refund',
-  isAuthenticated,
-  checkPermission('orders:manage_refunds'),
+  // Removed duplicated path string, redundant middleware, and the first, less complete validation array.
+  // Using the more comprehensive validation array below, followed by the handler.
   [
     param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt(),
     body('reason').optional().isString().trim().isLength({ max: 255 }).withMessage('Refund reason cannot exceed 255 characters.'),
