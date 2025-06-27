@@ -317,5 +317,119 @@ module.exports = {
   getReviewById,
   updateReview, // More generic update method
   deleteReview,
-  _updateProductAverageRating // Exporting for potential direct use in product service if needed, though typically private
+  _updateProductAverageRating, // Exporting for potential direct use in product service if needed, though typically private
+  submitNewReview,
+  getUserReviewForProduct,
+  getApprovedReviewsForProduct,
 };
+
+/**
+ * Allows an authenticated user to submit a new review for a product.
+ * @param {number} userId - The ID of the authenticated user.
+ * @param {number} productId - The ID of the product being reviewed.
+ * @param {object} reviewData - Contains rating, title (optional), comment (optional).
+ * @returns {Promise<object>} The newly created review object (status 'pending').
+ */
+async function submitNewReview(userId, productId, reviewData) {
+  const { rating, title, comment } = reviewData;
+
+  // Basic validation (more comprehensive validation via express-validator in route)
+  if (!rating || rating < 1 || rating > 5) {
+    throw new BadRequestError('Rating must be an integer between 1 and 5.');
+  }
+  // Title and comment are optional but if provided, should not be just whitespace (handled by trim in route validator)
+
+  try {
+    // Check if product exists
+    const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+    if (productCheck.rows.length === 0) {
+      throw new NotFoundError(`Product with ID ${productId} not found.`);
+    }
+
+    const result = await db.query(
+      `INSERT INTO product_reviews (product_id, user_id, rating, title, comment, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [productId, userId, rating, title || null, comment || null]
+    );
+    return result.rows[0];
+  } catch (error) {
+    if (error.code === '23505' && error.constraint === 'uk_product_user_review') {
+      throw new ConflictError('You have already reviewed this product.');
+    }
+    console.error(`[ReviewService.submitNewReview] Error for product ${productId}, user ${userId}:`, error);
+    if (error instanceof AppError) throw error;
+    throw new AppError('Failed to submit review.', 500, 'REVIEW_SUBMISSION_FAILED');
+  }
+}
+
+/**
+ * Retrieves a specific user's review for a given product.
+ * @param {number} userId - The ID of the user.
+ * @param {number} productId - The ID of the product.
+ * @returns {Promise<object|null>} The review object if found, otherwise null.
+ */
+async function getUserReviewForProduct(userId, productId) {
+  try {
+    const result = await db.query(
+      'SELECT * FROM product_reviews WHERE product_id = $1 AND user_id = $2',
+      [productId, userId]
+    );
+    return result.rows.length > 0 ? result.rows[0] : null;
+  } catch (error) {
+    console.error(`[ReviewService.getUserReviewForProduct] Error for product ${productId}, user ${userId}:`, error);
+    throw new AppError('Failed to retrieve user review.', 500, 'USER_REVIEW_FETCH_FAILED');
+  }
+}
+
+/**
+ * Retrieves a paginated list of approved reviews for a specific product.
+ * @param {number} productId - The ID of the product.
+ * @param {object} paginationOptions - Contains page and limit.
+ * @returns {Promise<object>} Paginated list of approved reviews.
+ */
+async function getApprovedReviewsForProduct(productId, paginationOptions = {}) {
+  const page = parseInt(paginationOptions.page) || 1;
+  let limit = parseInt(paginationOptions.limit) || 10;
+  if (limit > 100) limit = 100;
+  const offset = (page - 1) * limit;
+
+  try {
+    // Optional: Check if product exists first, though query will just return empty if not.
+    // const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+    // if (productCheck.rows.length === 0) {
+    //   throw new NotFoundError(`Product with ID ${productId} not found.`);
+    // }
+
+    const reviewsQuery = `
+      SELECT r.id, r.rating, r.title, r.comment, r.created_at, u.name as user_name
+      FROM product_reviews r
+      JOIN users u ON r.user_id = u.id
+      WHERE r.product_id = $1 AND r.status = 'approved'
+      ORDER BY r.created_at DESC
+      LIMIT $2 OFFSET $3;
+    `;
+    const reviewsResult = await db.query(reviewsQuery, [productId, limit, offset]);
+
+    const totalCountQuery = `
+      SELECT COUNT(*) FROM product_reviews
+      WHERE product_id = $1 AND status = 'approved';
+    `;
+    const totalCountResult = await db.query(totalCountQuery, [productId]);
+    const totalItems = parseInt(totalCountResult.rows[0].count, 10);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    return {
+      reviews: reviewsResult.rows,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalItems,
+        pageSize: limit,
+      },
+    };
+  } catch (error) {
+    console.error(`[ReviewService.getApprovedReviewsForProduct] Error for product ${productId}:`, error);
+    throw new AppError('Failed to retrieve approved reviews.', 500, 'APPROVED_REVIEWS_FETCH_FAILED');
+  }
+}
