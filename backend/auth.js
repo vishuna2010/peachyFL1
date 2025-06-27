@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
 const config = require('./config'); // Import the centralized config
+const emailService = require('./services/emailService'); // Import EmailService
 
 const saltRounds = 10; // This could also be moved to config if desired
 const jwtSecret = config.jwtSecret; // Use jwtSecret from config
@@ -38,7 +39,27 @@ async function registerUser(email, password) {
       'INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id, email, role, created_at',
       [email, hashedPassword, 'customer'] // Explicitly set role
     );
-    const { password: _, ...userWithoutPassword } = result.rows[0];
+    const user = result.rows[0];
+    const { password: _, ...userWithoutPassword } = user;
+
+    // Send welcome email (fire and forget, don't block registration on email failure)
+    if (user && user.email) {
+      // The 'registerUser' function currently doesn't add 'name', so pass email as name for now.
+      // Or, if a default name like "Valued Customer" is preferred by emailService, adjust there.
+      // For now, using email for userName placeholder.
+      emailService.sendWelcomeEmail(user.email, user.email.split('@')[0]) // Use part of email as name
+        .then(emailRes => {
+          if (emailRes.success) {
+            console.log(`Welcome email successfully sent to ${user.email}`);
+          } else {
+            console.error(`Failed to send welcome email to ${user.email}: ${emailRes.error}`);
+          }
+        })
+        .catch(err => {
+          console.error(`Error dispatching welcome email for ${user.email}:`, err);
+        });
+    }
+
     return { success: true, user: userWithoutPassword };
   } catch (error) {
     console.error('Error registering user:', error);
