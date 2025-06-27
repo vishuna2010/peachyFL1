@@ -33,6 +33,9 @@ async function createSchema(client) {
         is_tax_exempt BOOLEAN DEFAULT FALSE NOT NULL,
         tax_exemption_certificate_id VARCHAR(100) NULL,
         tax_exemption_notes TEXT NULL,
+        email_verification_token VARCHAR(255) NULL,
+        email_verification_token_expires_at TIMESTAMPTZ NULL,
+        is_email_verified BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
@@ -46,6 +49,9 @@ async function createSchema(client) {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_tax_exempt BOOLEAN;`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tax_exemption_certificate_id VARCHAR(100) NULL;`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tax_exemption_notes TEXT NULL;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token VARCHAR(255) NULL;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verification_token_expires_at TIMESTAMPTZ NULL;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_email_verified BOOLEAN NOT NULL DEFAULT FALSE;`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
     console.log('All columns for "users" table ensured/checked (basic existence).');

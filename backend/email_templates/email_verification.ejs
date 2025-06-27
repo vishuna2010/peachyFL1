@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify Your Email for <%= siteName %></title>
+  <style>
+    body {
+      font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+      color: #333333;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border: 1px solid #dddddd;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .header {
+      background-color: #007bff; /* Placeholder: Info/Primary Blue */
+      color: #ffffff;
+      padding: 20px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .content {
+      padding: 25px 30px;
+      text-align: left;
+      line-height: 1.6;
+    }
+    .content p {
+      margin: 0 0 15px 0;
+    }
+    .verification-code {
+      display: inline-block;
+      background-color: #e9ecef;
+      color: #007bff; /* Placeholder: Info/Primary Blue */
+      padding: 10px 20px;
+      font-size: 28px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      border-radius: 5px;
+      margin: 20px 0;
+      text-align: center;
+      width: auto; /* Adjust as needed or make it block and center */
+    }
+    .code-container {
+        text-align: center; /* Center the inline-block code */
+    }
+    .expiry-info {
+      font-size: 0.9em;
+      color: #555555;
+    }
+    .footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 0.85em;
+      color: #777777;
+      background-color: #f9f9f9;
+      border-top: 1px solid #eeeeee;
+    }
+    .footer p {
+      margin: 5px 0;
+    }
+    .site-name {
+        font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>Verify Your Email Address</h1>
+    </div>
+    <div class="content">
+      <p>Hi <%= userName %>,</p>
+      <p>Thanks for registering at <span class="site-name"><%= siteName %></span>! To complete your registration and activate your account, please use the verification code below.</p>
+
+      <div class="code-container">
+        <p>Your verification code is:</p>
+        <div class="verification-code"><%= verificationCode %></div>
+      </div>
+
+      <p class="expiry-info">This code will expire in <%= expiresInMinutes %> minutes.</p>
+      <p>If you did not request this email, please ignore it.</p>
+      <p>Best regards,<br>The <span class="site-name"><%= siteName %></span> Team</p>
+    </div>
+    <div class="footer">
+      <p>&copy; <%= new Date().getFullYear() %> <span class="site-name"><%= siteName %></span>. All rights reserved.</p>
+      <% if (typeof companyAddress !== 'undefined' && companyAddress) { %>
+        <p><%= companyAddress %></p>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

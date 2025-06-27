@@ -5,6 +5,7 @@ const auditLogService = require('../services/auditLogService');
 const db = require('../db'); // For 2FA direct DB check
 const { authenticator } = require('otplib');
 const rateLimit = require('express-rate-limit');
+const { body, validationResult } = require('express-validator'); // Added for /verify-email route
 
 // Rate limiter for login attempts
 const loginLimiter = rateLimit({
@@ -43,17 +44,49 @@ const changePasswordLimiter = rateLimit({
 });
 
 // Register
-router.post('/register', registerLimiter, async (req, res) => {
-  const { email, password } = req.body;
+router.post('/register', registerLimiter, async (req, res, next) => { // Added next
+  const { email, password } = req.body; // Assuming name is not part of initial public registration form yet
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
   }
-  const result = await authService.registerUser(email, password);
-  if (result.success) {
-    const userResponse = result.user ? (({ password, ...rest }) => rest)(result.user) : {};
-    res.status(201).json({ message: 'User registered successfully.', user: userResponse });
-  } else {
-    res.status(400).json({ message: result.message });
+
+  try {
+    const result = await authService.registerUser(email, password); // This now returns user with email_verification_token
+
+    if (result.success && result.user) {
+      const user = result.user;
+      const userNameForEmail = user.name || user.email.split('@')[0]; // Use name if available, else email prefix
+      const tokenExpiryMinutes = 15; // Should match what's set in authService.registerUser
+
+      // Send verification email (fire and forget)
+      emailService.sendEmailVerificationCode(user.email, userNameForEmail, user.email_verification_token, tokenExpiryMinutes)
+        .then(emailRes => {
+          if (emailRes.success) {
+            console.log(`Verification email successfully dispatched to ${user.email}`);
+          } else {
+            console.error(`Failed to dispatch verification email to ${user.email}: ${emailRes.error}`);
+            // Potentially log this more robustly or flag for retry if critical
+          }
+        })
+        .catch(err => {
+          console.error(`Error occurred while trying to send verification email for ${user.email}:`, err);
+        });
+
+      // Respond to client indicating verification is needed
+      res.status(201).json({
+        message: 'User registered successfully. Please check your email to verify your account.',
+        userId: user.id // Useful for frontend to direct to a verification page
+      });
+
+    } else {
+      // Registration failed in authService (e.g., email already in use)
+      // authService.registerUser returns { success: false, message: '...' }
+      return res.status(400).json({ message: result.message || 'User registration failed.' });
+    }
+  } catch (error) {
+    // Catch any unexpected errors from authService.registerUser or within this handler
+    console.error('Unexpected error during /register route:', error);
+    next(error); // Pass to global error handler
   }
 });
 
@@ -397,5 +430,84 @@ router.get('/my-permissions', authService.isAuthenticated, async (req, res, next
     res.status(500).json({ message: 'Failed to retrieve user permissions.' });
   }
 });
+
+// POST /api/auth/verify-email - Verify email with token
+router.post('/verify-email',
+  [ // Add express-validator rules
+    body('userId').isInt({ gt: 0 }).withMessage('Valid User ID is required.').toInt(),
+    body('verificationCode').isString().isLength({ min:6, max: 6 }).withMessage('A valid 6-digit verification code is required.')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { userId, verificationCode } = req.body;
+    const client = await db.pool.connect(); // db needs to be required in this file
+
+    try {
+      await client.query('BEGIN');
+
+      const userResult = await client.query(
+        'SELECT id, email, name, role, email_verification_token, email_verification_token_expires_at, is_email_verified FROM users WHERE id = $1 FOR UPDATE',
+        [userId]
+      );
+
+      if (userResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        // Use AppError for consistency if available and global error handler is set up
+        // For now, direct response or pass to next if AppError is imported and configured
+        return res.status(404).json({ message: 'User not found.' });
+      }
+
+      const user = userResult.rows[0];
+
+      if (user.is_email_verified) {
+        await client.query('ROLLBACK');
+        return res.status(200).json({ message: 'Email is already verified. You can log in.' });
+      }
+
+      if (!user.email_verification_token || user.email_verification_token !== verificationCode) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Invalid verification code.' });
+      }
+
+      if (user.email_verification_token_expires_at && new Date(user.email_verification_token_expires_at) < new Date()) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ message: 'Verification code has expired. Please register again or request a new code if that feature exists.' });
+      }
+
+      await client.query(
+        'UPDATE users SET is_email_verified = TRUE, email_verification_token = NULL, email_verification_token_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [userId]
+      );
+
+      await client.query('COMMIT');
+
+      const userNameForEmail = user.name || user.email.split('@')[0];
+      emailService.sendWelcomeEmail(user.email, userNameForEmail) // emailService needs to be required
+        .then(emailRes => {
+          if (emailRes.success) {
+            console.log(`Welcome email successfully sent to ${user.email} after verification.`);
+          } else {
+            console.error(`Failed to send welcome email to ${user.email} after verification: ${emailRes.error}`);
+          }
+        })
+        .catch(err => {
+          console.error(`Error dispatching welcome email for ${user.email} after verification:`, err);
+        });
+
+      res.status(200).json({ message: 'Email verified successfully. You can now log in.' });
+
+    } catch (error) {
+      if(client) await client.query('ROLLBACK');
+      console.error('Error during /verify-email route:', error);
+      next(error);
+    } finally {
+      if(client) client.release();
+    }
+  }
+);
 
 module.exports = router;
