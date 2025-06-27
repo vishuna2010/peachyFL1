@@ -597,8 +597,301 @@ function calculateProfitMargin(sellingPrice, costPrice) {
     };
 }
 
+const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../services/s3Service');
+const { getOrCreateTagIds, getS3KeyFromUrl } = require('../utils/productHelpers'); // Assuming these helpers are still relevant
+
+/**
+ * Creates a new product, including handling optional image upload and tag association.
+ * Manages database transaction.
+ * @param {object} productData - Data for the new product from the validated request body.
+ * @param {object} [fileData] - Optional file object from multer (req.file).
+ * @returns {Promise<object>} The newly created product object, enriched with details.
+ * @throws {AppError} If creation fails (e.g., DB error, S3 error).
+ * @throws {ConflictError} If SKU already exists.
+ */
+async function createProduct(productData, fileData) {
+  const {
+    name, description, price, category_id, supplier_id, sku,
+    stock_quantity = 0, // Default from validator might be used by route
+    reorder_threshold, product_status = 'draft', // Default from validator
+    tax_class_id, cost_price, wholesale_price,
+    brand_manufacturer, supplier_reference, specifications,
+    tags: tagNames // Expects an array of tag names
+  } = productData;
+
+  const client = await db.pool.connect();
+  let s3FileKeyToStore = null;
+  let imageUrlToStoreInDb = null;
+
+  try {
+    await client.query('BEGIN');
+
+    if (fileData) {
+      if (!isS3Configured()) {
+        await client.query('ROLLBACK');
+        throw new AppError("Image upload service is not configured.", 500, "S3_NOT_CONFIGURED");
+      }
+      try {
+        const uniqueFileName = `product-images/product-${Date.now()}-${fileData.originalname.replace(/\s+/g, '_')}`;
+        const s3Data = await uploadFileToS3(fileData.buffer, uniqueFileName, fileData.mimetype);
+        imageUrlToStoreInDb = s3Data.Location;
+        s3FileKeyToStore = s3Data.Key;
+      } catch (s3Error) {
+        await client.query('ROLLBACK');
+        console.error("S3 Upload Error during product creation in service:", s3Error);
+        throw new AppError("Failed to upload image to S3.", 500, "S3_UPLOAD_FAILED", { originalError: s3Error.message });
+      }
+    }
+
+    const insertQuery = `
+      INSERT INTO products (
+        name, description, price, category_id, supplier_id, sku, stock_quantity,
+        reorder_threshold, product_status, image_url, tax_class_id, cost_price,
+        wholesale_price, brand_manufacturer, supplier_reference, specifications,
+        has_variants, average_rating, review_count, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        FALSE, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      ) RETURNING id;
+    `;
+    // RETURNING * would be better if not calling getProductById later, but id is enough for now.
+
+    const values = [
+      name, description || null, price, category_id || null, supplier_id || null, sku || null,
+      stock_quantity, reorder_threshold || null, product_status, imageUrlToStoreInDb,
+      tax_class_id || null, cost_price || null, wholesale_price || null,
+      brand_manufacturer || null, supplier_reference || null,
+      specifications ? (typeof specifications === 'string' ? specifications : JSON.stringify(specifications)) : null,
+    ];
+
+    const result = await client.query(insertQuery, values);
+    const newProductId = result.rows[0].id;
+
+    if (Array.isArray(tagNames) && tagNames.length > 0) {
+      const tagIds = await getOrCreateTagIds(tagNames, client); // Pass client for transaction
+      for (const tagId of tagIds) {
+        await client.query('INSERT INTO product_tags (product_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [newProductId, tagId]);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    // Fetch the full product details to return (consistent with getProductById)
+    // getProductById uses its own client, so this is safe after commit.
+    return getProductById(newProductId);
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    if (s3FileKeyToStore && isS3Configured()) { // If S3 upload happened but DB failed
+      try {
+        await deleteFileFromS3(s3FileKeyToStore);
+        console.log(`Rolled back S3 upload for key: ${s3FileKeyToStore} due to DB error.`);
+      } catch (s3RollbackError) {
+        console.error(`CRITICAL: Failed to rollback S3 upload for key ${s3FileKeyToStore} after DB error:`, s3RollbackError);
+      }
+    }
+
+    if (error.code === '23505' && error.constraint === 'products_sku_key') {
+      throw new ConflictError(`SKU "${sku}" already exists.`);
+    }
+    console.error('Error in productService.createProduct:', error);
+    // If it's already an AppError, rethrow it, otherwise wrap it.
+    if (error instanceof AppError || error instanceof NotFoundError || error instanceof ConflictError || error instanceof BadRequestError) {
+        throw error;
+    }
+    throw new AppError('Failed to create product.', 500, 'PRODUCT_CREATION_FAILED', { originalError: error.message });
+  } finally {
+    client.release();
+  }
+}
+
+
+/**
+ * Updates an existing product, including handling optional image upload/removal and tag association.
+ * Manages database transaction.
+ * @param {number} productId - The ID of the product to update.
+ * @param {object} productData - Data for updating the product from the validated request body.
+ * @param {object} [fileData] - Optional file object from multer (req.file) for new image.
+ * @param {boolean} [removeImage=false] - Flag to indicate if existing image should be removed.
+ * @returns {Promise<object>} The updated product object, enriched with details.
+ * @throws {AppError} If update fails.
+ * @throws {NotFoundError} If product not found.
+ * @throws {ConflictError} If new SKU conflicts.
+ */
+async function updateProduct(productId, productData, fileData, removeImage = false) {
+  const {
+    name, description, price, category_id, supplier_id, sku,
+    stock_quantity, reorder_threshold, product_status, tax_class_id,
+    cost_price, wholesale_price, brand_manufacturer, supplier_reference,
+    specifications, tags: tagNames, image_url: imageUrlFromRequest // Used to signal keeping or explicitly nullifying image_url if no fileData
+  } = productData;
+
+  const client = await db.pool.connect();
+  let s3FileKeyToStore = null;       // Key of newly uploaded S3 object
+  let finalImageUrlToStoreInDb = undefined; // undefined means no change, null means remove, string means new URL
+  let oldS3KeyToDelete = null;
+
+  try {
+    await client.query('BEGIN');
+
+    const currentProductResult = await client.query('SELECT image_url, sku, has_variants FROM products WHERE id = $1 FOR UPDATE', [productId]);
+    if (currentProductResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      throw new NotFoundError(`Product with ID ${productId} not found.`);
+    }
+    const currentProduct = currentProductResult.rows[0];
+    finalImageUrlToStoreInDb = currentProduct.image_url; // Start with current image
+
+    // --- Image Handling Logic ---
+    if (fileData) { // New image uploaded
+      if (!isS3Configured()) {
+        await client.query('ROLLBACK');
+        throw new AppError("Image upload service is not configured.", 500, "S3_NOT_CONFIGURED");
+      }
+      try {
+        const uniqueFileName = `product-images/product-${productId}-${Date.now()}-${fileData.originalname.replace(/\s+/g, '_')}`;
+        const s3Data = await uploadFileToS3(fileData.buffer, uniqueFileName, fileData.mimetype);
+        finalImageUrlToStoreInDb = s3Data.Location;
+        s3FileKeyToStore = s3Data.Key;
+        if (currentProduct.image_url) { // If there was an old image, mark it for deletion
+          oldS3KeyToDelete = getS3KeyFromUrl(currentProduct.image_url);
+        }
+      } catch (s3Error) {
+        await client.query('ROLLBACK');
+        console.error("S3 Upload Error during product update in service:", s3Error);
+        throw new AppError("Failed to upload new image to S3.", 500, "S3_UPLOAD_FAILED", { originalError: s3Error.message });
+      }
+    } else if (removeImage === true || imageUrlFromRequest === null) { // Explicitly removing image
+        if (currentProduct.image_url && isS3Configured()) {
+            oldS3KeyToDelete = getS3KeyFromUrl(currentProduct.image_url);
+        }
+        finalImageUrlToStoreInDb = null; // Set to null to remove from DB
+    }
+    // If imageUrlFromRequest is a string, it's assumed client wants to keep existing or it's a non-S3 URL (not typical for this app's S3 flow)
+    // If undefined, no change to image unless fileData is present.
+
+    // --- Build Update Query ---
+    const setClauses = [];
+    const queryUpdateValues = [];
+    let currentParamIndex = 1;
+
+    const addUpdateClause = (field, value, isJson = false) => {
+      // Only add to SET if property exists in productData (meaning it was intended to be updated)
+      // or if it's image_url and it has changed through file upload/removal.
+      if (productData.hasOwnProperty(field) || (field === 'image_url' && finalImageUrlToStoreInDb !== currentProduct.image_url)) {
+        setClauses.push(`${field} = $${currentParamIndex++}`);
+        if (isJson && value !== null && typeof value !== 'string') {
+          queryUpdateValues.push(JSON.stringify(value));
+        } else {
+          queryUpdateValues.push(value === '' && (field === 'description' || field === 'sku' || field === 'brand_manufacturer' || field === 'supplier_reference') ? null : value);
+        }
+      }
+    };
+
+    // Add fields from productData to update query if they exist
+    addUpdateClause('name', name);
+    addUpdateClause('description', description);
+    addUpdateClause('price', price);
+    addUpdateClause('category_id', category_id === '' ? null : category_id);
+    addUpdateClause('supplier_id', supplier_id === '' ? null : supplier_id);
+    addUpdateClause('sku', sku);
+
+    if (productData.hasOwnProperty('stock_quantity') && !currentProduct.has_variants) {
+        addUpdateClause('stock_quantity', stock_quantity);
+    } else if (productData.hasOwnProperty('stock_quantity') && currentProduct.has_variants) {
+        console.warn(`Attempt to update base stock_quantity for product ID ${productId} which has variants. Update to stock_quantity ignored by service.`);
+    }
+
+    addUpdateClause('reorder_threshold', reorder_threshold === '' ? null : reorder_threshold);
+    addUpdateClause('product_status', product_status);
+    // Ensure image_url is part of productData for addUpdateClause logic if it changed
+    if (finalImageUrlToStoreInDb !== currentProduct.image_url) {
+        productData.image_url = finalImageUrlToStoreInDb; // Make it available for addUpdateClause
+    }
+    addUpdateClause('image_url', productData.image_url); // Will use finalImageUrlToStoreInDb if it was changed
+
+    addUpdateClause('tax_class_id', tax_class_id === '' ? null : tax_class_id);
+    addUpdateClause('cost_price', cost_price === '' ? null : cost_price);
+    addUpdateClause('wholesale_price', wholesale_price === '' ? null : wholesale_price);
+    addUpdateClause('brand_manufacturer', brand_manufacturer);
+    addUpdateClause('supplier_reference', supplier_reference);
+    addUpdateClause('specifications', specifications, true);
+
+
+    let productUpdated = false;
+    if (setClauses.length > 0) {
+      setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+      const updateQueryString = `UPDATE products SET ${setClauses.join(", ")} WHERE id = $${currentParamIndex} RETURNING id`;
+      queryUpdateValues.push(productId);
+
+      const updateResult = await client.query(updateQueryString, queryUpdateValues);
+      if (updateResult.rowCount > 0) productUpdated = true;
+    }
+
+    // --- Tags Handling ---
+    let tagsUpdated = false;
+    if (productData.hasOwnProperty('tags')) { // Check if 'tags' was part of the update request
+        tagsUpdated = true; // Mark that tag processing was intended
+        await client.query('DELETE FROM product_tags WHERE product_id = $1', [productId]);
+        if (Array.isArray(tagNames) && tagNames.length > 0) {
+            const tagIds = await getOrCreateTagIds(tagNames, client);
+            for (const tagId of tagIds) {
+                await client.query('INSERT INTO product_tags (product_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [productId, tagId]);
+            }
+        }
+    }
+
+    // If only tags changed, and no other product fields, ensure updated_at is still touched on products table
+    if (tagsUpdated && !productUpdated && setClauses.length === 0) {
+        await client.query('UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE id = $1', [productId]);
+    }
+
+
+    await client.query('COMMIT');
+
+    // If commit was successful, delete old S3 image if applicable
+    if (oldS3KeyToDelete && isS3Configured()) {
+      try {
+        await deleteFileFromS3(oldS3KeyToDelete);
+        console.log(`Successfully deleted old S3 image: ${oldS3KeyToDelete}`);
+      } catch (s3DeleteError) {
+        console.error(`Failed to delete old S3 image ${oldS3KeyToDelete} after product update:`, s3DeleteError);
+        // Non-critical, don't fail the whole operation, but log it.
+      }
+    }
+
+    return getProductById(productId); // Fetch and return the updated product details
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    // If a new image was uploaded to S3 but DB transaction failed, delete the new S3 image
+    if (s3FileKeyToStore && isS3Configured()) {
+      try {
+        await deleteFileFromS3(s3FileKeyToStore);
+        console.log(`Rolled back S3 upload for key: ${s3FileKeyToStore} due to DB error on product update.`);
+      } catch (s3RollbackError) {
+        console.error(`CRITICAL: Failed to rollback S3 upload for key ${s3FileKeyToStore} after DB error:`, s3RollbackError);
+      }
+    }
+
+    if (error.code === '23505' && error.constraint === 'products_sku_key') {
+      throw new ConflictError(`SKU "${sku}" already exists.`);
+    }
+    if (error instanceof AppError || error instanceof NotFoundError || error instanceof ConflictError || error instanceof BadRequestError) {
+        throw error;
+    }
+    console.error(`Error in productService.updateProduct for ID ${productId}:`, error);
+    throw new AppError('Failed to update product.', 500, 'PRODUCT_UPDATE_FAILED', { originalError: error.message });
+  } finally {
+    client.release();
+  }
+}
+
+
 module.exports = {
   getAllProducts,
   getProductById,
-  calculateProfitMargin
+  calculateProfitMargin,
+  createProduct,
+  updateProduct,
 };
