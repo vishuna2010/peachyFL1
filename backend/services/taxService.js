@@ -214,7 +214,296 @@ async function calculateTaxForCartItems(cartItems, userId, addressForTaxCalculat
 }
 
 
+const { NotFoundError, ConflictError, BadRequestError, AppError } = require('../utils/AppError'); // Assuming AppError and others are in utils
+
+// --- Tax Class CRUD ---
+
+/**
+ * Creates a new tax class.
+ * @param {object} taxClassData - Contains name (string, required) and description (string, optional).
+ * @returns {Promise<object>} The newly created tax class object.
+ */
+async function createTaxClass(taxClassData) {
+  const { name, description } = taxClassData;
+  if (!name || name.trim() === '') {
+    throw new BadRequestError('Tax class name is required.');
+  }
+
+  try {
+    const existingClass = await db.query('SELECT id FROM tax_classes WHERE LOWER(name) = LOWER($1)', [name.trim()]);
+    if (existingClass.rows.length > 0) {
+      throw new ConflictError('A tax class with this name already exists.');
+    }
+
+    const result = await db.query(
+      'INSERT INTO tax_classes (name, description, created_at, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING *',
+      [name.trim(), description || null]
+    );
+    return result.rows[0];
+  } catch (error) {
+    if (error.code === '23505') { // unique_violation
+      throw new ConflictError('A tax class with this name already exists (database constraint).');
+    }
+    if (error instanceof AppError) throw error;
+    console.error('[taxService.createTaxClass] Error:', error);
+    throw new AppError('Failed to create tax class.', 500, 'TAX_CLASS_CREATION_FAILED');
+  }
+}
+
+/**
+ * Retrieves a paginated list of all tax classes.
+ * @param {object} paginationOptions - Contains page (number, default 1) and limit (number, default 10).
+ * @returns {Promise<object>} An object containing data (array of tax classes) and pagination details.
+ */
+async function getAllTaxClasses(paginationOptions = {}) {
+  const { page = 1, limit = 10 } = paginationOptions;
+  const offset = (page - 1) * limit;
+
+  try {
+    const dataQuery = 'SELECT * FROM tax_classes ORDER BY name ASC LIMIT $1 OFFSET $2;';
+    const dataResult = await db.query(dataQuery, [limit, offset]);
+
+    const countQuery = 'SELECT COUNT(*) FROM tax_classes;';
+    const countResult = await db.query(countQuery);
+    const totalRecords = parseInt(countResult.rows[0].count, 10);
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    return {
+      data: dataResult.rows,
+      pagination: {
+        total: totalRecords,
+        page: page,
+        limit: limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    };
+  } catch (error) {
+    console.error('[taxService.getAllTaxClasses] Error:', error);
+    throw new AppError('Failed to retrieve tax classes.', 500, 'TAX_CLASS_FETCH_ALL_FAILED');
+  }
+}
+
+/**
+ * Retrieves a specific tax class by its ID.
+ * @param {number} taxClassId - The ID of the tax class.
+ * @returns {Promise<object>} The tax class object.
+ * @throws {NotFoundError} If not found.
+ */
+async function getTaxClassById(taxClassId) {
+  try {
+    const result = await db.query('SELECT * FROM tax_classes WHERE id = $1', [taxClassId]);
+    if (result.rows.length === 0) {
+      throw new NotFoundError(`Tax class with ID ${taxClassId} not found.`);
+    }
+    return result.rows[0];
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    console.error(`[taxService.getTaxClassById] Error for ID ${taxClassId}:`, error);
+    throw new AppError('Failed to retrieve tax class.', 500, 'TAX_CLASS_FETCH_BY_ID_FAILED');
+  }
+}
+
+/**
+ * Updates an existing tax class.
+ * @param {number} taxClassId - The ID of the tax class to update.
+ * @param {object} updateData - Contains name (string, optional) and/or description (string, optional).
+ * @returns {Promise<object>} The updated tax class object.
+ */
+async function updateTaxClass(taxClassId, updateData) {
+  const { name, description } = updateData;
+
+  if (name === undefined && description === undefined) {
+    throw new BadRequestError('No fields provided for update. Please provide name or description.');
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const currentClassResult = await client.query('SELECT name, description FROM tax_classes WHERE id = $1 FOR UPDATE', [taxClassId]);
+    if (currentClassResult.rows.length === 0) {
+      throw new NotFoundError(`Tax class with ID ${taxClassId} not found.`);
+    }
+    const currentClass = currentClassResult.rows[0];
+
+    const updateFields = {};
+    let needsUpdate = false;
+
+    if (name !== undefined && name.trim() !== currentClass.name) {
+      const trimmedName = name.trim();
+      if (trimmedName === '') throw new BadRequestError('Tax class name cannot be empty if provided.');
+      const existingClass = await client.query('SELECT id FROM tax_classes WHERE LOWER(name) = LOWER($1) AND id != $2', [trimmedName, taxClassId]);
+      if (existingClass.rows.length > 0) {
+        throw new ConflictError('Another tax class with this name already exists.');
+      }
+      updateFields.name = trimmedName;
+      needsUpdate = true;
+    }
+
+    if (description !== undefined && description !== currentClass.description) {
+      updateFields.description = description === null || description.trim() === '' ? null : description.trim();
+      needsUpdate = true;
+    }
+
+    if (!needsUpdate && name === undefined && description === undefined) {
+        // This case should be caught by the initial check, but as a safeguard:
+        // if name or description were provided but identical to current, this path might be hit.
+        // The route handler already checks if name and description are both undefined.
+        // This ensures if they are provided but same as current, we don't proceed.
+        return currentClass; // No actual change
+    }
+
+    if (Object.keys(updateFields).length === 0) {
+        // All provided fields were identical to existing ones
+        return currentClass; // No actual change needed
+    }
+
+
+    const setClauses = Object.keys(updateFields).map((key, i) => `${key} = $${i + 1}`);
+    const values = Object.values(updateFields);
+    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+
+    const updateQuery = `UPDATE tax_classes SET ${setClauses.join(', ')} WHERE id = $${values.length + 1} RETURNING *;`;
+    values.push(taxClassId);
+
+    const result = await client.query(updateQuery, values);
+    await client.query('COMMIT');
+    return result.rows[0];
+
+  } catch (error) {
+    if(client) await client.query('ROLLBACK');
+    if (error.code === '23505') {
+      throw new ConflictError('Another tax class with this name already exists (database constraint).');
+    }
+    if (error instanceof AppError) throw error;
+    console.error(`[taxService.updateTaxClass] Error for ID ${taxClassId}:`, error);
+    throw new AppError('Failed to update tax class.', 500, 'TAX_CLASS_UPDATE_FAILED');
+  } finally {
+    if(client) client.release();
+  }
+}
+
+/**
+ * Deletes a tax class.
+ * @param {number} taxClassId - The ID of the tax class to delete.
+ * @returns {Promise<object>} The data of the deleted tax class.
+ */
+async function deleteTaxClass(taxClassId) {
+  try {
+    // products.tax_class_id is ON DELETE SET NULL.
+    // tax_class_rates.tax_class_id is ON DELETE CASCADE.
+    const result = await db.query('DELETE FROM tax_classes WHERE id = $1 RETURNING *', [taxClassId]);
+    if (result.rowCount === 0) {
+      throw new NotFoundError(`Tax class with ID ${taxClassId} not found.`);
+    }
+    return result.rows[0];
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    console.error(`[taxService.deleteTaxClass] Error for ID ${taxClassId}:`, error);
+    throw new AppError('Failed to delete tax class.', 500, 'TAX_CLASS_DELETE_FAILED');
+  }
+}
+
+// --- Tax Class Rates Management ---
+
+/**
+ * Links a tax rate to a tax class.
+ * @param {number} classId - The ID of the tax class.
+ * @param {number} rateId - The ID of the tax rate.
+ * @returns {Promise<object>} The new tax_class_rates record.
+ */
+async function linkRateToClass(classId, rateId) {
+  try {
+    const classCheck = await db.query('SELECT id FROM tax_classes WHERE id = $1', [classId]);
+    if (classCheck.rows.length === 0) {
+      throw new NotFoundError(`Tax class with ID ${classId} not found.`);
+    }
+    const rateCheck = await db.query('SELECT id FROM tax_rates WHERE id = $1', [rateId]);
+    if (rateCheck.rows.length === 0) {
+      throw new BadRequestError(`Tax rate with ID ${rateId} not found.`);
+    }
+
+    const result = await db.query(
+      'INSERT INTO tax_class_rates (tax_class_id, tax_rate_id) VALUES ($1, $2) RETURNING *',
+      [classId, rateId]
+    );
+    return result.rows[0];
+  } catch (error) {
+    if (error.code === '23505') { // unique_violation
+      throw new ConflictError('This tax rate is already linked to this tax class.');
+    }
+    if (error instanceof AppError) throw error;
+    console.error(`[taxService.linkRateToClass] Error linking rate ${rateId} to class ${classId}:`, error);
+    throw new AppError('Failed to link tax rate to class.', 500, 'TAX_CLASS_RATE_LINK_FAILED');
+  }
+}
+
+/**
+ * Lists all tax rates linked to a specific tax class.
+ * @param {number} classId - The ID of the tax class.
+ * @returns {Promise<Array<object>>} An array of tax rate objects.
+ */
+async function getRatesForClass(classId) {
+  try {
+    const classCheck = await db.query('SELECT id FROM tax_classes WHERE id = $1', [classId]);
+    if (classCheck.rows.length === 0) {
+      throw new NotFoundError(`Tax class with ID ${classId} not found.`);
+    }
+
+    const result = await db.query(
+      `SELECT tr.*
+       FROM tax_rates tr
+       JOIN tax_class_rates tcr ON tr.id = tcr.tax_rate_id
+       WHERE tcr.tax_class_id = $1
+       ORDER BY tr.name ASC;`,
+      [classId]
+    );
+    return result.rows;
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    console.error(`[taxService.getRatesForClass] Error for class ID ${classId}:`, error);
+    throw new AppError('Failed to retrieve rates for tax class.', 500, 'TAX_CLASS_RATES_FETCH_FAILED');
+  }
+}
+
+/**
+ * Unlinks a tax rate from a tax class.
+ * @param {number} classId - The ID of the tax class.
+ * @param {number} rateId - The ID of the tax rate.
+ * @returns {Promise<object>} Data of the unlinked relation.
+ */
+async function unlinkRateFromClass(classId, rateId) {
+  try {
+    const result = await db.query(
+      'DELETE FROM tax_class_rates WHERE tax_class_id = $1 AND tax_rate_id = $2 RETURNING *',
+      [classId, rateId]
+    );
+    if (result.rowCount === 0) {
+      throw new NotFoundError(`Link between tax class ID ${classId} and tax rate ID ${rateId} not found.`);
+    }
+    return result.rows[0];
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    console.error(`[taxService.unlinkRateFromClass] Error unlinking rate ${rateId} from class ${classId}:`, error);
+    throw new AppError('Failed to unlink tax rate from class.', 500, 'TAX_CLASS_RATE_UNLINK_FAILED');
+  }
+}
+
+
 module.exports = {
   calculatePriceWithAppliedTaxes,
   calculateTaxForCartItems, // Export the new function
+
+  // Tax Class CRUD
+  createTaxClass,
+  getAllTaxClasses,
+  getTaxClassById,
+  updateTaxClass,
+  deleteTaxClass,
+
+  // Tax Class Rates Management
+  linkRateToClass,
+  getRatesForClass,
+  unlinkRateFromClass,
 };
