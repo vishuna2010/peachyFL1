@@ -888,10 +888,75 @@ async function updateProduct(productId, productData, fileData, removeImage = fal
 }
 
 
+/**
+ * Updates the stock quantity for a specific product.
+ * This method should only be used for products that do NOT have variants.
+ * @param {number} productId - The ID of the product to update.
+ * @param {number} newStockQuantity - The new stock quantity.
+ * @returns {Promise<object>} The updated product object (full details via getProductById).
+ * @throws {NotFoundError} If the product is not found.
+ * @throws {BadRequestError} If attempting to update stock for a product with variants, or if stock is invalid.
+ * @throws {AppError} If database operation fails.
+ */
+async function updateProductStock(productId, newStockQuantity) {
+  if (newStockQuantity === undefined || newStockQuantity === null || isNaN(parseInt(newStockQuantity)) || parseInt(newStockQuantity) < 0) {
+    throw new BadRequestError('New stock quantity must be a non-negative integer.');
+  }
+  const stockQty = parseInt(newStockQuantity);
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const productDetailsResult = await client.query('SELECT id, has_variants FROM products WHERE id = $1 FOR UPDATE', [productId]);
+    if (productDetailsResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      throw new NotFoundError(`Product with ID ${productId} not found.`);
+    }
+    const product = productDetailsResult.rows[0];
+
+    if (product.has_variants) {
+      await client.query('ROLLBACK');
+      throw new BadRequestError(`Stock for product ID ${productId} (which has variants) must be managed at the variant level.`);
+    }
+
+    const updateQuery = `
+      UPDATE products
+      SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+      RETURNING id;
+    `;
+    const updatedProductResult = await client.query(updateQuery, [stockQty, productId]);
+
+    if (updatedProductResult.rowCount === 0) {
+      // Should not happen if FOR UPDATE lock was successful and ID is correct
+      await client.query('ROLLBACK');
+      throw new AppError(`Product with ID ${productId} found but update failed to apply.`, 500, 'PRODUCT_STOCK_UPDATE_FAILED');
+    }
+
+    await client.query('COMMIT');
+
+    // Return the full product details after successful update
+    return getProductById(productId); // getProductById uses its own client connection
+
+  } catch (error) {
+    await client.query('ROLLBACK'); // Ensure rollback on any error not caught above
+    if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof AppError) {
+      throw error; // Re-throw known errors
+    }
+    console.error(`Error in productService.updateProductStock for ID ${productId}:`, error);
+    throw new AppError(`Failed to update stock for product ID ${productId}.`, 500, 'PRODUCT_STOCK_UPDATE_UNHANDLED_ERROR');
+  } finally {
+    client.release();
+  }
+}
+
+
 module.exports = {
   getAllProducts,
   getProductById,
   calculateProfitMargin,
   createProduct,
   updateProduct,
+  updateProductStock,
 };
