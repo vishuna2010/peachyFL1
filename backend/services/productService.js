@@ -1498,6 +1498,539 @@ async function getProductAssignedOptions(productId) {
 }
 
 
+// --- Internal Helper for Variant Option Details ---
+async function _getVariantOptionDetails(variantId, client) {
+  const detailsQuery = `
+    SELECT
+        pov.id as option_value_id,
+        pov.value as option_value_name,
+        po.id as option_id,
+        po.name as option_name
+    FROM product_variant_option_values pvov
+    JOIN product_option_values pov ON pvov.product_option_value_id = pov.id
+    JOIN product_options po ON pov.product_option_id = po.id
+    WHERE pvov.product_variant_id = $1
+    ORDER BY po.name, pov.value;
+  `;
+  // Use the provided client if available (for transactions), otherwise use the pool.
+  const dbExecutor = client || db;
+  const { rows } = await dbExecutor.query(detailsQuery, [variantId]);
+  return rows;
+}
+
+/**
+ * Retrieves all variants for a given product, including their selected option details.
+ * @param {number} productId - The ID of the product.
+ * @returns {Promise<Array<object>>} An array of variant objects, each with a 'selected_options' array.
+ * @throws {NotFoundError} If the product is not found.
+ */
+async function getProductVariants(productId) {
+  const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
+  if (productCheck.rows.length === 0) {
+    throw new NotFoundError(`Product with ID ${productId} not found.`);
+  }
+
+  const variantsResult = await db.query('SELECT * FROM product_variants WHERE product_id = $1 ORDER BY id', [productId]);
+  const variants = [];
+  for (const variant of variantsResult.rows) {
+    const details = await _getVariantOptionDetails(variant.id); // Uses pool connection
+    variants.push({ ...variant, selected_options: details });
+  }
+  return variants;
+}
+
+/**
+ * Retrieves a specific variant by its ID, including its selected option details.
+ * @param {number} variantId - The ID of the variant.
+ * @returns {Promise<object>} The variant object with a 'selected_options' array.
+ * @throws {NotFoundError} If the variant is not found.
+ */
+async function getVariantById(variantId) {
+  const variantResult = await db.query('SELECT * FROM product_variants WHERE id = $1', [variantId]);
+  if (variantResult.rows.length === 0) {
+    throw new NotFoundError(`Variant with ID ${variantId} not found.`);
+  }
+  const variant = variantResult.rows[0];
+  const details = await _getVariantOptionDetails(variant.id); // Uses pool connection
+  return { ...variant, selected_options: details };
+}
+
+
+const { AppError, BadRequestError, NotFoundError, ConflictError } = require('../utils/AppError'); // Ensure all error types are available
+
+/**
+ * Creates a new product variant.
+ * @param {number} productId - The ID of the parent product.
+ * @param {object} variantData - Data for the new variant.
+ * @param {string} [variantData.sku]
+ * @param {number|string} variantData.price_modifier
+ * @param {number|string} variantData.stock_quantity
+ * @param {string} [variantData.image_url] - Direct URL, S3 upload handled by fileData
+ * @param {Array<number>} variantData.option_value_ids - Array of global product_option_value IDs.
+ * @param {number|string} [variantData.cost_price]
+ * @param {number|string} [variantData.wholesale_price_modifier]
+ * @param {object} [fileData] - Optional file object from multer for image upload.
+ * @param {number} [requestingUserId] - Optional ID of the user making the request (for logging).
+ * @returns {Promise<object>} The newly created variant object with selected_options.
+ */
+async function createProductVariant(productId, variantData, fileData, requestingUserId = null) {
+  const {
+    sku, price_modifier, stock_quantity, image_url: directImageUrl, // image_url from body if not using fileData
+    option_value_ids, cost_price, wholesale_price_modifier
+  } = variantData;
+
+  const finalSku = sku && sku.trim() !== '' ? sku.trim() : null;
+  const numPriceModifier = parseFloat(price_modifier);
+  const numStockQuantity = parseInt(stock_quantity, 10);
+  const numCostPrice = (cost_price !== undefined && cost_price !== null && cost_price !== '') ? parseFloat(cost_price) : null;
+  const numWholesalePriceModifier = (wholesale_price_modifier !== undefined && wholesale_price_modifier !== null && wholesale_price_modifier !== '') ? parseFloat(wholesale_price_modifier) : null;
+
+
+  if (isNaN(numPriceModifier)) throw new BadRequestError('Price modifier must be a valid number.');
+  if (isNaN(numStockQuantity) || numStockQuantity < 0) throw new BadRequestError('Stock quantity must be a non-negative integer.');
+  if (numCostPrice !== null && (isNaN(numCostPrice) || numCostPrice < 0)) throw new BadRequestError('Cost price must be a non-negative number or null.');
+  if (numWholesalePriceModifier !== null && isNaN(numWholesalePriceModifier)) throw new BadRequestError('Wholesale price modifier must be a number or null.');
+
+
+  if (!Array.isArray(option_value_ids) || option_value_ids.length === 0) {
+    throw new BadRequestError('At least one option value ID is required.');
+  }
+  const uniqueOptionValueIds = [...new Set(option_value_ids.map(id => parseInt(id)))];
+  if (uniqueOptionValueIds.some(isNaN)) throw new BadRequestError('All option value IDs must be integers.');
+  if (uniqueOptionValueIds.length !== option_value_ids.length) throw new BadRequestError('Duplicate option value IDs provided.');
+
+
+  const client = await db.pool.connect();
+  let s3VariantFileKey = null;
+  let variantImageUrl = directImageUrl || null; // Prioritize direct URL if provided
+
+  try {
+    await client.query('BEGIN');
+
+    const productResult = await client.query('SELECT id, name FROM products WHERE id = $1 FOR UPDATE', [productId]);
+    if (productResult.rows.length === 0) {
+      throw new NotFoundError(`Product with ID ${productId} not found.`);
+    }
+
+    // Validate option_value_ids (existence, one per option type, assigned to product)
+    const selectedGlobalOptionTypes = new Set();
+    for (const globalValueId of uniqueOptionValueIds) {
+      const valueCheck = await client.query(
+        `SELECT pov.product_option_id, po.name AS option_name
+         FROM product_option_values pov
+         JOIN product_options po ON pov.product_option_id = po.id
+         WHERE pov.id = $1`, [globalValueId]
+      );
+      if (valueCheck.rows.length === 0) throw new NotFoundError(`Global option value ID ${globalValueId} not found.`);
+      const globalOptionId = valueCheck.rows[0].product_option_id;
+      if (selectedGlobalOptionTypes.has(globalOptionId)) {
+        throw new BadRequestError(`Multiple values selected for the same global option type "${valueCheck.rows[0].option_name}".`);
+      }
+      selectedGlobalOptionTypes.add(globalOptionId);
+
+      const assignmentCheck = await client.query(
+        `SELECT paosv.id FROM product_assigned_option_specific_values paosv
+         JOIN product_assigned_options pao ON paosv.product_assigned_option_id = pao.id
+         WHERE pao.product_id = $1 AND pao.option_id = $2 AND paosv.product_option_value_id = $3`,
+        [productId, globalOptionId, globalValueId]
+      );
+      if (assignmentCheck.rows.length === 0) {
+        throw new BadRequestError(`Option value ID ${globalValueId} (for option ${valueCheck.rows[0].option_name}) is not assigned/allowed for product ID ${productId}.`);
+      }
+    }
+
+    // Check for duplicate variant combination
+    const sortedIds = [...uniqueOptionValueIds].sort((a, b) => a - b);
+    const existingVariantsCheckQuery = `
+      SELECT pv.id FROM product_variants pv
+      WHERE pv.product_id = $1 AND (
+          SELECT array_agg(pvov.product_option_value_id ORDER BY pvov.product_option_value_id)
+          FROM product_variant_option_values pvov
+          WHERE pvov.product_variant_id = pv.id
+      ) = $2::int[];
+    `;
+    const duplicateCheckResult = await client.query(existingVariantsCheckQuery, [productId, sortedIds]);
+    if (duplicateCheckResult.rows.length > 0) {
+      throw new ConflictError('A variant with this exact combination of option values already exists.');
+    }
+
+    // SKU Uniqueness Check (across products and other variants)
+    if (finalSku) {
+      const skuCheck = await client.query(
+        `SELECT id FROM product_variants WHERE sku = $1
+         UNION
+         SELECT id FROM products WHERE sku = $1`,
+        [finalSku]
+      );
+      if (skuCheck.rows.length > 0) {
+        throw new ConflictError(`SKU "${finalSku}" already exists.`);
+      }
+    }
+
+    // Handle S3 image upload if fileData is provided
+    if (fileData) {
+        if (!isS3Configured()) {
+            throw new AppError("Variant image upload failed: S3 service not configured.", 500, "S3_NOT_CONFIGURED");
+        }
+        try {
+            const uniqueFileName = `product-variants/variant-${productId}-${Date.now()}-${fileData.originalname.replace(/\s+/g, '_')}`;
+            const s3Data = await uploadFileToS3(fileData.buffer, uniqueFileName, fileData.mimetype);
+            variantImageUrl = s3Data.Location;
+            s3VariantFileKey = s3Data.Key;
+        } catch (s3Error) {
+            console.error("S3 Upload Error for variant image:", s3Error);
+            throw new AppError("Failed to upload variant image to S3.", 500, "S3_UPLOAD_FAILED", { originalError: s3Error.message });
+        }
+    }
+
+
+    const variantInsertResult = await client.query(
+      `INSERT INTO product_variants (product_id, sku, price_modifier, stock_quantity, image_url, cost_price, wholesale_price_modifier)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [productId, finalSku, numPriceModifier, numStockQuantity, variantImageUrl, numCostPrice, numWholesalePriceModifier]
+    );
+    const newVariant = variantInsertResult.rows[0];
+
+    for (const ovId of uniqueOptionValueIds) {
+      await client.query(
+        'INSERT INTO product_variant_option_values (product_variant_id, product_option_value_id) VALUES ($1, $2)',
+        [newVariant.id, ovId]
+      );
+    }
+
+    await client.query('UPDATE products SET has_variants = TRUE, updated_at = NOW() WHERE id = $1 AND has_variants = FALSE', [productId]);
+
+    if (newVariant.stock_quantity > 0) {
+      const batchNumber = `INITIAL-${newVariant.sku || `VAR${newVariant.id}`}-${Date.now()}`;
+      const costAtReceipt = newVariant.cost_price !== null ? newVariant.cost_price : 0;
+      // TODO: Get currency code from product/supplier or config default
+      const currencyCodeAtReceipt = config.currency.defaultStoreCurrency || 'USD';
+
+      await client.query(
+        `INSERT INTO inventory_batches
+          (product_id, variant_id, batch_number, initial_quantity, current_quantity,
+           cost_price_at_receipt, currency_code_at_receipt, received_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP) RETURNING id;`,
+        [newVariant.product_id, newVariant.id, batchNumber, newVariant.stock_quantity, newVariant.stock_quantity, costAtReceipt, currencyCodeAtReceipt]
+      );
+
+      await client.query(
+        `INSERT INTO stock_movement_logs
+            (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [newVariant.product_id, newVariant.id, requestingUserId, 'initial_stock_setup', newVariant.stock_quantity, newVariant.stock_quantity, 'Initial stock for new variant', `variant_id:${newVariant.id}`]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    const finalVariantDetails = await _getVariantOptionDetails(newVariant.id, client); // Use client to ensure read after write consistency if needed, or null for pool
+    return { ...newVariant, selected_options: finalVariantDetails };
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    if (s3VariantFileKey && isS3Configured()) {
+        try { await deleteFileFromS3(s3VariantFileKey); }
+        catch (s3e) { console.error(`CRITICAL: Failed to rollback S3 upload for variant image ${s3VariantFileKey}:`, s3e); }
+    }
+    if (error instanceof AppError || error instanceof NotFoundError || error instanceof ConflictError || error instanceof BadRequestError) {
+      throw error;
+    }
+    console.error('Error in productService.createProductVariant:', error);
+    throw new AppError('Failed to create product variant.', 500, 'VARIANT_CREATION_FAILED', { originalError: error.message });
+  } finally {
+    client.release();
+  }
+}
+
+
+/**
+ * Updates an existing product variant.
+ * @param {number} variantId - The ID of the variant to update.
+ * @param {object} variantData - Data for updating the variant.
+ * @param {string} [variantData.sku]
+ * @param {number|string} [variantData.price_modifier]
+ * @param {number|string} [variantData.stock_quantity] - New target aggregate stock.
+ * @param {string} [variantData.image_url] - Explicit new URL or null to remove if no fileData.
+ * @param {Array<number>} [variantData.option_value_ids] - If provided, replaces existing option values.
+ * @param {string} [variantData.reason] - Reason for stock adjustment if stock_quantity is changed.
+ * @param {number|string} [variantData.cost_price]
+ * @param {number|string} [variantData.wholesale_price_modifier]
+ * @param {object} [fileData] - Optional file object from multer for new image.
+ * @param {boolean} [removeImageByFlag=false] - Explicit flag to remove image if image_url not in variantData.
+ * @param {number} [requestingUserId] - Optional ID of the user making the request (for logging).
+ * @returns {Promise<object>} The updated variant object with selected_options.
+ */
+async function updateProductVariant(variantId, variantData, fileData, removeImageByFlag = false, requestingUserId = null) {
+  const {
+    sku, price_modifier, stock_quantity, image_url: directImageUrl,
+    option_value_ids, reason, cost_price, wholesale_price_modifier
+  } = variantData;
+
+  const client = await db.pool.connect();
+  let s3NewFileKey = null;
+  let s3OldFileKey = null;
+  let finalImageUrl = undefined; // undefined means no change unless file/remove flag says otherwise
+
+  try {
+    await client.query('BEGIN');
+
+    const currentVariantResult = await client.query('SELECT * FROM product_variants WHERE id = $1 FOR UPDATE', [variantId]);
+    if (currentVariantResult.rows.length === 0) {
+      throw new NotFoundError(`Variant with ID ${variantId} not found.`);
+    }
+    const currentVariant = currentVariantResult.rows[0];
+    finalImageUrl = currentVariant.image_url; // Default to current
+
+    // --- Image Handling ---
+    if (fileData) { // New image uploaded
+      if (!isS3Configured()) throw new AppError("S3 service not configured.", 500, "S3_NOT_CONFIGURED");
+      if (currentVariant.image_url) s3OldFileKey = getS3KeyFromUrl(currentVariant.image_url);
+
+      const uniqueFileName = `product-variants/variant-${currentVariant.product_id}-${variantId}-${Date.now()}-${fileData.originalname.replace(/\s+/g, '_')}`;
+      const s3Data = await uploadFileToS3(fileData.buffer, uniqueFileName, fileData.mimetype);
+      finalImageUrl = s3Data.Location;
+      s3NewFileKey = s3Data.Key;
+    } else if (removeImageByFlag || (variantData.hasOwnProperty('image_url') && directImageUrl === null)) { // Explicit removal
+      if (currentVariant.image_url && isS3Configured()) s3OldFileKey = getS3KeyFromUrl(currentVariant.image_url);
+      finalImageUrl = null;
+    } else if (variantData.hasOwnProperty('image_url') && typeof directImageUrl === 'string') { // Setting to a new direct URL
+        if (currentVariant.image_url && currentVariant.image_url !== directImageUrl && isS3Configured()) {
+             s3OldFileKey = getS3KeyFromUrl(currentVariant.image_url); // Delete old S3 if new URL is different
+        }
+        finalImageUrl = directImageUrl;
+    }
+    // If image_url is not in variantData and no fileData and no removeImageByFlag, finalImageUrl remains currentVariant.image_url
+
+    // --- Stock Quantity Update via Batches (if stock_quantity is provided) ---
+    let newAggregateStockForVariantTable = currentVariant.stock_quantity;
+    if (stock_quantity !== undefined && stock_quantity !== null) {
+      const targetStock = parseInt(stock_quantity, 10);
+      if (isNaN(targetStock) || targetStock < 0) {
+        throw new BadRequestError('Stock quantity must be a non-negative integer.');
+      }
+      newAggregateStockForVariantTable = targetStock; // This will be set on product_variants table
+
+      const existingBatchStockResult = await client.query(
+        `SELECT COALESCE(SUM(current_quantity), 0) AS total_batch_stock FROM inventory_batches WHERE variant_id = $1 AND product_id = $2`,
+        [variantId, currentVariant.product_id]
+      );
+      const currentTotalBatchStock = parseInt(existingBatchStockResult.rows[0].total_batch_stock, 10);
+      const stockChange = targetStock - currentTotalBatchStock;
+
+      if (stockChange !== 0) {
+        const changeReason = reason || 'Manual stock adjustment via variant edit';
+        if (stockChange > 0) { // Increase stock - add to a new or existing manual batch
+          const manualBatchNumber = `MANUAL-${currentVariant.sku || `VAR${variantId}`}`;
+          const existingManualBatch = await client.query(
+            `SELECT id FROM inventory_batches WHERE variant_id = $1 AND product_id = $2 AND batch_number = $3 FOR UPDATE`,
+            [variantId, currentVariant.product_id, manualBatchNumber]
+          );
+          if (existingManualBatch.rows.length > 0) {
+            await client.query(
+              `UPDATE inventory_batches SET current_quantity = current_quantity + $1, initial_quantity = initial_quantity + $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+              [stockChange, stockChange, existingManualBatch.rows[0].id]
+            );
+          } else {
+            const costAtReceipt = variantData.cost_price !== undefined ? parseFloat(variantData.cost_price) : (currentVariant.cost_price !== null ? currentVariant.cost_price : 0);
+            const currencyCodeAtReceipt = config.currency.defaultStoreCurrency || 'USD';
+            await client.query(
+              `INSERT INTO inventory_batches (product_id, variant_id, batch_number, initial_quantity, current_quantity, cost_price_at_receipt, currency_code_at_receipt, received_date)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+              [currentVariant.product_id, variantId, manualBatchNumber, stockChange, stockChange, costAtReceipt, currencyCodeAtReceipt]
+            );
+          }
+        } else { // Decrease stock (stockChange < 0) - this is complex. For now, log and rely on aggregate update.
+             console.warn(`[ProductService] Stock decrease of ${-stockChange} requested for variant ${variantId}. This currently only updates the aggregate and logs. Ensure specific batch decrements if using FEFO/FIFO for sales.`);
+        }
+        // Log movement
+        await client.query(
+          `INSERT INTO stock_movement_logs (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [currentVariant.product_id, variantId, requestingUserId, 'manual_adjustment', stockChange, targetStock, changeReason, `variant_id:${variantId}`]
+        );
+      }
+    }
+
+    // --- Option Value IDs Update (if provided) ---
+    if (option_value_ids) {
+      const uniqueNewOptionValueIds = [...new Set(option_value_ids.map(id => parseInt(id)))].sort((a, b) => a - b);
+      if (uniqueNewOptionValueIds.some(isNaN)) throw new BadRequestError('All option value IDs must be integers.');
+      if (uniqueNewOptionValueIds.length !== option_value_ids.length && option_value_ids.length > 0) throw new BadRequestError('Duplicate option value IDs provided.');
+      if (uniqueNewOptionValueIds.length === 0) throw new BadRequestError('At least one option value ID is required if options are being updated.');
+
+      // Validation for new option_value_ids (similar to POST)
+      const newSelectedGlobalOptionTypes = new Set();
+      for (const globalValueId of uniqueNewOptionValueIds) {
+        const valueCheck = await client.query(`SELECT pov.product_option_id, po.name AS option_name FROM product_option_values pov JOIN product_options po ON pov.product_option_id = po.id WHERE pov.id = $1`, [globalValueId]);
+        if (valueCheck.rows.length === 0) throw new NotFoundError(`Global option value ID ${globalValueId} not found.`);
+        const globalOptionId = valueCheck.rows[0].product_option_id;
+        if (newSelectedGlobalOptionTypes.has(globalOptionId)) throw new BadRequestError(`Multiple values selected for the same global option type "${valueCheck.rows[0].option_name}".`);
+        newSelectedGlobalOptionTypes.add(globalOptionId);
+        const assignmentCheck = await client.query(
+            `SELECT paosv.id FROM product_assigned_option_specific_values paosv
+             JOIN product_assigned_options pao ON paosv.product_assigned_option_id = pao.id
+             WHERE pao.product_id = $1 AND pao.option_id = $2 AND paosv.product_option_value_id = $3`,
+            [currentVariant.product_id, globalOptionId, globalValueId]
+        );
+        if (assignmentCheck.rows.length === 0) throw new BadRequestError(`Option value ID ${globalValueId} (for option ${valueCheck.rows[0].option_name}) is not assigned/allowed for product ID ${currentVariant.product_id}.`);
+      }
+      // Check for duplicate variant with the new combination
+      const duplicateCheck = await client.query(
+          `SELECT pv.id FROM product_variants pv WHERE pv.product_id = $1 AND pv.id != $2 AND
+           (SELECT array_agg(pvov.product_option_value_id ORDER BY pvov.product_option_value_id) FROM product_variant_option_values pvov WHERE pvov.product_variant_id = pv.id) = $3::int[]`,
+          [currentVariant.product_id, variantId, uniqueNewOptionValueIds]
+      );
+      if (duplicateCheck.rows.length > 0) throw new ConflictError('Another variant with this exact combination of option values already exists.');
+
+      await client.query('DELETE FROM product_variant_option_values WHERE product_variant_id = $1', [variantId]);
+      for (const ovId of uniqueNewOptionValueIds) {
+        await client.query('INSERT INTO product_variant_option_values (product_variant_id, product_option_value_id) VALUES ($1, $2)', [variantId, ovId]);
+      }
+    }
+
+    // --- SKU Uniqueness Check (if SKU is being changed) ---
+    const finalSku = (variantData.hasOwnProperty('sku') && sku && sku.trim() !== '') ? sku.trim() : ( (variantData.hasOwnProperty('sku') && (sku === null || sku === '')) ? null : currentVariant.sku);
+    if (finalSku && finalSku !== currentVariant.sku) {
+        const skuCheck = await client.query(
+            `SELECT id FROM product_variants WHERE sku = $1 AND id != $2
+             UNION
+             SELECT id FROM products WHERE sku = $1`, // Also check base products
+            [finalSku, variantId]
+        );
+        if (skuCheck.rows.length > 0) {
+            throw new ConflictError(`SKU "${finalSku}" already exists.`);
+        }
+    }
+
+
+    // --- Update product_variants table ---
+    const setClauses = [];
+    const queryValues = [];
+    let paramIndex = 1;
+
+    const addUpdateField = (fieldName, value, currentValue) => {
+      if (variantData.hasOwnProperty(fieldName) && value !== currentValue) {
+        setClauses.push(`${fieldName} = $${paramIndex++}`);
+        queryValues.push(value);
+      }
+    };
+
+    addUpdateField('sku', finalSku, currentVariant.sku);
+    if(variantData.hasOwnProperty('price_modifier')) addUpdateField('price_modifier', parseFloat(price_modifier), parseFloat(currentVariant.price_modifier));
+    // stock_quantity on product_variants table is updated with the target aggregate stock
+    if(variantData.hasOwnProperty('stock_quantity')) addUpdateField('stock_quantity', newAggregateStockForVariantTable, currentVariant.stock_quantity);
+    if(finalImageUrl !== undefined) addUpdateField('image_url', finalImageUrl, currentVariant.image_url); // Check against undefined to allow setting to null
+    if(variantData.hasOwnProperty('cost_price')) addUpdateField('cost_price', (cost_price !== undefined && cost_price !== null && cost_price !== '') ? parseFloat(cost_price) : null, currentVariant.cost_price);
+    if(variantData.hasOwnProperty('wholesale_price_modifier')) addUpdateField('wholesale_price_modifier', (wholesale_price_modifier !== undefined && wholesale_price_modifier !== null && wholesale_price_modifier !== '') ? parseFloat(wholesale_price_modifier) : null, currentVariant.wholesale_price_modifier);
+
+    let updatedVariant = currentVariant;
+    if (setClauses.length > 0) {
+      setClauses.push(`updated_at = NOW()`);
+      const updateQueryString = `UPDATE product_variants SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+      queryValues.push(variantId);
+      const updatedResult = await client.query(updateQueryString, queryValues);
+      updatedVariant = updatedResult.rows[0];
+    }
+
+    await client.query('COMMIT');
+
+    if (s3OldFileKey && s3OldFileKey !== s3NewFileKey) { // If a new image was uploaded and replaced an old one, or old one was removed
+        try { await deleteFileFromS3(s3OldFileKey); }
+        catch (s3e) { console.error(`Failed to delete old S3 variant image ${s3OldFileKey}:`, s3e); }
+    }
+
+    const optionDetails = await _getVariantOptionDetails(updatedVariant.id, client);
+    return { ...updatedVariant, selected_options: optionDetails };
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    if (s3NewFileKey && isS3Configured()) { // If new image uploaded but DB op failed
+        try { await deleteFileFromS3(s3NewFileKey); }
+        catch (s3e) { console.error(`CRITICAL: Failed to rollback S3 upload for new variant image ${s3NewFileKey}:`, s3e); }
+    }
+    if (error instanceof AppError || error instanceof NotFoundError || error instanceof ConflictError || error instanceof BadRequestError) {
+      throw error;
+    }
+    console.error(`Error in productService.updateProductVariant for ID ${variantId}:`, error);
+    throw new AppError('Failed to update product variant.', 500, 'VARIANT_UPDATE_FAILED', { originalError: error.message });
+  } finally {
+    client.release();
+  }
+}
+
+
+/**
+ * Deletes a product variant.
+ * @param {number} variantId - The ID of the variant to delete.
+ * @returns {Promise<object>} The deleted variant object.
+ * @throws {NotFoundError} If the variant is not found.
+ * @throws {AppError} If database operation fails.
+ */
+async function deleteProductVariant(variantId) {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const variantResult = await client.query('SELECT * FROM product_variants WHERE id = $1 FOR UPDATE', [variantId]);
+    if (variantResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      throw new NotFoundError(`Variant with ID ${variantId} not found.`);
+    }
+    const deletedVariantData = variantResult.rows[0];
+    const { product_id: baseProductId, image_url: variantImageUrl } = deletedVariantData;
+
+    // product_variant_option_values are deleted by ON DELETE CASCADE constraint
+
+    // Delete from inventory_batches (important to prevent orphaned batch stock)
+    // This should ideally also log stock movements if current_quantity > 0 in deleted batches
+    const batchDeletionResult = await client.query('DELETE FROM inventory_batches WHERE variant_id = $1 RETURNING current_quantity, batch_number', [variantId]);
+    if (batchDeletionResult.rows.length > 0) {
+        console.log(`Deleted ${batchDeletionResult.rowCount} inventory batches for variant ID ${variantId}. Affected quantities: ${batchDeletionResult.rows.map(r => r.current_quantity).join(', ')}`);
+        // TODO: Consider logging these as stock write-offs if they had quantity.
+    }
+
+
+    const deleteResult = await client.query('DELETE FROM product_variants WHERE id = $1', [variantId]);
+    // No need to check rowCount again due to FOR UPDATE select
+
+    // Check if the parent product has any remaining variants
+    const remainingVariantsResult = await client.query('SELECT COUNT(*) AS count FROM product_variants WHERE product_id = $1', [baseProductId]);
+    if (parseInt(remainingVariantsResult.rows[0].count, 10) === 0) {
+      await client.query('UPDATE products SET has_variants = FALSE, updated_at = NOW() WHERE id = $1', [baseProductId]);
+    }
+
+    await client.query('COMMIT');
+
+    // If variant had an S3 image, delete it after successful DB commit
+    if (variantImageUrl && isS3Configured()) {
+        const s3Key = getS3KeyFromUrl(variantImageUrl);
+        if (s3Key) {
+            try {
+                await deleteFileFromS3(s3Key);
+                console.log(`Deleted S3 image ${s3Key} for variant ${variantId}`);
+            } catch (s3Error) {
+                console.error(`Failed to delete S3 image ${s3Key} for variant ${variantId}:`, s3Error);
+                // Non-critical, don't fail the whole operation
+            }
+        }
+    }
+    return deletedVariantData; // Return the data of the variant that was deleted
+  } catch (error) {
+    await client.query('ROLLBACK');
+    if (error instanceof NotFoundError) {
+      throw error;
+    }
+    // TODO: Check for FK constraints if variant is on order_items, etc.
+    // For now, assuming orders lock variant details at time of purchase or handle missing variants.
+    console.error(`Error in productService.deleteProductVariant for ID ${variantId}:`, error);
+    throw new AppError(`Failed to delete product variant ID ${variantId}.`, 500, 'VARIANT_DELETE_FAILED');
+  } finally {
+    client.release();
+  }
+}
+
+
 module.exports = {
   getAllProducts,
   getProductById,
@@ -1510,4 +2043,9 @@ module.exports = {
   getProductCostHistory,
   getFormattedLabelData,
   getProductAssignedOptions,
+  getProductVariants,
+  getVariantById,
+  createProductVariant,
+  updateProductVariant,
+  deleteProductVariant,
 };
