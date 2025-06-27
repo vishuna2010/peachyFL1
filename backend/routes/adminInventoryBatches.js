@@ -7,6 +7,149 @@ const { NotFoundError, BadRequestError, ConflictError } = require('../utils/AppE
 
 router.use(isAuthenticated, isAdmin);
 
+// Validation rules for POST / (create batch)
+const validateCreateBatchParams = [
+  body('product_id').isInt({ gt: 0 }).toInt().withMessage('Product ID must be a positive integer.'),
+  body('variant_id').optional({ nullable: true }).isInt({ gt: 0 }).toInt().withMessage('Variant ID must be a positive integer if provided.'),
+  body('batch_number').optional({ nullable: true }).isString().trim().isLength({ min: 1, max: 100 }).withMessage('Batch number must be between 1 and 100 characters if provided.'),
+  body('initial_quantity').isInt({ gt: 0 }).toInt().withMessage('Initial quantity must be a positive integer.'),
+  body('current_quantity').optional().isInt({ min: 0 }).toInt().withMessage('Current quantity must be a non-negative integer. Defaults to initial_quantity if not provided.'),
+  body('expiry_date').optional({ nullable: true }).isDate().withMessage('Expiry date must be a valid date (YYYY-MM-DD) or null.'),
+  body('cost_price_at_receipt').isDecimal({ decimal_digits: '0,2' }).toFloat().withMessage('Cost price at receipt must be a decimal value.'),
+  body('currency_code_at_receipt').isString().trim().isLength({ min: 3, max: 3 }).toUpperCase().withMessage('Currency code must be a 3-letter string.'),
+  body('purchase_order_item_id').optional({ nullable: true }).isInt({ gt: 0 }).toInt().withMessage('PO Item ID must be a positive integer if provided.'),
+  // Note: base_currency_cost_price_at_receipt and exchange_rate_used might be calculated or defaulted rather than direct input for manual creation
+];
+
+// POST / - Create a new inventory batch
+router.post('/', validateCreateBatchParams, async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const {
+    product_id, variant_id, batch_number, initial_quantity,
+    expiry_date, cost_price_at_receipt, currency_code_at_receipt,
+    purchase_order_item_id
+  } = req.body;
+
+  // current_quantity defaults to initial_quantity if not provided or if less than 0 (though validator ensures >=0)
+  const current_quantity = (req.body.current_quantity !== undefined && req.body.current_quantity >= 0)
+                           ? parseInt(req.body.current_quantity)
+                           : initial_quantity;
+
+  if (current_quantity > initial_quantity) {
+    return next(new BadRequestError('Current quantity cannot exceed initial quantity for a new batch.'));
+  }
+
+  const finalBatchNumber = batch_number ? batch_number.trim() : `MANUAL-${Date.now()}`;
+  const finalExpiryDate = (expiry_date === '' || expiry_date === null) ? null : expiry_date;
+  const userId = req.user.userId;
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Validate product_id
+    const productCheck = await client.query('SELECT id, sku, has_variants FROM products WHERE id = $1 FOR UPDATE', [product_id]);
+    if (productCheck.rows.length === 0) {
+      throw new NotFoundError(`Product with ID ${product_id} not found.`);
+    }
+    const product = productCheck.rows[0];
+
+    // Validate variant_id if provided
+    let variantSku = null;
+    if (variant_id) {
+      if (!product.has_variants) {
+        throw new BadRequestError(`Product ID ${product_id} does not have variants, so variant_id should not be provided.`);
+      }
+      const variantCheck = await client.query('SELECT id, sku FROM product_variants WHERE id = $1 AND product_id = $2 FOR UPDATE', [variant_id, product_id]);
+      if (variantCheck.rows.length === 0) {
+        throw new NotFoundError(`Variant with ID ${variant_id} not found for product ID ${product_id}.`);
+      }
+      variantSku = variantCheck.rows[0].sku;
+    } else {
+      if (product.has_variants) {
+        throw new BadRequestError(`Product ID ${product_id} has variants. A specific variant_id is required to create a batch for it.`);
+      }
+    }
+
+    // Check for batch number uniqueness (product_id, variant_id, batch_number)
+     const conflictCheck = await client.query(
+        `SELECT id FROM inventory_batches
+         WHERE product_id = $1
+           AND ${variant_id ? `variant_id = $2` : 'variant_id IS NULL'}
+           AND batch_number = $${variant_id ? 3 : 2}`,
+        variant_id ? [product_id, variant_id, finalBatchNumber] : [product_id, finalBatchNumber]
+      );
+      if (conflictCheck.rows.length > 0) {
+        throw new ConflictError(`Batch number "${finalBatchNumber}" already exists for this product/variant.`);
+      }
+
+
+    const insertQuery = `
+      INSERT INTO inventory_batches
+        (product_id, variant_id, batch_number, expiry_date, initial_quantity, current_quantity,
+         cost_price_at_receipt, currency_code_at_receipt, base_currency_cost_price_at_receipt, exchange_rate_used,
+         purchase_order_item_id, received_date, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      RETURNING *;
+    `;
+    // For manual creation, base_currency_cost_price and exchange_rate might be same as cost_price_at_receipt and 1 if currency is base, or need input.
+    // Assuming cost_price_at_receipt IS in base currency for manual entry simplicity for now.
+    const newBatchResult = await client.query(insertQuery, [
+      product_id, variant_id || null, finalBatchNumber, finalExpiryDate, initial_quantity, current_quantity,
+      cost_price_at_receipt, currency_code_at_receipt, cost_price_at_receipt, 1.0, // Assuming cost is in base currency
+      purchase_order_item_id || null
+    ]);
+    const newBatch = newBatchResult.rows[0];
+
+    // Update aggregate stock on product or variant
+    let old_aggregate_stock = 0;
+    if (variant_id) {
+      const vr = await client.query('SELECT stock_quantity FROM product_variants WHERE id=$1', [variant_id]);
+      old_aggregate_stock = vr.rows[0].stock_quantity;
+      await client.query(
+        'UPDATE product_variants SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [newBatch.current_quantity, variant_id]
+      );
+    } else {
+      const pr = await client.query('SELECT stock_quantity FROM products WHERE id=$1', [product_id]);
+      old_aggregate_stock = pr.rows[0].stock_quantity;
+      await client.query(
+        'UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [newBatch.current_quantity, product_id]
+      );
+    }
+
+    // Log stock movement
+    const logMovementQuery = `
+      INSERT INTO stock_movement_logs
+        (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+    `;
+    await client.query(logMovementQuery, [
+      newBatch.product_id, newBatch.variant_id, userId, 'manual_batch_creation',
+      newBatch.current_quantity, old_aggregate_stock + newBatch.current_quantity,
+      `Manual batch entry: ${finalBatchNumber}`, `batch_id:${newBatch.id}`
+    ]);
+
+    await client.query('COMMIT');
+    res.status(201).json(newBatch);
+
+  } catch (error) {
+    if(client) await client.query('ROLLBACK');
+    if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof ConflictError) {
+      return next(error);
+    }
+    next(error);
+  } finally {
+    if(client) client.release();
+  }
+});
+
+
 // Validation rules for GET / (list batches)
 const validateGetBatchesParams = [
   query('page').optional().isInt({ min: 1 }).toInt().withMessage('Page must be a positive integer.'),
@@ -239,13 +382,31 @@ router.put(
          return next(new BadRequestError('No updatable data fields (current_quantity, expiry_date, batch_number) provided or values are the same as current. Reason for change logged only if data changes.'));
       }
 
-      // Log quantity change if it actually happened
-      // new_current_quantity_value holds the value from req.body if provided, otherwise it's old_current_quantity
-      // updatedBatch.current_quantity is the value now in the DB
+      // After batch update, recalculate and update aggregate stock on product/variant
+      const sumBatchStockQuery = await client.query(
+        `SELECT COALESCE(SUM(current_quantity), 0) AS total_stock
+         FROM inventory_batches
+         WHERE product_id = $1 AND ${updatedBatch.variant_id ? 'variant_id = $2' : 'variant_id IS NULL'}`,
+        updatedBatch.variant_id ? [updatedBatch.product_id, updatedBatch.variant_id] : [updatedBatch.product_id]
+      );
+      const newTotalAggregateStock = parseInt(sumBatchStockQuery.rows[0].total_stock, 10);
+
+      if (updatedBatch.variant_id) {
+        await client.query(
+          'UPDATE product_variants SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [newTotalAggregateStock, updatedBatch.variant_id]
+        );
+      } else {
+        await client.query(
+          'UPDATE products SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [newTotalAggregateStock, updatedBatch.product_id]
+        );
+      }
+
+      // Log quantity change if it actually happened for this batch
       if (current_quantity !== undefined && updatedBatch.current_quantity !== old_current_quantity) {
-        const quantity_difference = updatedBatch.current_quantity - old_current_quantity;
-        // Only log if there's an actual difference.
-        if (quantity_difference !== 0) {
+        const quantity_difference_for_this_batch = updatedBatch.current_quantity - old_current_quantity;
+        if (quantity_difference_for_this_batch !== 0) {
             const logMovementQuery = `
               INSERT INTO stock_movement_logs
                 (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
@@ -255,9 +416,9 @@ router.put(
               updatedBatch.product_id,
               updatedBatch.variant_id,
               userId,
-              'batch_adjustment',
-              quantity_difference,
-              updatedBatch.current_quantity, // New quantity on hand for this batch
+              'batch_adjustment', // This specific batch was adjusted
+              quantity_difference_for_this_batch, // Change in this batch
+              newTotalAggregateStock, // New total aggregate stock for the product/variant
               reason_for_change,
               `batch_id:${batchId}`
             ]);
@@ -265,7 +426,17 @@ router.put(
       }
 
       await client.query('COMMIT');
-      res.status(200).json(updatedBatch);
+      // Fetch the batch again to include any potentially joined data if needed by frontend, or just return updatedBatch
+      // For consistency, let's re-fetch with product/variant names like in GET list.
+      const finalBatchDataResult = await db.query( // Use db.query for fresh client after commit
+         `SELECT ib.*, p.name as product_name, p.sku as product_sku, pv.sku as variant_sku
+          FROM inventory_batches ib
+          LEFT JOIN products p ON ib.product_id = p.id
+          LEFT JOIN product_variants pv ON ib.variant_id = pv.id
+          WHERE ib.id = $1`, [updatedBatch.id]
+      );
+
+      res.status(200).json(finalBatchDataResult.rows[0] || updatedBatch); // Fallback to updatedBatch if re-fetch fails
 
     } catch (error) {
       if(client) await client.query('ROLLBACK');

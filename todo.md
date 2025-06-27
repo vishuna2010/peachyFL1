@@ -151,6 +151,56 @@ This section outlines the primary driver for future backend development, based o
     - [ ] Expand unit test coverage for services and utility functions.
     - [ ] Increase integration test coverage for critical API endpoints.
 
+- **[ ] Enhanced Configuration Management:**
+    -   **Suggestion:** Centralize all environment variable access and configuration settings (e.g., database URLs, API keys, pagination defaults, feature flags) into a dedicated configuration module (e.g., `backend/config/index.js`).
+    -   **Benefit:** Makes configuration easier to manage, reduces magic strings/numbers scattered in the code, and simplifies environment-specific setups (dev, staging, prod).
+
+- **[ ] Comprehensive Error Handling & Validation:**
+    -   **Suggestion:**
+        *   Ensure a globally consistent error response structure for all API endpoints (building on `AppError` and `errorHandler.js`).
+        *   Systematically review and expand input validation (`express-validator`) for *all* API endpoints, ensuring all expected parameters, body fields, and their types/constraints are covered.
+        *   Refine the global error handler (`errorHandler.js`) for more detailed logging (e.g., stack traces for 500 errors, request identifiers) while ensuring no sensitive details are leaked in client-facing error messages.
+    -   **Benefit:** Improves API robustness, provides clearer error feedback to clients, and enhances security.
+
+- **[ ] Strict Database Interactions & Service Layer Enforcement:**
+    -   **Suggestion:**
+        *   Strictly enforce the service layer pattern: All database interaction logic should reside within service functions. Route handlers should only be responsible for request/response handling and calling services.
+        *   Review and ensure comprehensive transaction management (`BEGIN`, `COMMIT`, `ROLLBACK`) for all operations that involve multiple database writes.
+        *   For complex queries or if direct SQL becomes unwieldy, consider evaluating a Query Builder (like Knex.js) which can work alongside direct `db.query` calls.
+    -   **Benefit:** Better separation of concerns, more testable code, improved data consistency, and potentially more maintainable database logic.
+
+- **[ ] Stock Management Logic Reconciliation & Accuracy:**
+    *   **Suggestion:** **Critically review** how stock quantities are determined and presented. Ensure `productService.getAllProducts` (and thus public product listings) stock (e.g. `effective_stock_quantity` CTE) is perfectly aligned with the batch-aware stock deduction logic used in sales order fulfillment (`inventory_batches` table) and accurately reflects sellable quantities.
+    *   **Benefit:** Prevents overselling and ensures customers see accurate stock availability.
+
+- **[ ] Asynchronous Operations & Background Jobs Strategy:**
+    *   **Suggestion:** For operations that can be slow or are not critical to the immediate API response (e.g., sending emails, complex report generation, S3 cleanup on failure), evaluate using a message queue (e.g., RabbitMQ, Redis streams, AWS SQS) and background workers.
+    *   **Benefit:** Improves API responsiveness and resilience.
+
+- **[ ] Proactive Security Enhancements:**
+    *   **Suggestion:**
+        *   Periodically review RBAC permission granularity.
+        *   Ensure no sensitive data is inadvertently exposed in API responses or general `console.log` statements.
+        *   Regularly review dependencies for known vulnerabilities (`npm audit`).
+    *   **Benefit:** Strengthens the security posture of the application.
+
+- **[ ] API Design Consistency & Documentation Standards:**
+    *   **Suggestion:**
+        *   Maintain consistency in API endpoint paths, naming conventions, and response structures.
+        *   Consider implementing API documentation using tools like Swagger/OpenAPI.
+    *   **Benefit:** Makes the API easier to understand, consume, and maintain.
+
+- **[ ] Expanded Testing Strategy:**
+    *   **Suggestion:**
+        *   Expand unit test coverage for services (especially complex business logic like in `productService`, `taxService`, `orderService`) and utility functions.
+        *   Increase integration test coverage for critical API endpoints, testing the full request-response cycle including database interaction.
+    *   **Benefit:** Improves code quality, reduces regressions, and makes refactoring safer.
+
+- **[ ] Advanced Logging Enhancements:**
+    *   **Suggestion:** Implement structured logging (e.g., JSON format) with consistent fields like request ID, user ID (if available), timestamp, log level, and message.
+    *   Ensure important events, errors, and decision points are logged appropriately.
+    *   **Benefit:** Greatly improves debugging, monitoring, and auditing capabilities.
+
 ### E. Development Utilities: Data Seeding (Existing)
 - [X] Enhance `seed.js` to add sample products with variants and reviews. (Sample products, global options/values, product-specific option configurations, variants, and reviews are now seeded; average ratings also updated).
 - [X] Major `seed.js` overhaul: Implemented full schema creation (`CREATE TABLE IF NOT EXISTS` for all tables including all new columns/features) and added comprehensive sample data for new entities (product images, stock logs, cost history) and new fields in existing entities.
@@ -454,3 +504,75 @@ This section outlines the primary driver for future backend development, based o
 - **Admin Layout - Duplicate Sidebar / Content Misplacement (Reported, then addressed):**
     - Issue: Content (including a second sidebar) was appearing at the bottom of the main sidebar.
     - Fix: Reverted a speculative `lg:w-[calc(...)]` style from the main content wrapper in `admin.vue`. This issue is likely resolved. User to verify.
+
+---
+
+## Purchase Order Feature Improvements
+
+### UI/UX Enhancements (Purchase Order Creation/Editing)
+
+1.  **Searchable Product Dropdown:**
+    *   Instead of a simple `<select>` for products (currently limited to 100 per supplier), implement a searchable dropdown component (e.g., using libraries like `vue-select`, `choices.js`, or a custom-built one).
+    *   This would allow users to type product names or SKUs to quickly find items, especially if a supplier has many products.
+    *   Could include server-side searching if the product list per supplier is very large (beyond a few hundred).
+
+2.  **Display Product Details on Selection:**
+    *   When a product is selected in a line item, automatically populate not just the name/SKU but also other relevant info like current stock (for reference), last cost price (if available and desired as a default), or even a small thumbnail.
+
+3.  **Supplier Details Display:**
+    *   Once a supplier is selected, display some key details about them on the form (e.g., supplier contact info, address, default currency if applicable) for quick reference.
+
+4.  **Automatic Calculation of Line Totals & Grand Total:**
+    *   As quantity and unit cost are entered for each line item, automatically calculate and display the line total (`quantity * unit_cost`).
+    *   Calculate and display a running grand total for the entire PO.
+
+5.  **Prevent Duplicate Products in Line Items:**
+    *   Optionally, add logic to warn or prevent the user from adding the exact same product multiple times as separate line items (they should typically just adjust the quantity on the existing line).
+
+6.  **Batch Actions for Line Items:**
+    *   E.g., "Remove selected items", "Apply X% discount to selected items" (if discounts on POs are a feature).
+
+7.  **Improved Date Pickers:**
+    *   Use a more user-friendly date picker component if the native browser ones are not ideal for your users.
+
+8.  **Clearer Loading/Error States:**
+    *   Ensure all async operations (supplier select, product select, submission) have clear visual feedback.
+
+### Backend/Functionality Enhancements
+
+1.  **Supplier-Specific Product Codes/Costs:**
+    *   Allow storing supplier-specific product codes (their part number for your product) and default cost prices for each product from that supplier. When creating a PO, these could auto-populate.
+
+2.  **PO Templates/Recurring POs:**
+    *   Ability to save a PO as a template for frequently ordered items from a supplier.
+    *   Functionality for setting up recurring POs.
+
+3.  **PO Approval Workflow:**
+    *   If needed, implement a system where POs above a certain value or for certain items require approval from another user/role before being sent.
+
+4.  **Emailing PO to Supplier:**
+    *   Functionality to generate a PDF of the PO and email it directly to the supplier from the system.
+
+5.  **Partial Receipts & Backorders:**
+    *   The current receiving logic seems to handle partial receipts at the item level. Ensure the overall PO status (`pending`, `ordered`, `partially_received`, `received`, `cancelled`) accurately reflects this across all items.
+    *   Consider how backordered items are managed.
+
+6.  **Landed Costs:**
+    *   Ability to add landed costs (shipping, duties, customs fees) to a PO or to received items to get a more accurate inventory valuation.
+
+7.  **Integration with Inventory Adjustments:**
+    *   Ensure that receiving PO items correctly and robustly updates inventory levels, including logging stock movements (which seems to be in place with `stock_movement_logs` and `inventory_batches`).
+
+8.  **PO Number Generation:**
+    *   Implement a configurable PO number generation system (e.g., prefix + sequential number).
+
+9.  **Reporting on POs:**
+    *   More detailed reports: POs by supplier, by status, items pending receipt, cost analysis over time, etc.
+
+10. **Link POs to Sales Orders (for dropshipping/back-to-back orders):**
+    *   If you fulfill orders by ordering directly from a supplier for a specific customer sale.
+
+11. **Currency Handling:**
+    *   If dealing with suppliers in different currencies, ensure robust handling of currency codes, exchange rates at time of order and receipt, and proper calculation of base currency costs.
+
+---

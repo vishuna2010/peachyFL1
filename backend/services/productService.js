@@ -23,11 +23,21 @@ async function getAllProducts({
   optionValueId,
   status, // New: 'active', 'draft', 'archived', etc.
   stock_status, // New: 'in_stock', 'out_of_stock', 'low_stock'
+  supplierId, // <<<< NEW PARAMETER
   is_admin_request = false, // New: boolean
   include_total_stock = false, // New: boolean, to add total stock for variant products
   page = 1,
   limit = 10
 }) {
+  // console.log(`[productService.getAllProducts] Initial supplierId: ${supplierId}, Type: ${typeof supplierId}`);
+
+  const validatedSupplierId = supplierId ? parseInt(supplierId, 10) : undefined;
+  // console.log(`[productService.getAllProducts] Validated supplierId: ${validatedSupplierId}, Type: ${typeof validatedSupplierId}`);
+
+  if (validatedSupplierId && isNaN(validatedSupplierId)) {
+    console.warn(`[productService.getAllProducts] Invalid non-numeric supplierId received: ${supplierId}. Ignoring filter.`);
+  }
+
   const queryValues = [];
   let paramIndex = 1;
 
@@ -49,14 +59,26 @@ async function getAllProducts({
       SELECT
         p_stock.id as product_id,
         CASE
-          WHEN p_stock.has_variants THEN COALESCE((SELECT SUM(pv_stock.stock_quantity) FROM product_variants pv_stock WHERE pv_stock.product_id = p_stock.id), 0)
-          ELSE p_stock.stock_quantity
+          WHEN p_stock.has_variants THEN
+            COALESCE(
+              (SELECT SUM(ib.current_quantity)
+               FROM inventory_batches ib
+               WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.current_quantity > 0),
+            0)
+          ELSE
+            COALESCE(
+              (SELECT SUM(ib.current_quantity)
+               FROM inventory_batches ib
+               WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.current_quantity > 0),
+            0)
         END as effective_stock_quantity,
         CASE
           WHEN p_stock.has_variants THEN
-            COALESCE((SELECT SUM(pv_stock.stock_quantity) FROM product_variants pv_stock WHERE pv_stock.product_id = p_stock.id), 0) > 0 AND
-            COALESCE((SELECT SUM(pv_stock.stock_quantity) FROM product_variants pv_stock WHERE pv_stock.product_id = p_stock.id), 0) < p_stock.reorder_threshold
-          ELSE p_stock.stock_quantity > 0 AND p_stock.stock_quantity < p_stock.reorder_threshold
+            (COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.current_quantity > 0), 0) > 0 AND
+             COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.current_quantity > 0), 0) < p_stock.reorder_threshold)
+          ELSE
+            (COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.current_quantity > 0), 0) > 0 AND
+             COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.current_quantity > 0), 0) < p_stock.reorder_threshold)
         END as is_low_stock
       FROM products p_stock
     )
@@ -150,6 +172,19 @@ async function getAllProducts({
     queryValues.push(categoryId);
     paramIndex++;
   }
+
+  // ++++ NEW SUPPLIER ID FILTER ++++
+  // Use validatedSupplierId for the check and for pushing to queryValues
+  if (validatedSupplierId && validatedSupplierId > 0) { // Ensure it's a positive integer
+    // console.log(`[productService.getAllProducts] Applying filter for supplierId: ${validatedSupplierId}`);
+    whereClauses.push(`p.supplier_id = $${paramIndex}`);
+    queryValues.push(validatedSupplierId); // Push the parsed integer
+    paramIndex++;
+  } else {
+    // console.log(`[productService.getAllProducts] No valid supplierId to filter by.`);
+  }
+  // +++++++++++++++++++++++++++++++
+
   if (minPrice !== undefined) {
     whereClauses.push(`p.price >= $${paramIndex}`); // Assumes p.price is base price. Variant pricing is complex.
     queryValues.push(minPrice);
@@ -208,12 +243,19 @@ async function getAllProducts({
     // Or, more simply, build whereString without the optionValueId filter for count if it was handled separately.
     // Let's rebuild whereString for count query if optionValueId was present.
     if (optionValueId && !isNaN(parseInt(optionValueId,10))) {
-        const countWhereClauses = whereClauses.filter(c => !c.startsWith('pvov_filter.'));
+        const countWhereClauses = whereClauses.filter(c => !c.startsWith('pvov_filter.')); // Exclude optionValueId filter
         if (countWhereClauses.length > 0) {
              // countBaseQuery already has its optionValueId filter if needed
             countBaseQuery += (countBaseQuery.includes('WHERE') ? ' AND ' : ' WHERE ') + countWhereClauses.join(" AND ");
         }
-    } else if (whereClauses.length > 0) { // No optionValueId, or it was invalid
+        // Add the optionValueId filter to count query if it's not already (it was in original code)
+        if (!countBaseQuery.includes('pvov_filter_count.product_option_value_id')) {
+           const optValParamIndex = queryValues.indexOf(parseInt(optionValueId,10)) + 1; // find its param index
+           if (optValParamIndex > 0) {
+             countBaseQuery += (countBaseQuery.includes('WHERE') ? ' AND ' : ' WHERE ') + `pvov_filter_count.product_option_value_id = $${optValParamIndex}`;
+           }
+        }
+    } else { // No optionValueId, or it was invalid, so all whereClauses apply to count
         countBaseQuery += whereString;
     }
   }
@@ -263,11 +305,11 @@ async function getAllProducts({
   baseSelect += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1} `;
 
   // Create a separate copy of queryValues for count to avoid mutation issues with limit/offset
-  const countQueryValues = [...queryValues];
+  const countQueryValues = [...queryValues]; // queryValues for count doesn't include limit/offset
   const finalQueryValuesForSelect = [...queryValues, numLimit, offset];
 
-  // console.log('Executing product list query:', baseSelect);
-  // console.log('With params:', finalQueryValuesForSelect);
+  // console.log('Updated Executing product list query:', baseSelect);
+  // console.log('Updated With params:', finalQueryValuesForSelect);
   // console.log('Executing count query:', countBaseQuery);
   // console.log('With params:', countQueryValues);
 
@@ -320,15 +362,45 @@ async function getProductById(productId) {
     }
     const product = productResult.rows[0];
 
+    // If product has no variants, its own stock_quantity should be derived from batches
+    if (!product.has_variants) {
+      const baseProductBatchStockQuery = await client.query(
+        `SELECT COALESCE(SUM(current_quantity), 0) as total_batch_stock
+         FROM inventory_batches
+         WHERE product_id = $1 AND variant_id IS NULL AND current_quantity > 0`,
+        [productId]
+      );
+      if (baseProductBatchStockQuery.rows.length > 0) {
+        product.stock_quantity = parseInt(baseProductBatchStockQuery.rows[0].total_batch_stock, 10);
+      } else {
+        product.stock_quantity = 0; // Should not happen if COALESCE is used, but as safeguard
+      }
+    }
+
     // Fetch product gallery images
     const imagesQuery = `
-      SELECT id, image_url AS url, alt_text, display_order
+      SELECT id, image_url AS url, alt_text, display_order, is_primary
       FROM product_images
       WHERE product_id = $1
       ORDER BY display_order ASC, id ASC;
     `;
     const imagesResult = await client.query(imagesQuery, [productId]);
-    product.images = imagesResult.rows; // Assign the array of images
+    // product.images will hold these raw gallery images, including the is_primary flag
+    // The main products.image_url should already be synced by adminProductImages.js logic
+    // to the URL of the image where is_primary = true.
+
+    // Let's find if there's a primary image from the gallery to ensure product.image_url is consistent.
+    const primaryGalleryImage = imagesResult.rows.find(img => img.is_primary);
+    if (primaryGalleryImage) {
+      product.image_url = primaryGalleryImage.url; // Ensure product.image_url reflects the gallery's primary
+    } else if (imagesResult.rows.length > 0 && !product.image_url) {
+      // If no gallery image is marked primary, but there are gallery images,
+      // and product.image_url is null, this is a data inconsistency.
+      // For display, we could pick the first gallery image, but ideally, one should be primary.
+      // For now, we rely on product.image_url being the primary source if no gallery image is_primary.
+      // If adminProductImages correctly sets product.image_url to NULL when no primary exists, this is fine.
+    }
+
 
     // Calculate profit margin for the main product
     // product.cost_price should be available if the DB schema is updated for products table
@@ -341,14 +413,14 @@ async function getProductById(productId) {
             po.id as option_id,
             po.name as option_name,
             COALESCE(
-              json_agg(DISTINCT jsonb_build_object('value_id', pov.id, 'value_name', pov.value, 'assigned_option_value_table_id', paov.id))
+              json_agg(DISTINCT jsonb_build_object('value_id', pov.id, 'value_name', pov.value, 'assigned_option_specific_value_table_id', paosv.id))
               FILTER (WHERE pov.id IS NOT NULL),
               '[]'::json
             ) as "values"
         FROM product_assigned_options pao
         JOIN product_options po ON pao.option_id = po.id
-        JOIN product_assigned_option_values paov ON pao.id = paov.product_assigned_option_id
-        JOIN product_option_values pov ON paov.option_value_id = pov.id
+        JOIN product_assigned_option_specific_values paosv ON pao.id = paosv.product_assigned_option_id
+        JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
         WHERE pao.product_id = $1
         GROUP BY po.id, po.name
         ORDER BY po.name;
@@ -369,6 +441,20 @@ async function getProductById(productId) {
       for (const variant of product.variants) {
         variant.option_value_ids = await getVariantOptionValueIds(variant.id, client);
         variant.final_price = (parseFloat(product.price) + parseFloat(variant.price_modifier)).toFixed(2);
+
+        // Get actual stock from inventory_batches for this variant
+        const batchStockQuery = await client.query(
+          `SELECT COALESCE(SUM(current_quantity), 0) as total_batch_stock
+           FROM inventory_batches
+           WHERE variant_id = $1 AND product_id = $2 AND current_quantity > 0`,
+          [variant.id, product.id]
+        );
+        if (batchStockQuery.rows.length > 0) {
+          variant.stock_quantity = parseInt(batchStockQuery.rows[0].total_batch_stock, 10);
+        } else {
+          variant.stock_quantity = 0; // Should not happen with COALESCE, but safeguard
+        }
+
         // Calculate profit margin for the variant
         // variant.cost_price is now fetched in variantsQuery
         variant.profit_margin_details = calculateProfitMargin(variant.final_price, variant.cost_price);
@@ -392,35 +478,54 @@ async function getProductById(productId) {
 
     // Create consolidated gallery_images
     let gallery_images = [];
-    let imageUrlsSet = new Set();
+    let imageUrlsSet = new Set(); // To avoid duplicates if product.image_url is also in product_images
 
-    // Add images from product.images
-    if (product.images && Array.isArray(product.images)) {
-      product.images.forEach(img => {
-        if (img.url && !imageUrlsSet.has(img.url)) {
-          imageUrlsSet.add(img.url);
-          gallery_images.push({
-            id: img.id,
-            url: img.url,
-            alt_text: img.alt_text || product.name,
-            display_order: img.display_order
-          });
-        }
-      });
-    }
+    // Process actual gallery images (product_images table) first
+    // These now include the is_primary flag from the modified imagesQuery
+    const rawGalleryImages = imagesResult.rows; // Results from product_images table
 
-    // Ensure primary product.image_url is included
+    rawGalleryImages.forEach(img => {
+      if (img.url && !imageUrlsSet.has(img.url)) {
+        imageUrlsSet.add(img.url);
+        gallery_images.push({
+          id: img.id, // Actual ID from product_images table
+          url: img.url,
+          alt_text: img.alt_text || product.name,
+          display_order: img.display_order,
+          is_primary: img.is_primary || false // Carry over the is_primary flag
+        });
+      }
+    });
+
+    // Ensure product.image_url (which should be the primary image URL) is represented
+    // This also acts as a fallback if product_images table is empty but products.image_url exists
     if (product.image_url && !imageUrlsSet.has(product.image_url)) {
       imageUrlsSet.add(product.image_url);
       gallery_images.push({
-        id: 'product_primary_' + product.id,
+        id: 'main_' + product.id, // A unique ID for this entry if it's not from product_images
         url: product.image_url,
-        alt_text: product.name,
-        display_order: -1 // Prioritize if no other primary is set
+        alt_text: product.name + " (Primary)",
+        display_order: -1, // Ensure it sorts first if no other is primary
+        is_primary: true   // Mark it as primary conceptually
       });
     }
 
-    // Add images from product.variants
+    // Sort: primary first, then by display_order, then by id
+    gallery_images.sort((a, b) => {
+      if (a.is_primary && !b.is_primary) return -1;
+      if (!a.is_primary && b.is_primary) return 1;
+      if (a.display_order !== b.display_order) {
+        return (a.display_order || 0) - (b.display_order || 0);
+      }
+      // Ensure consistent sort for items with same display_order or if display_order is null
+      const aId = typeof a.id === 'string' ? a.id : String(a.id);
+      const bId = typeof b.id === 'string' ? b.id : String(b.id);
+      return aId.localeCompare(bId);
+    });
+
+    // Add images from product.variants (if they should also be in the gallery display)
+    // This part might be optional depending on desired gallery content.
+    // For now, let's keep it as it was, but ensure no duplicates with what's already added.
     if (product.variants && Array.isArray(product.variants)) {
       product.variants.forEach(variant => {
         if (variant.image_url && !imageUrlsSet.has(variant.image_url)) {

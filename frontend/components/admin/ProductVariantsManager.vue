@@ -16,7 +16,16 @@
         <div v-if="configuredProductOptions.length === 0" class="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-md">
           No options configured for this product to create variants from. Please assign options and their allowed values first.
         </div>
-        <pre v-else class="text-xs bg-gray-100 p-3 rounded-md overflow-x-auto max-h-96">{{ configuredProductOptions }}</pre>
+        <!-- Debug <pre> tag removed. The configured options are used by the 'Add New Variant' modal. -->
+        <div v-else class="text-sm text-gray-700 p-3 border border-dashed border-gray-300 bg-gray-50 rounded-md">
+          <p><strong class="font-medium">Ready to create variants.</strong> This product has the following option types configured with specific values:</p>
+          <ul class="list-disc list-inside ml-4 mt-1">
+            <li v-for="opt in configuredProductOptions" :key="opt.option_id">
+              {{ opt.option_name }} (with {{ opt.allowed_values.length }} value{{ opt.allowed_values.length === 1 ? '' : 's' }})
+            </li>
+          </ul>
+          <p class="mt-2 text-xs text-gray-500">Click 'Add New Variant' to combine these options.</p>
+        </div>
       </div>
 
       <div class="mt-6">
@@ -46,7 +55,7 @@
                 <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                   <div v-if="variant.selected_options && variant.selected_options.length > 0">
                     <span v-for="(opt, index) in variant.selected_options" :key="opt.option_value_id">
-                      <strong>{{ opt.option_name }}:</strong> {{ opt.value_name }}<span v-if="index < variant.selected_options.length - 1">, </span>
+                      <strong>{{ opt.option_name }}:</strong> {{ opt.option_value_name }}<span v-if="index < variant.selected_options.length - 1">, </span>
                     </span>
                   </div>
                   <span v-else class="text-xs text-gray-400 italic">Base product or no options defined</span>
@@ -150,8 +159,21 @@
 
             <div>
               <label for="variant_image_url" class="block text-sm font-medium text-gray-700 mb-1">Image URL (Optional)</label>
-              <input type="text" id="variant_image_url" v-model="newVariantForm.image_url" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="https://example.com/image.jpg" />
+              <div class="flex items-center space-x-2">
+                <input type="text" id="variant_image_url" v-model="newVariantForm.image_url" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="https://example.com/image.jpg" />
+                <button type="button" @click="showImagePickerModal = true" class="px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-100 rounded-md hover:bg-indigo-200 focus:outline-none whitespace-nowrap">
+                  Choose from Gallery
+                </button>
+              </div>
             </div>
+
+            <VariantImagePickerModal
+              v-if="showImagePickerModal"
+              :product-id="propProductId"
+              :is-visible="showImagePickerModal"
+              @image-selected="handleGalleryImageSelected"
+              @close="showImagePickerModal = false"
+            />
 
             <div v-if="addVariantFormError" class="my-3 p-3 bg-red-100 text-red-700 border border-red-200 rounded-lg shadow text-sm">
               {{ addVariantFormError }}
@@ -184,6 +206,7 @@
 import { ref, onMounted, watch, toRefs, reactive } from 'vue';
 import { useNuxtApp } from '#app';
 import { useToast } from 'vue-toastification';
+import VariantImagePickerModal from '~/components/admin/VariantImagePickerModal.vue'; // Import the new modal
 
 const props = defineProps({
   productId: {
@@ -217,6 +240,13 @@ const newVariantForm = reactive({
 const isSubmittingNewVariant = ref(false); // Used for Add/Edit form submission
 const addVariantFormError = ref(null);
 const actionLoading = ref({ type: null, id: null }); // For row-specific actions like delete
+
+const showImagePickerModal = ref(false);
+
+function handleGalleryImageSelected(imageUrl) {
+  newVariantForm.image_url = imageUrl;
+  showImagePickerModal.value = false;
+}
 
 // Modal Control Methods
 function openAddVariantModal() {
@@ -270,7 +300,7 @@ function openEditVariantModal(variantToEdit) {
         selectedOpt => selectedOpt.option_id === configOpt.option_id
       );
       if (foundSelectedOpt) {
-        newSelectedOptionValues[configOpt.option_id] = foundSelectedOpt.value_id;
+        newSelectedOptionValues[configOpt.option_id] = foundSelectedOpt.option_value_id; // Corrected to use option_value_id
       } else {
         // This option from configuredProductOptions was not in the variant's selected_options
         // This might happen if an option was removed from the product after variant creation,
@@ -457,42 +487,40 @@ async function fetchConfiguredProductOptions() {
     console.log('[ProductVariantsManager] Data before .map():', JSON.stringify(assignedOptionsResponse.data, null, 2));
 
     const fetchedConfiguredOptions = assignedOptionsResponse.data.map((assignedOpt, index) => {
-      // Unconditional log at the very start of the map callback
-      console.log(`[ProductVariantsManager] MAP ITEM ${index}: global_option_name = ${assignedOpt?.global_option_name}, global_option_id = ${assignedOpt?.global_option_id}`);
-
-      if (!assignedOpt || typeof assignedOpt !== 'object') {
-        console.warn(`[ProductVariantsManager] Item at index ${index} is not a valid object:`, assignedOpt);
-        return null; // Skip this item
+      // assignedOpt is expected to have: id (assigned_option_id), option_id (global_option_id), option_name (global_option_name), selected_values
+      if (assignedOpt.option_id === null || assignedOpt.option_id === undefined || !assignedOpt.option_name) {
+        console.error(`[ProductVariantsManager] MAP ITEM ${index} (assigned_option_id: ${assignedOpt.id}) has invalid/missing option_id or option_name:`, JSON.stringify(assignedOpt));
+        toast.error(`Configuration error: An assigned option (ID: ${assignedOpt.id || 'N/A'}) is missing critical details (option type ID or name). Please check product option configuration in admin.`);
+        return null; // Skip this invalid option configuration
       }
-
-      if (!assignedOpt.global_option_name && assignedOpt.global_option_id === undefined) { // Check if BOTH are missing
-        console.warn('[ProductVariantsManager] Critical: Encountered an assigned option completely missing global_option_name AND global_option_id:', JSON.stringify(assignedOpt));
-      } else if (!assignedOpt.global_option_name) {
-        console.warn('[ProductVariantsManager] Encountered an assigned option without a global_option_name (ID might be present):', JSON.stringify(assignedOpt));
-      }
-
 
       // The 'selected_values' array from the backend IS the list of allowed values for this product's option assignment.
-      // These are global product_option_values that have been specifically chosen for this product-option link.
       if (!assignedOpt.selected_values || assignedOpt.selected_values.length === 0) {
-        const optionNameForToast = assignedOpt.global_option_name || `(Unknown Option ID: ${assignedOpt.global_option_id !== undefined ? assignedOpt.global_option_id : 'undefined'})`;
-        toast.warning(`Option type "${optionNameForToast}" has no specific values configured for this product. Variants cannot be created with it until values are selected.`);
+        // This toast is fine, it's a valid state (option assigned, but no values selected for it yet for this product)
+        // This message will appear if an option type is assigned to a product, but no specific values (e.g. "Red", "Blue")
+        // have been chosen for that product-option assignment via the "Configure Values" interface.
+        // Variants can only be created if an option type has selectable values.
+        toast.warning(`Option type "${assignedOpt.option_name}" has specific values that need to be configured for this product before it can be used in variants.`);
       }
 
       return {
-        assigned_option_id: assignedOpt.assigned_option_id,
-        option_id: assignedOpt.global_option_id,
-        option_name: assignedOpt.global_option_name,
+        assigned_option_id: assignedOpt.id, // This is pao.id from backend
+        option_id: assignedOpt.option_id, // This is pao.option_id (global option id) from backend
+        option_name: assignedOpt.option_name, // This is po.name from backend
         allowed_values: Array.isArray(assignedOpt.selected_values) ? assignedOpt.selected_values.map(val => ({
-          value_id: val.id,
-          value_name: val.value
+          value_id: val.id, // This is product_option_values.id
+          value_name: val.value // This is product_option_values.value
         })) : []
       };
-    }).filter(opt => opt !== null); // Filter out any nulls from invalid items
+    }).filter(opt => opt !== null); // Filter out any nulls from explicitly invalid items due to missing option_id/option_name
 
+    // This filter remains: only include options that actually have selectable values for variant creation UI.
+    // An option might be valid (has option_id, option_name) but have an empty allowed_values if no specific
+    // values were configured for it for THIS product. Such options cannot be used to create variants.
     configuredProductOptions.value = fetchedConfiguredOptions.filter(opt => opt.allowed_values && opt.allowed_values.length > 0);
 
-    if (configuredProductOptions.value.length === 0 && assignedOptionsResponse.data.length > 0) {
+    if (configuredProductOptions.value.length === 0 && assignedOptionsResponse.data.length > 0 && fetchedConfiguredOptions.length > 0) {
+      // This case means that options ARE assigned to the product, but NONE of them have specific values selected (allowed_values is empty for all).
         toast.info("None of the assigned options for this product have any specific values configured. Please configure values for each option type to enable variant creation.");
     }
 

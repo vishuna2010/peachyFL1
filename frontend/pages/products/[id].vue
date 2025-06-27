@@ -15,18 +15,17 @@
       <div class="lg:grid lg:grid-cols-12 lg:gap-x-8 items-start">
 
         <!-- Image Column (e.g., takes 5 or 6 cols on lg) -->
-        <div class="lg:col-span-6 xl:col-span-5"> {/* Adjusted for potentially more image space */}
-          {/* Image Gallery - Main Image - Sticky class removed */}
+        <div class="lg:col-span-6 xl:col-span-5">
           <div class="mb-4">
             <img
-              @click="openZoomModal(selectedImage.value?.url)"
-              v-if="selectedImage && selectedImage.value?.url"
-              :src="selectedImage.value.url"
-              :alt="selectedImage.value.alt_text || product.name"
+              @click="openZoomModal(selectedImage?.url)"
+              v-if="selectedImage && selectedImage.url"
+              :src="selectedImage.url"
+              :alt="selectedImage.alt_text || product.name"
               class="w-full h-auto object-contain rounded-lg shadow-lg max-h-[450px] sm:max-h-[500px] lg:max-h-[550px] aspect-[4/5] cursor-zoom-in hover:opacity-90 transition-opacity duration-200 border border-neutral-bg-soft"
               key="selected-image"
             />
-            <div v-if="!selectedImage || !selectedImage.value?.url" class="w-full h-[400px] md:h-[500px] flex items-center justify-center bg-neutral-bg-soft rounded-lg text-venus-text-secondary shadow-inner">No Image Available</div>
+            <div v-if="!selectedImage || !selectedImage.url" class="w-full h-[400px] md:h-[500px] flex items-center justify-center bg-neutral-bg-soft rounded-lg text-venus-text-secondary shadow-inner">No Image Available</div>
           </div>
 
           <!-- Thumbnail Section with Arrows -->
@@ -45,10 +44,10 @@
                 v-for="imageItem in galleryImages"
                 :key="imageItem.id"
                 :src="imageItem.url"
-                @click="selectedImage.value = imageItem"
+                @click="selectedImage = { ...imageItem }"
                 :alt="imageItem.alt_text || product.name + ' thumbnail ' + imageItem.id"
                 class="h-16 w-16 sm:h-20 sm:w-20 object-cover rounded-md border-2 cursor-pointer transition-all duration-200 ease-in-out flex-shrink-0 hover:shadow-md"
-                :class="selectedImage?.value?.url === imageItem.url ? 'border-orange-gold ring-2 ring-orange-gold/50' : 'border-neutral-bg-soft hover:border-sky-blue/70'"
+                :class="selectedImage?.url === imageItem.url ? 'border-orange-gold ring-2 ring-orange-gold/50' : 'border-neutral-bg-soft hover:border-sky-blue/70'"
               />
             </div>
             <button
@@ -74,8 +73,7 @@
 
           <h1 class="text-3xl lg:text-4xl font-bold text-venus-text-primary mb-2">{{ product.name }}</h1>
 
-          <p v-if="currentVariant && currentVariant.sku" class="text-xs text-venus-text-secondary mb-3">SKU: {{ currentVariant.sku }}</p>
-          <p v-else-if="!currentVariant && product.sku" class="text-xs text-venus-text-secondary mb-3">SKU: {{ product.sku }}</p>
+          <p v-if="product && (displaySku || product.sku)" class="text-xs text-venus-text-secondary mb-3">SKU: {{ displaySku || (product.sku || 'N/A') }}</p>
 
           <div v-if="product && product.review_count !== undefined" class="flex items-center mb-4">
             <div v-if="product.review_count > 0" class="flex items-center">
@@ -424,7 +422,7 @@ const stockStatusMessage = computed(() => {
 
   if (stock <= 0) return 'Out of Stock';
   if (stock > 0 && stock <= 5) return `Only ${stock} left!`;
-  return 'In Stock';
+  return `${stock} in stock`; // Changed to always show quantity when > 5
 });
 
 const isColorOption = (optionName) => {
@@ -548,8 +546,13 @@ function selectOption(optionId, valueId) {
         const otherSelsForThisCheck = { ...selectedOptions };
         delete otherSelsForThisCheck[optId];
         const availableValsForThisOpt = getAvailableValuesForOption(optType, otherSelsForThisCheck);
-        if (!availableValsForThisOpt.has(selectedOptions[optId])) {
+        // Check if the currently selected value for optId is still potentially available
+        const isStillAvailable = availableValsForThisOpt.find(
+            val => val.value_id === selectedOptions[optId] && val.isPotentiallyAvailable
+        );
+        if (!isStillAvailable && selectedOptions[optId] !== undefined) { // Ensure selectedOptions[optId] actually exists before trying to delete
           delete selectedOptions[optId];
+          // console.log(`Auto-deselected ${optType.option_name} because value ${selectedOptions[optId]} is no longer available with current other selections.`);
         }
       }
     }
@@ -565,9 +568,10 @@ function updateCurrentVariant() {
     displaySku.value = product.value.sku || '';
     displayStock.value = product.value.stock_quantity;
     if (galleryImages.value.length > 0) {
-        selectedImage.value = galleryImages.value[0];
+        selectedImage.value = galleryImages.value.find(img => img.is_primary === true) || galleryImages.value[0];
+        if(selectedImage.value) selectedImage.value = {...selectedImage.value}; // Ensure plain object
     } else if (product.value.image_url) {
-        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
+        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id, is_primary: true };
     } else {
         selectedImage.value = null;
     }
@@ -583,6 +587,15 @@ function updateCurrentVariant() {
     displaySku.value = product.value.sku || '';
     displayStock.value = 0;
     addToCartDisabled.value = true;
+    // When options are not fully selected, revert to product's primary image
+    let productPrimaryImage = null;
+    if (galleryImages.value.length > 0) {
+        productPrimaryImage = galleryImages.value.find(img => img.is_primary === true) || galleryImages.value[0];
+    }
+    if (!productPrimaryImage && product.value.image_url) {
+        productPrimaryImage = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_incomplete_sel_' + product.value.id, is_primary: true };
+    }
+    selectedImage.value = productPrimaryImage ? { ...productPrimaryImage } : null;
     return;
   }
   const selectedValuesArray = Object.values(selectedOptions).sort((a, b) => a - b);
@@ -591,40 +604,57 @@ function updateCurrentVariant() {
     const sortedVariantValues = [...variant.option_value_ids].sort((a, b) => a - b);
     return JSON.stringify(sortedVariantValues) === JSON.stringify(selectedValuesArray);
   });
+
+  let imageToSet = null;
+
   if (matchedVariant) {
     currentVariant.value = matchedVariant;
     displayPrice.value = parseFloat(matchedVariant.final_price);
     displaySku.value = matchedVariant.sku || product.value.sku || '';
     displayStock.value = matchedVariant.stock_quantity;
-    if (matchedVariant.image_url) {
-        const existingGalleryImage = galleryImages.value.find(img => img.url === matchedVariant.image_url);
-        if (existingGalleryImage) {
-            selectedImage.value = existingGalleryImage;
-        } else {
-            selectedImage.value = { url: matchedVariant.image_url, alt_text: currentVariant.value.sku || product.value.name, id: 'variant_' + currentVariant.value.id };
-        }
-    } else if (galleryImages.value.length > 0) {
-        selectedImage.value = galleryImages.value[0];
-    } else if (product.value.image_url) {
-        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
-    } else {
-        selectedImage.value = null;
-    }
     addToCartDisabled.value = matchedVariant.stock_quantity <= 0;
-  } else {
+
+    if (matchedVariant.image_url) {
+        const galleryMatch = galleryImages.value.find(gi => gi.url === matchedVariant.image_url);
+        imageToSet = galleryMatch ? { ...galleryMatch } : {
+            url: matchedVariant.image_url,
+            alt_text: matchedVariant.sku || product.value.name,
+            id: 'variant_img_' + matchedVariant.id
+        };
+    } else { // Variant has no specific image, fall back to product's primary
+      if (galleryImages.value.length > 0) {
+        const primaryFromGallery = galleryImages.value.find(img => img.is_primary === true) || galleryImages.value[0];
+        if (primaryFromGallery) imageToSet = { ...primaryFromGallery };
+      } else if (product.value.image_url) {
+        imageToSet = {
+            url: product.value.image_url,
+            alt_text: product.value.name,
+            id: 'product_primary_variant_fb_' + product.value.id,
+            is_primary: true
+        };
+      }
+    }
+  } else { // No matching variant / options fully selected but no match
     currentVariant.value = null;
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
     displayStock.value = 0;
-    if (galleryImages.value.length > 0) {
-        selectedImage.value = galleryImages.value[0];
-    } else if (product.value.image_url) {
-        selectedImage.value = { url: product.value.image_url, alt_text: product.value.name, id: 'product_primary_' + product.value.id };
-    } else {
-        selectedImage.value = null;
-    }
     addToCartDisabled.value = true;
+
+    // Revert to product's primary image
+    if (galleryImages.value.length > 0) {
+      const primaryFromGallery = galleryImages.value.find(img => img.is_primary === true) || galleryImages.value[0];
+      if (primaryFromGallery) imageToSet = { ...primaryFromGallery };
+    } else if (product.value.image_url) {
+      imageToSet = {
+          url: product.value.image_url,
+          alt_text: product.value.name,
+          id: 'product_primary_no_variant_fb_' + product.value.id,
+          is_primary: true
+      };
+    }
   }
+  selectedImage.value = imageToSet; // Assign once at the end, ensure plain object or null
   quantity.value = 1;
 }
 
@@ -650,16 +680,34 @@ const { data: productData, pending, error: fetchError, refresh } = await useAsyn
 const product = ref(null);
 
 watch(productData, (newProductData) => {
-  if (newProductData) {
-    product.value = newProductData;
-    galleryImages.value = newProductData.gallery_images || [];
+  if (newProductData && newProductData.id) {
+    product.value = { ...newProductData };
+
+    const currentGalleryData = newProductData.gallery_images || [];
+    galleryImages.value = currentGalleryData.map(img => ({ ...img }));
+
+    let initialDisplayImage = null;
     if (galleryImages.value.length > 0) {
-      selectedImage.value = galleryImages.value[0];
-    } else if (newProductData.image_url) {
-      selectedImage.value = { url: newProductData.image_url, alt_text: newProductData.name, id: 'product_primary_' + newProductData.id };
-    } else {
-      selectedImage.value = null;
+      initialDisplayImage = galleryImages.value.find(img => img.is_primary === true && img.url);
+      if (!initialDisplayImage && galleryImages.value[0]?.url) {
+        initialDisplayImage = galleryImages.value[0];
+      }
     }
+
+    if (!initialDisplayImage && newProductData.image_url) {
+      initialDisplayImage = {
+        url: newProductData.image_url,
+        alt_text: newProductData.name,
+        id: 'main_fallback_watch_' + newProductData.id,
+        is_primary: true
+      };
+      if (galleryImages.value.length === 0 && initialDisplayImage.url) {
+         galleryImages.value.push({ ...initialDisplayImage });
+      }
+    }
+
+    selectedImage.value = initialDisplayImage ? { ...initialDisplayImage } : null;
+
     initializeSelections();
     userHasReviewed.value = false;
     userReview.value = null;
@@ -674,11 +722,13 @@ watch(productData, (newProductData) => {
     }
   } else if (fetchError.value) {
     product.value = null;
+    selectedImage.value = null;
+    galleryImages.value = [];
     if (fetchError.value.statusMessage && process.client) {
         toast.error(fetchError.value.statusMessage || "Failed to load product.");
     }
   }
-}, { immediate: true });
+}, { immediate: true, deep: true });
 
 const handleAddToCart = () => {
   if (!product.value) {
@@ -878,6 +928,8 @@ useHead({
   title: computed(() => product.value ? product.value.name : 'Product Details'),
 });
 </script>
+
+[end of frontend/pages/products/[id].vue]
 
 [end of frontend/pages/products/[id].vue]
 

@@ -100,11 +100,11 @@ router.post(
         }
         selectedGlobalOptionTypes.add(globalOptionId);
 
-        // Check if this global option value is assigned to this product through product_assigned_options & product_assigned_option_values
+        // Check if this global option value is assigned to this product through product_assigned_options & product_assigned_option_specific_values
         const assignmentCheck = await client.query(
-          `SELECT paov.id FROM product_assigned_option_values paov
-           JOIN product_assigned_options pao ON paov.product_assigned_option_id = pao.id
-           WHERE pao.product_id = $1 AND pao.option_id = $2 AND paov.option_value_id = $3`,
+          `SELECT paosv.id FROM product_assigned_option_specific_values paosv
+           JOIN product_assigned_options pao ON paosv.product_assigned_option_id = pao.id
+           WHERE pao.product_id = $1 AND pao.option_id = $2 AND paosv.product_option_value_id = $3`,
           [productId, globalOptionId, globalValueId]
         );
         if (assignmentCheck.rows.length === 0) {
@@ -147,36 +147,49 @@ router.post(
         );
       }
       await client.query('UPDATE products SET has_variants = TRUE, updated_at = NOW() WHERE id = $1', [productId]);
-      await client.query('COMMIT');
 
-      // Log initial stock for the new variant, if applicable
+      // If initial stock is provided for the new variant, create a batch for it.
       if (newVariant.stock_quantity > 0) {
+        const batchNumber = `INITIAL-${newVariant.sku || `VAR${newVariant.id}`}-${Date.now()}`;
+        const costPriceAtReceipt = newVariant.cost_price !== null ? newVariant.cost_price : 0; // Default if not set
+        // Assuming BASE_CURRENCY_CODE is available or can be defaulted
+        const currencyCodeAtReceipt = process.env.BASE_CURRENCY_CODE || 'USD';
+
+        const batchInsertQuery = `
+          INSERT INTO inventory_batches
+            (product_id, variant_id, batch_number, initial_quantity, current_quantity,
+             cost_price_at_receipt, currency_code_at_receipt, received_date, expiry_date)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8)
+          RETURNING id;
+        `;
+        await client.query(batchInsertQuery, [
+          newVariant.product_id, newVariant.id, batchNumber,
+          newVariant.stock_quantity, newVariant.stock_quantity,
+          costPriceAtReceipt, currencyCodeAtReceipt,
+          null // expiry_date - assuming null for initial stock batch
+        ]);
+        console.log(`Created initial inventory batch for new variant ID ${newVariant.id} with stock ${newVariant.stock_quantity}`);
+
+        // Log stock movement (this part was already there and is good)
         try {
           const logMovementQuery = `
             INSERT INTO stock_movement_logs
               (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           `;
-          // req.user should be available due to isAuthenticated middleware
           const userIdForLog = req.user ? req.user.userId : null;
-          const logMovementValues = [
-            newVariant.product_id, // This is productId from req.params
-            newVariant.id,
-            userIdForLog,
-            'initial_stock_setup',
-            newVariant.stock_quantity, // quantity_changed is the full initial stock
-            newVariant.stock_quantity, // new_quantity_on_hand is the initial stock
-            'Initial stock for new variant',
-            newVariant.id.toString() // Reference could be the variant ID itself
-          ];
-          // Use db.query for a new client from the pool, as original client related to the transaction is now released.
-          await db.query(logMovementQuery, logMovementValues);
-          console.log(`Initial stock logged for variant ID ${newVariant.id}`);
+          await client.query(logMovementQuery, [
+            newVariant.product_id, newVariant.id, userIdForLog,
+            'initial_stock_setup', newVariant.stock_quantity, newVariant.stock_quantity,
+            'Initial stock for new variant', `variant_id:${newVariant.id}`
+          ]);
+          console.log(`Initial stock movement logged for variant ID ${newVariant.id}`);
         } catch (logError) {
-          console.error(`Error logging initial stock for variant ID ${newVariant.id}:`, logError);
-          // Non-critical error, so don't fail the main request if it already succeeded.
+          console.error(`Error logging initial stock movement for variant ID ${newVariant.id}:`, logError);
         }
       }
+
+      await client.query('COMMIT');
 
       const variantDetails = await getVariantDetailsForResponse(newVariant.id);
       res.status(201).json({ ...newVariant, selected_options: variantDetails });
@@ -274,35 +287,86 @@ router.put(
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
-      const currentVariantResult = await client.query('SELECT * FROM product_variants WHERE id = $1', [variantId]);
+      const currentVariantResult = await client.query('SELECT * FROM product_variants WHERE id = $1 FOR UPDATE', [variantId]);
       if (currentVariantResult.rows.length === 0) throw new NotFoundError(`Variant with ID ${variantId} not found.`);
       const currentVariant = currentVariantResult.rows[0];
+      const oldAggregateStockQuantity = currentVariant.stock_quantity; // The value stored on product_variants table
 
-      // Log stock adjustment if stock_quantity is changing
-      if (stock_quantity !== undefined && stock_quantity !== currentVariant.stock_quantity) {
-          const oldStock = currentVariant.stock_quantity;
-          const newStock = parseInt(stock_quantity); // Assumes stock_quantity is validated by express-validator
-          const stockChange = newStock - oldStock;
-          // req.user should be populated by isAuthenticated middleware
-          const userId = req.user && req.user.userId ? req.user.userId : null;
+      let newAggregateStockQuantity = oldAggregateStockQuantity; // Default to old if not provided in request
 
-          const logMovementQuery = `
-            INSERT INTO stock_movement_logs
-                (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          `;
-          const logMovementValues = [
-              currentVariant.product_id,
-              variantId, // from req.params
-              userId,
-              'manual_adjustment',
-              stockChange,
-              newStock,
-              reason || null, // destructured from req.body, defaults to null if not provided
-              null // reference_id for manual adjustment
-          ];
-          await client.query(logMovementQuery, logMovementValues);
+      // Handle stock_quantity update specifically to interact with inventory_batches
+      if (stock_quantity !== undefined) {
+        newAggregateStockQuantity = parseInt(stock_quantity); // This is the new desired total stock
+        if (isNaN(newAggregateStockQuantity) || newAggregateStockQuantity < 0) {
+          throw new BadRequestError('Stock quantity must be a non-negative integer.');
+        }
+
+        // Get current total stock from batches for this variant
+        const existingBatchStockResult = await client.query(
+          `SELECT COALESCE(SUM(current_quantity), 0) AS total_batch_stock FROM inventory_batches WHERE variant_id = $1 AND product_id = $2`,
+          [variantId, currentVariant.product_id]
+        );
+        const currentTotalBatchStock = parseInt(existingBatchStockResult.rows[0].total_batch_stock, 10);
+
+        const stockChange = newAggregateStockQuantity - currentTotalBatchStock;
+        const userId = req.user && req.user.userId ? req.user.userId : null;
+        const changeReason = reason || 'Manual stock adjustment via variant edit';
+
+        if (stockChange > 0) { // Increase stock - add to a new or existing manual batch
+          const manualBatchNumber = `MANUAL-${currentVariant.sku || `VAR${variantId}`}`;
+          // Try to find an existing manual batch for this variant
+          const existingManualBatch = await client.query(
+            `SELECT id, current_quantity, initial_quantity FROM inventory_batches
+             WHERE variant_id = $1 AND product_id = $2 AND batch_number = $3 FOR UPDATE`,
+            [variantId, currentVariant.product_id, manualBatchNumber]
+          );
+
+          if (existingManualBatch.rows.length > 0) {
+            // Update existing manual batch
+            const batchToUpdate = existingManualBatch.rows[0];
+            await client.query(
+              `UPDATE inventory_batches SET current_quantity = current_quantity + $1,
+               initial_quantity = initial_quantity + $2, updated_at = CURRENT_TIMESTAMP
+               WHERE id = $3`,
+              [stockChange, stockChange, batchToUpdate.id] // Increment initial_quantity as well for this simple model
+            );
+            console.log(`[SeedDB/VariantUpdate] Increased stock in existing manual batch ${manualBatchNumber} by ${stockChange} for variant ${variantId}`);
+          } else {
+            // Create new manual batch
+            const costPriceAtReceipt = currentVariant.cost_price !== null ? currentVariant.cost_price : 0;
+            const currencyCodeAtReceipt = process.env.BASE_CURRENCY_CODE || 'USD';
+            await client.query(
+              `INSERT INTO inventory_batches
+                (product_id, variant_id, batch_number, initial_quantity, current_quantity,
+                 cost_price_at_receipt, currency_code_at_receipt, received_date, expiry_date, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+              [currentVariant.product_id, variantId, manualBatchNumber, stockChange, stockChange,
+               costPriceAtReceipt, currencyCodeAtReceipt, null]
+            );
+            console.log(`[SeedDB/VariantUpdate] Created new manual batch ${manualBatchNumber} with stock ${stockChange} for variant ${variantId}`);
+          }
+        } else if (stockChange < 0) {
+          // Decrease stock - This is complex. For now, we only log and update the aggregate.
+          // The actual batch decrement should happen via a dedicated UI or process.
+          // The stock_movement_log below will capture this intended reduction.
+          console.warn(`[SeedDB/VariantUpdate] Stock decrease of ${-stockChange} requested for variant ${variantId}. This operation does not automatically decrement specific batches. Ensure manual batch adjustment if needed.`);
+        }
+
+        // Log movement if there was any change based on batch calculation vs new target
+        if (stockChange !== 0) {
+            const logMovementQuery = `
+              INSERT INTO stock_movement_logs
+                  (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `;
+            await client.query(logMovementQuery, [
+                currentVariant.product_id, variantId, userId,
+                'manual_adjustment', stockChange, newAggregateStockQuantity, // Log against the new aggregate target
+                changeReason, `variant_id:${variantId}`
+            ]);
+        }
       }
+      // The product_variants.stock_quantity will be updated later with newAggregateStockQuantity
 
       let newOptionValueIds = null;
       if (option_value_ids) {
@@ -317,9 +381,9 @@ router.put(
             selectedGlobalOptionTypes.add(globalOptionId);
 
             const assignmentCheck = await client.query(
-              `SELECT paov.id FROM product_assigned_option_values paov
-               JOIN product_assigned_options pao ON paov.product_assigned_option_id = pao.id
-               WHERE pao.product_id = $1 AND pao.option_id = $2 AND paov.option_value_id = $3`,
+              `SELECT paosv.id FROM product_assigned_option_specific_values paosv
+               JOIN product_assigned_options pao ON paosv.product_assigned_option_id = pao.id
+               WHERE pao.product_id = $1 AND pao.option_id = $2 AND paosv.product_option_value_id = $3`,
               [currentVariant.product_id, globalOptionId, globalValueId]
             );
             if (assignmentCheck.rows.length === 0) {
