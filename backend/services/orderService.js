@@ -1,6 +1,6 @@
 // backend/services/orderService.js
 const db = require('../db');
-const { NotFoundError, AppError } = require('../utils/AppError');
+const { NotFoundError, AppError, BadRequestError, ConflictError } = require('../utils/AppError');
 
 /**
  * Retrieves a paginated list of all orders for the admin view.
@@ -108,7 +108,7 @@ async function getAdminOrderById(orderId) {
   }
 }
 
-const { BadRequestError } = require('../utils/AppError'); // Add BadRequestError
+// const { BadRequestError } = require('../utils/AppError'); // REMOVED - Consolidated at top
 
 const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded', 'partially_refunded']; // Added refund statuses
 const BILLABLE_ORDER_STATUSES = ['shipped', 'completed', 'delivered'];
@@ -502,7 +502,7 @@ module.exports = {
 
 const bcrypt = require('bcrypt');
 const taxService = require('./taxService'); // Assuming it's in the same directory
-const { BadRequestError, ConflictError } = require('../utils/AppError'); // Already have NotFoundError, AppError from top
+// const { BadRequestError, ConflictError } = require('../utils/AppError'); // REMOVED - Consolidated at top
 
 /**
  * Creates a new public order, handling guest or authenticated users,
