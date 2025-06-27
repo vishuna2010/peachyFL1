@@ -496,6 +496,8 @@ module.exports = {
   getOrderDetailsForPdf,
   processOrderRefund,
   createPublicOrder, // Added new function
+  getUserOrderHistory, // Added for user's order history
+  getUserOrderDetails, // Added for user's specific order details
 };
 
 const bcrypt = require('bcrypt');
@@ -829,5 +831,158 @@ async function createPublicOrder(orderRequestData, authenticatedUser) {
     throw new AppError('Failed to create order due to an internal server error.', 500, 'ORDER_CREATION_FAILED', { originalError: error.message });
   } finally {
     if (client) client.release();
+  }
+}
+
+
+/**
+ * Retrieves a paginated list of orders for a specific user.
+ * @param {number} userId - The ID of the user.
+ * @param {object} paginationOptions - Contains page and limit.
+ * @returns {Promise<object>} Paginated list of orders.
+ */
+async function getUserOrderHistory(userId, paginationOptions = {}) {
+  const page = parseInt(paginationOptions.page) || 1;
+  let limit = parseInt(paginationOptions.limit) || 10;
+  if (limit > 100) limit = 100; // Max limit safeguard
+
+  const offset = (page - 1) * limit;
+
+  try {
+    const ordersQuery = `
+      SELECT o.id, o.created_at as order_date, o.total_amount, o.status,
+             (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) as item_count
+      FROM orders o
+      WHERE o.user_id = $1
+      ORDER BY o.created_at DESC
+      LIMIT $2 OFFSET $3;
+    `;
+    const ordersResult = await db.query(ordersQuery, [userId, limit, offset]);
+
+    const totalCountQuery = 'SELECT COUNT(*) FROM orders WHERE user_id = $1;';
+    const totalCountResult = await db.query(totalCountQuery, [userId]);
+    const totalOrders = parseInt(totalCountResult.rows[0].count);
+    const totalPages = Math.ceil(totalOrders / limit);
+
+    return {
+      data: ordersResult.rows,
+      pagination: {
+        total: totalOrders,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    };
+  } catch (error) {
+    console.error(`[orderService.getUserOrderHistory] Error for user ID ${userId}:`, error);
+    throw new AppError('Failed to retrieve user order history.', 500, 'USER_ORDER_HISTORY_FETCH_FAILED');
+  }
+}
+
+/**
+ * Retrieves detailed information for a specific order, ensuring it belongs to the specified user.
+ * @param {number} userId - The ID of the user.
+ * @param {number} orderId - The ID of the order.
+ * @returns {Promise<object>} The detailed order object.
+ */
+async function getUserOrderDetails(userId, orderId) {
+  if (isNaN(parseInt(orderId)) || parseInt(orderId) <= 0) {
+    throw new BadRequestError('Invalid order ID format.');
+  }
+  const numOrderId = parseInt(orderId);
+
+  try {
+    const orderQuery = 'SELECT *, created_at as order_date FROM orders WHERE id = $1 AND user_id = $2;';
+    const orderResult = await db.query(orderQuery, [numOrderId, userId]);
+
+    if (orderResult.rows.length === 0) {
+      throw new NotFoundError(`Order with ID ${numOrderId} not found or does not belong to user ID ${userId}.`);
+    }
+    const orderData = orderResult.rows[0];
+
+    const itemsQuery = `
+      SELECT
+        oi.id as item_id,
+        oi.product_id,
+        oi.product_variant_id,
+        oi.quantity,
+        oi.price_at_purchase,
+        oi.product_name_at_purchase,
+        oi.product_sku_at_purchase,
+        p.image_url as product_image_url, -- Base product image
+        pv.image_url as variant_image_url -- Variant specific image
+      FROM order_items oi
+      JOIN products p ON oi.product_id = p.id
+      LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id
+      WHERE oi.order_id = $1
+      ORDER BY oi.id ASC;
+    `;
+    const itemsResult = await db.query(itemsQuery, [numOrderId]);
+
+    // Ensure order items are correctly associated and image_url is determined
+    orderData.items = itemsResult.rows.map(item => ({
+      item_id: item.item_id,
+      product_id: item.product_id,
+      product_variant_id: item.product_variant_id,
+      name: item.product_name_at_purchase, // Use the name stored at time of purchase
+      sku: item.product_sku_at_purchase,   // Use SKU stored at time of purchase
+      quantity: item.quantity,
+      price_at_purchase: parseFloat(item.price_at_purchase),
+      image_url: item.variant_image_url || item.product_image_url, // Prioritize variant image
+    }));
+
+
+    // Reconstruct response similar to the original route's structure
+    const responseOrder = {
+      id: orderData.id,
+      order_date: orderData.order_date, // This is already aliased from created_at
+      status: orderData.status,
+      payment_status: orderData.payment_status,
+      total_amount: parseFloat(orderData.total_amount),
+      shipping_address: {
+        line1: orderData.shipping_address_line1,
+        line2: orderData.shipping_address_line2,
+        city: orderData.shipping_city,
+        postalCode: orderData.shipping_postal_code,
+        country: orderData.shipping_country,
+      },
+      billing_address: {
+        line1: orderData.billing_address_line1 || orderData.shipping_address_line1,
+        line2: orderData.billing_address_line2 || orderData.shipping_address_line2,
+        city: orderData.billing_city || orderData.shipping_city,
+        postalCode: orderData.billing_postal_code || orderData.shipping_postal_code,
+        country: orderData.billing_country || orderData.shipping_country,
+      },
+      items: orderData.items, // Already processed above
+      subtotal: parseFloat(orderData.original_total_amount), // This is the pre-discount, pre-tax subtotal
+      total_tax_amount: parseFloat(orderData.total_tax_amount),
+      discount_applied: orderData.discount_id ? {
+        code: orderData.discount_code_applied,
+        amount_deducted: parseFloat(orderData.discount_amount_applied),
+      } : null,
+      // Additional fields from the 'orders' table if needed by frontend can be added here directly from orderData
+      invoice_number: orderData.invoice_number,
+      tax_summary_details: orderData.tax_summary_details, // Assuming it's stored as JSONB
+    };
+
+    // This logic from route was to recalculate subtotal if original_total_amount was null
+    // However, original_total_amount should always be set by createPublicOrder now.
+    // If it could still be null, this check would be needed.
+    // if (orderData.original_total_amount === null && responseOrder.discount_applied) {
+    //    responseOrder.subtotal = parseFloat(orderData.total_amount) + parseFloat(orderData.discount_amount_applied);
+    // } else if (orderData.original_total_amount === null && !responseOrder.discount_applied) {
+    //    responseOrder.subtotal = parseFloat(orderData.total_amount);
+    // }
+
+
+    return responseOrder;
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof BadRequestError) {
+      throw error;
+    }
+    console.error(`[orderService.getUserOrderDetails] Error for order ID ${orderId}, user ID ${userId}:`, error);
+    throw new AppError('Failed to retrieve user order details.', 500, 'USER_ORDER_DETAILS_FETCH_FAILED');
   }
 }
