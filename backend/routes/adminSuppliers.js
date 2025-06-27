@@ -1,227 +1,171 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
-const { isAuthenticated, checkPermission } = require('../auth'); // Updated import
+// const db = require('../db'); // No longer directly needed
+const { isAuthenticated, checkPermission } = require('../auth');
+const { body, param, query, validationResult } = require('express-validator');
+const { ConflictError, NotFoundError, BadRequestError, AppError } = require('../utils/AppError');
+const supplierService = require('../services/supplierService');
 
-// Apply auth middleware to all routes in this router
-// router.use(isAuthenticated, isAdmin); // REMOVED
+// Validation chains
+const commonSupplierValidations = [
+  body('name').trim().notEmpty().withMessage('Supplier name is required.').isString().isLength({ min: 2, max: 255 }).withMessage('Supplier name must be between 2 and 255 characters.'),
+  body('contact_person').optional({ nullable: true }).isString().trim().isLength({ max: 255 }),
+  body('email').optional({ nullable: true }).isEmail().withMessage('Invalid email format.').toLowerCase().trim(),
+  body('phone').optional({ nullable: true }).isString().trim().isLength({ max: 50 }),
+  body('address_line1').optional({ nullable: true }).isString().trim().isLength({ max: 255 }),
+  body('address_line2').optional({ nullable: true }).isString().trim().isLength({ max: 255 }),
+  body('city').optional({ nullable: true }).isString().trim().isLength({ max: 100 }),
+  body('postal_code').optional({ nullable: true }).isString().trim().isLength({ max: 20 }),
+  body('country').optional({ nullable: true }).isString().trim().isLength({ max: 50 }),
+  body('notes').optional({ nullable: true }).isString().trim(),
+  body('currency_code').optional({ nullable: true }).isString().isLength({ min: 3, max: 3 }).withMessage('Currency code must be 3 letters.').toUpperCase()
+];
+
+const validateSupplierIdParam = [
+  param('id').isInt({ gt: 0 }).withMessage('Supplier ID must be a positive integer.').toInt()
+];
+
+const validatePaginationParams = [
+  query('page').optional().isInt({ min: 1 }).toInt().default(1),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(20)
+];
+
 
 // POST /api/admin/suppliers - Create a new supplier
-router.post('/', isAuthenticated, checkPermission('suppliers:manage'), async (req, res) => {
-  const {
-    name, contact_person, email, phone,
-    address_line1, address_line2, city, postal_code, country, notes,
-    currency_code // New field
-  } = req.body;
-
-  // Validation
-  if (!name || typeof name !== 'string' || name.trim() === '') {
-    return res.status(400).json({ message: 'Supplier name is required and must be a non-empty string.' });
-  }
-  // Email validation (basic)
-  if (email && typeof email !== 'string') { // Could add more robust email format validation
-    return res.status(400).json({ message: 'Invalid email format.' });
-  }
-
-  let final_currency_code = null;
-  if (currency_code !== undefined && currency_code !== null) {
-    if (typeof currency_code !== 'string' || !/^[A-Z]{3}$/.test(currency_code.toUpperCase())) {
-      return res.status(400).json({ message: 'Currency code must be 3 uppercase letters.' });
+router.post('/',
+  isAuthenticated,
+  checkPermission('suppliers:manage'),
+  commonSupplierValidations, // Apply validation
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    final_currency_code = currency_code.toUpperCase();
-  }
 
-  const client = await db.pool.connect();
-  try {
-    const insertQuery = `
-      INSERT INTO suppliers
-        (name, contact_person, email, phone, address_line1, address_line2, city, postal_code, country, notes, currency_code, updated_at)
-      VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
-      RETURNING *;
-    `;
-    const values = [
-      name.trim(), contact_person || null, email ? email.trim() : null, phone || null,
-      address_line1 || null, address_line2 || null, city || null, postal_code || null, country || null, notes || null,
-      final_currency_code // New
-    ];
-
-    const result = await client.query(insertQuery, values);
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    if (error.code === '23505') { // Unique constraint violation
-      if (error.constraint === 'suppliers_name_key') {
-        return res.status(409).json({ message: 'Supplier name already exists.' });
-      }
-      if (error.constraint === 'suppliers_email_key') {
-        return res.status(409).json({ message: 'Supplier email already exists.' });
-      }
+    try {
+      // req.body will contain validated and sanitized data
+      const newSupplier = await supplierService.createSupplier(req.body);
+      res.status(201).json(newSupplier);
+    } catch (error) {
+      // Errors from service (ConflictError, AppError, etc.) are passed to global handler
+      next(error);
     }
-    console.error('Error creating supplier:', error);
-    res.status(500).json({ message: 'Failed to create supplier.' });
-  } finally {
-    client.release();
-  }
 });
 
 // GET /api/admin/suppliers - List all suppliers
-router.get('/', isAuthenticated, checkPermission('suppliers:manage'), async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20; // Default limit
-  const offset = (page - 1) * limit;
+router.get('/',
+  isAuthenticated,
+  checkPermission('suppliers:manage'),
+  validatePaginationParams, // Apply validation
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    // page and limit are validated and defaulted by express-validator
+    const { page, limit } = req.query;
 
-  try {
-    const countResult = await db.query('SELECT COUNT(*) FROM suppliers');
-    const totalSuppliers = parseInt(countResult.rows[0].count);
-
-    const result = await db.query('SELECT * FROM suppliers ORDER BY name ASC LIMIT $1 OFFSET $2', [limit, offset]);
-
-    res.status(200).json({
-        data: result.rows,
-        pagination: {
-            total: totalSuppliers,
-            page: page,
-            limit: limit,
-            totalPages: Math.ceil(totalSuppliers / limit)
-        }
-    });
-  } catch (error) {
-    console.error('Error listing suppliers:', error);
-    res.status(500).json({ message: 'Failed to retrieve suppliers.' });
-  }
+    try {
+      const result = await supplierService.getAllSuppliers({ page, limit });
+      res.status(200).json({
+          data: result.suppliers,
+          pagination: {
+              total: result.totalSuppliers,
+              page: result.page,
+              limit: result.limit,
+              totalPages: result.totalPages,
+          }
+      });
+    } catch (error) {
+      next(error);
+    }
 });
 
 // GET /api/admin/suppliers/:id - Get a specific supplier
-router.get('/:id', isAuthenticated, checkPermission('suppliers:manage'), async (req, res) => {
-  const { id } = req.params;
-  if (isNaN(parseInt(id))) {
-    return res.status(400).json({ message: 'Invalid supplier ID format.' });
-  }
-  try {
-    const result = await db.query('SELECT * FROM suppliers WHERE id = $1', [id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: `Supplier with ID ${id} not found.` });
+router.get('/:id',
+  isAuthenticated,
+  checkPermission('suppliers:manage'),
+  validateSupplierIdParam, // Apply validation
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    res.status(200).json(result.rows[0]);
-  } catch (error) {
-    console.error(`Error fetching supplier ${id}:`, error);
-    res.status(500).json({ message: 'Failed to retrieve supplier.' });
-  }
+    const { id } = req.params; // id is validated and sanitized by toInt()
+
+    try {
+      const supplier = await supplierService.getSupplierById(id);
+      // Service throws NotFoundError if not found
+      res.status(200).json(supplier);
+    } catch (error) {
+      next(error);
+    }
 });
 
 // PUT /api/admin/suppliers/:id - Update a supplier
-router.put('/:id', isAuthenticated, checkPermission('suppliers:manage'), async (req, res) => {
-  const { id } = req.params;
-  if (isNaN(parseInt(id))) {
-    return res.status(400).json({ message: 'Invalid supplier ID format.' });
-  }
-
-  const {
-    name, contact_person, email, phone,
-    address_line1, address_line2, city, postal_code, country, notes,
-    currency_code // New field
-  } = req.body;
-
-  const client = await db.pool.connect();
-  try {
-    await client.query('BEGIN');
-    const currentSupplier = await client.query('SELECT * FROM suppliers WHERE id = $1 FOR UPDATE', [id]);
-    if (currentSupplier.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ message: `Supplier with ID ${id} not found.` });
+router.put('/:id',
+  isAuthenticated,
+  checkPermission('suppliers:manage'),
+  validateSupplierIdParam, // Validate ID from param
+  commonSupplierValidations, // Apply common validations to body (all fields optional for PUT)
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
 
-    // Build dynamic query
-    const setClauses = [];
-    const values = [];
-    let paramIndex = 1;
+    const { id } = req.params; // Validated id
+    const updateData = req.body; // Validated and sanitized fields
 
-    if (name !== undefined) {
-      if (typeof name !== 'string' || name.trim() === '') {
-        await client.query('ROLLBACK'); return res.status(400).json({ message: 'Supplier name must be a non-empty string.' });
-      }
-      setClauses.push(`name = $${paramIndex++}`); values.push(name.trim());
-    }
-    if (contact_person !== undefined) { setClauses.push(`contact_person = $${paramIndex++}`); values.push(contact_person); }
-    if (email !== undefined) {
-      if (email !== null && typeof email !== 'string') { // Basic email format check could be added
-         await client.query('ROLLBACK'); return res.status(400).json({ message: 'Invalid email format.' });
-      }
-      setClauses.push(`email = $${paramIndex++}`); values.push(email ? email.trim() : null);
-    }
-    if (phone !== undefined) { setClauses.push(`phone = $${paramIndex++}`); values.push(phone); }
-    if (address_line1 !== undefined) { setClauses.push(`address_line1 = $${paramIndex++}`); values.push(address_line1); }
-    if (address_line2 !== undefined) { setClauses.push(`address_line2 = $${paramIndex++}`); values.push(address_line2); }
-    if (city !== undefined) { setClauses.push(`city = $${paramIndex++}`); values.push(city); }
-    if (postal_code !== undefined) { setClauses.push(`postal_code = $${paramIndex++}`); values.push(postal_code); }
-    if (country !== undefined) { setClauses.push(`country = $${paramIndex++}`); values.push(country); }
-    if (notes !== undefined) { setClauses.push(`notes = $${paramIndex++}`); values.push(notes); }
+    // Construct an object with only the fields that are actually present in the request body
+    const fieldsToUpdate = {};
+    const updatableFields = [
+      'name', 'contact_person', 'email', 'phone', 'address_line1',
+      'address_line2', 'city', 'postal_code', 'country', 'notes', 'currency_code'
+    ];
 
-    if (currency_code !== undefined) {
-      if (currency_code === null) {
-        setClauses.push(`currency_code = $${paramIndex++}`); values.push(null);
-      } else if (typeof currency_code === 'string' && /^[A-Z]{3}$/.test(currency_code.toUpperCase())) {
-        setClauses.push(`currency_code = $${paramIndex++}`); values.push(currency_code.toUpperCase());
-      } else {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ message: 'Currency code must be 3 uppercase letters or null.' });
+    let hasUpdate = false;
+    for (const field of updatableFields) {
+      if (updateData.hasOwnProperty(field)) {
+        fieldsToUpdate[field] = updateData[field];
+        hasUpdate = true;
       }
     }
 
-    if (setClauses.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ message: 'No valid fields provided for update.' });
+    if (!hasUpdate) {
+      return next(new BadRequestError('No valid fields provided for update.'));
     }
 
-    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
-
-    const updateQuery = `UPDATE suppliers SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *;`;
-    values.push(id);
-
-    const result = await client.query(updateQuery, values);
-    await client.query('COMMIT');
-    res.status(200).json(result.rows[0]);
-
-  } catch (error) {
-    await client.query('ROLLBACK');
-    if (error.code === '23505') { // Unique constraint violation
-      if (error.constraint === 'suppliers_name_key') {
-        return res.status(409).json({ message: 'Another supplier with this name already exists.' });
-      }
-      if (error.constraint === 'suppliers_email_key') {
-        return res.status(409).json({ message: 'Another supplier with this email already exists.' });
-      }
+    try {
+      const updatedSupplier = await supplierService.updateSupplier(id, fieldsToUpdate);
+      res.status(200).json(updatedSupplier);
+    } catch (error) {
+      // Service layer handles NotFoundError, ConflictError, BadRequestError, AppError
+      next(error);
     }
-    console.error(`Error updating supplier ${id}:`, error);
-    res.status(500).json({ message: 'Failed to update supplier.' });
-  } finally {
-    client.release();
-  }
 });
 
 // DELETE /api/admin/suppliers/:id - Delete a supplier
-router.delete('/:id', isAuthenticated, checkPermission('suppliers:manage'), async (req, res) => {
-  const { id } = req.params;
-  if (isNaN(parseInt(id))) {
-    return res.status(400).json({ message: 'Invalid supplier ID format.' });
-  }
-  try {
-    // If supplier_id was added to products table with ON DELETE SET NULL, this is fine.
-    // If ON DELETE RESTRICT, this would fail if supplier is linked to products.
-    // Application logic would need to handle reassigning products or deleting them first.
-    const result = await db.query('DELETE FROM suppliers WHERE id = $1 RETURNING *', [id]);
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: `Supplier with ID ${id} not found.` });
+router.delete('/:id',
+  isAuthenticated,
+  checkPermission('suppliers:manage'),
+  validateSupplierIdParam, // Apply validation
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-    res.status(200).json({ message: 'Supplier deleted successfully.', supplier: result.rows[0] }); // Or 204 No Content
-  } catch (error) {
-    console.error(`Error deleting supplier ${id}:`, error);
-    // Handle foreign key constraint errors if products.supplier_id uses ON DELETE RESTRICT
-    if (error.code === '23503') { // foreign_key_violation
-        return res.status(409).json({ message: 'Cannot delete supplier: They are referenced by products or other records. Please reassign or delete those records first.' });
+    const { id } = req.params; // Validated id
+
+    try {
+      const deletedSupplier = await supplierService.deleteSupplier(id);
+      // Service throws NotFoundError or BadRequestError (if dependencies exist)
+      res.status(200).json({ message: 'Supplier deleted successfully.', supplier: deletedSupplier });
+      // Consider res.status(204).send() for DELETE operations if no content is returned.
+      // However, returning the deleted object can be useful for client-side state updates.
+    } catch (error) {
+      next(error);
     }
-    res.status(500).json({ message: 'Failed to delete supplier.' });
-  }
 });
 
 module.exports = router;
