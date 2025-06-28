@@ -310,9 +310,84 @@ module.exports = {
   sendOrderDispatchedEmail,
   sendOrderDeliveredEmail,
   sendInvoiceEmail, // Added new function
+  sendMarketingPromoEmail, // Added for marketing emails
   // For testing/debugging if needed:
   // getTestTransporter,
 };
+
+// --- Marketing Promo Email Function ---
+/**
+ * Sends a marketing promotional email to a user.
+ * @param {string} toEmail - The recipient's email address.
+ * @param {string} userName - The name of the user.
+ * @param {object} promoDetails - Details for the promotion.
+ * @param {string} promoDetails.subject - The subject of the email.
+ * @param {string} [promoDetails.promoTitle] - Optional title for the promo content.
+ * @param {string} promoDetails.promoMessageBody - The main HTML body of the promo.
+ * @param {string} promoDetails.ctaLink - The URL for the call-to-action button.
+ * @param {string} promoDetails.ctaText - The text for the call-to-action button.
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendMarketingPromoEmail(toEmail, userName, promoDetails) {
+  try {
+    const {
+      subject,
+      promoTitle,
+      promoMessageBody,
+      ctaLink,
+      ctaText
+    } = promoDetails;
+
+    const siteName = config.company.name || 'Our Platform';
+    const supportEmail = config.email.supportAddress || config.email.fromAddress;
+    const companyAddress = config.company.address || '';
+    // const unsubscribeLink = `${config.frontendUrlBase}/unsubscribe?email=${encodeURIComponent(toEmail)}&type=marketing`; // Example
+
+    const templatePath = path.join(__dirname, '..', 'email_templates', 'marketing', 'basic_promo_1.ejs');
+    const templateContent = fs.readFileSync(templatePath, 'utf-8');
+    const htmlContent = ejs.render(templateContent, {
+      subject, // For the <title> tag in the template
+      userName: userName || 'Valued Customer', // Fallback for userName
+      promoTitle,
+      promoMessageBody,
+      ctaLink,
+      ctaText,
+      siteName,
+      supportEmail,
+      companyAddress,
+      // unsubscribeLink // For future use
+    });
+
+    // Basic plain text version (consider a library to convert HTML to plain text for better results)
+    const textContent = `
+Hi ${userName || 'Valued Customer'},
+
+${promoTitle ? promoTitle + '\n\n' : ''}
+${promoMessageBody.replace(/<[^>]*>?/gm, '')} /* Basic strip HTML for text version */
+
+${ctaText}: ${ctaLink}
+
+If you have any questions, contact our support team at ${supportEmail}.
+
+Best regards,
+The ${siteName} Team
+---
+&copy; ${new Date().getFullYear()} ${siteName}. All rights reserved.
+${companyAddress}
+    `.trim();
+
+    return sendEmail({
+      to: toEmail,
+      subject: subject,
+      text: textContent,
+      html: htmlContent,
+    });
+
+  } catch (error) {
+    console.error(`Error preparing or sending marketing promo email to ${toEmail}:`, error);
+    return { success: false, error: `Failed to send marketing promo email: ${error.message}` };
+  }
+}
 
 
 // --- Welcome Email Function ---

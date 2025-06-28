@@ -367,8 +367,20 @@ This section outlines the primary driver for future backend development, based o
 
 ## 📢 Marketing Emails
 - **Email Marketing Integration**
-  - [ ] Design promotional and newsletter templates
-  - [ ] Segment user base (e.g., by activity, order history)
+  - [X] Design promotional and newsletter templates
+    - [X] Created basic promotional EJS template: `backend/email_templates/marketing/basic_promo_1.ejs`.
+  - [~] Segment user base (e.g., by activity, order history)
+    - [X] Basic user fetching implemented in `userService.getAllMarketingSubscribers()` (gets all verified, non-guest users).
+    - [ ] Advanced segmentation logic (by order history, activity, etc.) still pending.
+  - [X] Backend API for sending marketing emails (Initial Version)
+    - [X] Created `emailService.sendMarketingPromoEmail` for sending individual promo emails.
+    - [X] Created `marketingService.js` with `sendPromotionalEmailToSegment` to orchestrate sending to a user list.
+    - [X] Created `POST /api/admin/marketing/send-promo-email` endpoint in `adminMarketing.js`.
+    - [X] Endpoint includes validation, auth, and permission check (`marketing:send_emails`).
+    - [ ] Note: `marketing:send_emails` permission needs to be defined in the RBAC system.
+    - [ ] Note: UI integration for admin panel is pending.
+  - [ ] (Future) Tracking for marketing emails (opens, clicks).
+  - [ ] (Future) Unsubscribe mechanism for marketing emails.
 
 ---
 
