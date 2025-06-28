@@ -291,8 +291,17 @@ router.put(
     }
 
     const { productId } = req.params; // Validated
-    const productData = req.body;    // Validated by express-validator
+    const productData = req.body;    // This is req.body
     const fileData = req.file;       // From multer middleware
+
+    // Defensive check for productData before using hasOwnProperty
+    if (!productData || typeof productData !== 'object' || Array.isArray(productData)) {
+      console.error(`[adminProductsRouter] PUT /products/${productId} - req.body is not a valid object. Received:`, productData);
+      // It's possible that with multipart/form-data and no text fields, req.body could be {}.
+      // However, the error "hasOwnProperty is not a function" implies productData is truly not an object (e.g. undefined).
+      // If it were {}, hasOwnProperty would work. So this check is for more severe cases like undefined/null.
+      return res.status(400).json({ message: 'Invalid request body: Expected a product data object.' });
+    }
 
     // Determine if image removal is intended based on image_url field
     // If image_url is explicitly set to null in the request, it means remove.
