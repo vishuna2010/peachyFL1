@@ -45,11 +45,12 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     return navigateTo('/login?redirect=' + path);
   }
 
-  if (finalUserRole !== 'admin') {
-    console.log(`[AdminAuth] Path: ${path}. Final check failed: User role is "${finalUserRole}" (expected "admin"). Redirecting to homepage (/).`);
+  const allowedAdminRoles = ['admin', 'super_admin']; // Define allowed admin roles
+  if (!allowedAdminRoles.includes(finalUserRole)) {
+    console.log(`[AdminAuth] Path: ${path}. Final check failed: User role is "${finalUserRole}" (not in allowed admin roles: ${allowedAdminRoles.join(', ')}). Redirecting to homepage (/).`);
     return navigateTo('/'); // User is known, but not an admin
   }
 
-  console.log(`[AdminAuth] Path: ${path}. User is admin (role: "${finalUserRole}"). Access granted.`);
+  console.log(`[AdminAuth] Path: ${path}. User role "${finalUserRole}" is authorized. Access granted to admin section.`);
   // Allow navigation by not returning anything explicitly
 });
