@@ -343,11 +343,16 @@ This section outlines the primary driver for future backend development, based o
 
 ## 📦 Fulfillment Features
 - **Print Shipping Label**
-  - [ ] Generate and print shipping label per order
+  - [X] Generate and print shipping label per order (Backend PDF generation implemented)
   - Include:
-    - [ ] Recipient name/address
-    - [ ] Tracking number
-    - [ ] Barcode or QR code (if supported by courier)
+    - [X] Recipient name/address
+    - [X] Tracking number
+    - [X] Barcode or QR code (if supported by courier) (Implemented QR code of tracking number)
+  - Notes:
+    - API endpoint `GET /admin/orders/:orderId/shipping-label/pdf` created.
+    - Uses `orderService.getOrderDetailsForShippingLabel` and `pdfService.generateShippingLabelPdf`.
+    - Label is 4x6 inches, includes sender/recipient info, tracking, carrier, QR of tracking no.
+    - Permission `orders:print_shipping_label` required.
 
 ---
 

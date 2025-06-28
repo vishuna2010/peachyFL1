@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 // const db = require('../db'); // No longer directly needed for most routes
 const { isAuthenticated, checkPermission } = require('../auth');
-const { generateOrderInvoicePdf, generatePackingSlipPdf } = require('../services/pdfService');
+const { generateOrderInvoicePdf, generatePackingSlipPdf, generateShippingLabelPdf } = require('../services/pdfService'); // Added generateShippingLabelPdf
 const { param, query, body, validationResult } = require('express-validator');
 const { NotFoundError, BadRequestError, AppError } = require('../utils/AppError'); // Added AppError
 const crypto = require('crypto'); // Still needed for QR code token in one route, could move to service
@@ -176,6 +176,42 @@ router.get(
       res.send(pdfBuffer);
     } catch (error) {
       next(error);
+    }
+  }
+);
+
+// GET /admin/orders/:orderId/shipping-label/pdf - Generate PDF shipping label for an order
+router.get(
+  '/orders/:orderId/shipping-label/pdf',
+  isAuthenticated,
+  checkPermission('orders:print_shipping_label'), // New permission
+  validateOrderIdParam, // Reuse validation for orderId
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { orderId } = req.params;
+
+    try {
+      const labelData = await orderService.getOrderDetailsForShippingLabel(orderId);
+      if (!labelData.trackingNumber || labelData.trackingNumber === 'N/A') {
+        // Potentially throw an error or return a specific message if tracking number is essential
+        // For now, pdfService will handle generating a label that indicates tracking is N/A
+        console.warn(`Attempting to generate shipping label for order ${orderId} without a tracking number.`);
+      }
+
+      const pdfBuffer = await generateShippingLabelPdf(labelData);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      // Suggest inline for preview, or attachment to force download
+      res.setHeader('Content-Disposition', `inline; filename="shipping_label_order_${orderId}.pdf"`);
+      res.send(pdfBuffer);
+
+    } catch (error) {
+      // Log specific error for shipping label generation failure
+      console.error(`Error generating shipping label for order ${orderId}:`, error);
+      next(error); // Pass to global error handler
     }
   }
 );
