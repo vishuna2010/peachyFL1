@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 // const db = require('../db'); // No longer directly used by this route file
 const { isAuthenticated, tryAuthenticate } = require('../auth'); // Using tryAuthenticate for POST /
-const { sendEmail, getOrderConfirmationHtml, getOrderConfirmationText } = require('../services/emailService');
+const { sendEmail, getOrderConfirmationHtml, getOrderConfirmationText, sendInvoiceEmail } = require('../services/emailService'); // Added sendInvoiceEmail
 const orderService = require('../services/orderService'); // Import orderService
+const pdfService = require('../services/pdfService'); // Import pdfService
+const config = require('../config'); // Import config for siteName, URLs etc.
 const { body, query, param, validationResult } = require('express-validator'); // Corrected import
 const { NotFoundError, BadRequestError, ConflictError } = require('../utils/AppError'); // For direct error handling if needed pre-service call
 
@@ -135,8 +137,49 @@ router.post(
             console.error(`Error generating email content for order ${createdOrder.id}:`, templateError);
           }
         })();
+
+        // Generate and send Invoice PDF email
+        (async () => {
+          try {
+            const siteNameFromConfig = config.company.name || 'Our Platform';
+            const invoiceData = await orderService.getOrderDetailsForPdf(createdOrder.id, 'invoice');
+            const pdfBuffer = await pdfService.generateOrderInvoicePdf(invoiceData);
+            const pdfFileName = `Invoice-Order-${createdOrder.id}.pdf`;
+
+            const emailBodyOptionalData = {
+                orderTotal: createdOrder.total_amount,
+                currencySymbol: '$', // TODO: Get from config or order details
+                viewOrderLink: `${config.frontendUrlBase || 'http://localhost:3000'}/profile/orders/${createdOrder.id}`,
+                supportEmail: config.email.supportAddress || config.email.fromAddress,
+                companyAddress: config.company.address || ''
+            };
+
+            emailService.sendInvoiceEmail(
+              userEmailForOrder,
+              userNameForOrder,
+              createdOrder.id,
+              siteNameFromConfig,
+              pdfBuffer,
+              pdfFileName,
+              emailBodyOptionalData
+            )
+            .then(emailRes => {
+              if (emailRes.success) {
+                console.log(`Invoice PDF email sent for order ${createdOrder.id} to ${userEmailForOrder}.`);
+              } else {
+                console.error(`Failed to send invoice PDF email for order ${createdOrder.id}: ${emailRes.error}`);
+              }
+            })
+            .catch(err => {
+              console.error(`Error dispatching invoice PDF email for order ${createdOrder.id}:`, err);
+            });
+          } catch (pdfOrEmailError) {
+            console.error(`Error generating PDF or preparing invoice email for order ${createdOrder.id}:`, pdfOrEmailError);
+          }
+        })();
+
       } else {
-        console.warn(`No customer email found for order ${createdOrder.id}. Skipping confirmation email.`);
+        console.warn(`No customer email found for order ${createdOrder.id}. Skipping confirmation and invoice emails.`);
       }
 
     } catch (error) {
