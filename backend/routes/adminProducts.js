@@ -306,7 +306,8 @@ router.put(
     // Determine if image removal is intended based on image_url field
     // If image_url is explicitly set to null in the request, it means remove.
     // If image_url is not in productData, and no new file is uploaded, existing image is kept.
-    const removeImageFlag = productData.hasOwnProperty('image_url') && productData.image_url === null;
+    // Use Object.prototype.hasOwnProperty.call for robustness
+    const removeImageFlag = Object.prototype.hasOwnProperty.call(productData, 'image_url') && productData.image_url === null;
 
     try {
       const updatedProductDetails = await productService.updateProduct(
