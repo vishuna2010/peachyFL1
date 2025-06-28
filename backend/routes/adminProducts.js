@@ -291,28 +291,40 @@ router.put(
     }
 
     const { productId } = req.params; // Validated
-    const productData = req.body;    // This is req.body
     const fileData = req.file;       // From multer middleware
 
-    // Defensive check for productData before using hasOwnProperty
-    if (!productData || typeof productData !== 'object' || Array.isArray(productData)) {
-      console.error(`[adminProductsRouter] PUT /products/${productId} - req.body is not a valid object. Received:`, productData);
-      // It's possible that with multipart/form-data and no text fields, req.body could be {}.
-      // However, the error "hasOwnProperty is not a function" implies productData is truly not an object (e.g. undefined).
-      // If it were {}, hasOwnProperty would work. So this check is for more severe cases like undefined/null.
-      return res.status(400).json({ message: 'Invalid request body: Expected a product data object.' });
+    // --- Start Debugging and Defaulting req.body ---
+    console.log('[DEBUG adminProducts PUT raw] req.body:', req.body);
+    console.log('[DEBUG adminProducts PUT raw] typeof req.body:', typeof req.body);
+    console.log('[DEBUG adminProducts PUT raw] Array.isArray(req.body):', Array.isArray(req.body));
+    if (req.body && typeof req.body === 'object') {
+        console.log('[DEBUG adminProducts PUT raw] req.body constructor name:', req.body.constructor ? req.body.constructor.name : 'N/A');
+        console.log('[DEBUG adminProducts PUT raw] Object.keys(req.body):', Object.keys(req.body));
     }
+
+    let productDataToUse;
+    if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
+        // If it's an object (even one with a null prototype or other class instance),
+        // spread its properties into a new plain object for safety with hasOwnProperty and service layer.
+        productDataToUse = { ...req.body };
+    } else {
+        console.error(`[adminProductsRouter] PUT /products/${productId} - req.body was not a valid object. Type: ${typeof req.body}, IsArray: ${Array.isArray(req.body)}. Defaulting to empty object for safety, but this indicates an upstream issue.`);
+        productDataToUse = {}; // Default to an empty object to prevent TypeError on hasOwnProperty
+    }
+    console.log('[DEBUG adminProducts PUT processed] productDataToUse:', productDataToUse);
+    // --- End Debugging and Defaulting req.body ---
+
 
     // Determine if image removal is intended based on image_url field
     // If image_url is explicitly set to null in the request, it means remove.
-    // If image_url is not in productData, and no new file is uploaded, existing image is kept.
+    // If image_url is not in productDataToUse, and no new file is uploaded, existing image is kept.
     // Use Object.prototype.hasOwnProperty.call for robustness
-    const removeImageFlag = Object.prototype.hasOwnProperty.call(productData, 'image_url') && productData.image_url === null;
+    const removeImageFlag = Object.prototype.hasOwnProperty.call(productDataToUse, 'image_url') && productDataToUse.image_url === null;
 
     try {
       const updatedProductDetails = await productService.updateProduct(
         productId,
-        productData,
+        productDataToUse, // Use the processed and defaulted productDataToUse
         fileData,
         removeImageFlag
       );
@@ -322,7 +334,7 @@ router.put(
         { userId: req.user.userId, userEmail: req.user.email },
         { resourceType: 'PRODUCT', resourceId: updatedProductDetails.id },
         {
-          inputData: productData, // Log what was sent in request
+          inputData: productDataToUse, // Log the processed productDataToUse
           updatedProductSummary: { id: updatedProductDetails.id, name: updatedProductDetails.name, sku: updatedProductDetails.sku }
         },
         req
