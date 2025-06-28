@@ -312,7 +312,10 @@ This section outlines the primary driver for future backend development, based o
     - [X] Order is delivered (Covered by 'Order Delivered' email notification)
 - **QR Code for Delivery Confirmation**
   - New feature:
-    - [ ] Attach a QR code to each invoice
+    - [X] Attach a QR code to each invoice
+      - [X] `orderService.getOrderDetailsForPdf` updated to generate a `delivery_confirmation_qr_url`.
+      - [X] `pdfService` updated to generate QR code from this URL and embed it in the invoice PDF.
+      - [ ] Token storage & verification for the QR URL endpoint is a future step (part of "Triggers delivery confirmation").
     - [ ] Delivery person scans QR at hand-off
     - [ ] Triggers delivery confirmation in system
 

@@ -274,14 +274,17 @@ const config = require('../config'); // For company details, QR code base URL
  * @throws {AppError} If database operation fails.
  */
 async function getOrderDetailsForPdf(orderId, type) {
+const crypto = require('crypto'); // Added for token generation
+
+async function getOrderDetailsForPdf(orderId, type) {
   try {
     const orderQuery = `
       SELECT
         o.*,
         u.email as user_email,
-        u.name as user_name, // Assuming 'name' field exists on users for customer name
-        u.first_name as user_first_name, // For packing slip if 'name' is full name
-        u.last_name as user_last_name   // For packing slip
+        u.name as user_name,
+        u.first_name as user_first_name,
+        u.last_name as user_last_name
       FROM orders o
       LEFT JOIN users u ON o.user_id = u.id
       WHERE o.id = $1;
@@ -307,7 +310,7 @@ async function getOrderDetailsForPdf(orderId, type) {
         tc.name AS tax_class_name_at_purchase,
         oi.line_item_tax_amount,
         oi.applied_tax_rate_percentage,
-        pv.id as product_variant_id -- for fetching variant option details
+        pv.id as product_variant_id
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       LEFT JOIN product_variants pv ON oi.product_variant_id = pv.id
@@ -321,8 +324,7 @@ async function getOrderDetailsForPdf(orderId, type) {
     for (const item of itemsResult.rows) {
       let variant_description = null;
       if (item.product_variant_id) {
-        // Re-use internal helper from productService if possible, or replicate logic
-        const optionDetails = await _getVariantOptionDetails(item.product_variant_id, db); // db is the pool here
+        const optionDetails = await _getVariantOptionDetails(item.product_variant_id, db);
         variant_description = optionDetails.map(opt => `${opt.option_name}: ${opt.option_value_name}`).join(', ');
       }
       processedItems.push({
@@ -331,13 +333,12 @@ async function getOrderDetailsForPdf(orderId, type) {
         line_item_tax_amount: item.line_item_tax_amount ? parseFloat(item.line_item_tax_amount) : 0,
         applied_tax_rate_percentage: item.applied_tax_rate_percentage ? parseFloat(item.applied_tax_rate_percentage) : null,
         display_sku: item.variant_sku || item.base_product_sku || 'N/A',
-        image_url: item.variant_image_url || item.base_product_image_url, // Prioritize variant image
+        image_url: item.variant_image_url || item.base_product_image_url,
         variant_description
       });
     }
     orderData.items = processedItems;
 
-    // Add company details from config
     orderData.company_name = config.company.name;
     orderData.company_address = config.company.address;
     orderData.company_logo_url = config.company.logoUrl;
@@ -345,18 +346,24 @@ async function getOrderDetailsForPdf(orderId, type) {
     orderData.company_email = config.company.email;
     orderData.company_website = config.company.website;
 
-    // Add customer name for packing slip if not already full name
     orderData.customer_name_for_slip = (orderData.user_first_name || orderData.user_last_name)
         ? `${orderData.user_first_name || ''} ${orderData.user_last_name || ''}`.trim()
         : orderData.user_name;
 
-
-    // Add QR code URL for invoice
+    // Generate and add delivery confirmation QR URL if type is 'invoice'
+    // This token is for the QR code that the delivery person would scan.
+    // The existing invoice_qr_code_url was for customer viewing their invoice online.
     if (type === 'invoice' && orderData.id) {
-        // This token generation should ideally be more secure or tied to a session/DB record if it's for public access
-        const crypto = require('crypto');
-        const token = crypto.randomBytes(8).toString('hex');
-        orderData.invoice_qr_code_url = `${config.frontendInvoiceViewUrlBase || config.frontendUrlBase + '/invoices'}/${orderData.id}?token=${token}`;
+        const deliveryToken = crypto.randomBytes(16).toString('hex'); // More secure token
+        const appBaseUrl = config.appBaseUrl || `${config.protocol || 'http'}://${config.host}:${config.port || 3000}`; // Construct if not directly available
+        orderData.delivery_confirmation_qr_url = `${appBaseUrl}/api/public/delivery/confirm?orderId=${orderData.id}&token=${deliveryToken}`;
+
+        // For customer viewing invoice (if different or also needed)
+        const customerInvoiceViewToken = crypto.randomBytes(8).toString('hex'); // Shorter, different purpose
+        orderData.invoice_qr_code_url = `${config.frontendInvoiceViewUrlBase || config.frontendUrlBase + '/invoices'}/${orderData.id}?token=${customerInvoiceViewToken}`;
+
+        // TODO: Consider if deliveryToken needs to be stored in the `orders` table for later verification.
+        // For now, it's generated dynamically for the QR code. The actual verification endpoint would need a way to validate it.
     }
 
     return orderData;

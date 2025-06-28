@@ -376,6 +376,12 @@ function getInvoiceHtml(orderDetails) {
 
         <footer>
           <p>Thank you for your business!</p>
+          ${orderDetails.delivery_confirmation_qr_url ?
+            `<div>
+               <img src="${orderDetails.delivery_confirmation_qr_code_data_url || ''}" alt="Delivery Confirmation QR Code" style="margin: 10px auto; display: block; width: 100px; height: 100px;">
+               <p style="font-size: 9px;">Scan for delivery confirmation</p>
+             </div>` : ''
+          }
           <p>${companyName} - ${new Date().getFullYear()}</p>
         </footer>
       </div>
@@ -387,7 +393,16 @@ function getInvoiceHtml(orderDetails) {
 async function generateOrderInvoicePdf(orderDetails) {
   let browser = null;
   try {
-    const htmlContent = getInvoiceHtml(orderDetails);
+    let finalOrderDetails = { ...orderDetails }; // Clone to potentially add QR image data
+
+    if (finalOrderDetails.delivery_confirmation_qr_url) {
+      const qrImageDataUrl = await generateQrCodeDataURL(finalOrderDetails.delivery_confirmation_qr_url);
+      if (qrImageDataUrl) {
+        finalOrderDetails.delivery_confirmation_qr_code_data_url = qrImageDataUrl;
+      }
+    }
+
+    const htmlContent = getInvoiceHtml(finalOrderDetails);
 
     browser = await puppeteer.launch({
         headless: true,
