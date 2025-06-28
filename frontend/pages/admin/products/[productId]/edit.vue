@@ -132,7 +132,8 @@ async function fetchCategories() {
 }
 async function fetchSuppliers() {
   try {
-    const response = await $axios.get('/admin/suppliers?limit=1000');
+    // Changed limit from 1000 to 100 to match backend validation max limit
+    const response = await $axios.get('/admin/suppliers?limit=100');
     return response.data.data || response.data;
   } catch (error) { console.error('Error fetching suppliers:', error); throw new Error('Failed to load suppliers.'); }
 }
