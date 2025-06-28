@@ -308,8 +308,8 @@ This section outlines the primary driver for future backend development, based o
     - [ ] Review if PDF invoice content itself needs theming/updates.
 - **Tracking Updates**
   - Email customer when:
-    - [ ] Order is dispatched (with tracking link or number)
-    - [ ] Order is delivered
+    - [X] Order is dispatched (with tracking link or number) (Covered by 'Order Dispatched' email notification)
+    - [X] Order is delivered (Covered by 'Order Delivered' email notification)
 - **QR Code for Delivery Confirmation**
   - New feature:
     - [ ] Attach a QR code to each invoice
