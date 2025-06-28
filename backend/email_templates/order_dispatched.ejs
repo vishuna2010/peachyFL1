@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your <%= siteName %> Order #<%= order.id %> Has Shipped!</title>
+  <style>
+    body {
+      font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+      color: #333333;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .email-container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #ffffff;
+      border: 1px solid #dddddd;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .header {
+      background-color: #007bff; /* Placeholder Primary Color - e.g., a professional blue */
+      color: #ffffff;
+      padding: 20px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 22px; /* Slightly smaller for notification emails */
+    }
+    .content {
+      padding: 25px 30px;
+      text-align: left;
+      line-height: 1.6;
+    }
+    .content h2 {
+      color: #0056b3; /* Darker shade of primary for headings */
+      margin-top: 0;
+      font-size: 20px;
+    }
+    .content p {
+      margin: 0 0 15px 0;
+    }
+    .tracking-info {
+      background-color: #f8f9fa; /* Light grey background */
+      padding: 15px;
+      border: 1px solid #e9ecef; /* Softer border */
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+    .tracking-info p {
+      margin-bottom: 8px;
+      font-size: 1em;
+    }
+    .tracking-info strong {
+      color: #343a40; /* Darker text for labels */
+    }
+    .button-container {
+        text-align: center;
+        margin-top: 20px;
+        margin-bottom: 15px;
+    }
+    .button {
+      display: inline-block;
+      background-color: #28a745; /* Placeholder Accent Color - e.g., a success green */
+      color: #ffffff !important;
+      padding: 12px 25px;
+      text-decoration: none;
+      border-radius: 5px;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .item-list {
+      margin-top: 20px;
+      padding-left: 0;
+      list-style-type: none;
+    }
+    .item-list li {
+      border-bottom: 1px solid #eeeeee;
+      padding: 10px 0;
+      font-size: 0.95em;
+    }
+    .item-list li:last-child {
+      border-bottom: none;
+    }
+    .footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 0.85em;
+      color: #6c757d; /* Placeholder Secondary Color - grey */
+      background-color: #f8f9fa;
+      border-top: 1px solid #e9ecef;
+    }
+    .footer p {
+      margin: 5px 0;
+    }
+    a {
+      color: #007bff; /* Link color matching primary */
+      text-decoration: underline;
+    }
+    .site-name {
+        font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">
+      <h1>Great News, <%= userName %>!</h1>
+    </div>
+    <div class="content">
+      <h2>Your <%= siteName %> Order #<%= order.id %> Has Shipped!</h2>
+      <p>We're excited to let you know that your recent order from <span class="site-name"><%= siteName %></span> has been dispatched and is on its way to you.</p>
+
+      <% if (order.shipping_carrier && order.tracking_number) { %>
+      <div class="tracking-info">
+        <p><strong>Carrier:</strong> <%= order.shipping_carrier %></p>
+        <p><strong>Tracking Number:</strong> <%= order.tracking_number %></p>
+        <% if (order.tracking_link) { %>
+          <div class="button-container">
+            <a href="<%= order.tracking_link %>" class="button">Track Your Shipment</a>
+          </div>
+        <% } %>
+      </div>
+      <% } %>
+
+      <% if (order.estimated_delivery_date) { %>
+        <p><strong>Estimated Delivery:</strong> <%= new Date(order.estimated_delivery_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %></p>
+      <% } %>
+
+      <h3>Shipping To:</h3>
+      <p>
+        <%= userName %><br>
+        <%= order.shipping_address_line1 %><br>
+        <% if (order.shipping_address_line2) { %><%= order.shipping_address_line2 %><br><% } %>
+        <%= order.shipping_city %>, <%= order.shipping_state_province_region ? order.shipping_state_province_region + ' ' : '' %><%= order.shipping_postal_code %><br>
+        <%= order.shipping_country %>
+      </p>
+
+      <% if (order.items && order.items.length > 0) { %>
+        <h3>Items in this Shipment:</h3>
+        <ul class="item-list">
+          <% order.items.forEach(function(item) { %>
+            <li>
+              <%= item.product_name_at_purchase || item.name %>
+              <% if (item.product_sku_at_purchase) { %>(SKU: <%= item.product_sku_at_purchase %>)<% } %>
+              - Qty: <%= item.quantity %>
+            </li>
+          <% }); %>
+        </ul>
+      <% } %>
+
+      <p>If you have any questions about your order, please don't hesitate to <a href="mailto:<%= supportEmail %>">contact us</a> or reply to this email.</p>
+      <p>Thank you for shopping with <span class="site-name"><%= siteName %></span>!</p>
+    </div>
+    <div class="footer">
+      <p>&copy; <%= new Date().getFullYear() %> <span class="site-name"><%= siteName %></span>. All rights reserved.</p>
+      <% if (typeof companyAddress !== 'undefined' && companyAddress) { %>
+        <p><%= companyAddress %></p>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

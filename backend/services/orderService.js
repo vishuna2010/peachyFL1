@@ -128,11 +128,13 @@ const ALLOWED_PAYMENT_STATUSES = ['pending', 'paid', 'partially_paid', 'refunded
  * @throws {BadRequestError} If status values are invalid or no updatable fields provided.
  * @throws {AppError} For other DB errors.
  */
-async function updateOrderStatus(orderId, data, adminUserId /* for potential future use in audit within service */) {
-  const { status: newStatus, payment_status: newPaymentStatus } = data;
+const emailService = require('./emailService'); // Import emailService
 
-  if (!newStatus && !newPaymentStatus) {
-    throw new BadRequestError('At least one of status or payment_status is required for update.');
+async function updateOrderStatus(orderId, data, adminUserId /* for potential future use in audit within service */) {
+  const { status: newStatus, payment_status: newPaymentStatus, shipping_carrier, tracking_number } = data;
+
+  if (!newStatus && !newPaymentStatus && !shipping_carrier && !tracking_number) {
+    throw new BadRequestError('At least one of status, payment_status, shipping_carrier, or tracking_number is required for update.');
   }
   if (newStatus && !ALLOWED_ORDER_STATUSES.includes(newStatus.toLowerCase())) {
     throw new BadRequestError(`Invalid order status. Allowed: ${ALLOWED_ORDER_STATUSES.join(', ')}`);
@@ -192,14 +194,64 @@ async function updateOrderStatus(orderId, data, adminUserId /* for potential fut
 
     const updateQuery = `UPDATE orders SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *;`;
     const updatedOrderResult = await client.query(updateQuery, queryParams);
+    const updatedOrder = updatedOrderResult.rows[0];
 
     await client.query('COMMIT');
-    // The RETURNING * gives the full order, but getAdminOrderById ensures consistent structure with items.
-    // For this specific method, returning the direct result of RETURNING * is fine as items aren't modified.
-    return updatedOrderResult.rows[0];
+
+    // If status changed to 'shipped', send dispatch email
+    if (newStatus && newStatus.toLowerCase() === 'shipped' && updatedOrder) {
+      try {
+        const userDetailsQuery = await db.query('SELECT email, name FROM users WHERE id = $1', [updatedOrder.user_id]);
+        if (userDetailsQuery.rows.length > 0) {
+          const user = userDetailsQuery.rows[0];
+          let tracking_link = null;
+          if (updatedOrder.shipping_carrier && updatedOrder.tracking_number) {
+            if (updatedOrder.shipping_carrier.toLowerCase().includes('fedex')) {
+                tracking_link = `https://www.fedex.com/fedextrack/?trknbr=${updatedOrder.tracking_number}`;
+            } else if (updatedOrder.shipping_carrier.toLowerCase().includes('ups')) {
+                tracking_link = `https://www.ups.com/track?loc=en_US&tracknum=${updatedOrder.tracking_number}`;
+            } else if (updatedOrder.shipping_carrier.toLowerCase().includes('usps')) {
+                tracking_link = `https://tools.usps.com/go/TrackConfirmAction?qtc_tLabels1=${updatedOrder.tracking_number}`;
+            } else {
+                tracking_link = `https://www.google.com/search?q=${encodeURIComponent(updatedOrder.shipping_carrier + ' ' + updatedOrder.tracking_number)}`;
+            }
+          }
+          const itemsResult = await db.query(`SELECT oi.product_name_at_purchase, oi.quantity FROM order_items oi WHERE oi.order_id = $1`, [updatedOrder.id]);
+          const emailOrderDetails = { ...updatedOrder, items: itemsResult.rows, tracking_link };
+          emailService.sendOrderDispatchedEmail(user.email, user.name || user.email.split('@')[0], emailOrderDetails)
+            .then(emailRes => console.log(emailRes.success ? `Order dispatched email sent for order ${updatedOrder.id}` : `Failed to send dispatch email for order ${updatedOrder.id}: ${emailRes.error}`))
+            .catch(err => console.error(`Error dispatching order dispatched email for ${updatedOrder.id}:`, err));
+        } else {
+            console.warn(`User details not found for user ID ${updatedOrder.user_id} (Order ID ${updatedOrder.id}) - dispatch email not sent.`);
+        }
+      } catch (emailError) {
+        console.error(`Error preparing/sending order dispatched email for order ${updatedOrder.id}:`, emailError);
+      }
+    }
+
+    // If status changed to 'delivered', send delivered email
+    if (newStatus && newStatus.toLowerCase() === 'delivered' && updatedOrder) {
+        try {
+            const userDetailsQuery = await db.query('SELECT email, name FROM users WHERE id = $1', [updatedOrder.user_id]);
+            if (userDetailsQuery.rows.length > 0) {
+                const user = userDetailsQuery.rows[0];
+                const itemsResult = await db.query(`SELECT oi.product_name_at_purchase, oi.quantity FROM order_items oi WHERE oi.order_id = $1`, [updatedOrder.id]);
+                // reviewLink and viewOrderLink will be constructed by emailService using frontendUrlBase and order.id
+                const emailOrderDetails = { ...updatedOrder, items: itemsResult.rows };
+                emailService.sendOrderDeliveredEmail(user.email, user.name || user.email.split('@')[0], emailOrderDetails)
+                    .then(emailRes => console.log(emailRes.success ? `Order delivered email sent for order ${updatedOrder.id}` : `Failed to send delivered email for order ${updatedOrder.id}: ${emailRes.error}`))
+                    .catch(err => console.error(`Error dispatching order delivered email for ${updatedOrder.id}:`, err));
+            } else {
+                 console.warn(`User details not found for user ID ${updatedOrder.user_id} (Order ID ${updatedOrder.id}) - delivered email not sent.`);
+            }
+        } catch (emailError) {
+            console.error(`Error preparing/sending order delivered email for order ${updatedOrder.id}:`, emailError);
+        }
+    }
+    return updatedOrder;
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (client) await client.query('ROLLBACK'); // Ensure rollback if client was connected
     if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof AppError) {
       throw error;
     }

@@ -306,7 +306,10 @@ module.exports = {
   getRefundConfirmationHtml,
   getRefundConfirmationText,
   sendWelcomeEmail,
-  sendEmailVerificationCode, // Added new function
+  sendEmailVerificationCode,
+  sendOrderDispatchedEmail,
+  sendOrderDeliveredEmail,
+  sendInvoiceEmail, // Added new function
   // For testing/debugging if needed:
   // getTestTransporter,
 };
@@ -372,6 +375,239 @@ ${companyAddress}
     return { success: false, error: `Failed to send welcome email: ${error.message}` };
   }
 }
+
+// --- Invoice Email Function ---
+/**
+ * Sends an invoice email with PDF attachment to a user.
+ * @param {string} toEmail - The recipient's email address.
+ * @param {string} userName - The name of the user.
+ * @param {string|number} orderId - The ID of the order.
+ * @param {string} siteName - The name of the site/company.
+ * @param {Buffer} pdfBuffer - The buffer containing the PDF invoice.
+ * @param {string} pdfFileName - The desired filename for the PDF attachment.
+ * @param {object} [optionalData] - Optional data for the email body template e.g. { orderTotal, currencySymbol, viewOrderLink, supportEmail, companyAddress }
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendInvoiceEmail(toEmail, userName, orderId, siteName, pdfBuffer, pdfFileName, optionalData = {}) {
+  try {
+    const {
+      orderTotal,
+      currencySymbol = '$', // Default currency symbol
+      viewOrderLink,
+      supportEmail = config.email.supportAddress || config.email.fromAddress,
+      companyAddress = config.company.address || ''
+    } = optionalData;
+
+    const templatePath = path.join(__dirname, '..', 'email_templates', 'invoice_email.ejs');
+    const templateContent = fs.readFileSync(templatePath, 'utf-8');
+    const htmlContent = ejs.render(templateContent, {
+      siteName,
+      userName,
+      orderId,
+      orderTotal: orderTotal ? parseFloat(orderTotal).toFixed(2) : undefined,
+      currencySymbol,
+      viewOrderLink,
+      supportEmail,
+      companyAddress,
+    });
+
+    const textContent = `
+Dear ${userName},
+
+Thank you for your order! Please find your invoice for Order #${orderId} attached.
+
+${orderTotal ? `Order Total: ${currencySymbol}${parseFloat(orderTotal).toFixed(2)}` : ''}
+${viewOrderLink ? `You can also view your order details online: ${viewOrderLink}` : ''}
+
+If you have any questions regarding your invoice or order, please contact our support team at ${supportEmail}.
+
+We appreciate your business!
+
+Sincerely,
+The ${siteName} Team
+
+---
+&copy; ${new Date().getFullYear()} ${siteName}. All rights reserved.
+${companyAddress}
+    `.trim();
+
+    return sendEmail({
+      to: toEmail,
+      subject: `Your Invoice for Order #${orderId} from ${siteName}`,
+      text: textContent,
+      html: htmlContent,
+      attachments: [{
+        filename: pdfFileName,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }]
+    });
+
+  } catch (error) {
+    console.error(`Error preparing or sending invoice email to ${toEmail} for order #${orderId}:`, error);
+    return { success: false, error: `Failed to send invoice email: ${error.message}` };
+  }
+}
+
+
+// --- Order Delivered Email Function ---
+/**
+ * Sends an order delivered email to a user.
+ * @param {string} toEmail - The recipient's email address.
+ * @param {string} userName - The name of the user.
+ * @param {object} orderDetails - Object containing order details (id, items, reviewLink, viewOrderLink etc.)
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendOrderDeliveredEmail(toEmail, userName, orderDetails) {
+  try {
+    const siteName = config.company.name || 'Our Platform';
+    const supportEmail = config.email.supportAddress || config.email.fromAddress;
+    const companyAddress = config.company.address || '';
+
+    // Ensure orderDetails.items exists and is an array for the template
+    const itemsForTemplate = (orderDetails.items && Array.isArray(orderDetails.items)) ? orderDetails.items : [];
+
+    // Construct default links if not provided, based on frontend structure
+    const baseFrontendUrl = config.frontendUrlBase || 'http://localhost:3000';
+    const reviewLink = orderDetails.reviewLink || `${baseFrontendUrl}/profile/orders/${orderDetails.id}?action=review`; // Example link
+    const viewOrderLink = orderDetails.viewOrderLink || `${baseFrontendUrl}/profile/orders/${orderDetails.id}`;
+
+
+    const templatePath = path.join(__dirname, '..', 'email_templates', 'order_delivered.ejs');
+    const templateContent = fs.readFileSync(templatePath, 'utf-8');
+    const htmlContent = ejs.render(templateContent, {
+      siteName,
+      userName,
+      order: { // Nest orderDetails under 'order' as expected by the template
+        ...orderDetails,
+        items: itemsForTemplate,
+        reviewLink,
+        viewOrderLink
+      },
+      supportEmail,
+      companyAddress,
+    });
+
+    // Basic plain text version
+    let textItemsSummary = "Items in this order:\n";
+    itemsForTemplate.forEach(item => {
+      textItemsSummary += `- ${item.product_name_at_purchase || item.name} (Qty: ${item.quantity})\n`;
+    });
+     if (itemsForTemplate.length === 0) {
+        textItemsSummary = "Your order items have been delivered.\n";
+    }
+
+    const textContent = `
+Hi ${userName},
+
+Good news! Your ${siteName} order #${orderDetails.id} has been successfully delivered.
+
+We hope you love your purchase! We'd love to hear your thoughts:
+Review Your Products: ${reviewLink}
+
+${textItemsSummary}
+View your full order details here: ${viewOrderLink}
+
+If you have any questions, please contact us at ${supportEmail}.
+
+Thank you for choosing ${siteName}!
+---
+&copy; ${new Date().getFullYear()} ${siteName}. All rights reserved.
+${companyAddress}
+    `.trim();
+
+    return sendEmail({
+      to: toEmail,
+      subject: `Your ${siteName} Order #${orderDetails.id} Has Been Delivered!`,
+      text: textContent,
+      html: htmlContent,
+    });
+
+  } catch (error) {
+    console.error(`Error preparing or sending order delivered email to ${toEmail} for order #${orderDetails.id}:`, error);
+    return { success: false, error: `Failed to send order delivered email: ${error.message}` };
+  }
+}
+
+
+// --- Order Dispatched Email Function ---
+/**
+ * Sends an order dispatched/shipped email to a user.
+ * @param {string} toEmail - The recipient's email address.
+ * @param {string} userName - The name of the user.
+ * @param {object} orderDetails - Object containing order details (id, items, shipping_carrier, tracking_number, tracking_link, shipping_address_*, etc.)
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendOrderDispatchedEmail(toEmail, userName, orderDetails) {
+  try {
+    const siteName = config.company.name || 'Our Platform';
+    const supportEmail = config.email.supportAddress || config.email.fromAddress;
+    const companyAddress = config.company.address || '';
+
+    // Ensure orderDetails.items exists and is an array for the template
+    const itemsForTemplate = (orderDetails.items && Array.isArray(orderDetails.items)) ? orderDetails.items : [];
+
+    const templatePath = path.join(__dirname, '..', 'email_templates', 'order_dispatched.ejs');
+    const templateContent = fs.readFileSync(templatePath, 'utf-8');
+    const htmlContent = ejs.render(templateContent, {
+      siteName,
+      userName,
+      order: { // Nest orderDetails under 'order' as expected by the template
+        ...orderDetails,
+        items: itemsForTemplate
+      },
+      supportEmail,
+      companyAddress,
+    });
+
+    // Basic plain text version
+    let textItemsSummary = "Items in this shipment:\n";
+    itemsForTemplate.forEach(item => {
+      textItemsSummary += `- ${item.product_name_at_purchase || item.name} - Qty: ${item.quantity}\n`;
+    });
+    if (itemsForTemplate.length === 0) {
+        textItemsSummary = "Your order items have been dispatched.\n";
+    }
+
+    const textContent = `
+Hi ${userName},
+
+Great news! Your order #${orderDetails.id} from ${siteName} has been dispatched.
+${orderDetails.shipping_carrier && orderDetails.tracking_number ? `
+Carrier: ${orderDetails.shipping_carrier}
+Tracking Number: ${orderDetails.tracking_number}` : ''}
+${orderDetails.tracking_link ? `Track Your Shipment: ${orderDetails.tracking_link}` : ''}
+${orderDetails.estimated_delivery_date ? `Estimated Delivery: ${new Date(orderDetails.estimated_delivery_date).toLocaleDateString()}` : ''}
+
+Shipping To:
+${userName}
+${orderDetails.shipping_address_line1 || ''}
+${orderDetails.shipping_address_line2 || ''}
+${orderDetails.shipping_city || ''}, ${orderDetails.shipping_state_province_region || ''} ${orderDetails.shipping_postal_code || ''}
+${orderDetails.shipping_country || ''}
+
+${textItemsSummary}
+If you have any questions, please contact us at ${supportEmail}.
+
+Thank you for shopping with ${siteName}!
+---
+&copy; ${new Date().getFullYear()} ${siteName}. All rights reserved.
+${companyAddress}
+    `.trim();
+
+    return sendEmail({
+      to: toEmail,
+      subject: `Your ${siteName} Order #${orderDetails.id} Has Shipped!`,
+      text: textContent,
+      html: htmlContent,
+    });
+
+  } catch (error) {
+    console.error(`Error preparing or sending order dispatched email to ${toEmail} for order #${orderDetails.id}:`, error);
+    return { success: false, error: `Failed to send order dispatched email: ${error.message}` };
+  }
+}
+
 
 // --- Email Verification Code Function ---
 /**

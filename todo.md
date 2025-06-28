@@ -286,11 +286,26 @@ This section outlines the primary driver for future backend development, based o
     - [X] Welcome email now sent *after* successful email verification.
 - **Order Notifications**
   - Email customer when:
-    - [ ] Order is placed
-    - [ ] Order is dispatched
-    - [ ] Order is delivered
+    - [X] Order is placed (covered by existing Order Confirmation email sent after successful order creation)
+    - [X] Order is dispatched
+      - [X] EJS template `order_dispatched.ejs` created.
+      - [X] `emailService.sendOrderDispatchedEmail` function implemented.
+      - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'shipped'.
+      - [X] `orders` table schema in `seed.js` updated with `shipping_carrier`, `tracking_number`.
+      - [X] Admin route `PUT /admin/orders/:id/status` and validators updated for tracking info.
+      - [ ] Theming with site colors pending user input for color codes.
+    - [X] Order is delivered
+      - [X] EJS template `order_delivered.ejs` created.
+      - [X] `emailService.sendOrderDeliveredEmail` function implemented.
+      - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'delivered'.
+      - [ ] Theming with site colors pending user input for color codes.
 - **Invoice Notifications**
-  - [ ] Automatically generate and email invoices to customers upon order confirmation
+  - [~] Automatically generate and email invoices to customers upon order confirmation
+    - [X] EJS template `invoice_email.ejs` for email body created.
+    - [X] `emailService.sendInvoiceEmail` function implemented to send email with PDF attachment.
+    - [X] Integrated into `POST /api/orders` route: after order creation, PDF is generated and invoice email is sent.
+    - [ ] Theming of email body template pending user input for site colors.
+    - [ ] Review if PDF invoice content itself needs theming/updates.
 - **Tracking Updates**
   - Email customer when:
     - [ ] Order is dispatched (with tracking link or number)
