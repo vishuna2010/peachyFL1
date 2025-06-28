@@ -94,11 +94,17 @@ export const useCart = () => {
           }
           return isValidProductId && isValidQuantity && isValidPrice;
         })
-        .map(item => ({
-          productId: item.productId,
-          variantId: item.variantId || null,
-          quantity: item.quantity,
-          price: parseFloat(item.price.toFixed(2)) // Ensure price is correctly formatted float
+        .map(item => {
+          const mappedItem = {
+            productId: item.productId,
+            quantity: item.quantity,
+            price: parseFloat(item.price.toFixed(2)) // Ensure price is correctly formatted float
+          };
+          // Only include variantId if it's a positive integer
+          if (typeof item.variantId === 'number' && item.variantId > 0) {
+            mappedItem.variantId = item.variantId;
+          }
+          return mappedItem;
         }));
 
       // If, after filtering, itemsToTax is empty but the original cart was not, it means all items were invalid.
