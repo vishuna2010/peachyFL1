@@ -377,8 +377,14 @@ This section outlines the primary driver for future backend development, based o
     - [X] Created `marketingService.js` with `sendPromotionalEmailToSegment` to orchestrate sending to a user list.
     - [X] Created `POST /api/admin/marketing/send-promo-email` endpoint in `adminMarketing.js`.
     - [X] Endpoint includes validation, auth, and permission check (`marketing:send_emails`).
-    - [ ] Note: `marketing:send_emails` permission needs to be defined in the RBAC system.
-    - [ ] Note: UI integration for admin panel is pending.
+    - [X] Note: `marketing:send_emails` permission defined and assigned to Super Admin in `seed.js`.
+  - [~] Admin Panel UI for Marketing Emails (Initial Version)
+    - [X] Added "Marketing" link to Admin Sidebar (`AdminSidebar.vue`), visible with `marketing:send_emails` permission.
+    - [X] Created basic Marketing page structure (`frontend/pages/admin/marketing/index.vue`) with admin layout and RBAC.
+    - [X] Implemented "Send Promotional Email" form UI with fields for subject, title, message, CTA.
+    - [X] Implemented API call logic from UI to `POST /api/admin/marketing/send-promo-email` endpoint.
+    - [X] Basic success/error message display on UI based on API response.
+    - [ ] Advanced UI features (e.g., template selection, segment selection, preview) pending.
   - [ ] (Future) Tracking for marketing emails (opens, clicks).
   - [ ] (Future) Unsubscribe mechanism for marketing emails.
 
