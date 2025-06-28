@@ -147,7 +147,9 @@ This section outlines the primary driver for future backend development, based o
           - [X] Added validation for `/low-stock-products` (page, limit, categoryId, supplierId, sortBy, sortOrder).
           - [X] Added validation for `/sales` (optional status, paymentStatus, productId, customerId).
           - [X] Confirmed existing validations for other report routes are adequate.
-        - [ ] Admin Stock Adjustments module (`adminStockAdjustments.js`)
+        - [X] Admin Stock Adjustments module (`adminStockAdjustments.js`)
+          - [X] Reviewed existing validation for routes `/adjust` and `/physical-count`.
+          - [X] Added `isLength({ min: 1, max: 255 })` validation to `reason` fields.
         - [ ] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route)
         - [ ] Admin Tax Classes module (`adminTaxClasses.js`)
         - [ ] Admin Tax Rates module (`adminTaxRates.js`)
