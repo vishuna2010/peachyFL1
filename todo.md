@@ -306,7 +306,10 @@ This section outlines the primary driver for future backend development, based o
     - [X] `emailService.sendInvoiceEmail` function implemented to send email with PDF attachment.
     - [X] Integrated into `POST /api/orders` route: after order creation, PDF is generated and invoice email is sent.
     - [X] Theming of email body template applied.
-    - [ ] Review if PDF invoice content itself needs theming/updates.
+    - [X] Review if PDF invoice content itself needs theming/updates.
+      - [X] Reviewed `pdfService.js` and `orderService.js` data preparation.
+      - [X] PDF invoice already uses theme colors subtly and professionally.
+      - [X] Made minor styling adjustment to "Order Items:" heading in PDF for consistency.
 - **Tracking Updates**
   - Email customer when:
     - [X] Order is dispatched (with tracking link or number) (Covered by 'Order Dispatched' email notification)

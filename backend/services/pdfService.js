@@ -295,6 +295,7 @@ function getInvoiceHtml(orderDetails) {
         .addresses .address-block { width: 48%; float: left; }
         .addresses .address-block.shipping { float: right; }
         .addresses h3 { margin-top: 0; margin-bottom: 8px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px; color: #26A7E2; } /* Sky Blue section titles */
+        h3.order-items-heading { margin-top: 20px; margin-bottom: 10px; font-size: 14px; border-bottom: 1px solid #eee; padding-bottom: 5px; color: #26A7E2; } /* Sky Blue for Order Items heading */
         table.items-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
         table.items-table th, table.items-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         table.items-table th { background-color: #26A7E2; color: white; font-weight: bold; } /* Sky Blue header, white text */
@@ -339,7 +340,7 @@ function getInvoiceHtml(orderDetails) {
           </div>
         </section>
 
-        <h3>Order Items:</h3>
+        <h3 class="order-items-heading">Order Items:</h3>
         <table class="items-table">
           <thead>
             <tr>
