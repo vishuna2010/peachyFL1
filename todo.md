@@ -140,7 +140,9 @@ This section outlines the primary driver for future backend development, based o
         - [X] Admin Users module (`adminUsers.js` - C/U/D, Role Update)
         - [X] Admin Orders module (`adminOrders.js` - List, GetByID, UpdateStatus, GetPDFData, ProcessRefund)
         - [X] Admin Purchase Orders module (`adminPurchaseOrders.js` - All existing routes)
-        - [ ] Admin Reviews module (`adminReviews.js`)
+        - [X] Admin Reviews module (`adminReviews.js`)
+          - [X] Reviewed existing comprehensive validation.
+          - [X] Added custom validator for `dateTo` >= `dateFrom` in list query.
         - [ ] Admin Reports module (`adminReports.js` - query parameters)
         - [ ] Admin Stock Adjustments module (`adminStockAdjustments.js`)
         - [ ] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route)
