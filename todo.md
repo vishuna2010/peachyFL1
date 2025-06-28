@@ -314,11 +314,17 @@ This section outlines the primary driver for future backend development, based o
 - **QR Code for Delivery Confirmation**
   - New feature:
     - [X] Attach a QR code to each invoice
-      - [X] `orderService.getOrderDetailsForPdf` updated to generate a `delivery_confirmation_qr_url`.
+      - [X] `orderService.getOrderDetailsForPdf` updated to generate a `delivery_confirmation_qr_url` using a deterministic HMAC token.
       - [X] `pdfService` updated to generate QR code from this URL and embed it in the invoice PDF.
-      - [ ] Token storage & verification for the QR URL endpoint is a future step (part of "Triggers delivery confirmation").
-    - [ ] Delivery person scans QR at hand-off
-    - [ ] Triggers delivery confirmation in system
+    - [ ] Delivery person scans QR at hand-off (Assumed physical process)
+    - [X] Triggers delivery confirmation in system
+      - [X] Created `GET /api/public/delivery/confirm` endpoint.
+      - [X] Endpoint validates `orderId` and HMAC `token`.
+      - [X] Updates order status to 'delivered' and sets `delivery_confirmed_at`.
+      - [X] Returns HTML response for success/failure.
+      - [X] Added `delivery_confirmed_at` to `orders` table schema.
+      - [X] Implemented `generateDeliveryConfirmationToken` and `validateDeliveryConfirmationToken` utilities.
+      - [X] Added `DELIVERY_CONFIRMATION_SECRET` to config.
 
 ---
 

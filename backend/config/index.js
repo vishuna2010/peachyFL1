@@ -58,6 +58,9 @@ const config = {
   // Logging configuration
   logLevel: process.env.LOG_LEVEL || 'info',
 
+  // Secret for QR Code Delivery Confirmation
+  deliveryConfirmationSecret: process.env.DELIVERY_CONFIRMATION_SECRET || 'default_super_secret_for_dev_only_change_this',
+
   // Ensure critical configurations are present
   checkCriticalConfig: function() {
     const criticalVars = ['DATABASE_URL', 'JWT_SECRET'];

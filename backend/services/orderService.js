@@ -273,8 +273,7 @@ const config = require('../config'); // For company details, QR code base URL
  * @throws {NotFoundError} If the order is not found.
  * @throws {AppError} If database operation fails.
  */
-async function getOrderDetailsForPdf(orderId, type) {
-const crypto = require('crypto'); // Added for token generation
+// const crypto = require('crypto'); // No longer needed here for random token, using utility
 
 async function getOrderDetailsForPdf(orderId, type) {
   try {
@@ -352,18 +351,19 @@ async function getOrderDetailsForPdf(orderId, type) {
 
     // Generate and add delivery confirmation QR URL if type is 'invoice'
     // This token is for the QR code that the delivery person would scan.
-    // The existing invoice_qr_code_url was for customer viewing their invoice online.
     if (type === 'invoice' && orderData.id) {
-        const deliveryToken = crypto.randomBytes(16).toString('hex'); // More secure token
-        const appBaseUrl = config.appBaseUrl || `${config.protocol || 'http'}://${config.host}:${config.port || 3000}`; // Construct if not directly available
+        const deliveryToken = generateDeliveryConfirmationToken(orderData.id); // Use the new utility
+        const appBaseUrl = config.frontendUrlBase; // Use frontendUrlBase as the base for API calls if not configured separately
         orderData.delivery_confirmation_qr_url = `${appBaseUrl}/api/public/delivery/confirm?orderId=${orderData.id}&token=${deliveryToken}`;
 
-        // For customer viewing invoice (if different or also needed)
-        const customerInvoiceViewToken = crypto.randomBytes(8).toString('hex'); // Shorter, different purpose
-        orderData.invoice_qr_code_url = `${config.frontendInvoiceViewUrlBase || config.frontendUrlBase + '/invoices'}/${orderData.id}?token=${customerInvoiceViewToken}`;
-
-        // TODO: Consider if deliveryToken needs to be stored in the `orders` table for later verification.
-        // For now, it's generated dynamically for the QR code. The actual verification endpoint would need a way to validate it.
+        // For customer viewing invoice (if different or also needed) - using a simpler, non-secure random token for this example
+        // This part remains as it was, using a simple random token for the customer-facing invoice link,
+        // as it's not part of the secure delivery confirmation flow.
+        const crypto = require('crypto'); // Keep crypto for this specific, non-secure token
+        const customerInvoiceViewToken = crypto.randomBytes(8).toString('hex');
+        orderData.invoice_qr_code_url = `${config.frontendInvoiceViewUrlBase || config.frontendUrlBase + '/invoices'}/${orderData.id}?view_token=${customerInvoiceViewToken}`;
+        // Note: The customerInvoiceViewToken is not validated by any backend endpoint in this example.
+        // It's just for making the URL unique if needed for caching or simple client-side checks.
     }
 
     return orderData;
@@ -547,6 +547,118 @@ async function processOrderRefund(orderId, refundInput, adminUserId) {
   }
 }
 
+/**
+ * Confirms the delivery of an order via QR code scan.
+ * Validates the token, checks order status, and updates it to 'delivered'.
+ * @param {string|number} orderId - The ID of the order to confirm.
+ * @param {string} providedToken - The token from the QR code URL.
+ * @returns {Promise<object>} An object with a success message and orderId.
+ * @throws {NotFoundError} If the order is not found.
+ * @throws {BadRequestError} If the token is invalid or the order cannot be confirmed.
+ * @throws {AppError} For other database errors.
+ */
+async function confirmOrderDelivery(orderId, providedToken) {
+  // 1. Validate Token
+  if (!validateDeliveryConfirmationToken(orderId, providedToken)) {
+    throw new BadRequestError('Invalid or expired delivery confirmation token.', 'INVALID_DELIVERY_TOKEN');
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 2. Fetch and Validate Order
+    const orderResult = await client.query(
+      'SELECT id, status, payment_status FROM orders WHERE id = $1 FOR UPDATE',
+      [orderId]
+    );
+
+    if (orderResult.rows.length === 0) {
+      throw new NotFoundError(`Order with ID ${orderId} not found.`);
+    }
+    const order = orderResult.rows[0];
+
+    if (order.status === 'delivered') {
+      // Optionally, could return a different success indicating already delivered,
+      // but for simplicity, treating as a successful confirmation of current state.
+      // Or throw new BadRequestError(`Order ${orderId} has already been marked as delivered.`, 'ORDER_ALREADY_DELIVERED');
+      await client.query('COMMIT'); // Commit to release lock if any was taken
+      return { success: true, message: `Order ${orderId} is already marked as delivered.`, orderId: order.id, status: order.status };
+    }
+
+    // Allow confirmation if status is 'shipped' or 'processing' (or any other valid pre-delivery status)
+    const validPreviousStatuses = ['shipped', 'processing', 'pending_delivery', 'out_for_delivery']; // Customize as needed
+    if (!validPreviousStatuses.includes(order.status.toLowerCase())) {
+      throw new BadRequestError(
+        `Order ${orderId} cannot be marked as delivered. Current status: ${order.status}. Expected: ${validPreviousStatuses.join('/')}.`,
+        'INVALID_ORDER_STATUS_FOR_DELIVERY'
+      );
+    }
+
+    // 3. Update Order Status
+    const newStatus = 'delivered';
+    const newPaymentStatus = (order.payment_status === 'pending' && order.status === 'shipped') ? 'paid' : order.payment_status; // Example: If COD and shipped, mark paid on delivery. Adjust as per payment logic.
+
+    const updateResult = await client.query(
+      `UPDATE orders
+       SET status = $1, payment_status = $2, delivery_confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING id, status, payment_status, delivery_confirmed_at;`,
+      [newStatus, newPaymentStatus, orderId]
+    );
+
+    const updatedOrder = updateResult.rows[0];
+
+    // Log this action (Simplified, could use auditLogService)
+    console.log(`Delivery confirmed for Order ID: ${orderId} at ${updatedOrder.delivery_confirmed_at}. New status: ${updatedOrder.status}, Payment Status: ${updatedOrder.payment_status}.`);
+    // Consider adding an audit log entry here if more detail is needed.
+
+    await client.query('COMMIT');
+
+    // 4. (Optional) Trigger "Order Delivered" Email
+    // This can be done here or rely on the general status update mechanism in updateOrderStatus if that's preferred.
+    // For atomicity, if this service function is the SOLE way to mark delivery via QR, sending email here is fine.
+    try {
+      const userDetailsQuery = await db.query('SELECT email, name FROM users WHERE id = (SELECT user_id FROM orders WHERE id = $1)', [orderId]);
+      if (userDetailsQuery.rows.length > 0) {
+        const user = userDetailsQuery.rows[0];
+        const itemsResult = await db.query(`SELECT oi.product_name_at_purchase, oi.quantity FROM order_items oi WHERE oi.order_id = $1`, [orderId]);
+        const emailOrderDetails = { ...updatedOrder, items: itemsResult.rows, user_id: (await db.query('SELECT user_id FROM orders WHERE id = $1', [orderId])).rows[0].user_id };
+
+        // Ensure emailService is available
+        if (emailService && typeof emailService.sendOrderDeliveredEmail === 'function') {
+            emailService.sendOrderDeliveredEmail(user.email, user.name || user.email.split('@')[0], emailOrderDetails)
+                .then(emailRes => console.log(emailRes.success ? `Order delivered email sent (QR confirm) for order ${orderId}` : `Failed to send delivered email (QR confirm) for order ${orderId}: ${emailRes.error}`))
+                .catch(err => console.error(`Error dispatching order delivered email (QR confirm) for ${orderId}:`, err));
+        } else {
+            console.warn('emailService or sendOrderDeliveredEmail not available for QR confirmation email.');
+        }
+      }
+    } catch (emailError) {
+      console.error(`Error preparing/sending order delivered email after QR confirmation for order ${orderId}:`, emailError);
+      // Do not let email failure roll back the transaction.
+    }
+
+    return {
+      success: true,
+      message: `Order ${orderId} successfully marked as delivered.`,
+      orderId: updatedOrder.id,
+      status: updatedOrder.status,
+      delivery_confirmed_at: updatedOrder.delivery_confirmed_at
+    };
+
+  } catch (error) {
+    if (client) await client.query('ROLLBACK');
+    if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof AppError) {
+      throw error;
+    }
+    console.error(`Error in orderService.confirmOrderDelivery for order ID ${orderId}:`, error);
+    throw new AppError(`Failed to confirm delivery for order ID ${orderId}.`, 500, 'DELIVERY_CONFIRMATION_FAILED');
+  } finally {
+    if (client) client.release();
+  }
+}
+
 
 module.exports = {
   getAllAdminOrders,
@@ -557,8 +669,10 @@ module.exports = {
   createPublicOrder, // Added new function
   getUserOrderHistory, // Added for user's order history
   getUserOrderDetails, // Added for user's specific order details
+  confirmOrderDelivery, // Added for QR code delivery confirmation
 };
 
+const { validateDeliveryConfirmationToken } = require('../utils/securityUtils'); // For QR Code
 const bcrypt = require('bcrypt');
 const taxService = require('./taxService'); // Assuming it's in the same directory
 // const { BadRequestError, ConflictError } = require('../utils/AppError'); // REMOVED - Consolidated at top
