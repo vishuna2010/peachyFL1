@@ -6,25 +6,26 @@
   <title>Your <%= siteName %> Order #<%= order.id %> Has Shipped!</title>
   <style>
     body {
-      font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+      font-family: Arial, sans-serif;
       margin: 0;
       padding: 0;
-      background-color: #f4f4f4;
+      background-color: #FFF5F8; /* Light Pastel */
       color: #333333;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
-    .email-container {
+    .container {
+      width: 100%;
       max-width: 600px;
       margin: 20px auto;
-      background-color: #ffffff;
-      border: 1px solid #dddddd;
+      background-color: #FFFFFF;
       border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
       overflow: hidden;
     }
     .header {
-      background-color: #007bff; /* Placeholder Primary Color - e.g., a professional blue */
-      color: #ffffff;
+      background-color: #FC7099; /* Peach Pink */
+      color: #FFFFFF;
       padding: 20px;
       text-align: center;
     }
@@ -34,21 +35,25 @@
     }
     .content {
       padding: 25px 30px;
-      text-align: left;
       line-height: 1.6;
     }
     .content h2 {
-      color: #0056b3; /* Darker shade of primary for headings */
+      color: #FC7099; /* Peach Pink for headings */
       margin-top: 0;
       font-size: 20px;
+    }
+    .content h3 {
+      color: #333333; /* Standard dark color for sub-sub-headings */
+      margin-top: 20px;
+      font-size: 18px;
     }
     .content p {
       margin: 0 0 15px 0;
     }
     .tracking-info {
-      background-color: #f8f9fa; /* Light grey background */
+      background-color: #FFF5F8; /* Light Pastel to blend with body, but framed by content area */
       padding: 15px;
-      border: 1px solid #e9ecef; /* Softer border */
+      border: 1px solid #F6A03C; /* Orange Gold border for accent */
       border-radius: 5px;
       margin: 20px 0;
     }
@@ -57,17 +62,17 @@
       font-size: 1em;
     }
     .tracking-info strong {
-      color: #343a40; /* Darker text for labels */
+      color: #333333;
     }
     .button-container {
         text-align: center;
         margin-top: 20px;
         margin-bottom: 15px;
     }
-    .button {
+    .button-link { /* For <a> tags styled as buttons */
       display: inline-block;
-      background-color: #28a745; /* Placeholder Accent Color - e.g., a success green */
-      color: #ffffff !important;
+      background-color: #FC7099; /* Peach Pink */
+      color: #FFFFFF !important;
       padding: 12px 25px;
       text-decoration: none;
       border-radius: 5px;
@@ -75,7 +80,7 @@
       font-size: 16px;
     }
     .item-list {
-      margin-top: 20px;
+      margin-top: 10px; /* Reduced margin */
       padding-left: 0;
       list-style-type: none;
     }
@@ -91,29 +96,35 @@
       text-align: center;
       padding: 20px;
       font-size: 0.85em;
-      color: #6c757d; /* Placeholder Secondary Color - grey */
-      background-color: #f8f9fa;
-      border-top: 1px solid #e9ecef;
+      color: #777777;
+      background-color: #FFF5F8; /* Light Pastel */
     }
     .footer p {
       margin: 5px 0;
     }
     a {
-      color: #007bff; /* Link color matching primary */
+      color: #FC7099; /* Peach Pink for links */
       text-decoration: underline;
+    }
+    a:hover {
+      text-decoration: none;
     }
     .site-name {
         font-weight: bold;
     }
+    .shipping-address p {
+      margin: 0 0 5px 0; /* Tighter spacing for address lines */
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
-  <div class="email-container">
+  <div class="container">
     <div class="header">
       <h1>Great News, <%= userName %>!</h1>
     </div>
     <div class="content">
-      <h2>Your <%= siteName %> Order #<%= order.id %> Has Shipped!</h2>
+      <h2>Your <span class="site-name"><%= siteName %></span> Order #<%= order.id %> Has Shipped!</h2>
       <p>We're excited to let you know that your recent order from <span class="site-name"><%= siteName %></span> has been dispatched and is on its way to you.</p>
 
       <% if (order.shipping_carrier && order.tracking_number) { %>
@@ -122,24 +133,26 @@
         <p><strong>Tracking Number:</strong> <%= order.tracking_number %></p>
         <% if (order.tracking_link) { %>
           <div class="button-container">
-            <a href="<%= order.tracking_link %>" class="button">Track Your Shipment</a>
+            <a href="<%= order.tracking_link %>" class="button-link">Track Your Shipment</a>
           </div>
         <% } %>
       </div>
       <% } %>
 
       <% if (order.estimated_delivery_date) { %>
-        <p><strong>Estimated Delivery:</strong> <%= new Date(order.estimated_delivery_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %></p>
+        <p><strong>Estimated Delivery:</strong> <span class="accent-text"><%= new Date(order.estimated_delivery_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %></span></p>
       <% } %>
 
       <h3>Shipping To:</h3>
-      <p>
-        <%= userName %><br>
-        <%= order.shipping_address_line1 %><br>
-        <% if (order.shipping_address_line2) { %><%= order.shipping_address_line2 %><br><% } %>
-        <%= order.shipping_city %>, <%= order.shipping_state_province_region ? order.shipping_state_province_region + ' ' : '' %><%= order.shipping_postal_code %><br>
-        <%= order.shipping_country %>
-      </p>
+      <div class="shipping-address">
+        <p>
+          <%= userName %><br>
+          <%= order.shipping_address_line1 %><br>
+          <% if (order.shipping_address_line2) { %><%= order.shipping_address_line2 %><br><% } %>
+          <%= order.shipping_city %>, <%= order.shipping_state_province_region ? order.shipping_state_province_region + ' ' : '' %><%= order.shipping_postal_code %><br>
+          <%= order.shipping_country %>
+        </p>
+      </div>
 
       <% if (order.items && order.items.length > 0) { %>
         <h3>Items in this Shipment:</h3>

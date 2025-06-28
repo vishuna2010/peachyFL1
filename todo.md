@@ -272,10 +272,11 @@ This section outlines the primary driver for future backend development, based o
 ---
 
 ## 🔔 Notifications & Email Features (To Implement & Verify)
+- [X] **Email Template Theming:** Applied consistent color palette and branding to all EJS email templates.
 - **Welcome Email**
   - [~] Sent immediately after user signs up
     - [X] Core functionality implemented (EJS template, emailService function, integration with registration).
-    - [ ] Theming with site colors pending user input for color codes.
+    - [X] Theming with site colors applied.
     - [ ] Consider enhancing user name personalization if registration collects a full name.
 - **Two-Factor Authentication (2FA)**
   - [X] Email-based code for signup validation
@@ -293,18 +294,18 @@ This section outlines the primary driver for future backend development, based o
       - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'shipped'.
       - [X] `orders` table schema in `seed.js` updated with `shipping_carrier`, `tracking_number`.
       - [X] Admin route `PUT /admin/orders/:id/status` and validators updated for tracking info.
-      - [ ] Theming with site colors pending user input for color codes.
+      - [X] Theming with site colors applied.
     - [X] Order is delivered
       - [X] EJS template `order_delivered.ejs` created.
       - [X] `emailService.sendOrderDeliveredEmail` function implemented.
       - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'delivered'.
-      - [ ] Theming with site colors pending user input for color codes.
+      - [X] Theming with site colors applied.
 - **Invoice Notifications**
   - [~] Automatically generate and email invoices to customers upon order confirmation
     - [X] EJS template `invoice_email.ejs` for email body created.
     - [X] `emailService.sendInvoiceEmail` function implemented to send email with PDF attachment.
     - [X] Integrated into `POST /api/orders` route: after order creation, PDF is generated and invoice email is sent.
-    - [ ] Theming of email body template pending user input for site colors.
+    - [X] Theming of email body template applied.
     - [ ] Review if PDF invoice content itself needs theming/updates.
 - **Tracking Updates**
   - Email customer when:
