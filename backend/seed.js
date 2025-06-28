@@ -1703,6 +1703,9 @@ async function seedRbac(client, seededDataIds) {
     // Audit Logs
     { name: 'auditlogs:view', description: 'Can view system audit logs.', group_name: 'System' },
 
+    // Marketing
+    { name: 'marketing:send_emails', description: 'Allows sending of marketing emails to user segments.', group_name: 'Marketing' },
+
   ];
 
   try {
