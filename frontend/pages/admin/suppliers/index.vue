@@ -35,7 +35,7 @@
           <td>{{ supplier.city || 'N/A' }}</td>
           <td>{{ supplier.country || 'N/A' }}</td>
           <td class="actions-cell">
-            <NuxtLink :to="`/admin/suppliers/edit/${supplier.id}`" class="action-link edit-link">Edit</NuxtLink>
+            <NuxtLink :to="`/admin/suppliers/${supplier.id}/edit`" class="action-link edit-link">Edit</NuxtLink> <!-- Corrected path -->
             <button @click="confirmDeleteSupplier(supplier)" class="action-link delete-button" :disabled="deletingId === supplier.id">
               {{ deletingId === supplier.id ? 'Deleting...' : 'Delete' }}
             </button>
