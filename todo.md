@@ -150,7 +150,10 @@ This section outlines the primary driver for future backend development, based o
         - [X] Admin Stock Adjustments module (`adminStockAdjustments.js`)
           - [X] Reviewed existing validation for routes `/adjust` and `/physical-count`.
           - [X] Added `isLength({ min: 1, max: 255 })` validation to `reason` fields.
-        - [ ] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route)
+        - [X] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route)
+          - [X] Reviewed `PUT /:batchId` route and corresponding service method.
+          - [X] Enhanced validation for `expiry_date` (to use `isISO8601().toDate()`).
+          - [X] Added `isLength` validation for `batch_number` (max 100) and `reason_for_change` (max 255).
         - [ ] Admin Tax Classes module (`adminTaxClasses.js`)
         - [ ] Admin Tax Rates module (`adminTaxRates.js`)
         - [ ] Public API routes (auth, products, orders, users, categories, reviews, etc.)
