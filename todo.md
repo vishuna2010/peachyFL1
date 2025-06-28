@@ -284,34 +284,34 @@ This section outlines the primary driver for future backend development, based o
 ## 🔔 Notifications & Email Features (To Implement & Verify)
 - [X] **Email Template Theming:** Applied consistent color palette and branding to all EJS email templates.
 - **Welcome Email**
-  - [~] Sent immediately after user signs up
-    - [X] Core functionality implemented (EJS template, emailService function, integration with registration).
+  - [X] Sent after user successfully verifies their email address (was: [~] Sent immediately after user signs up)
+    - [X] Core functionality implemented (EJS template, emailService function, integration with registration & email verification).
     - [X] Theming with site colors applied.
-    - [ ] Consider enhancing user name personalization if registration collects a full name.
+    - [~] Consider enhancing user name personalization if registration collects a full name. (Note: Backend (`emailService.js`) already attempts to use `user.name`. This item depends on frontend registration form changes to collect the name.)
 - **Two-Factor Authentication (2FA)**
-  - [X] Email-based code for signup validation
+  - [X] Email-based code for signup validation (Email ownership verification)
     - [X] User registration updated to generate/store verification token & expiry.
     - [X] Email service sends verification code upon registration.
     - [X] New `/api/auth/verify-email` endpoint created to validate code, mark email as verified, and clear token.
     - [X] Login process updated to block login for unverified emails.
-    - [X] Welcome email now sent *after* successful email verification.
+    - [X] Welcome email now sent *after* successful email verification. (This is confirmed)
 - **Order Notifications**
   - Email customer when:
-    - [X] Order is placed (covered by existing Order Confirmation email sent after successful order creation)
-    - [X] Order is dispatched
+    - [X] Order is placed (covered by existing Order Confirmation email sent after successful order creation) - Verified.
+    - [X] Order is dispatched - Verified.
       - [X] EJS template `order_dispatched.ejs` created.
       - [X] `emailService.sendOrderDispatchedEmail` function implemented.
       - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'shipped'.
       - [X] `orders` table schema in `seed.js` updated with `shipping_carrier`, `tracking_number`.
       - [X] Admin route `PUT /admin/orders/:id/status` and validators updated for tracking info.
       - [X] Theming with site colors applied.
-    - [X] Order is delivered
+    - [X] Order is delivered - Verified.
       - [X] EJS template `order_delivered.ejs` created.
       - [X] `emailService.sendOrderDeliveredEmail` function implemented.
-      - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'delivered'.
+      - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'delivered' and via QR code delivery confirmation.
       - [X] Theming with site colors applied.
 - **Invoice Notifications**
-  - [~] Automatically generate and email invoices to customers upon order confirmation
+  - [X] Automatically generate and email invoices to customers upon order confirmation (was: [~]) - Verified.
     - [X] EJS template `invoice_email.ejs` for email body created.
     - [X] `emailService.sendInvoiceEmail` function implemented to send email with PDF attachment.
     - [X] Integrated into `POST /api/orders` route: after order creation, PDF is generated and invoice email is sent.
@@ -352,11 +352,11 @@ This section outlines the primary driver for future backend development, based o
 ---
 
 ## 💸 Refund System
-- **Refund Notification**
+- **Refund Notification** - Verified.
   - Email customer for:
-    - [ ] Full refunds
-    - [ ] Partial refunds
-  - [ ] Include refund details in email
+    - [X] Full refunds
+    - [X] Partial refunds
+  - [X] Include refund details in email (items, amounts, reason if provided)
 
 ---
 
