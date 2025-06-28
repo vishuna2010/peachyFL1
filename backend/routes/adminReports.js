@@ -11,17 +11,30 @@ const { AppError } = require('../utils/AppError'); // For consistent error handl
 router.use(isAuthenticated, isAdmin);
 
 // GET /api/admin/reports/low-stock-products
-router.get('/low-stock-products', async (req, res, next) => {
-  try {
-    // Options for low stock report can be extended in the future (e.g., categoryId, supplierId, pagination)
-    const options = { ...req.query }; // Pass any query params for future flexibility
-    const reportData = await reportService.generateLowStockReport(options);
-    res.status(200).json(reportData);
-  } catch (error) {
-    // Errors from service (e.g., AppError) will be passed to the global handler
-    next(error);
+router.get('/low-stock-products',
+  [
+    query('page').optional().isInt({ min: 1 }).toInt().default(1),
+    query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10),
+    query('categoryId').optional().isInt({ gt: 0 }).toInt(),
+    query('supplierId').optional().isInt({ gt: 0 }).toInt(),
+    query('sortBy').optional().isString().trim().isIn(['name', 'sku', 'stock_quantity', 'reorder_threshold', 'stock_difference', 'supplier_name']).default('stock_difference'),
+    query('sortOrder').optional().isString().trim().toUpperCase().isIn(['ASC', 'DESC']).default('ASC'),
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const options = { ...req.query };
+      // Note: reportService.generateLowStockReport would need to be updated to use these options.
+      const reportData = await reportService.generateLowStockReport(options);
+      res.status(200).json(reportData);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Validation chain for Tax Report
 const validateTaxReportParams = [
@@ -163,7 +176,11 @@ const validateSalesReportParams = [
         throw new Error('endDate cannot be before startDate.');
       }
       return true;
-    })
+    }),
+  query('status').optional().isString().trim().toLowerCase().isIn(['shipped', 'delivered', 'completed']).withMessage('Invalid status. Allowed: shipped, delivered, completed.'),
+  query('paymentStatus').optional().isString().trim().toLowerCase().isIn(['pending', 'paid', 'partially_paid', 'refunded', 'partially_refunded', 'failed', 'cancelled', 'voided']).withMessage('Invalid paymentStatus.'),
+  query('productId').optional().isInt({ gt: 0 }).toInt(),
+  query('customerId').optional().isInt({ gt: 0 }).toInt() // Assuming customerId is userId
 ];
 
 // GET /api/admin/reports/sales

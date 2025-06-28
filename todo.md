@@ -143,7 +143,10 @@ This section outlines the primary driver for future backend development, based o
         - [X] Admin Reviews module (`adminReviews.js`)
           - [X] Reviewed existing comprehensive validation.
           - [X] Added custom validator for `dateTo` >= `dateFrom` in list query.
-        - [ ] Admin Reports module (`adminReports.js` - query parameters)
+        - [X] Admin Reports module (`adminReports.js` - query parameters)
+          - [X] Added validation for `/low-stock-products` (page, limit, categoryId, supplierId, sortBy, sortOrder).
+          - [X] Added validation for `/sales` (optional status, paymentStatus, productId, customerId).
+          - [X] Confirmed existing validations for other report routes are adequate.
         - [ ] Admin Stock Adjustments module (`adminStockAdjustments.js`)
         - [ ] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route)
         - [ ] Admin Tax Classes module (`adminTaxClasses.js`)
