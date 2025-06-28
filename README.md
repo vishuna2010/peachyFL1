@@ -184,6 +184,7 @@ Each directory has its own `package.json` and dependencies.
 -   `/api/products/:id` (GET - single product)
 -   `/api/categories` (GET - list categories)
 -   `/api/cart/validate-discount` (POST - validate discount code against cart subtotal)
+-   `/api/public/delivery/confirm` (GET - confirm order delivery via QR code scan; Params: `orderId`, `token`)
 
 ### Authenticated User Routes (Require valid JWT, any role):
 -   `/api/orders` (POST - create orders)

@@ -18,7 +18,14 @@ router.get(
     query('userId').optional().isInt({ gt: 0 }).toInt(),
     query('rating').optional().isInt({ min: 1, max: 5 }).toInt(),
     query('dateFrom').optional().isISO8601().toDate(),
-    query('dateTo').optional().isISO8601().toDate(),
+    query('dateTo').optional().isISO8601().toDate().custom((value, { req }) => {
+      if (value && req.query.dateFrom) {
+        if (new Date(value) < new Date(req.query.dateFrom)) {
+          throw new Error('dateTo cannot be earlier than dateFrom.');
+        }
+      }
+      return true;
+    }),
     query('sortBy').optional().isString().trim().isIn([
       'created_at', 'rating', 'status', 'product_name', 'user_name'
     ]).withMessage('Invalid sortBy parameter.').default('created_at'),

@@ -6,25 +6,26 @@
   <title>Your <%= siteName %> Order #<%= order.id %> Has Been Delivered!</title>
   <style>
     body {
-      font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+      font-family: Arial, sans-serif;
       margin: 0;
       padding: 0;
-      background-color: #f4f4f4;
+      background-color: #FFF5F8; /* Light Pastel */
       color: #333333;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
-    .email-container {
+    .container {
+      width: 100%;
       max-width: 600px;
       margin: 20px auto;
-      background-color: #ffffff;
-      border: 1px solid #dddddd;
+      background-color: #FFFFFF;
       border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
       overflow: hidden;
     }
     .header {
-      background-color: #28a745; /* Placeholder: Success Green for delivery */
-      color: #ffffff;
+      background-color: #5BAA41; /* Fresh Green for delivery confirmation */
+      color: #FFFFFF;
       padding: 20px;
       text-align: center;
     }
@@ -34,11 +35,10 @@
     }
     .content {
       padding: 25px 30px;
-      text-align: left;
       line-height: 1.6;
     }
     .content h2 {
-      color: #218838; /* Darker shade of success green */
+      color: #5BAA41; /* Fresh Green for headings */
       margin-top: 0;
       font-size: 20px;
     }
@@ -49,10 +49,10 @@
       text-align: center;
       margin: 25px 0;
     }
-    .button-cta {
+    .button-link { /* Main CTA button */
       display: inline-block;
-      background-color: #007bff; /* Placeholder Primary Color for primary CTA */
-      color: #ffffff !important;
+      background-color: #FC7099; /* Peach Pink for primary actions */
+      color: #FFFFFF !important;
       padding: 12px 25px;
       text-decoration: none;
       border-radius: 5px;
@@ -80,26 +80,35 @@
     }
     .secondary-links a {
         margin: 0 10px;
-        color: #007bff; /* Placeholder Primary/Link Color */
+        color: #FC7099; /* Peach Pink for secondary links too */
     }
     .footer {
       text-align: center;
       padding: 20px;
       font-size: 0.85em;
-      color: #6c757d; /* Placeholder Secondary Color */
-      background-color: #f8f9fa;
-      border-top: 1px solid #e9ecef;
+      color: #777777;
+      background-color: #FFF5F8; /* Light Pastel */
     }
     .footer p {
       margin: 5px 0;
     }
+    a { /* General link styling */
+      color: #FC7099; /* Peach Pink for links */
+      text-decoration: underline;
+    }
+    a:hover {
+      text-decoration: none;
+    }
     .site-name {
         font-weight: bold;
+    }
+    .accent-text {
+      color: #F6A03C; /* Orange Gold */
     }
   </style>
 </head>
 <body>
-  <div class="email-container">
+  <div class="container">
     <div class="header">
       <h1>Order Delivered!</h1>
     </div>
@@ -109,7 +118,7 @@
 
       <p>We hope you love your purchase! If you have a moment, we'd greatly appreciate it if you could share your thoughts by reviewing the products you received.</p>
       <div class="button-container">
-        <a href="<%= order.reviewLink %>" class="button-cta">Review Your Products</a>
+        <a href="<%= order.reviewLink %>" class="button-link">Review Your Products</a>
       </div>
 
       <% if (order.items && order.items.length > 0) { %>

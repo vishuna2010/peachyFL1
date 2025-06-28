@@ -140,8 +140,13 @@ This section outlines the primary driver for future backend development, based o
         - [X] Admin Users module (`adminUsers.js` - C/U/D, Role Update)
         - [X] Admin Orders module (`adminOrders.js` - List, GetByID, UpdateStatus, GetPDFData, ProcessRefund)
         - [X] Admin Purchase Orders module (`adminPurchaseOrders.js` - All existing routes)
-        - [ ] Admin Reviews module (`adminReviews.js`)
-        - [ ] Admin Reports module (`adminReports.js` - query parameters)
+        - [X] Admin Reviews module (`adminReviews.js`)
+          - [X] Reviewed existing comprehensive validation.
+          - [X] Added custom validator for `dateTo` >= `dateFrom` in list query.
+        - [X] Admin Reports module (`adminReports.js` - query parameters)
+          - [X] Added validation for `/low-stock-products` (page, limit, categoryId, supplierId, sortBy, sortOrder).
+          - [X] Added validation for `/sales` (optional status, paymentStatus, productId, customerId).
+          - [X] Confirmed existing validations for other report routes are adequate.
         - [ ] Admin Stock Adjustments module (`adminStockAdjustments.js`)
         - [ ] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route)
         - [ ] Admin Tax Classes module (`adminTaxClasses.js`)
@@ -272,10 +277,11 @@ This section outlines the primary driver for future backend development, based o
 ---
 
 ## 🔔 Notifications & Email Features (To Implement & Verify)
+- [X] **Email Template Theming:** Applied consistent color palette and branding to all EJS email templates.
 - **Welcome Email**
   - [~] Sent immediately after user signs up
     - [X] Core functionality implemented (EJS template, emailService function, integration with registration).
-    - [ ] Theming with site colors pending user input for color codes.
+    - [X] Theming with site colors applied.
     - [ ] Consider enhancing user name personalization if registration collects a full name.
 - **Two-Factor Authentication (2FA)**
   - [X] Email-based code for signup validation
@@ -293,28 +299,40 @@ This section outlines the primary driver for future backend development, based o
       - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'shipped'.
       - [X] `orders` table schema in `seed.js` updated with `shipping_carrier`, `tracking_number`.
       - [X] Admin route `PUT /admin/orders/:id/status` and validators updated for tracking info.
-      - [ ] Theming with site colors pending user input for color codes.
+      - [X] Theming with site colors applied.
     - [X] Order is delivered
       - [X] EJS template `order_delivered.ejs` created.
       - [X] `emailService.sendOrderDeliveredEmail` function implemented.
       - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'delivered'.
-      - [ ] Theming with site colors pending user input for color codes.
+      - [X] Theming with site colors applied.
 - **Invoice Notifications**
   - [~] Automatically generate and email invoices to customers upon order confirmation
     - [X] EJS template `invoice_email.ejs` for email body created.
     - [X] `emailService.sendInvoiceEmail` function implemented to send email with PDF attachment.
     - [X] Integrated into `POST /api/orders` route: after order creation, PDF is generated and invoice email is sent.
-    - [ ] Theming of email body template pending user input for site colors.
-    - [ ] Review if PDF invoice content itself needs theming/updates.
+    - [X] Theming of email body template applied.
+    - [X] Review if PDF invoice content itself needs theming/updates.
+      - [X] Reviewed `pdfService.js` and `orderService.js` data preparation.
+      - [X] PDF invoice already uses theme colors subtly and professionally.
+      - [X] Made minor styling adjustment to "Order Items:" heading in PDF for consistency.
 - **Tracking Updates**
   - Email customer when:
-    - [ ] Order is dispatched (with tracking link or number)
-    - [ ] Order is delivered
+    - [X] Order is dispatched (with tracking link or number) (Covered by 'Order Dispatched' email notification)
+    - [X] Order is delivered (Covered by 'Order Delivered' email notification)
 - **QR Code for Delivery Confirmation**
   - New feature:
-    - [ ] Attach a QR code to each invoice
-    - [ ] Delivery person scans QR at hand-off
-    - [ ] Triggers delivery confirmation in system
+    - [X] Attach a QR code to each invoice
+      - [X] `orderService.getOrderDetailsForPdf` updated to generate a `delivery_confirmation_qr_url` using a deterministic HMAC token.
+      - [X] `pdfService` updated to generate QR code from this URL and embed it in the invoice PDF.
+    - [ ] Delivery person scans QR at hand-off (Assumed physical process)
+    - [X] Triggers delivery confirmation in system
+      - [X] Created `GET /api/public/delivery/confirm` endpoint.
+      - [X] Endpoint validates `orderId` and HMAC `token`.
+      - [X] Updates order status to 'delivered' and sets `delivery_confirmed_at`.
+      - [X] Returns HTML response for success/failure.
+      - [X] Added `delivery_confirmed_at` to `orders` table schema.
+      - [X] Implemented `generateDeliveryConfirmationToken` and `validateDeliveryConfirmationToken` utilities.
+      - [X] Added `DELIVERY_CONFIRMATION_SECRET` to config.
 
 ---
 

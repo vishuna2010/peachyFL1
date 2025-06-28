@@ -6,76 +6,103 @@
   <title>Welcome to <%= siteName %></title>
   <style>
     body {
-      font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+      font-family: Arial, sans-serif;
       margin: 0;
       padding: 0;
-      background-color: #f4f4f4;
+      background-color: #FFF5F8; /* Light Pastel */
       color: #333333;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
-    .email-container {
+    .container { /* Changed from email-container */
+      width: 100%;
       max-width: 600px;
-      margin: 20px auto;
-      background-color: #ffffff;
-      border: 1px solid #dddddd;
+      margin: 20px auto; /* Added margin for body background visibility */
+      background-color: #FFFFFF; /* White container for content */
       border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
       overflow: hidden; /* Ensures border-radius clips inner elements */
     }
     .header {
-      background-color: #4A90E2; /* Placeholder Primary Color */
-      color: #ffffff;
+      background-color: #FC7099; /* Peach Pink */
+      color: #FFFFFF;
       padding: 20px;
       text-align: center;
+      /* Removed border-top-left-radius & border-top-right-radius as .container handles overflow */
     }
     .header h1 {
       margin: 0;
       font-size: 24px;
     }
     .content {
-      padding: 25px 30px;
-      text-align: left;
+      padding: 25px 30px; /* Existing padding */
       line-height: 1.6;
     }
-    .content p {
-      margin: 0 0 15px 0;
+    .content h2 { /* Added for potential future use */
+      color: #FC7099; /* Peach Pink */
     }
-    .button-container {
+    .content p {
+      margin: 0 0 15px 0; /* Existing margin */
+    }
+    .button-container { /* Kept for structure, styling primarily on button itself */
       text-align: center;
       margin: 25px 0;
     }
-    .button {
+    .button-link { /* For <a> tags styled as buttons */
       display: inline-block;
-      background-color: #50C878; /* Placeholder Accent Color */
-      color: #ffffff !important; /* Important to override link styles */
+      background-color: #FC7099; /* Peach Pink */
+      color: #FFFFFF !important; /* Important to override link styles */
       padding: 12px 25px;
       text-decoration: none;
       border-radius: 5px;
       font-weight: bold;
-      font-size: 16px;
+      font-size: 16px; /* Existing font size */
+    }
+    .accent-text {
+      color: #F6A03C; /* Orange Gold */
+    }
+    .secondary-accent-text {
+      color: #5BAA41; /* Fresh Green */
+    }
+    .highlight {
+      background-color: #F9D849; /* Lemon Yellow */
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+    .badge {
+      background-color: #26A7E2; /* Sky Blue */
+      color: #FFFFFF;
+      padding: 5px 10px;
+      border-radius: 15px;
+      font-size: 12px;
+      display: inline-block;
     }
     .footer {
       text-align: center;
       padding: 20px;
-      font-size: 0.85em;
-      color: #777777; /* Placeholder Secondary Color */
-      background-color: #f9f9f9;
-      border-top: 1px solid #eeeeee;
+      font-size: 0.85em; /* Existing font size */
+      color: #777777;
+      background-color: #FFF5F8; /* Light Pastel to match body */
+      /* border-top: 1px solid #eeeeee; Removed, using background separation */
+      /* Removed border-bottom-left-radius & border-bottom-right-radius as .container handles overflow */
     }
     .footer p {
-      margin: 5px 0;
+      margin: 5px 0; /* Existing margin */
     }
-    a {
-      color: #4A90E2; /* Placeholder Primary/Link Color */
-      text-decoration: underline;
+    a { /* General link styling */
+      color: #FC7099; /* Peach Pink for links */
+      text-decoration: underline; /* Existing decoration */
     }
-    .site-name {
+    a:hover {
+      text-decoration: none; /* Optional: remove underline on hover if desired */
+    }
+    .site-name { /* No specific color, inherits from parent, e.g., white in header, Peach Pink in text */
         font-weight: bold;
     }
   </style>
 </head>
 <body>
-  <div class="email-container">
+  <div class="container">
     <div class="header">
       <h1>Welcome to <span class="site-name"><%= siteName %></span>!</h1>
     </div>
@@ -84,7 +111,7 @@
       <p>Thank you for signing up at <span class="site-name"><%= siteName %></span>. We're thrilled to have you join our community!</p>
       <p>Get started by exploring our latest products or setting up your profile.</p>
       <div class="button-container">
-        <a href="<%= shopLink %>" class="button">Start Shopping</a>
+        <a href="<%= shopLink %>" class="button-link">Start Shopping</a>
       </div>
       <% if (typeof profileLink !== 'undefined' && profileLink) { %>
         <p style="text-align:center; font-size: 0.9em;">
