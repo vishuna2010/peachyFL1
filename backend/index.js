@@ -183,6 +183,10 @@ app.use('/api/orders', orderRoutes);
 // --- Public Options Routes (e.g., for product filters) ---
 app.use('/api/options', optionsRoutes);
 
+// --- Other Public Utility Routes (e.g., delivery confirmation) ---
+const publicUtilityRoutes = require('./routes/public');
+app.use('/api/public', publicUtilityRoutes);
+
 // --- Admin RBAC Management Routes ---
 const adminPermissionsRoutes = require('./routes/adminPermissions');
 const adminRolesRoutes = require('./routes/adminRoles');

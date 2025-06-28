@@ -528,6 +528,7 @@ async function createSchema(client) {
         billing_country VARCHAR(100),
         shipping_carrier VARCHAR(100) NULL,
         tracking_number VARCHAR(100) NULL,
+        delivery_confirmed_at TIMESTAMPTZ NULL, -- For QR code scan confirmation
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
@@ -560,6 +561,7 @@ async function createSchema(client) {
     await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_country VARCHAR(100);`);
     await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_carrier VARCHAR(100) NULL;`);
     await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(100) NULL;`);
+    await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_confirmed_at TIMESTAMPTZ NULL;`);
     await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
     await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
     console.log('All columns for "orders" table ensured/checked (basic existence).');
