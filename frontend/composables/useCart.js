@@ -105,7 +105,7 @@ export const useCart = () => {
             mappedItem.variantId = item.variantId;
           }
           return mappedItem;
-        }));
+        }); // Corrected: removed extra parenthesis
 
       // If, after filtering, itemsToTax is empty but the original cart was not, it means all items were invalid.
       if (itemsToTax.length === 0 && currentCartItems.length > 0) {
