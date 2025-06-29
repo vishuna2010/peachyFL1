@@ -205,16 +205,20 @@ const availableRoles = ref([]); // Populate this from an API or define staticall
 
 const fetchAvailableRoles = async () => {
   try {
-    const response = await $axios.get('/admin/roles/all'); // Assuming an endpoint to fetch all roles
-    if (response.data && Array.isArray(response.data.roles)) {
-      availableRoles.value = response.data.roles;
+    // Corrected endpoint to fetch all roles
+    const response = await $axios.get('/admin/roles');
+    // The GET /api/admin/roles route returns an array of role objects directly
+    if (response.data && Array.isArray(response.data)) {
+      availableRoles.value = response.data; // The response itself is the array of roles
+      console.log('[UsersPage] Fetched available roles:', availableRoles.value);
     } else {
-      availableRoles.value = [{id: 'admin', name: 'Admin'}, {id: 'user', name: 'User'}]; // Fallback
+      console.warn('[UsersPage] Unexpected response structure for roles, using fallback. Response:', response.data);
+      availableRoles.value = [{id: 1, name: 'Admin (Fallback)'}, {id: 2, name: 'User (Fallback)'}];
     }
   } catch (err) {
-    console.error('Error fetching roles:', err);
+    console.error('[UsersPage] Error fetching roles:', err);
     // Fallback or default roles if API fails
-    availableRoles.value = [{id: 'admin', name: 'Admin'}, {id: 'user', name: 'User'}]; // Example
+    availableRoles.value = [{id: 1, name: 'Admin (Fallback)'}, {id: 2, name: 'User (Fallback)'}];
   }
 };
 
