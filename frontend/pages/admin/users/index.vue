@@ -273,14 +273,30 @@ const usersToDisplay = computed(() => {
 watch(usersApiResponse, (newResponse) => {
   console.log('[UsersPage] usersApiResponse watcher triggered. New response:', newResponse);
   if (newResponse && newResponse.data) {
-    totalUsers.value = newResponse.data.total_users || 0;
+    // Log the exact structure of newResponse.data
+    try {
+      console.log('[UsersPage] RAW API newResponse.data:', JSON.parse(JSON.stringify(newResponse.data)));
+    } catch (e) {
+      console.error('[UsersPage] Could not stringify newResponse.data', e);
+      console.log('[UsersPage] RAW API newResponse.data (direct):', newResponse.data);
+    }
+
+    totalUsers.value = newResponse.data.total_users || 0; // This is where the issue might be
+    console.log('[UsersPage] Attempted to set total_users from newResponse.data.total_users. Value found:', newResponse.data.total_users);
     console.log('[UsersPage] Total users set to:', totalUsers.value);
+
+    if (Array.isArray(newResponse.data.users)) {
+      console.log('[UsersPage] newResponse.data.users is an array. Length:', newResponse.data.users.length);
+    } else {
+      console.warn('[UsersPage] newResponse.data.users is NOT an array. Value:', newResponse.data.users);
+    }
+
   } else {
     totalUsers.value = 0;
-    console.log('[UsersPage] Total users set to 0 due to invalid newResponse.');
+    console.log('[UsersPage] Total users set to 0 due to invalid newResponse or missing newResponse.data.');
   }
   console.log(`[UsersPage] Pagination state: currentPage=${currentPage.value}, itemsPerPage=${itemsPerPage.value}, totalUsers=${totalUsers.value}`);
-}, { immediate: true, deep: true }); // Added deep: true for more robust watching of nested data
+}, { immediate: true, deep: true });
 
 
 const applyFilters = () => {
