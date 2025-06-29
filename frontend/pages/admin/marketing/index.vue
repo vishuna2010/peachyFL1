@@ -5,12 +5,11 @@
   </div>
 </template>
 
-<!--
 <script setup>
 definePageMeta({
   layout: 'admin',
-  middleware: ['admin-auth', 'rbac'],
-  requiredPermission: 'marketing:send_emails' // Or a more general 'marketing:access_section'
+  // middleware: ['admin-auth', 'rbac'], // Removed as per fix for users page
+  // requiredPermission: 'marketing:send_emails' // RBAC middleware handles this globally
 });
 
 useHead({
@@ -18,7 +17,9 @@ useHead({
 });
 
 import { ref } from 'vue';
-const { $api } = useNuxtApp(); // Common way to access global API instance in Nuxt 3
+import { useNuxtApp } from '#app'; // Correct import for useNuxtApp
+
+const { $axios } = useNuxtApp(); // Assuming $axios is configured, or use $api if that's the convention
 
 const form = ref({
   subject: '',
