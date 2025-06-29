@@ -239,17 +239,34 @@ async function fetchUsers() {
 
     // console.log('[fetchUsers] Fetching with params:', params); // Cleaned
     const response = await $axios.get(url, { params });
-    // console.log('[fetchUsers] Backend response.data:', JSON.stringify(response.data, null, 2)); // Cleaned
+    // console.log('[fetchUsers] Backend response.data:', JSON.stringify(response.data, null, 2));
 
-    users.value = response.data.map(u => ({
-      ...u,
-      originalRoleId: u.role_id,
-      originalRoleName: u.role_name
-    }));
+    if (response.data && Array.isArray(response.data.data) && response.data.pagination) {
+      users.value = response.data.data.map(u => ({
+        ...u,
+        originalRoleId: u.role_id,
+        originalRoleName: u.role_name
+      }));
 
-    // if (users.value.length > 0) { // Cleaned
-    //  console.log('[fetchUsers] First user object after mapping (frontend state):', JSON.stringify(users.value[0], null, 2));
-    // }
+      pagination.value.total_suppliers = response.data.pagination.total; // Note: Key was total_suppliers, should be total_users or generic total
+      pagination.value.total_pages = response.data.pagination.totalPages;
+      pagination.value.current_page = response.data.pagination.page;
+      // pagination.value.limit is managed by the component's state / query params
+
+      // console.log('[fetchUsers] Users processed. Count:', users.value.length);
+      // if (users.value.length > 0) {
+      //  console.log('[fetchUsers] First user object after mapping (frontend state):', JSON.stringify(users.value[0], null, 2));
+      // }
+    } else {
+      // Handle cases where response.data.data might be missing or not an array, or pagination is missing
+      users.value = [];
+      pagination.value.total_suppliers = 0; // Reset relevant pagination fields
+      pagination.value.total_pages = 1;
+      // pagination.value.current_page might be kept or reset to 1
+      console.error('[fetchUsers] Unexpected response structure from /api/admin/users:', response.data);
+      fetchError.value = 'Failed to parse user data from server: Unexpected response structure.';
+      toast.error(fetchError.value);
+    }
 
   } catch (err) {
     console.error(`[fetchUsers] Failed to fetch users (filter: ${activeTab.value}):`, err.response?.data || err.message || err);
