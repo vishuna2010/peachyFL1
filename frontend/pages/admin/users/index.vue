@@ -255,17 +255,21 @@ watch(error, (newError) => {
 });
 
 const usersToDisplay = computed(() => {
-  console.log('[UsersPage] usersApiResponse raw:', usersApiResponse.value);
-  if (usersApiResponse.value && usersApiResponse.value.data && Array.isArray(usersApiResponse.value.data.users)) {
-    const mappedUsers = usersApiResponse.value.data.users.map(user => ({
+  console.log('[UsersPage CPTD] Evaluating usersToDisplay. usersApiResponse.value:', usersApiResponse.value);
+
+  const responseData = usersApiResponse.value?.data; // This is {data: Array, pagination: Object}
+
+  if (responseData && responseData.data && Array.isArray(responseData.data)) {
+    console.log('[UsersPage CPTD] Condition TRUE. Mapping users from responseData.data. Length:', responseData.data.length);
+    const mappedUsers = responseData.data.map(user => ({
       ...user,
       role: user.role_name || user.legacy_role || 'N/A',
       created_at: new Date(user.created_at).toLocaleDateString(),
     }));
-    console.log('[UsersPage] Mapped usersToDisplay:', mappedUsers);
+    console.log('[UsersPage CPTD] Mapped usersToDisplay:', mappedUsers);
     return mappedUsers;
   }
-  console.log('[UsersPage] usersToDisplay returning empty array.');
+  console.log('[UsersPage CPTD] Condition FALSE or data not in expected format. Returning empty array. responseData:', responseData);
   return [];
 });
 
