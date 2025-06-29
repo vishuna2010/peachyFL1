@@ -226,61 +226,78 @@ onMounted(() => {
 const queryParams = computed(() => {
   const params = new URLSearchParams();
   if (searchQuery.value) params.append('search', searchQuery.value);
-  if (selectedRole.value) params.append('role_id', selectedRole.value); // Assuming role is filtered by id
+  if (selectedRole.value) params.append('role_id', selectedRole.value);
   if (selectedStatus.value) params.append('status', selectedStatus.value);
   params.append('page', currentPage.value.toString());
   params.append('limit', itemsPerPage.value.toString());
+  console.log('[UsersPage] Computed queryParams:', Object.fromEntries(params.entries()));
   return params;
 });
 
 // Fetching users data
 const { data: usersApiResponse, pending, error, refresh: refreshUsers } = await useAsyncData(
   'admin-users',
-  () => $axios.get('/admin/users', { params: Object.fromEntries(queryParams.value.entries()) }),
+  () => {
+    const paramsObject = Object.fromEntries(queryParams.value.entries());
+    console.log('[UsersPage] Fetching users with params:', paramsObject);
+    return $axios.get('/admin/users', { params: paramsObject });
+  },
   {
-    watch: [currentPage, itemsPerPage], // searchQuery, selectedRole, selectedStatus handled by applyFilters
-    default: () => ({ data: { users: [], total_users: 0, roles: [] } }) // Ensure structure for initial render
+    watch: [currentPage, itemsPerPage],
+    default: () => ({ data: { users: [], total_users: 0 } })
   }
 );
 
+watch(error, (newError) => {
+  if (newError) {
+    console.error('[UsersPage] Error fetching users (useAsyncData):', newError);
+  }
+});
+
 const usersToDisplay = computed(() => {
-  // usersApiResponse.value will be the full axios response object.
-  // The actual user list is expected in usersApiResponse.value.data.users
+  console.log('[UsersPage] usersApiResponse raw:', usersApiResponse.value);
   if (usersApiResponse.value && usersApiResponse.value.data && Array.isArray(usersApiResponse.value.data.users)) {
-    return usersApiResponse.value.data.users.map(user => ({
+    const mappedUsers = usersApiResponse.value.data.users.map(user => ({
       ...user,
-      role: user.role?.name || 'N/A', // Handle if role is an object or just a name
+      role: user.role_name || user.legacy_role || 'N/A',
       created_at: new Date(user.created_at).toLocaleDateString(),
     }));
+    console.log('[UsersPage] Mapped usersToDisplay:', mappedUsers);
+    return mappedUsers;
   }
+  console.log('[UsersPage] usersToDisplay returning empty array.');
   return [];
 });
 
 // Update totalUsers when data is fetched/updated
 watch(usersApiResponse, (newResponse) => {
+  console.log('[UsersPage] usersApiResponse watcher triggered. New response:', newResponse);
   if (newResponse && newResponse.data) {
     totalUsers.value = newResponse.data.total_users || 0;
-    // If roles are part of this response and not fetched separately:
-    // if (Array.isArray(newResponse.data.roles)) {
-    //   availableRoles.value = newResponse.data.roles;
-    // }
+    console.log('[UsersPage] Total users set to:', totalUsers.value);
+  } else {
+    totalUsers.value = 0;
+    console.log('[UsersPage] Total users set to 0 due to invalid newResponse.');
   }
-}, { immediate: true });
+  console.log(`[UsersPage] Pagination state: currentPage=${currentPage.value}, itemsPerPage=${itemsPerPage.value}, totalUsers=${totalUsers.value}`);
+}, { immediate: true, deep: true }); // Added deep: true for more robust watching of nested data
 
 
 const applyFilters = () => {
-  currentPage.value = 1; // Reset to first page on new filter/search
+  console.log('[UsersPage] applyFilters called.');
+  currentPage.value = 1;
   refreshUsers();
 };
 
-// Watch for individual filter changes to trigger applyFilters (or refresh directly)
+// Watch for individual filter changes to trigger applyFilters
 watch([searchQuery, selectedRole, selectedStatus], () => {
-  // Optional: debounce this if needed
+  console.log(`[UsersPage] Filters changed: searchQuery=${searchQuery.value}, selectedRole=${selectedRole.value}, selectedStatus=${selectedStatus.value}`);
   applyFilters();
 });
 
 
 const changePage = (page) => {
+  console.log(`[UsersPage] changePage called with page: ${page}. Current totalUsers: ${totalUsers.value}`);
   if (page > 0 && (page - 1) * itemsPerPage.value < totalUsers.value) {
     currentPage.value = page;
     // refreshUsers(); // useAsyncData watcher handles this for currentPage
