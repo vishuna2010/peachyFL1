@@ -20,9 +20,10 @@ const validateCreateUserParams = [
 const validateListUsersParams = [
   query('page').optional().isInt({ min: 1 }).toInt().default(1),
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(20),
-  query('role').optional().isString().trim().toLowerCase()
-    .isLength({ min: 2, max: 50 }).withMessage('Role name is invalid if provided.'),
+  query('role_id').optional().isInt({ gt: 0 }).toInt().withMessage('Role ID must be a positive integer if provided.'), // Changed from 'role' (name) to 'role_id' (integer)
   query('search_term').optional().isString().trim()
+  // Add status filter validation if you implement status filtering
+  // query('status').optional().isString().trim().isIn(['active', 'inactive', 'verified', 'unverified'])
 ];
 
 const validateUserIdParam = [
@@ -101,8 +102,9 @@ router.get(
     const options = {
       page: req.query.page,
       limit: req.query.limit,
-      role: req.query.role,
+      role_id: req.query.role_id, // Pass role_id to the service
       search_term: req.query.search_term,
+      // status: req.query.status // If implementing status filter
     };
 
     try {

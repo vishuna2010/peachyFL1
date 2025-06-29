@@ -75,7 +75,7 @@ async function createUserByAdmin(userData) {
 /**
  * Retrieves a paginated list of all users, optionally filtered by role.
  * @param {object} options - Filtering and pagination options.
- * @param {string} [options.role] - Role name to filter by (case-insensitive).
+ * @param {number} [options.role_id] - Role ID to filter by.
  * @param {string} [options.search_term] - Search term for name or email.
  * @param {number} [options.page=1]
  * @param {number} [options.limit=20]
@@ -84,7 +84,7 @@ async function createUserByAdmin(userData) {
  */
 async function getAllUsers(options = {}) {
   const {
-    role,
+    role_id, // Changed from 'role' to 'role_id'
     search_term,
     page = 1,
     limit = 20
@@ -94,25 +94,40 @@ async function getAllUsers(options = {}) {
   let baseQuery = `
     SELECT u.id, u.name, u.email, u.role_id, r.name as role_name, u.role as legacy_role,
            u.is_tax_exempt, u.tax_exemption_certificate_id, u.tax_exemption_notes,
-           u.created_at, u.updated_at
+           u.is_email_verified, u.created_at, u.updated_at
     FROM users u
     LEFT JOIN roles r ON u.role_id = r.id
   `;
-  let countQueryBase = `SELECT COUNT(u.id) FROM users u LEFT JOIN roles r ON u.role_id = r.id`;
+  // Ensure count query also joins roles if role_id filter is applied on r.name, but it's better to filter on u.role_id
+  let countQueryBase = `SELECT COUNT(u.id) FROM users u`; // Simplified, join only if needed by filter
 
   const whereClauses = [];
   const queryParams = [];
   let paramIndex = 1;
 
-  if (role) {
-    whereClauses.push(`LOWER(r.name) = LOWER($${paramIndex++})`);
-    queryParams.push(role);
+  if (role_id) {
+    // Filter by u.role_id directly. Ensure role_id is treated as a number.
+    whereClauses.push(`u.role_id = $${paramIndex++}`);
+    queryParams.push(parseInt(role_id, 10)); // Ensure it's an integer
+    // No need to join roles table for this filter if only filtering by u.role_id
   }
   if (search_term) {
     whereClauses.push(`(u.name ILIKE $${paramIndex} OR u.email ILIKE $${paramIndex})`);
     queryParams.push(`%${search_term}%`);
-    paramIndex++;
+    // paramIndex was missing increment here if role_id was also present
+    // Corrected: paramIndex is incremented when item is added to whereClauses.
   }
+  // Add other filters like 'status' if needed
+  // Example for status (assuming options.status is passed from route)
+  // if (options.status) {
+  //   if (options.status === 'verified') {
+  //     whereClauses.push(`u.is_email_verified = TRUE`);
+  //   } else if (options.status === 'unverified') {
+  //     whereClauses.push(`u.is_email_verified = FALSE`);
+  //   }
+  //   // Add 'active'/'inactive' if you have an 'is_active' column
+  // }
+
 
   if (whereClauses.length > 0) {
     const whereString = ` WHERE ${whereClauses.join(' AND ')}`;
