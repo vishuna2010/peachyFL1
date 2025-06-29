@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= subject %></title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #FFF5F8; /* Light Pastel */
+      color: #333333;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .container {
+      width: 100%;
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #FFFFFF;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .header {
+      background-color: #26A7E2; /* Sky Blue - for marketing/info */
+      color: #FFFFFF;
+      padding: 20px;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .content {
+      padding: 25px 30px;
+      line-height: 1.6;
+    }
+    .content h2 {
+      color: #F6A03C; /* Orange Gold */
+      font-size: 20px;
+      margin-top: 0;
+    }
+    .content p {
+      margin: 0 0 15px 0;
+    }
+    .promo-message {
+        margin-bottom: 20px;
+        font-size: 16px;
+    }
+    .button-container {
+      text-align: center;
+      margin: 25px 0;
+    }
+    .button-link {
+      display: inline-block;
+      background-color: #FC7099; /* Peach Pink */
+      color: #FFFFFF !important; /* Important to override link styles */
+      padding: 12px 25px;
+      text-decoration: none;
+      border-radius: 5px;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 0.85em;
+      color: #777777;
+      background-color: #FFF5F8; /* Light Pastel to match body */
+    }
+    .footer p {
+      margin: 5px 0;
+    }
+    a {
+      color: #FC7099; /* Peach Pink for links */
+      text-decoration: underline;
+    }
+    a:hover {
+      text-decoration: none;
+    }
+    .site-name {
+        font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1><%= subject %></h1>
+    </div>
+    <div class="content">
+      <p>Hi <%= userName %>,</p>
+
+      <% if (typeof promoTitle !== 'undefined' && promoTitle) { %>
+        <h2><%= promoTitle %></h2>
+      <% } %>
+
+      <div class="promo-message">
+        <%- promoMessageBody %> <!-- Use <%- %> to output raw HTML if promoMessageBody can contain HTML -->
+      </div>
+
+      <% if (typeof ctaLink !== 'undefined' && ctaLink && typeof ctaText !== 'undefined' && ctaText) { %>
+        <div class="button-container">
+          <a href="<%= ctaLink %>" class="button-link"><%= ctaText %></a>
+        </div>
+      <% } %>
+
+      <p>If you have any questions, feel free to <a href="mailto:<%= supportEmail %>">contact our support team</a>.</p>
+      <p>Best regards,<br>The <span class="site-name"><%= siteName %></span> Team</p>
+    </div>
+    <div class="footer">
+      <p>&copy; <%= new Date().getFullYear() %> <span class="site-name"><%= siteName %></span>. All rights reserved.</p>
+      <% if (typeof companyAddress !== 'undefined' && companyAddress) { %>
+        <p><%= companyAddress %></p>
+      <% } %>
+      <!-- Consider adding an unsubscribe link placeholder here for future implementation -->
+      <!-- <p><a href="<%# unsubscribeLink // EJS variable commented out %>">Unsubscribe</a> from these emails.</p> -->
+    </div>
+  </div>
+</body>
+</html>

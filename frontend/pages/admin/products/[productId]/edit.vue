@@ -2,7 +2,7 @@
   <div class="p-4 sm:p-6 lg:p-8">
     <div class="flex justify-between items-center mb-6">
       <h2 class="text-2xl font-semibold text-gray-800">Edit Product Form (ID: {{ productId }})</h2>
-      <NuxtLink :to="`/admin/products/${productId}`" class="text-sm text-indigo-600 hover:text-indigo-800">&larr; Back to Product View</NuxtLink>
+      <NuxtLink to="/admin/products" class="text-sm text-indigo-600 hover:text-indigo-800">&larr; Back to Product List</NuxtLink>
     </div>
     <div v-if="isLoadingInitialData" class="text-center py-10">
       <div class="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-600"></div>
@@ -132,7 +132,8 @@ async function fetchCategories() {
 }
 async function fetchSuppliers() {
   try {
-    const response = await $axios.get('/admin/suppliers?limit=1000');
+    // Changed limit from 1000 to 100 to match backend validation max limit
+    const response = await $axios.get('/admin/suppliers?limit=100');
     return response.data.data || response.data;
   } catch (error) { console.error('Error fetching suppliers:', error); throw new Error('Failed to load suppliers.'); }
 }

@@ -17,7 +17,7 @@ const validateManualAdjustmentParams = [
   body('itemType').isIn(['product', 'variant']).withMessage("itemType must be 'product' or 'variant'."),
   body('itemId').isInt({ gt: 0 }).withMessage('itemId must be a positive integer.').toInt(),
   body('quantity').isInt({ gt: 0 }).withMessage('Quantity must be a positive integer for the adjustment magnitude.').toInt(),
-  body('reason').notEmpty().isString().trim().withMessage('Reason is required.'),
+  body('reason').notEmpty().isString().trim().isLength({ min: 1, max: 255 }).withMessage('Reason is required and must be between 1 and 255 characters.'),
   body('movementType').trim().isIn(inventoryService.VALID_ADJUSTMENT_MOVEMENT_TYPES)
     .withMessage(`Movement type must be one of: ${inventoryService.VALID_ADJUSTMENT_MOVEMENT_TYPES.join(', ')}`)
 ];
@@ -56,7 +56,7 @@ const validatePhysicalCountParams = [
   body('itemType').isIn(['product', 'variant']).withMessage("itemType must be 'product' or 'variant'."),
   body('itemId').isInt({ gt: 0 }).toInt().withMessage('itemId must be a positive integer.'),
   body('countedQuantity').isInt({ min: 0 }).toInt().withMessage('Counted quantity must be a non-negative integer.'),
-  body('reason').notEmpty().isString().trim().withMessage('Reason for count/adjustment is required.')
+  body('reason').notEmpty().isString().trim().isLength({ min: 1, max: 255 }).withMessage('Reason for count/adjustment is required and must be between 1 and 255 characters.')
 ];
 
 router.post(

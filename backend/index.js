@@ -33,6 +33,7 @@ const adminStockAdjustmentsRoutes = require('./routes/adminStockAdjustments');
 const adminReturnsRoutes = require('./routes/adminReturns');
 const adminTaxClassesRoutes = require('./routes/adminTaxClasses');
 const adminTaxRatesRoutes = require('./routes/adminTaxRates'); // New import
+const adminMarketingRoutes = require('./routes/adminMarketing'); // Import admin marketing routes
 // Duplicate imports for adminOptionManagementRoutes and adminProductSpecificOptionsRoutes were removed by only keeping the first ones.
 const reviewRoutes = require('./routes/reviews'); // Import review routes
 const userRoutes = require('./routes/users'); // Import user profile routes
@@ -166,6 +167,7 @@ app.use('/api/admin/stock-adjustments', adminStockAdjustmentsRoutes);
 app.use('/api/admin/returns', adminReturnsRoutes);
 app.use('/api/admin/tax-classes', adminTaxClassesRoutes);
 app.use('/api/admin/tax-rates', adminTaxRatesRoutes); // New mount
+app.use('/api/admin/marketing', adminMarketingRoutes); // Mount admin marketing routes
 
 
 // --- User Profile Routes ---

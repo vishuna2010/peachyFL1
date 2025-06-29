@@ -670,9 +670,110 @@ module.exports = {
   getUserOrderHistory, // Added for user's order history
   getUserOrderDetails, // Added for user's specific order details
   confirmOrderDelivery, // Added for QR code delivery confirmation
+  getOrderDetailsForShippingLabel, // Added for shipping label generation
 };
 
-const { validateDeliveryConfirmationToken } = require('../utils/securityUtils'); // For QR Code
+/**
+ * Retrieves and formats order details suitable for shipping label generation.
+ * @param {number} orderId - The ID of the order.
+ * @returns {Promise<object>} The formatted order data object for the shipping label.
+ * @throws {NotFoundError} If the order is not found.
+ * @throws {AppError} If database operation fails or required information is missing.
+ */
+async function getOrderDetailsForShippingLabel(orderId) {
+  try {
+    const orderQuery = `
+      SELECT
+        o.id, o.user_id, o.status,
+        o.shipping_address_line1, o.shipping_address_line2, o.shipping_city, o.shipping_postal_code, o.shipping_country,
+        o.shipping_phone, -- Assuming this column might exist or be added
+        o.tracking_number, o.shipping_carrier,
+        u.name as user_full_name, -- User's full name if available
+        u.first_name as user_first_name,
+        u.last_name as user_last_name,
+        o.created_at
+      FROM orders o
+      LEFT JOIN users u ON o.user_id = u.id
+      WHERE o.id = $1;
+    `;
+    const orderResult = await db.query(orderQuery, [orderId]);
+
+    if (orderResult.rows.length === 0) {
+      throw new NotFoundError(`Order with ID ${orderId} not found.`);
+    }
+    const orderData = orderResult.rows[0];
+
+    if (!orderData.tracking_number || !orderData.shipping_carrier) {
+        console.warn(`Order ID ${orderId} is missing tracking_number or shipping_carrier. Label generation might be incomplete.`);
+        // Depending on strictness, could throw BadRequestError here
+    }
+
+    // Construct recipient name
+    let recipientName = 'N/A';
+    if (orderData.shipping_address_full_name) { // Ideal if orders table stores this directly
+        recipientName = orderData.shipping_address_full_name;
+    } else if (orderData.user_first_name || orderData.user_last_name) {
+        recipientName = `${orderData.user_first_name || ''} ${orderData.user_last_name || ''}`.trim();
+    } else if (orderData.user_full_name) {
+        recipientName = orderData.user_full_name;
+    }
+    // Fallback could be guest name if stored differently, or just "Valued Customer" - for now, rely on above
+
+    // Sender information from config
+    const sender = {
+      name: config.company.name,
+      addressLine1: config.company.address?.split(',')[0]?.trim() || 'N/A', // Basic split, improve if address format is complex
+      addressLine2: config.company.address?.split(',')[1]?.trim() || '',
+      city: config.company.address?.split(',')[2]?.trim() || 'N/A', // Highly dependent on address string format
+      postalCode: config.company.address?.match(/\b\d{5}(?:-\d{4})?\b|\b[A-Z0-9]{3}\s?[A-Z0-9]{3}\b/)?.[0] || 'N/A', // Basic US/UK/CA postal code regex
+      country: 'Your Country', // Placeholder, ideally part of structured company address in config
+      phone: config.company.phone || '',
+    };
+     // A more robust way to get company address parts if config.company.address is just a string:
+     // This is still a simplification. A structured address in config would be best.
+     const companyAddressParts = config.company.address.split(',');
+     sender.addressLine1 = companyAddressParts[0]?.trim() || 'N/A';
+     if (companyAddressParts.length > 3) { // Assuming Street, City, Region, Postal Code
+        sender.addressLine2 = ''; // Or handle more complex splits
+        sender.city = companyAddressParts[companyAddressParts.length - 3]?.trim() || 'N/A';
+        // sender.region = companyAddressParts[companyAddressParts.length - 2]?.trim(); // If region is separate
+        sender.postalCode = companyAddressParts[companyAddressParts.length - 1]?.trim() || 'N/A'; // Simplistic
+        // Country would need to be explicit or inferred.
+     } else if (companyAddressParts.length === 3) { // Street, City, PostalCode
+        sender.city = companyAddressParts[1]?.trim() || 'N/A';
+        sender.postalCode = companyAddressParts[2]?.trim() || 'N/A';
+     }
+
+
+    const labelDetails = {
+      orderId: orderData.id,
+      shipmentDate: new Date().toLocaleDateString(), // Or orderData.updated_at if status became 'shipped'
+      sender,
+      recipient: {
+        name: recipientName,
+        addressLine1: orderData.shipping_address_line1,
+        addressLine2: orderData.shipping_address_line2,
+        city: orderData.shipping_city,
+        postalCode: orderData.shipping_postal_code,
+        country: orderData.shipping_country,
+        phone: orderData.shipping_phone || '', // Use order.shipping_phone if available
+      },
+      trackingNumber: orderData.tracking_number || 'N/A',
+      carrier: orderData.shipping_carrier || 'N/A',
+      // Potentially add items summary if needed on the label, but typically not for a pure shipping label
+    };
+
+    return labelDetails;
+
+  } catch (error) {
+    if (error instanceof NotFoundError) throw error;
+    console.error(`Error in orderService.getOrderDetailsForShippingLabel for order ID ${orderId}:`, error);
+    throw new AppError(`Failed to retrieve order details for shipping label.`, 500, 'ORDER_SHIPPING_LABEL_DETAILS_FETCH_FAILED');
+  }
+}
+
+
+const { generateDeliveryConfirmationToken, validateDeliveryConfirmationToken } = require('../utils/securityUtils'); // For QR Code (validateDeliveryConfirmationToken was already imported)
 const bcrypt = require('bcrypt');
 const taxService = require('./taxService'); // Assuming it's in the same directory
 // const { BadRequestError, ConflictError } = require('../utils/AppError'); // REMOVED - Consolidated at top

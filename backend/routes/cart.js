@@ -46,6 +46,7 @@ const { NotFoundError, BadRequestError } = require('../utils/AppError');
 // POST /api/cart/calculate-taxes - Calculate taxes for a given cart
 router.post(
   '/calculate-taxes',
+  // Removed temporary logging middleware
   [ // Basic validation for cartItems and optional userId/shippingAddress
     body('cartItems').isArray({ min: 1 }).withMessage('Cart items must be a non-empty array.'),
     body('cartItems.*.productId').isInt({ gt: 0 }).withMessage('Each cart item must have a valid productId.'),

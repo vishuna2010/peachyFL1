@@ -81,17 +81,53 @@ export const useCart = () => {
     isFetchingTaxDetails.value = true;
     taxCalculationError.value = '';
     try {
-      // Prepare payload for the backend
-      // Backend expects: { productId, variantId, quantity, price }
-      const itemsToTax = currentCartItems.map(item => ({
-        productId: item.productId,
-        variantId: item.variantId || null,
-        quantity: item.quantity,
-        price: item.price // This is the unit price
-      }));
+      // Prepare payload for the backend, filtering out invalid items
+      const itemsToTax = currentCartItems
+        .filter(item => {
+          const isValidProductId = typeof item.productId === 'number' && item.productId > 0;
+          const isValidQuantity = typeof item.quantity === 'number' && item.quantity > 0;
+          // Price can be 0, so check if it's a number and non-negative
+          const isValidPrice = typeof item.price === 'number' && !isNaN(item.price) && item.price >= 0;
+
+          if (!isValidProductId || !isValidQuantity || !isValidPrice) {
+            console.warn('Filtering out invalid cart item for tax calculation:', JSON.parse(JSON.stringify(item)));
+          }
+          return isValidProductId && isValidQuantity && isValidPrice;
+        })
+        .map(item => {
+          const mappedItem = {
+            productId: item.productId,
+            quantity: item.quantity,
+            price: parseFloat(item.price.toFixed(2)) // Ensure price is correctly formatted float
+          };
+          // Only include variantId if it's a positive integer
+          if (typeof item.variantId === 'number' && item.variantId > 0) {
+            mappedItem.variantId = item.variantId;
+          }
+          return mappedItem;
+        }); // Corrected: removed extra parenthesis
+
+      // If, after filtering, itemsToTax is empty but the original cart was not, it means all items were invalid.
+      if (itemsToTax.length === 0 && currentCartItems.length > 0) {
+        console.warn('All cart items were invalid for tax calculation. Not calling API.');
+        cartTaxDetails.value = null;
+        taxCalculationError.value = 'No valid items in cart to calculate tax for.';
+        isFetchingTaxDetails.value = false;
+        return;
+      }
+      // If itemsToTax is empty because currentCartItems was initially empty, the top-level check handles it.
+      if (itemsToTax.length === 0) {
+        // This path is taken if currentCartItems was empty initially or all items filtered out
+        // and the previous block already handled the "all items filtered out" case.
+        // So, if currentCartItems was empty, this is the correct state.
+        cartTaxDetails.value = null;
+        taxCalculationError.value = '';
+        isFetchingTaxDetails.value = false;
+        return;
+      }
 
       const payload = {
-        cartItems: itemsToTax,
+        cartItems: itemsToTax, // Use the filtered and mapped items
         userId: currentUserId || null,
       };
 

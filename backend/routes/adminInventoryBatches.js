@@ -277,9 +277,13 @@ router.put(
   [
     param('batchId').isInt({ gt: 0 }).toInt(),
     body('current_quantity').optional().isInt({ min: 0 }).toInt().withMessage('Current quantity must be a non-negative integer.'),
-    body('expiry_date').optional({ nullable: true }).isDate().withMessage('Expiry date must be a valid date (YYYY-MM-DD) or null.'),
-    body('batch_number').optional().isString().trim().notEmpty().withMessage('Batch number cannot be empty string if provided.'),
+    body('expiry_date').optional({ nullable: true })
+      .isISO8601().withMessage('Expiry date must be a valid date (YYYY-MM-DD) or null.')
+      .toDate(), // Convert to Date object if valid
+    body('batch_number').optional().isString().trim().notEmpty().withMessage('Batch number cannot be empty string if provided.')
+      .isLength({ min: 1, max: 100 }).withMessage('Batch number must be between 1 and 100 characters.'),
     body('reason_for_change').isString().trim().notEmpty().withMessage('Reason for change is required.')
+      .isLength({ min: 1, max: 255 }).withMessage('Reason for change must be between 1 and 255 characters.')
   ],
   async (req, res, next) => {
     const errors = validationResult(req);

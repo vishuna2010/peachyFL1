@@ -173,7 +173,176 @@ module.exports = {
   generateOrderInvoicePdf,
   generateQrCodeDataURL,
   generatePackingSlipPdf, // Added new function
+  getShippingLabelHtml, // Added for shipping label
+  generateShippingLabelPdf, // Added for shipping label
 };
+
+// Helper function to generate HTML for a shipping label
+function getShippingLabelHtml(labelData) {
+  const {
+    orderId,
+    shipmentDate,
+    sender, // { name, addressLine1, addressLine2, city, postalCode, country, phone }
+    recipient, // { name, addressLine1, addressLine2, city, postalCode, country, phone }
+    trackingNumber,
+    carrier,
+    barcodeDataUrl // This will be the QR code data URL for the tracking number
+  } = labelData;
+
+  return `
+  <!DOCTYPE html>
+  <html>
+  <head>
+      <meta charset="UTF-8">
+      <title>Shipping Label - Order ${orderId}</title>
+      <style>
+          body {
+              font-family: Arial, sans-serif;
+              margin: 0;
+              padding: 0; /* Padding will be handled by puppeteer's page.pdf margin */
+              width: 4in;
+              height: 6in;
+              box-sizing: border-box;
+              display: flex;
+              flex-direction: column;
+          }
+          .label-container {
+              width: 100%;
+              height: 100%;
+              padding: 0.15in; /* Overall padding inside the 4x6 area */
+              box-sizing: border-box;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+          }
+          .section {
+              border: 1.5px solid #000;
+              padding: 0.1in;
+              margin-bottom: 0.1in;
+              page-break-inside: avoid;
+          }
+          .address-block h3 {
+              margin-top: 0;
+              margin-bottom: 0.05in;
+              font-size: 8pt;
+              font-weight: bold;
+              text-transform: uppercase;
+              border-bottom: 1px solid #ccc;
+              padding-bottom: 0.03in;
+          }
+          .address-block p {
+              margin: 0.02in 0;
+              font-size: 10pt;
+              line-height: 1.3;
+          }
+          .address-block p.recipient-name {
+              font-size: 12pt;
+              font-weight: bold;
+          }
+          .top-section { display: flex; justify-content: space-between; margin-bottom: 0.1in; }
+          .top-section .sender-address { width: 55%; }
+          .top-section .carrier-details { width: 40%; text-align: left; font-size: 8pt; padding: 0.05in }
+
+          .recipient-address { text-align: left; padding: 0.15in; }
+          .barcode-area { text-align: center; padding-top: 0.1in; padding-bottom: 0.05in; border-top: 2px dashed #000; margin-top:0.1in; }
+          .barcode-area img {
+              max-width: 70%; /* Adjust based on QR code size */
+              height: auto;
+              max-height: 0.8in; /* Max height for QR code */
+              display: block;
+              margin: 0.05in auto;
+          }
+          .tracking-number-text { font-size: 10pt; font-weight: bold; margin-top: 0.05in; letter-spacing: 0.5px; }
+          .footer-info { text-align: center; font-size: 7pt; padding-top: 0.05in; }
+          .no-grow { flex-grow: 0; }
+          .grow { flex-grow: 1; }
+      </style>
+  </head>
+  <body>
+      <div class="label-container">
+          <div class="no-grow">
+              <div class="top-section">
+                  <div class="section sender-address address-block">
+                      <h3>FROM:</h3>
+                      <p>${sender.name}</p>
+                      <p>${sender.addressLine1}</p>
+                      ${sender.addressLine2 ? `<p>${sender.addressLine2}</p>` : ''}
+                      <p>${sender.city}, ${sender.postalCode}</p>
+                      <p>${sender.country || ''}</p>
+                      ${sender.phone ? `<p>Tel: ${sender.phone}</p>` : ''}
+                  </div>
+                  <div class="section carrier-details">
+                      <p><strong>Carrier:</strong> ${carrier}</p>
+                      <p><strong>Order ID:</strong> ${orderId}</p>
+                      <p><strong>Ship Date:</strong> ${shipmentDate}</p>
+                      <!-- Add weight/service type here if available -->
+                  </div>
+              </div>
+
+              <div class="section recipient-address address-block">
+                  <h3>TO:</h3>
+                  <p class="recipient-name">${recipient.name}</p>
+                  <p>${recipient.addressLine1}</p>
+                  ${recipient.addressLine2 ? `<p>${recipient.addressLine2}</p>` : ''}
+                  <p>${recipient.city}, ${recipient.postalCode}</p>
+                  <p>${recipient.country}</p>
+                  ${recipient.phone ? `<p>Tel: ${recipient.phone}</p>` : ''}
+              </div>
+          </div>
+
+          <div class="grow section barcode-area">
+              ${barcodeDataUrl ? `<img src="${barcodeDataUrl}" alt="Tracking QR Code">` : '<p>Tracking N/A</p>'}
+              <p class="tracking-number-text">${trackingNumber}</p>
+          </div>
+          <div class="no-grow footer-info">
+              <p>Thank you for your order! - ${config.company.name}</p>
+          </div>
+      </div>
+  </body>
+  </html>
+  `;
+}
+
+// Function to generate Shipping Label PDF
+async function generateShippingLabelPdf(labelData) {
+  let browser = null;
+  try {
+    // Generate QR Code for the tracking number
+    const qrCodeDataUrl = labelData.trackingNumber && labelData.trackingNumber !== 'N/A'
+      ? await generateQrCodeDataURL(labelData.trackingNumber)
+      : null;
+
+    const htmlContent = getShippingLabelHtml({ ...labelData, barcodeDataUrl: qrCodeDataUrl });
+
+    browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+    const pdfBuffer = await page.pdf({
+      width: '4in',
+      height: '6in',
+      printBackground: true,
+      margin: { // Minimal margins, as padding is handled in HTML/CSS
+        top: '0in',
+        right: '0in',
+        bottom: '0in',
+        left: '0in',
+      }
+    });
+    return pdfBuffer;
+  } catch (error) {
+    console.error('Error generating shipping label PDF with Puppeteer:', error);
+    throw error;
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
 
 async function generateQrCodeDataURL(text) {
   if (!text) return null;

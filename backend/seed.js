@@ -1703,6 +1703,9 @@ async function seedRbac(client, seededDataIds) {
     // Audit Logs
     { name: 'auditlogs:view', description: 'Can view system audit logs.', group_name: 'System' },
 
+    // Marketing
+    { name: 'marketing:send_emails', description: 'Allows sending of marketing emails to user segments.', group_name: 'Marketing' },
+
   ];
 
   try {
@@ -1908,24 +1911,62 @@ async function seedProductImages(client, seededDataIds) {
         continue;
       }
 
+      // Clear existing primary flags for this product to prevent unique constraint violation
+      await client.query('UPDATE product_images SET is_primary = FALSE WHERE product_id = $1', [productId]);
+      console.log(`Cleared existing primary image flags for product ID ${productId}.`);
+
       let primaryImageUrlForProduct = null;
+      let primaryImageMarkedInSeed = false;
 
       for (const img of productImageData.images) {
+        // Ensure only one image in the current seed data for this product is marked primary
+        let currentImgIsPrimary = img.is_primary;
+        if (currentImgIsPrimary && primaryImageMarkedInSeed) {
+          console.warn(`Multiple primary images defined in seed for product SKU ${productImageData.productSku}. Using only the first one encountered.`);
+          currentImgIsPrimary = false; // Demote subsequent primary flags for this product in this batch
+        }
+        if (currentImgIsPrimary && !primaryImageMarkedInSeed) {
+          primaryImageMarkedInSeed = true;
+        }
+
         const result = await client.query(
           `INSERT INTO product_images (product_id, image_url, alt_text, display_order, is_primary)
            VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (product_id, image_url) DO NOTHING RETURNING id, image_url, is_primary;`,
-          [productId, img.image_url, img.alt_text, img.display_order, img.is_primary]
+           ON CONFLICT (product_id, image_url) DO UPDATE SET
+             alt_text = EXCLUDED.alt_text,
+             display_order = EXCLUDED.display_order,
+             is_primary = EXCLUDED.is_primary,
+             updated_at = CURRENT_TIMESTAMP
+           RETURNING id, image_url, is_primary;`,
+          [productId, img.image_url, img.alt_text, img.display_order, currentImgIsPrimary]
         );
+
         if (result.rows.length > 0 && result.rows[0].is_primary) {
           primaryImageUrlForProduct = result.rows[0].image_url;
         }
-        console.log(`Seeded image "${img.alt_text}" for product ID ${productId}.`);
+        console.log(`Seeded/Updated image "${img.alt_text}" for product ID ${productId} (is_primary: ${currentImgIsPrimary}).`);
+      }
+
+      // If no primary image was explicitly set from the seed data (after potential demotion),
+      // and there are images, make the first one primary by default.
+      if (!primaryImageUrlForProduct && productImageData.images.length > 0) {
+          const firstImage = productImageData.images[0];
+          await client.query(
+              'UPDATE product_images SET is_primary = TRUE WHERE product_id = $1 AND image_url = $2 RETURNING image_url',
+              [productId, firstImage.image_url]
+          ).then(updateResult => {
+              if (updateResult.rows.length > 0) {
+                  primaryImageUrlForProduct = updateResult.rows[0].image_url;
+                  console.log(`Defaulted first image '${firstImage.alt_text}' to primary for product ID ${productId}.`);
+              }
+          });
       }
 
       if (primaryImageUrlForProduct) {
         await client.query('UPDATE products SET image_url = $1 WHERE id = $2', [primaryImageUrlForProduct, productId]);
         console.log(`Updated main image_url for product ID ${productId} to ${primaryImageUrlForProduct}.`);
+      } else if (productImageData.images.length > 0) {
+        console.warn(`No primary image could be definitively set for product ID ${productId} from seed data. Main product image_url may not be updated.`);
       }
     }
     console.log('Product images seeding completed.');

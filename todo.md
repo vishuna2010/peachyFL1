@@ -147,8 +147,13 @@ This section outlines the primary driver for future backend development, based o
           - [X] Added validation for `/low-stock-products` (page, limit, categoryId, supplierId, sortBy, sortOrder).
           - [X] Added validation for `/sales` (optional status, paymentStatus, productId, customerId).
           - [X] Confirmed existing validations for other report routes are adequate.
-        - [ ] Admin Stock Adjustments module (`adminStockAdjustments.js`)
-        - [ ] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route)
+        - [X] Admin Stock Adjustments module (`adminStockAdjustments.js`)
+          - [X] Reviewed existing validation for routes `/adjust` and `/physical-count`.
+          - [X] Added `isLength({ min: 1, max: 255 })` validation to `reason` fields.
+        - [X] Admin Inventory Batches module (`adminInventoryBatches.js` - PUT route)
+          - [X] Reviewed `PUT /:batchId` route and corresponding service method.
+          - [X] Enhanced validation for `expiry_date` (to use `isISO8601().toDate()`).
+          - [X] Added `isLength` validation for `batch_number` (max 100) and `reason_for_change` (max 255).
         - [ ] Admin Tax Classes module (`adminTaxClasses.js`)
         - [ ] Admin Tax Rates module (`adminTaxRates.js`)
         - [ ] Public API routes (auth, products, orders, users, categories, reviews, etc.)
@@ -279,34 +284,34 @@ This section outlines the primary driver for future backend development, based o
 ## 🔔 Notifications & Email Features (To Implement & Verify)
 - [X] **Email Template Theming:** Applied consistent color palette and branding to all EJS email templates.
 - **Welcome Email**
-  - [~] Sent immediately after user signs up
-    - [X] Core functionality implemented (EJS template, emailService function, integration with registration).
+  - [X] Sent after user successfully verifies their email address (was: [~] Sent immediately after user signs up)
+    - [X] Core functionality implemented (EJS template, emailService function, integration with registration & email verification).
     - [X] Theming with site colors applied.
-    - [ ] Consider enhancing user name personalization if registration collects a full name.
+    - [~] Consider enhancing user name personalization if registration collects a full name. (Note: Backend (`emailService.js`) already attempts to use `user.name`. This item depends on frontend registration form changes to collect the name.)
 - **Two-Factor Authentication (2FA)**
-  - [X] Email-based code for signup validation
+  - [X] Email-based code for signup validation (Email ownership verification)
     - [X] User registration updated to generate/store verification token & expiry.
     - [X] Email service sends verification code upon registration.
     - [X] New `/api/auth/verify-email` endpoint created to validate code, mark email as verified, and clear token.
     - [X] Login process updated to block login for unverified emails.
-    - [X] Welcome email now sent *after* successful email verification.
+    - [X] Welcome email now sent *after* successful email verification. (This is confirmed)
 - **Order Notifications**
   - Email customer when:
-    - [X] Order is placed (covered by existing Order Confirmation email sent after successful order creation)
-    - [X] Order is dispatched
+    - [X] Order is placed (covered by existing Order Confirmation email sent after successful order creation) - Verified.
+    - [X] Order is dispatched - Verified.
       - [X] EJS template `order_dispatched.ejs` created.
       - [X] `emailService.sendOrderDispatchedEmail` function implemented.
       - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'shipped'.
       - [X] `orders` table schema in `seed.js` updated with `shipping_carrier`, `tracking_number`.
       - [X] Admin route `PUT /admin/orders/:id/status` and validators updated for tracking info.
       - [X] Theming with site colors applied.
-    - [X] Order is delivered
+    - [X] Order is delivered - Verified.
       - [X] EJS template `order_delivered.ejs` created.
       - [X] `emailService.sendOrderDeliveredEmail` function implemented.
-      - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'delivered'.
+      - [X] Integrated into `orderService.updateOrderStatus` when status becomes 'delivered' and via QR code delivery confirmation.
       - [X] Theming with site colors applied.
 - **Invoice Notifications**
-  - [~] Automatically generate and email invoices to customers upon order confirmation
+  - [X] Automatically generate and email invoices to customers upon order confirmation (was: [~]) - Verified.
     - [X] EJS template `invoice_email.ejs` for email body created.
     - [X] `emailService.sendInvoiceEmail` function implemented to send email with PDF attachment.
     - [X] Integrated into `POST /api/orders` route: after order creation, PDF is generated and invoice email is sent.
@@ -338,27 +343,50 @@ This section outlines the primary driver for future backend development, based o
 
 ## 📦 Fulfillment Features
 - **Print Shipping Label**
-  - [ ] Generate and print shipping label per order
+  - [X] Generate and print shipping label per order (Backend PDF generation implemented)
   - Include:
-    - [ ] Recipient name/address
-    - [ ] Tracking number
-    - [ ] Barcode or QR code (if supported by courier)
+    - [X] Recipient name/address
+    - [X] Tracking number
+    - [X] Barcode or QR code (if supported by courier) (Implemented QR code of tracking number)
+  - Notes:
+    - API endpoint `GET /admin/orders/:orderId/shipping-label/pdf` created.
+    - Uses `orderService.getOrderDetailsForShippingLabel` and `pdfService.generateShippingLabelPdf`.
+    - Label is 4x6 inches, includes sender/recipient info, tracking, carrier, QR of tracking no.
+    - Permission `orders:print_shipping_label` required.
 
 ---
 
 ## 💸 Refund System
-- **Refund Notification**
+- **Refund Notification** - Verified.
   - Email customer for:
-    - [ ] Full refunds
-    - [ ] Partial refunds
-  - [ ] Include refund details in email
+    - [X] Full refunds
+    - [X] Partial refunds
+  - [X] Include refund details in email (items, amounts, reason if provided)
 
 ---
 
 ## 📢 Marketing Emails
 - **Email Marketing Integration**
-  - [ ] Design promotional and newsletter templates
-  - [ ] Segment user base (e.g., by activity, order history)
+  - [X] Design promotional and newsletter templates
+    - [X] Created basic promotional EJS template: `backend/email_templates/marketing/basic_promo_1.ejs`.
+  - [~] Segment user base (e.g., by activity, order history)
+    - [X] Basic user fetching implemented in `userService.getAllMarketingSubscribers()` (gets all verified, non-guest users).
+    - [ ] Advanced segmentation logic (by order history, activity, etc.) still pending.
+  - [X] Backend API for sending marketing emails (Initial Version)
+    - [X] Created `emailService.sendMarketingPromoEmail` for sending individual promo emails.
+    - [X] Created `marketingService.js` with `sendPromotionalEmailToSegment` to orchestrate sending to a user list.
+    - [X] Created `POST /api/admin/marketing/send-promo-email` endpoint in `adminMarketing.js`.
+    - [X] Endpoint includes validation, auth, and permission check (`marketing:send_emails`).
+    - [X] Note: `marketing:send_emails` permission defined and assigned to Super Admin in `seed.js`.
+  - [~] Admin Panel UI for Marketing Emails (Initial Version)
+    - [X] Added "Marketing" link to Admin Sidebar (`AdminSidebar.vue`), visible with `marketing:send_emails` permission.
+    - [X] Created basic Marketing page structure (`frontend/pages/admin/marketing/index.vue`) with admin layout and RBAC.
+    - [X] Implemented "Send Promotional Email" form UI with fields for subject, title, message, CTA.
+    - [X] Implemented API call logic from UI to `POST /api/admin/marketing/send-promo-email` endpoint.
+    - [X] Basic success/error message display on UI based on API response.
+    - [ ] Advanced UI features (e.g., template selection, segment selection, preview) pending.
+  - [ ] (Future) Tracking for marketing emails (opens, clicks).
+  - [ ] (Future) Unsubscribe mechanism for marketing emails.
 
 ---
 

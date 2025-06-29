@@ -2193,34 +2193,46 @@ module.exports = {
  */
 async function getPublicProductFilterOptions() {
   const query = `
+    WITH RelevantOptionValues AS (
+        SELECT DISTINCT
+            po.id AS option_id,
+            po.name AS option_name,
+            pov.id AS value_id,
+            pov.value AS value_name
+        FROM
+            product_options po
+        JOIN
+            product_option_values pov ON po.id = pov.product_option_id
+        JOIN
+            product_variant_option_values pvov ON pov.id = pvov.product_option_value_id
+        JOIN
+            product_variants pv ON pvov.product_variant_id = pv.id
+        JOIN
+            products p ON pv.product_id = p.id
+        WHERE
+            p.product_status = 'active' AND p.has_variants = TRUE
+    )
     SELECT
-        po.id AS option_id,
-        po.name AS option_name,
-        json_agg(DISTINCT jsonb_build_object('value_id', pov.id, 'value_name', pov.value) ORDER BY pov.value ASC) AS "values"
+        rov.option_id,
+        rov.option_name,
+        json_agg(jsonb_build_object('value_id', rov.value_id, 'value_name', rov.value_name) ORDER BY rov.value_name ASC) AS "values"
     FROM
-        product_options po
-    JOIN
-        product_option_values pov ON po.id = pov.product_option_id
-    JOIN
-        product_variant_option_values pvov ON pov.id = pvov.product_option_value_id
-    JOIN
-        product_variants pv ON pvov.product_variant_id = pv.id
-    JOIN
-        products p ON pv.product_id = p.id
-    WHERE
-        p.product_status = 'active' AND p.has_variants = TRUE
+        RelevantOptionValues rov
     GROUP BY
-        po.id, po.name
+        rov.option_id, rov.option_name
     ORDER BY
-        po.name;
+        rov.option_name;
   `;
   try {
     const { rows } = await db.query(query);
-    // Ensure 'values' array is always present, even if empty, and items are sorted by value_name.
-    // The ORDER BY pov.value ASC within json_agg handles sorting of values.
+    // The json_agg will return null if a group is empty (no values for an option_id/option_name combination from RelevantOptionValues)
+    // which shouldn't happen if RelevantOptionValues only contains options that *do* have values linked to active products.
+    // However, if an option exists but has no values linked to *active variant products*, it might not appear.
+    // The original query's structure might have implicitly handled this differently by starting from product_options.
+    // This new query will only return options that actually have values on active, variant products.
     return rows.map(option => ({
         ...option,
-        values: option.values || [] // Ensure values is an array, handles case where json_agg might return null for an option with no valid values (though unlikely with current joins)
+        values: option.values || [] // Ensure values is an array, especially if json_agg could return null for a group.
     }));
   } catch (error) {
     console.error('[productService.getPublicProductFilterOptions] Error fetching public filter options:', error);

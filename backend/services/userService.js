@@ -397,7 +397,39 @@ module.exports = {
   deleteUser,
   updateUserProfile, // Added new function
   getUserTaxContext, // Added for tax calculation context
+  getAllMarketingSubscribers, // Added for fetching users for marketing emails
 };
+
+/**
+ * Retrieves a list of users eligible for marketing emails.
+ * For this basic version, it fetches all non-guest users with verified emails.
+ * @returns {Promise<Array<object>>} A list of user objects, each with id, email, and name.
+ * @throws {AppError} If database operation fails.
+ */
+async function getAllMarketingSubscribers() {
+  try {
+    // Fetches users who are not guests and have verified their email.
+    // In a more advanced setup, this would check an 'is_subscribed_to_marketing' flag.
+    const query = `
+      SELECT id, email, name
+      FROM users
+      WHERE is_email_verified = TRUE AND (role IS NULL OR LOWER(role) != 'guest')
+      ORDER BY id ASC;
+    `;
+    // Note: The `role` column is a legacy text field. `role_id` and a join to `roles` table is preferred for new logic.
+    // However, to quickly filter out guests without joining, using the legacy `role` column is simpler here.
+    // If `role` can be NULL for non-guests, the condition `(role IS NULL OR LOWER(role) != 'guest')` handles that.
+    // If a dedicated `is_subscribed_to_marketing` BOOLEAN column is added to `users`, the query would be:
+    // SELECT id, email, name FROM users WHERE is_subscribed_to_marketing = TRUE ORDER BY id ASC;
+
+    const result = await db.query(query);
+    return result.rows;
+  } catch (error) {
+    console.error('Error in userService.getAllMarketingSubscribers:', error);
+    throw new AppError('Failed to retrieve marketing subscribers.', 500, 'MARKETING_SUBSCRIBERS_FETCH_FAILED');
+  }
+}
+
 
 /**
  * Fetches tax-relevant information for a given user.
