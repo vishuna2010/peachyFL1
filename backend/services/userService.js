@@ -403,7 +403,7 @@ module.exports = {
 /**
  * Retrieves a list of users eligible for marketing emails.
  * For this basic version, it fetches all non-guest users with verified emails.
- * @returns {Promise<Array<object>>} A list of user objects, each with id, email, name, first_name, last_name.
+ * @returns {Promise<Array<object>>} A list of user objects, each with id, email, and name.
  * @throws {AppError} If database operation fails.
  */
 async function getAllMarketingSubscribers() {
@@ -411,7 +411,7 @@ async function getAllMarketingSubscribers() {
     // Fetches users who are not guests and have verified their email.
     // In a more advanced setup, this would check an 'is_subscribed_to_marketing' flag.
     const query = `
-      SELECT id, email, name, first_name, last_name
+      SELECT id, email, name
       FROM users
       WHERE is_email_verified = TRUE AND (role IS NULL OR LOWER(role) != 'guest')
       ORDER BY id ASC;
@@ -420,7 +420,7 @@ async function getAllMarketingSubscribers() {
     // However, to quickly filter out guests without joining, using the legacy `role` column is simpler here.
     // If `role` can be NULL for non-guests, the condition `(role IS NULL OR LOWER(role) != 'guest')` handles that.
     // If a dedicated `is_subscribed_to_marketing` BOOLEAN column is added to `users`, the query would be:
-    // SELECT id, email, name, first_name, last_name FROM users WHERE is_subscribed_to_marketing = TRUE ORDER BY id ASC;
+    // SELECT id, email, name FROM users WHERE is_subscribed_to_marketing = TRUE ORDER BY id ASC;
 
     const result = await db.query(query);
     return result.rows;
