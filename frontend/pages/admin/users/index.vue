@@ -281,14 +281,26 @@ watch(usersApiResponse, (newResponse) => {
       console.log('[UsersPage] RAW API newResponse.data (direct):', newResponse.data);
     }
 
-    totalUsers.value = newResponse.data.total_users || 0; // This is where the issue might be
-    console.log('[UsersPage] Attempted to set total_users from newResponse.data.total_users. Value found:', newResponse.data.total_users);
+    // Adjust path based on actual API response structure: { data: { users: [], total_users: X } } or { data: [], pagination: { total: X } }
+    // Based on logs: newResponse.data = {data: Array(9), pagination: {…}}
+    // So, users are in newResponse.data.data
+    // And total count is in newResponse.data.pagination.total
+
+    const apiData = newResponse.data; // This is the {data: Array, pagination: Object} part
+
+    if (apiData && apiData.pagination) {
+      totalUsers.value = apiData.pagination.total || 0;
+      console.log('[UsersPage] Attempted to set total_users from apiData.pagination.total. Value found:', apiData.pagination.total);
+    } else {
+      totalUsers.value = 0;
+      console.warn('[UsersPage] apiData.pagination or apiData.pagination.total is missing.');
+    }
     console.log('[UsersPage] Total users set to:', totalUsers.value);
 
-    if (Array.isArray(newResponse.data.users)) {
-      console.log('[UsersPage] newResponse.data.users is an array. Length:', newResponse.data.users.length);
+    if (apiData && Array.isArray(apiData.data)) {
+      console.log('[UsersPage] apiData.data (formerly users) is an array. Length:', apiData.data.length);
     } else {
-      console.warn('[UsersPage] newResponse.data.users is NOT an array. Value:', newResponse.data.users);
+      console.warn('[UsersPage] apiData.data (formerly users) is NOT an array or is missing. Value:', apiData ? apiData.data : 'apiData is null/undefined');
     }
 
   } else {
