@@ -75,25 +75,48 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     }
 
     // Specific page permissions (examples)
-    if (to.path.startsWith('/admin/users') && !can('users:view').value) {
-      console.log(`[Middleware] User ${authUser.value?.email} lacks 'users:view' for ${to.path}. Redirecting.`);
+    const usersViewPermission = can('users:view');
+    console.log(`[RBAC] Checking 'users:view' for ${to.path}. Value: ${usersViewPermission.value}. All user permissions: ${JSON.stringify(userPermissions.value.map(p => p.name))}`);
+    if (to.path.startsWith('/admin/users') && !usersViewPermission.value) {
+      console.log(`[RBAC] User ${authUser.value?.email} lacks 'users:view' for ${to.path}. Redirecting to /admin.`);
       return navigateTo('/admin'); // Or '/admin/access-denied'
     }
-    if (to.path.startsWith('/admin/products') && !can('products:view').value) {
-      console.log(`[Middleware] User ${authUser.value?.email} lacks 'products:view' for ${to.path}. Redirecting.`);
+
+    const productsViewPermission = can('products:view');
+    console.log(`[RBAC] Checking 'products:view' for ${to.path}. Value: ${productsViewPermission.value}`);
+    if (to.path.startsWith('/admin/products') && !productsViewPermission.value) {
+      console.log(`[RBAC] User ${authUser.value?.email} lacks 'products:view' for ${to.path}. Redirecting to /admin.`);
       return navigateTo('/admin');
     }
-    if (to.path.startsWith('/admin/roles') && !can('rbac:manage').value) {
-      console.log(`[Middleware] User ${authUser.value?.email} lacks 'rbac:manage' for ${to.path}. Redirecting.`);
+
+    const rbacManagePermission = can('rbac:manage');
+    console.log(`[RBAC] Checking 'rbac:manage' for ${to.path}. Value: ${rbacManagePermission.value}`);
+    if (to.path.startsWith('/admin/roles') && !rbacManagePermission.value) {
+      console.log(`[RBAC] User ${authUser.value?.email} lacks 'rbac:manage' for ${to.path}. Redirecting to /admin.`);
       return navigateTo('/admin');
     }
+
+    const marketingSendEmailsPermission = can('marketing:send_emails');
+    console.log(`[RBAC] Checking 'marketing:send_emails' for ${to.path}. Value: ${marketingSendEmailsPermission.value}`);
+    if (to.path.startsWith('/admin/marketing') && !marketingSendEmailsPermission.value) {
+      console.log(`[RBAC] User ${authUser.value?.email} lacks 'marketing:send_emails' for ${to.path}. Redirecting to /admin.`);
+      return navigateTo('/admin');
+    }
+
+    // Example for orders, assuming 'orders:view_all' is the permission
+    const ordersViewAllPermission = can('orders:view_all');
+    console.log(`[RBAC] Checking 'orders:view_all' for ${to.path}. Value: ${ordersViewAllPermission.value}`);
+    if (to.path.startsWith('/admin/orders') && !to.path.includes('shipping-label') && !ordersViewAllPermission.value) { // Ensure not to block shipping label printing if it has its own fine-grained perm
+        console.log(`[RBAC] User ${authUser.value?.email} lacks 'orders:view_all' for ${to.path}. Redirecting to /admin.`);
+        return navigateTo('/admin');
+    }
+
     // Add more specific checks for other sections as needed...
-    // e.g., /admin/orders requires 'orders:view_all'
     // e.g., /admin/taxes requires 'taxes:manage_classes' or 'taxes:manage_rates'
 
   } else if (to.path === '/login' && isAuthenticated.value) {
     // If user is authenticated and tries to go to login page, redirect to admin dashboard or home
-    // console.log('[Middleware] Authenticated user on login page. Redirecting to /admin.');
+    console.log('[RBAC] Authenticated user on login page. Redirecting to /admin.');
     return navigateTo('/admin');
   }
 
