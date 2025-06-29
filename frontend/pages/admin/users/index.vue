@@ -1,18 +1,337 @@
 <template>
-  <div>
-    <h1>Simplified Admin Users Page Test - definePageMeta (Layout Only)</h1>
-    <p>If you see this, the basic page is rendering with layout.</p>
+  <div class="container mx-auto p-4 sm:p-6">
+    <div class="bg-white shadow-lg rounded-lg p-6">
+      <h1 class="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">User Management</h1>
+
+      <!-- Filters and Search -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6 items-end">
+        <div>
+          <label for="search" class="block text-sm font-medium text-gray-700 mb-1">Search Users</label>
+          <input
+            type="text"
+            id="search"
+            v-model="searchQuery"
+            placeholder="Search by name or email..."
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+          />
+        </div>
+        <div>
+          <label for="role-filter" class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+          <select
+            id="role-filter"
+            v-model="selectedRole"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+          >
+            <option value="">All Roles</option>
+            <option v-for="role in availableRoles" :key="role.id" :value="role.id">{{ role.name }}</option>
+          </select>
+        </div>
+        <div>
+          <label for="status-filter" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <select
+            id="status-filter"
+            v-model="selectedStatus"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+          >
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="verified">Email Verified</option>
+            <option value="unverified">Email Unverified</option>
+          </select>
+        </div>
+        <div class="flex space-x-2">
+          <button
+            @click="applyFilters"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-md shadow-md transition duration-150 ease-in-out text-sm flex-grow"
+          >
+            Apply
+          </button>
+           <NuxtLink
+            v-if="can('users:create').value"
+            to="/admin/users/create"
+            class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-md shadow-md transition duration-150 ease-in-out text-sm text-center"
+          >
+            Add User
+          </NuxtLink>
+        </div>
+      </div>
+
+      <!-- Loading and Error States -->
+      <div v-if="pending" class="text-center py-10">
+        <p class="text-lg text-gray-600">Loading users...</p>
+        <!-- You can add a spinner here -->
+      </div>
+      <div v-else-if="error" class="text-center py-10 bg-red-50 border border-red-200 rounded-md p-4">
+        <p class="text-lg text-red-600">Error loading users: {{ error.message || 'Unknown error' }}</p>
+        <button @click="refreshUsers" class="mt-2 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md text-sm">
+          Retry
+        </button>
+      </div>
+
+      <!-- Users Table -->
+      <div v-else-if="usersToDisplay.length > 0" class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 border border-gray-200 rounded-lg shadow">
+          <thead class="bg-gray-50">
+            <tr>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr v-for="user in usersToDisplay" :key="user.id" class="hover:bg-gray-50 transition-colors duration-150">
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ user.name }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user.email }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user.role }}</td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span
+                  :class="[
+                    'px-2 inline-flex text-xs leading-5 font-semibold rounded-full',
+                    user.is_email_verified ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800',
+                  ]"
+                >
+                  {{ user.is_email_verified ? 'Verified' : 'Unverified' }}
+                </span>
+                <!-- Add more status indicators if needed, e.g. Active/Inactive -->
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ user.created_at }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                <NuxtLink
+                  v-if="can('users:edit').value"
+                  :to="`/admin/users/${user.id}/edit`"
+                  class="text-indigo-600 hover:text-indigo-900 transition-colors"
+                >
+                  Edit
+                </NuxtLink>
+                <button
+                  v-if="can('users:delete').value"
+                  @click="confirmDeleteUser(user)"
+                  class="text-red-600 hover:text-red-900 transition-colors"
+                >
+                  Delete
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+       <div v-else class="text-center py-10">
+        <p class="text-lg text-gray-600">No users found matching your criteria.</p>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="!pending && !error && usersToDisplay.length > 0 && totalUsers > itemsPerPage" class="mt-6 flex items-center justify-between">
+        <p class="text-sm text-gray-700">
+          Showing {{ (currentPage - 1) * itemsPerPage + 1 }}
+          to {{ Math.min(currentPage * itemsPerPage, totalUsers) }}
+          of {{ totalUsers }} results
+        </p>
+        <div class="flex space-x-1">
+          <button
+            @click="changePage(currentPage - 1)"
+            :disabled="currentPage === 1"
+            class="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            v-for="page in paginationPages"
+            :key="page"
+            @click="changePage(page)"
+            :class="[
+              'px-3 py-1 border border-gray-300 rounded-md text-sm font-medium',
+              currentPage === page ? 'bg-indigo-600 text-white border-indigo-600' : 'text-gray-700 hover:bg-gray-50',
+            ]"
+          >
+            {{ page }}
+          </button>
+          <button
+            @click="changePage(currentPage + 1)"
+            :disabled="currentPage * itemsPerPage >= totalUsers"
+            class="px-3 py-1 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <Modal :is-open="showDeleteModal" @close="showDeleteModal = false" title="Confirm Deletion">
+      <p class="text-gray-700 mb-4">Are you sure you want to delete user: <strong>{{ userToDelete?.name }}</strong> ({{ userToDelete?.email }})?</p>
+      <p class="text-sm text-red-600 mb-4">This action cannot be undone.</p>
+      <div class="flex justify-end space-x-3">
+        <button @click="showDeleteModal = false" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border border-gray-300">
+          Cancel
+        </button>
+        <button @click="deleteUser" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md">
+          Delete User
+        </button>
+      </div>
+    </Modal>
   </div>
 </template>
-<script setup>
-import { onMounted } from 'vue';
 
+<script setup>
+import { ref, computed, watch, onMounted } from 'vue';
+import { useNuxtApp, useAsyncData, useRouter } from '#app';
+import { usePermissions } from '~/composables/usePermissions';
+import Modal from '~/components/common/Modal.vue'; // Assuming a common modal component
+
+// Corrected: Only layout in definePageMeta
 definePageMeta({
-  layout: 'admin'
-  // Middleware removed from here as they are global
+  layout: 'admin',
+  // title: 'User Management' // Optional: for dynamic titles in layout
 });
+
+const { $axios } = useNuxtApp();
+const router = useRouter();
+const { can } = usePermissions();
+
+// Filters and Pagination
+const searchQuery = ref('');
+const selectedRole = ref('');
+const selectedStatus = ref('');
+const currentPage = ref(1);
+const itemsPerPage = ref(10); // Or make this configurable
+const totalUsers = ref(0);
+
+// For role filter dropdown
+const availableRoles = ref([]); // Populate this from an API or define statically
+
+const fetchAvailableRoles = async () => {
+  try {
+    const response = await $axios.get('/admin/roles/all'); // Assuming an endpoint to fetch all roles
+    if (response.data && Array.isArray(response.data.roles)) {
+      availableRoles.value = response.data.roles;
+    } else {
+      availableRoles.value = [{id: 'admin', name: 'Admin'}, {id: 'user', name: 'User'}]; // Fallback
+    }
+  } catch (err) {
+    console.error('Error fetching roles:', err);
+    // Fallback or default roles if API fails
+    availableRoles.value = [{id: 'admin', name: 'Admin'}, {id: 'user', name: 'User'}]; // Example
+  }
+};
 
 onMounted(() => {
-  console.log('Simplified Users Page (Test Version - definePageMeta with layout ONLY) Mounted.');
+  fetchAvailableRoles();
 });
+
+// Computed query parameters for fetching users
+const queryParams = computed(() => {
+  const params = new URLSearchParams();
+  if (searchQuery.value) params.append('search', searchQuery.value);
+  if (selectedRole.value) params.append('role_id', selectedRole.value); // Assuming role is filtered by id
+  if (selectedStatus.value) params.append('status', selectedStatus.value);
+  params.append('page', currentPage.value.toString());
+  params.append('limit', itemsPerPage.value.toString());
+  return params;
+});
+
+// Fetching users data
+const { data: usersApiResponse, pending, error, refresh: refreshUsers } = await useAsyncData(
+  'admin-users',
+  () => $axios.get('/admin/users', { params: Object.fromEntries(queryParams.value.entries()) }),
+  {
+    watch: [currentPage, itemsPerPage], // searchQuery, selectedRole, selectedStatus handled by applyFilters
+    default: () => ({ data: { users: [], total_users: 0, roles: [] } }) // Ensure structure for initial render
+  }
+);
+
+const usersToDisplay = computed(() => {
+  // usersApiResponse.value will be the full axios response object.
+  // The actual user list is expected in usersApiResponse.value.data.users
+  if (usersApiResponse.value && usersApiResponse.value.data && Array.isArray(usersApiResponse.value.data.users)) {
+    return usersApiResponse.value.data.users.map(user => ({
+      ...user,
+      role: user.role?.name || 'N/A', // Handle if role is an object or just a name
+      created_at: new Date(user.created_at).toLocaleDateString(),
+    }));
+  }
+  return [];
+});
+
+// Update totalUsers when data is fetched/updated
+watch(usersApiResponse, (newResponse) => {
+  if (newResponse && newResponse.data) {
+    totalUsers.value = newResponse.data.total_users || 0;
+    // If roles are part of this response and not fetched separately:
+    // if (Array.isArray(newResponse.data.roles)) {
+    //   availableRoles.value = newResponse.data.roles;
+    // }
+  }
+}, { immediate: true });
+
+
+const applyFilters = () => {
+  currentPage.value = 1; // Reset to first page on new filter/search
+  refreshUsers();
+};
+
+// Watch for individual filter changes to trigger applyFilters (or refresh directly)
+watch([searchQuery, selectedRole, selectedStatus], () => {
+  // Optional: debounce this if needed
+  applyFilters();
+});
+
+
+const changePage = (page) => {
+  if (page > 0 && (page - 1) * itemsPerPage.value < totalUsers.value) {
+    currentPage.value = page;
+    // refreshUsers(); // useAsyncData watcher handles this for currentPage
+  }
+};
+
+// Pagination display logic
+const paginationPages = computed(() => {
+  const total = Math.ceil(totalUsers.value / itemsPerPage.value);
+  const current = currentPage.value;
+  const maxPagesToShow = 5; // Show 5 page numbers max
+  let startPage = Math.max(1, current - Math.floor(maxPagesToShow / 2));
+  let endPage = Math.min(total, startPage + maxPagesToShow - 1);
+
+  if (endPage - startPage + 1 < maxPagesToShow && total >= maxPagesToShow) {
+    startPage = Math.max(1, endPage - maxPagesToShow + 1);
+  }
+
+  const pages = [];
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(i);
+  }
+  return pages;
+});
+
+// Delete User Functionality
+const showDeleteModal = ref(false);
+const userToDelete = ref(null);
+
+const confirmDeleteUser = (user) => {
+  userToDelete.value = user;
+  showDeleteModal.value = true;
+};
+
+const deleteUser = async () => {
+  if (!userToDelete.value) return;
+  try {
+    await $axios.delete(`/admin/users/${userToDelete.value.id}`);
+    showDeleteModal.value = false;
+    userToDelete.value = null;
+    // Add notification for success (e.g., using a toast library)
+    await refreshUsers(); // Refresh the list
+  } catch (err) {
+    console.error('Error deleting user:', err);
+    // Add notification for error
+    showDeleteModal.value = false; // Still close modal on error, or handle differently
+  }
+};
+
 </script>
+
+<style scoped>
+/* Add any page-specific styles if necessary */
+</style>
