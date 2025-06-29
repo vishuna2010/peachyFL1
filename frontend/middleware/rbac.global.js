@@ -67,6 +67,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
 
     // Check for base admin access permission
     const hasAdminDashboardAccess = can('admin:access_dashboard'); // This returns a computed ref
+    // Corrected logging for userPermissions.value as it's an array of strings
     console.log(`[rbac.global.js] Checking 'admin:access_dashboard'. User: ${authUser.value?.email}. Has permission (computed.value): ${hasAdminDashboardAccess.value}. Permissions list for check: ${JSON.stringify(userPermissions.value)}`);
 
     if (!hasAdminDashboardAccess.value) {
@@ -76,7 +77,8 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
 
     // Specific page permissions (examples)
     const usersViewPermission = can('users:view');
-    console.log(`[RBAC] Checking 'users:view' for ${to.path}. Value: ${usersViewPermission.value}. All user permissions: ${JSON.stringify(userPermissions.value.map(p => p.name))}`);
+    // Corrected logging for userPermissions.value
+    console.log(`[RBAC] Checking 'users:view' for ${to.path}. Value: ${usersViewPermission.value}. All user permissions: ${JSON.stringify(userPermissions.value)}`);
     if (to.path.startsWith('/admin/users') && !usersViewPermission.value) {
       console.log(`[RBAC] User ${authUser.value?.email} lacks 'users:view' for ${to.path}. Redirecting to /admin.`);
       return navigateTo('/admin'); // Or '/admin/access-denied'
