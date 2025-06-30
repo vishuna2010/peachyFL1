@@ -236,6 +236,8 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { useCart } from '~/composables/useCart';
+import { useToast } from 'vue-toastification';
+import { sanitizeAttributeValue } from '~/utils/sanitize';
 import { useNuxtApp, useRoute, useRouter, useRuntimeConfig, useHead } from '#app';
 import ProductCard from '~/components/ProductCard.vue';
 import ProductCardSkeleton from '~/components/ProductCardSkeleton.vue';
@@ -251,6 +253,7 @@ const route = useRoute();
 const router = useRouter();
 const runtimeConfig = useRuntimeConfig();
 const { addToCart } = useCart();
+const toast = useToast();
 
 const heroData = ref({
   title: 'Golden Hour Glow', // Example from venus.com text
@@ -409,6 +412,42 @@ onMounted(async () => {
   await fetchCategories();
   // Initial product fetch is handled by the watcher on route.query
 });
+
+const handleDirectAddToCart = (product) => {
+  if (!product) {
+    toast.error("Cannot add product to cart: product data is missing.");
+    return;
+  }
+
+  // Use product.final_price if available, otherwise product.price
+  const priceForCart = parseFloat(
+    (product.final_price !== undefined && product.final_price !== null)
+    ? product.final_price
+    : product.price
+  );
+
+  if (!product.has_variants && product.stock_quantity && product.stock_quantity > 0 && !isNaN(priceForCart)) {
+    const cartItemData = {
+      id: product.id, // Use product ID as item ID if no variants
+      product_id: product.id,
+      variant_id: null,
+      name: sanitizeAttributeValue(product.name),
+      price: priceForCart,
+      sku: sanitizeAttributeValue(product.sku || ''), // Ensure SKU is at least an empty string
+      image_url: sanitizeAttributeValue(product.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'),
+      type: 'product', // In QuickView, we are adding the base product
+      tax_class_id: product.tax_class_id || null,
+      tax_class_name: product.tax_class_name || null,
+    };
+    addToCart(cartItemData, 1);
+    toast.success(`${sanitizeAttributeValue(product.name)} added to cart!`);
+  } else if (product.has_variants) {
+    toast.info("This product has options. Please view full details to select.");
+  } else {
+    toast.error("Item is out of stock or unavailable.");
+  }
+  // closeQuickViewModal(); // Already called in the template's @click handler
+};
 
 watch(
   () => route.query,
