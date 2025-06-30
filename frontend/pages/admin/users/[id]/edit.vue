@@ -245,16 +245,26 @@ const handleSubmit = async () => {
     // await refreshUser(); // Re-fetch to show updated data if staying on page
     router.push('/admin/users');
   } catch (err) {
-    console.error('Error updating user:', err.response?.data || err.message);
+    console.error('Error updating user (raw error object):', err); // Log raw error
     const errorData = err.response?.data;
+    let errorMessage = 'Failed to update user. An unexpected error occurred.';
+    let errorDetailsArray = [];
+
+    if (errorData) {
+      errorMessage = errorData.message || 'Failed to update user. Please check the details.';
+      errorDetailsArray = errorData.errors || [];
+    } else if (err.message) {
+      errorMessage = err.message; // Use the general error message if no response object
+    }
+
     submissionStatus.value = {
-      message: errorData?.message || 'Failed to update user. Please check the details.',
+      message: errorMessage,
       isError: true,
-      errors: errorData?.errors || []
+      errors: errorDetailsArray
     };
-    $toast.error(submissionStatus.value.message);
-    if (submissionStatus.value.errors.length > 0) {
-        submissionStatus.value.errors.forEach(e => $toast.error(e.msg || e));
+    $toast.error(errorMessage);
+    if (errorDetailsArray.length > 0) {
+        errorDetailsArray.forEach(e => $toast.error(e.msg || (typeof e === 'string' ? e : 'Detailed error')));
     }
   } finally {
     isSubmitting.value = false;
