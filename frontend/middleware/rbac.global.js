@@ -37,88 +37,71 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     }
 
     // User is authenticated, ensure permissions are loaded.
-    console.log(`[rbac.global.js] User authenticated. Checking permissions for path: ${to.path}. Current isLoadingPermissions: ${isLoadingPermissions.value}, Permissions loaded: ${userPermissions.value.length > 0}`);
+    // console.log(`[rbac.global.js] User authenticated. Checking permissions for path: ${to.path}. Current isLoadingPermissions: ${isLoadingPermissions.value}, Permissions loaded: ${userPermissions.value.length > 0}`);
 
     if (!isLoadingPermissions.value && userPermissions.value.length === 0 && authUser.value?.id) {
-        console.log(`[rbac.global.js] Permissions not loaded and not currently loading. Fetching for user ${authUser.value.id}...`);
+        // console.log(`[rbac.global.js] Permissions not loaded and not currently loading. Fetching for user ${authUser.value.id}...`);
         await fetchUserPermissions(); // Wait for permissions to be fetched
-        console.log(`[rbac.global.js] Permissions fetch completed. isLoading: ${isLoadingPermissions.value}, Permissions count: ${userPermissions.value.length}`);
+        // console.log(`[rbac.global.js] Permissions fetch completed. isLoading: ${isLoadingPermissions.value}, Permissions count: ${userPermissions.value.length}`);
     } else if (isLoadingPermissions.value) {
-        console.log(`[rbac.global.js] Permissions are currently loading. Setting up watcher to wait...`);
+        // console.log(`[rbac.global.js] Permissions are currently loading. Setting up watcher to wait...`);
         await new Promise(resolve => {
             const unwatch = watch(isLoadingPermissions, (newValue) => {
                 if (!newValue) {
-                    console.log(`[rbac.global.js] Watcher: Permissions finished loading. isLoading: ${isLoadingPermissions.value}, Permissions count: ${userPermissions.value.length}`);
+                    // console.log(`[rbac.global.js] Watcher: Permissions finished loading. isLoading: ${isLoadingPermissions.value}, Permissions count: ${userPermissions.value.length}`);
                     unwatch();
                     resolve();
                 }
             });
-            // Timeout for safety, in case isLoadingPermissions never becomes false
-            setTimeout(() => {
-                console.warn('[rbac.global.js] Watcher: Timeout waiting for permissions to load.');
-                unwatch(); // Clean up watcher
-                resolve(); // Proceed even if timeout, to prevent infinite loop
-            }, 5000); // 5 second timeout
+            setTimeout(() => { // Timeout for safety
+                // console.warn('[rbac.global.js] Watcher: Timeout waiting for permissions to load.');
+                unwatch();
+                resolve();
+            }, 5000);
         });
     } else {
-        console.log(`[rbac.global.js] Permissions already loaded or no user ID. Count: ${userPermissions.value.length}`);
+        // console.log(`[rbac.global.js] Permissions already loaded or no user ID. Count: ${userPermissions.value.length}`);
     }
     // At this point, permissions should have been given a chance to load.
 
     // Check for base admin access permission
-    const hasAdminDashboardAccess = can('admin:access_dashboard'); // This returns a computed ref
-    // Corrected logging for userPermissions.value as it's an array of strings
-    console.log(`[rbac.global.js] Checking 'admin:access_dashboard'. User: ${authUser.value?.email}. Has permission (computed.value): ${hasAdminDashboardAccess.value}. Permissions list for check: ${JSON.stringify(userPermissions.value)}`);
+    const hasAdminDashboardAccess = can('admin:access_dashboard');
+    // console.log(`[rbac.global.js] Checking 'admin:access_dashboard'. User: ${authUser.value?.email}. Has permission (computed.value): ${hasAdminDashboardAccess.value}. Permissions list for check: ${JSON.stringify(userPermissions.value)}`);
 
     if (!hasAdminDashboardAccess.value) {
-      console.log(`[rbac.global.js] User ${authUser.value?.email} lacks 'admin:access_dashboard' permission for ${to.path}. Redirecting to '/'.`);
-      return navigateTo('/'); // Or '/admin/access-denied'
+      // console.log(`[rbac.global.js] User ${authUser.value?.email} lacks 'admin:access_dashboard' permission for ${to.path}. Redirecting to '/'.`);
+      return navigateTo('/');
     }
 
-    // Specific page permissions (examples)
-    const usersViewPermission = can('users:view');
-    // Corrected logging for userPermissions.value
-    console.log(`[RBAC] Checking 'users:view' for ${to.path}. Value: ${usersViewPermission.value}. All user permissions: ${JSON.stringify(userPermissions.value)}`);
-    if (to.path.startsWith('/admin/users') && !usersViewPermission.value) {
-      console.log(`[RBAC] User ${authUser.value?.email} lacks 'users:view' for ${to.path}. Redirecting to /admin.`);
-      return navigateTo('/admin'); // Or '/admin/access-denied'
-    }
-
-    const productsViewPermission = can('products:view');
-    console.log(`[RBAC] Checking 'products:view' for ${to.path}. Value: ${productsViewPermission.value}`);
-    if (to.path.startsWith('/admin/products') && !productsViewPermission.value) {
-      console.log(`[RBAC] User ${authUser.value?.email} lacks 'products:view' for ${to.path}. Redirecting to /admin.`);
+    // Specific page permissions
+    if (to.path.startsWith('/admin/users') && !can('users:view').value) {
+      // console.log(`[RBAC] User ${authUser.value?.email} lacks 'users:view' for ${to.path}. Redirecting to /admin.`);
       return navigateTo('/admin');
     }
-
-    const rbacManagePermission = can('rbac:manage');
-    console.log(`[RBAC] Checking 'rbac:manage' for ${to.path}. Value: ${rbacManagePermission.value}`);
-    if (to.path.startsWith('/admin/roles') && !rbacManagePermission.value) {
-      console.log(`[RBAC] User ${authUser.value?.email} lacks 'rbac:manage' for ${to.path}. Redirecting to /admin.`);
+    if (to.path.startsWith('/admin/products') && !can('products:view').value) {
+      // console.log(`[RBAC] User ${authUser.value?.email} lacks 'products:view' for ${to.path}. Redirecting to /admin.`);
       return navigateTo('/admin');
     }
-
-    const marketingSendEmailsPermission = can('marketing:send_emails');
-    console.log(`[RBAC] Checking 'marketing:send_emails' for ${to.path}. Value: ${marketingSendEmailsPermission.value}`);
-    if (to.path.startsWith('/admin/marketing') && !marketingSendEmailsPermission.value) {
-      console.log(`[RBAC] User ${authUser.value?.email} lacks 'marketing:send_emails' for ${to.path}. Redirecting to /admin.`);
+    if (to.path.startsWith('/admin/roles') && !can('rbac:manage').value) {
+      // console.log(`[RBAC] User ${authUser.value?.email} lacks 'rbac:manage' for ${to.path}. Redirecting to /admin.`);
       return navigateTo('/admin');
     }
-
-    // Example for orders, assuming 'orders:view_all' is the permission
-    const ordersViewAllPermission = can('orders:view_all');
-    console.log(`[RBAC] Checking 'orders:view_all' for ${to.path}. Value: ${ordersViewAllPermission.value}`);
-    if (to.path.startsWith('/admin/orders') && !to.path.includes('shipping-label') && !ordersViewAllPermission.value) { // Ensure not to block shipping label printing if it has its own fine-grained perm
-        console.log(`[RBAC] User ${authUser.value?.email} lacks 'orders:view_all' for ${to.path}. Redirecting to /admin.`);
+    if (to.path.startsWith('/admin/marketing') && !can('marketing:send_emails').value) {
+      // console.log(`[RBAC] User ${authUser.value?.email} lacks 'marketing:send_emails' for ${to.path}. Redirecting to /admin.`);
+      return navigateTo('/admin');
+    }
+    if (to.path.startsWith('/admin/orders') && !to.path.includes('shipping-label') && !can('orders:view_all').value) {
+        // console.log(`[RBAC] User ${authUser.value?.email} lacks 'orders:view_all' for ${to.path}. Redirecting to /admin.`);
         return navigateTo('/admin');
     }
-
-    // Add more specific checks for other sections as needed...
-    // e.g., /admin/taxes requires 'taxes:manage_classes' or 'taxes:manage_rates'
+    // Example: Settings page check
+    if (to.path.startsWith('/admin/settings') && !can('settings:manage_general').value) {
+      // console.log(`[RBAC] User ${authUser.value?.email} lacks 'settings:manage_general' for ${to.path}. Redirecting to /admin.`);
+      return navigateTo('/admin');
+    }
 
   } else if (to.path === '/login' && isAuthenticated.value) {
-    // If user is authenticated and tries to go to login page, redirect to admin dashboard or home
-    console.log('[RBAC] Authenticated user on login page. Redirecting to /admin.');
+    // console.log('[RBAC] Authenticated user on login page. Redirecting to /admin.');
     return navigateTo('/admin');
   }
 

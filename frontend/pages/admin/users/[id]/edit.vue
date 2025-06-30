@@ -161,7 +161,7 @@ const { data: user, pending: userPending, error: userError, refresh: refreshUser
     transform: (response) => response.data
   }
 );
-console.log('[EditUserPage] After user useAsyncData - user.value:', user.value, 'userError.value:', userError.value, 'userPending.value:', userPending.value);
+// console.log('[EditUserPage] After user useAsyncData - user.value:', user.value, 'userError.value:', userError.value, 'userPending.value:', userPending.value);
 
 // Fetch available roles
 const { data: rolesData, pending: rolesPending, error: rolesError } = await useAsyncData( // Renamed 'roles' to 'rolesData' to avoid conflict
@@ -177,16 +177,16 @@ watch(rolesData, (newRoles) => { // Watch rolesData
     availableRoles.value = newRoles;
   } else if (rolesError.value) { // Use rolesError from its own useAsyncData
      availableRoles.value = [{id: 1, name: 'Admin (Fallback)'}, {id: 2, name: 'User (Fallback)'}];
-     console.warn('[EditUser] Failed to load roles, using fallback. Error:', rolesError.value);
+     // console.warn('[EditUser] Failed to load roles, using fallback. Error:', rolesError.value);
   }
 }, { immediate: true });
 
 
 // Populate form when user data is loaded
 watch(user, (currentUserData) => {
-  console.log('[EditUserPage] Watcher for user data triggered. currentUserData:', currentUserData, 'userError at this point:', userError.value);
+  // console.log('[EditUserPage] Watcher for user data triggered. currentUserData:', currentUserData, 'userError at this point:', userError.value);
   if (currentUserData && Object.keys(currentUserData).length > 0) {
-    console.log('[EditUserPage] Populating form with currentUserData:', JSON.parse(JSON.stringify(currentUserData)));
+    // console.log('[EditUserPage] Populating form with currentUserData:', JSON.parse(JSON.stringify(currentUserData)));
     form.value.name = currentUserData.name || '';
     form.value.email = currentUserData.email || '';
     form.value.role_id = currentUserData.role_id || null;
@@ -194,16 +194,16 @@ watch(user, (currentUserData) => {
     form.value.tax_exemption_certificate_id = currentUserData.tax_exemption_certificate_id || '';
     form.value.tax_exemption_notes = currentUserData.tax_exemption_notes || '';
   } else {
-    console.log('[EditUserPage] currentUserData is null, undefined, or empty. Checking userError.value:', userError.value);
+    // console.log('[EditUserPage] currentUserData is null, undefined, or empty. Checking userError.value:', userError.value);
     if (userError.value) {
-      console.error('[EditUserPage] Error details from userError.value (in else block):', JSON.parse(JSON.stringify(userError.value)));
+      // console.error('[EditUserPage] Error details from userError.value (in else block):', JSON.parse(JSON.stringify(userError.value)));
       submissionStatus.value = {
         message: `Failed to load user data: ${userError.value?.data?.message || userError.value?.message || 'Unknown error'}`,
         isError: true,
         errors: userError.value?.data?.errors || []
       };
     } else if (!userPending.value && !currentUserData) {
-      console.warn('[EditUserPage] User data is empty after fetch, and no error reported by useAsyncData. This might indicate a transform issue or API returning empty success.');
+      // console.warn('[EditUserPage] User data is empty after fetch, and no error reported by useAsyncData. This might indicate a transform issue or API returning empty success.');
        submissionStatus.value = { message: 'User data not found or is empty.', isError: true };
     }
   }
@@ -212,7 +212,7 @@ watch(user, (currentUserData) => {
 
 const handleSubmit = async () => {
   const nuxtApp = useNuxtApp(); // Get nuxtApp instance here
-  console.log('[EditUserPage] handleSubmit: nuxtApp.$toast type:', typeof nuxtApp.$toast, 'nuxtApp.$toast:', nuxtApp.$toast);
+  // console.log('[EditUserPage] handleSubmit: nuxtApp.$toast type:', typeof nuxtApp.$toast, 'nuxtApp.$toast:', nuxtApp.$toast);
 
   isSubmitting.value = true;
   submissionStatus.value = { message: '', isError: false, errors: [] };
@@ -242,28 +242,28 @@ const handleSubmit = async () => {
   }
 
   const url = `/admin/users/${userId.value}`;
-  console.log('[EditUserPage] PRE-SUBMIT: URL:', url);
-  console.log('[EditUserPage] PRE-SUBMIT: userId.value:', userId.value);
+  // console.log('[EditUserPage] PRE-SUBMIT: URL:', url);
+  // console.log('[EditUserPage] PRE-SUBMIT: userId.value:', userId.value);
   try {
-    console.log('[EditUserPage] PRE-SUBMIT: Payload:', JSON.parse(JSON.stringify(payload)));
+    // console.log('[EditUserPage] PRE-SUBMIT: Payload:', JSON.parse(JSON.stringify(payload)));
   } catch (e) {
-    console.error('[EditUserPage] PRE-SUBMIT: Could not stringify payload for logging:', e, payload);
+    // console.error('[EditUserPage] PRE-SUBMIT: Could not stringify payload for logging:', e, payload);
   }
-  console.log('[EditUserPage] PRE-SUBMIT: $axios type:', typeof $axios, '$axios.put type:', typeof $axios.put);
+  // console.log('[EditUserPage] PRE-SUBMIT: $axios type:', typeof $axios, '$axios.put type:', typeof $axios.put);
 
 
   try {
     const response = await $axios.put(url, payload);
-    console.log('[EditUserPage] Update successful. Response:', response);
+    // console.log('[EditUserPage] Update successful. Response:', response);
     submissionStatus.value = { message: 'User updated successfully!', isError: false };
     if (nuxtApp.$toast && typeof nuxtApp.$toast.success === 'function') {
       nuxtApp.$toast.success('User updated successfully!');
     } else {
-      console.log("[EditUserPage] Toastr instance or toast.success method not available, but user was updated.");
+      // console.log("[EditUserPage] Toastr instance or toast.success method not available, but user was updated.");
     }
     router.push('/admin/users');
   } catch (err) {
-    console.error('[EditUserPage] CAUGHT ERROR (raw):', err);
+    // console.error('[EditUserPage] CAUGHT ERROR (raw):', err);
     let errorToDisplay = err.message || 'An error occurred during update.';
     let detailedValidationErrors = err.response?.data?.errors || [];
 
@@ -278,7 +278,7 @@ const handleSubmit = async () => {
           detailedValidationErrors.forEach(e => nuxtApp.$toast.error(e.msg || (typeof e === 'string' ? e : 'Detailed error')));
       }
     } else {
-      console.error("[EditUserPage] Toastr instance or toast.error method not available for error message:", errorToDisplay, detailedValidationErrors);
+      // console.error("[EditUserPage] Toastr instance or toast.error method not available for error message:", errorToDisplay, detailedValidationErrors);
     }
   } finally {
     isSubmitting.value = false;

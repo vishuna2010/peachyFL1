@@ -234,7 +234,7 @@ const queryParams = computed(() => {
   if (selectedStatus.value) params.append('status', selectedStatus.value);
   params.append('page', currentPage.value.toString());
   params.append('limit', itemsPerPage.value.toString());
-  console.log('[UsersPage] Computed queryParams:', Object.fromEntries(params.entries()));
+  // console.log('[UsersPage] Computed queryParams:', Object.fromEntries(params.entries()));
   return params;
 });
 
@@ -243,7 +243,7 @@ const { data: usersApiResponse, pending, error, refresh: refreshUsers } = await 
   'admin-users',
   () => {
     const paramsObject = Object.fromEntries(queryParams.value.entries());
-    console.log('[UsersPage] Fetching users with params:', paramsObject);
+    // console.log('[UsersPage] Fetching users with params:', paramsObject);
     return $axios.get('/admin/users', { params: paramsObject });
   },
   {
@@ -254,89 +254,82 @@ const { data: usersApiResponse, pending, error, refresh: refreshUsers } = await 
 
 watch(error, (newError) => {
   if (newError) {
-    console.error('[UsersPage] Error fetching users (useAsyncData):', newError);
+    // console.error('[UsersPage] Error fetching users (useAsyncData):', newError);
   }
 });
 
 const usersToDisplay = computed(() => {
-  console.log('[UsersPage CPTD] Evaluating usersToDisplay. usersApiResponse.value:', usersApiResponse.value);
+  // console.log('[UsersPage CPTD] Evaluating usersToDisplay. usersApiResponse.value:', usersApiResponse.value);
 
   const responseData = usersApiResponse.value?.data; // This is {data: Array, pagination: Object}
 
   if (responseData && responseData.data && Array.isArray(responseData.data)) {
-    console.log('[UsersPage CPTD] Condition TRUE. Mapping users from responseData.data. Length:', responseData.data.length);
+    // console.log('[UsersPage CPTD] Condition TRUE. Mapping users from responseData.data. Length:', responseData.data.length);
     const mappedUsers = responseData.data.map(user => ({
       ...user,
       role: user.role_name || user.legacy_role || 'N/A',
       created_at: new Date(user.created_at).toLocaleDateString(),
     }));
-    console.log('[UsersPage CPTD] Mapped usersToDisplay:', mappedUsers);
+    // console.log('[UsersPage CPTD] Mapped usersToDisplay:', mappedUsers);
     return mappedUsers;
   }
-  console.log('[UsersPage CPTD] Condition FALSE or data not in expected format. Returning empty array. responseData:', responseData);
+  // console.log('[UsersPage CPTD] Condition FALSE or data not in expected format. Returning empty array. responseData:', responseData);
   return [];
 });
 
 // Update totalUsers when data is fetched/updated
 watch(usersApiResponse, (newResponse) => {
-  console.log('[UsersPage] usersApiResponse watcher triggered. New response:', newResponse);
+  // console.log('[UsersPage] usersApiResponse watcher triggered. New response:', newResponse);
   if (newResponse && newResponse.data) {
-    // Log the exact structure of newResponse.data
     try {
-      console.log('[UsersPage] RAW API newResponse.data:', JSON.parse(JSON.stringify(newResponse.data)));
+      // console.log('[UsersPage] RAW API newResponse.data:', JSON.parse(JSON.stringify(newResponse.data)));
     } catch (e) {
-      console.error('[UsersPage] Could not stringify newResponse.data', e);
-      console.log('[UsersPage] RAW API newResponse.data (direct):', newResponse.data);
+      // console.error('[UsersPage] Could not stringify newResponse.data', e);
+      // console.log('[UsersPage] RAW API newResponse.data (direct):', newResponse.data);
     }
 
-    // Adjust path based on actual API response structure: { data: { users: [], total_users: X } } or { data: [], pagination: { total: X } }
-    // Based on logs: newResponse.data = {data: Array(9), pagination: {…}}
-    // So, users are in newResponse.data.data
-    // And total count is in newResponse.data.pagination.total
-
-    const apiData = newResponse.data; // This is the {data: Array, pagination: Object} part
+    const apiData = newResponse.data;
 
     if (apiData && apiData.pagination) {
       totalUsers.value = apiData.pagination.total || 0;
-      console.log('[UsersPage] Attempted to set total_users from apiData.pagination.total. Value found:', apiData.pagination.total);
+      // console.log('[UsersPage] Attempted to set total_users from apiData.pagination.total. Value found:', apiData.pagination.total);
     } else {
       totalUsers.value = 0;
-      console.warn('[UsersPage] apiData.pagination or apiData.pagination.total is missing.');
+      // console.warn('[UsersPage] apiData.pagination or apiData.pagination.total is missing.');
     }
-    console.log('[UsersPage] Total users set to:', totalUsers.value);
+    // console.log('[UsersPage] Total users set to:', totalUsers.value);
 
     if (apiData && Array.isArray(apiData.data)) {
-      console.log('[UsersPage] apiData.data (formerly users) is an array. Length:', apiData.data.length);
+      // console.log('[UsersPage] apiData.data (formerly users) is an array. Length:', apiData.data.length);
     } else {
-      console.warn('[UsersPage] apiData.data (formerly users) is NOT an array or is missing. Value:', apiData ? apiData.data : 'apiData is null/undefined');
+      // console.warn('[UsersPage] apiData.data (formerly users) is NOT an array or is missing. Value:', apiData ? apiData.data : 'apiData is null/undefined');
     }
 
   } else {
     totalUsers.value = 0;
-    console.log('[UsersPage] Total users set to 0 due to invalid newResponse or missing newResponse.data.');
+    // console.log('[UsersPage] Total users set to 0 due to invalid newResponse or missing newResponse.data.');
   }
-  console.log(`[UsersPage] Pagination state: currentPage=${currentPage.value}, itemsPerPage=${itemsPerPage.value}, totalUsers=${totalUsers.value}`);
+  // console.log(`[UsersPage] Pagination state: currentPage=${currentPage.value}, itemsPerPage=${itemsPerPage.value}, totalUsers=${totalUsers.value}`);
 }, { immediate: true, deep: true });
 
 
 const applyFilters = () => {
-  console.log('[UsersPage] applyFilters called.');
+  // console.log('[UsersPage] applyFilters called.');
   currentPage.value = 1;
   refreshUsers();
 };
 
 // Watch for individual filter changes to trigger applyFilters
 watch([searchQuery, selectedRole, selectedStatus], () => {
-  console.log(`[UsersPage] Filters changed: searchQuery=${searchQuery.value}, selectedRole=${selectedRole.value}, selectedStatus=${selectedStatus.value}`);
+  // console.log(`[UsersPage] Filters changed: searchQuery=${searchQuery.value}, selectedRole=${selectedRole.value}, selectedStatus=${selectedStatus.value}`);
   applyFilters();
 });
 
 
 const changePage = (page) => {
-  console.log(`[UsersPage] changePage called with page: ${page}. Current totalUsers: ${totalUsers.value}`);
+  // console.log(`[UsersPage] changePage called with page: ${page}. Current totalUsers: ${totalUsers.value}`);
   if (page > 0 && (page - 1) * itemsPerPage.value < totalUsers.value) {
     currentPage.value = page;
-    // refreshUsers(); // useAsyncData watcher handles this for currentPage
   }
 };
 
