@@ -160,6 +160,7 @@ export const useCart = () => {
       console.log('Tax details fetched successfully:', response.data);
     } catch (error) {
       console.error('Error fetching cart tax details. Status:', error.response?.status, 'Data:', error.response?.data, 'Full Error:', error);
+      console.error('Detailed tax calculation error data from backend:', error.response?.data); // Added for detailed error inspection
       const message = error.response?.data?.message || 'Failed to calculate taxes.';
       taxCalculationError.value = message;
       // toast.error(message); // Optionally show toast, or let UI handle taxCalculationError
