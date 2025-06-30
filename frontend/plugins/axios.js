@@ -21,18 +21,13 @@ export default defineNuxtPlugin((nuxtApp) => {
       // Use authTokenState from the outer scope
       const token = authTokenState.value;
 
-      console.log('[Axios Interceptor] Current Token:', token ? 'Token Present' : 'Token Missing/Null');
-      console.log('[Axios Interceptor] Request URL:', config.url);
-
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
-        console.log('[Axios Interceptor] Authorization header SET');
-      } else {
-        console.log('[Axios Interceptor] Authorization header NOT SET (no token)');
       }
       return config;
     },
     (error) => {
+      // It's useful to keep this log for identifying request setup issues.
       console.error('[Axios Interceptor] Request Error:', error);
       return Promise.reject(error);
     }
@@ -47,8 +42,7 @@ export default defineNuxtPlugin((nuxtApp) => {
     async (error) => { // Made async to allow await for navigateTo if needed
       // Any status codes that falls outside the range of 2xx cause this function to trigger
       if (error.response && error.response.status === 401) {
-        console.error('[Axios Response Interceptor] Received 401 Unauthorized. Logging out.');
-
+        // Removed console.error for 401 as it's a handled condition.
         // Use authTokenState and authUserState from the outer scope
         if (process.client) {
           localStorage.removeItem('authToken');
@@ -72,13 +66,15 @@ export default defineNuxtPlugin((nuxtApp) => {
                 // Using nuxtApp.runWithContext for navigateTo is a good practice from plugins
                 await nuxtApp.runWithContext(() => navigateTo('/login', { replace: true }));
              } catch (e) {
-                console.error('[Axios Response Interceptor] Error during navigation to login:', e);
                 // Fallback if navigateTo within runWithContext fails or is not available
+                // Log retained as this indicates a more significant issue with navigation.
+                console.error('[Axios Response Interceptor] Error during navigation to login, attempting fallback:', e);
                 if (typeof window !== 'undefined') {
                     window.location.href = '/login';
                 }
              }
           } else if (!router) {
+            // Log retained as this indicates an issue with router availability.
             console.warn('[Axios Response Interceptor] Nuxt router not available on nuxtApp.$router. Falling back to window.location for redirect.');
              if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
                  window.location.href = '/login';

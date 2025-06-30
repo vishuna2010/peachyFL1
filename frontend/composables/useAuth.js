@@ -17,9 +17,8 @@ export const useAuth = () => {
     const storedUser = localStorage.getItem('authUser');
     if (storedToken) {
       authToken.value = storedToken;
-      if (storedToken) { // Set Axios header only if token actually exists
-          $axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-      }
+      // The Axios request interceptor in plugins/axios.js will handle setting the
+      // Authorization header based on the authToken state.
     }
     if (storedUser) {
       try {
@@ -30,7 +29,7 @@ export const useAuth = () => {
       }
     }
     isAuthInitialized.value = true;
-    console.log('Auth initialized. Token:', !!authToken.value, 'User:', !!authUser.value);
+    // console.log('Auth initialized. Token:', !!authToken.value, 'User:', !!authUser.value);
     }
   };
 
@@ -44,10 +43,11 @@ export const useAuth = () => {
     if (process.client) {
       if (newToken) {
         localStorage.setItem('authToken', newToken);
-        $axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+        // The Axios request interceptor in plugins/axios.js will handle setting the
+        // Authorization header based on the authToken state.
       } else {
         localStorage.removeItem('authToken');
-        delete $axios.defaults.headers.common['Authorization'];
+        // The interceptor will simply not add the header if no token is present.
       }
     }
   };
@@ -75,10 +75,11 @@ export const useAuth = () => {
       setToken(apiResponseData.token);
       setUser(apiResponseData.user); // Assuming user object from API is safe to store
                                      // (e.g., excludes password, sensitive fields)
-      console.log('Login successful, user set:', authUser.value);
+      // console.log('Login successful, user set:', authUser.value);
       // router.push(router.currentRoute.value.query.redirect || '/profile'); // Moved to page
       return true;
     }
+    // Keep this error as it indicates a logic flaw or unexpected API response.
     console.error('loginSuccess called with invalid data:', apiResponseData);
     return false;
   };
@@ -113,16 +114,18 @@ export const useAuth = () => {
       } else {
         // This case might indicate an issue with the /me endpoint's response structure
         // or if the token is valid but user data can't be retrieved for some reason.
+        // Keep this warning as it indicates a potential problem with API or data integrity.
         console.warn('fetchUser: User data not found in /api/auth/me response, or response structure is unexpected.');
         // Potentially clear user state if response is malformed or indicates an issue
         // setUser(null); // Or handle as an error state
       }
     } catch (error) {
+      // Keep this error as it indicates a failure in a core auth function.
       console.error('fetchUser: Error fetching user data from /api/auth/me:', error.response?.data?.message || error.message);
       // If the error is 401 (Unauthorized) or similar, it means the token is invalid or expired.
       // In this case, we should log the user out.
       if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-        console.log('fetchUser: Unauthorized or invalid token. Logging out.');
+        // console.log('fetchUser: Unauthorized or invalid token. Logging out.'); // This is a handled flow.
         logout(); // Call the logout function from useAuth
       }
       // Do not call setUser(null) here if logout() already does it, to avoid duplicate actions.
