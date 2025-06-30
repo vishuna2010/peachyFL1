@@ -179,6 +179,10 @@ app.use('/api/categories', categoryRoutes);
 // --- Public Cart Routes (e.g. for discount validation) ---
 app.use('/api/cart', cartRoutes);
 
+// --- CMS Routes (e.g., for Hero Banners) ---
+const cmsRoutes = require('./routes/cmsRoutes');
+app.use('/api/cms', cmsRoutes);
+
 // --- Public Order Routes (e.g., for user to create their own order) ---
 app.use('/api/orders', orderRoutes);
 

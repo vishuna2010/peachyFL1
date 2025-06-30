@@ -813,6 +813,56 @@ async function createSchema(client) {
     await client.query('CREATE INDEX IF NOT EXISTS idx_audit_logs_resource_type_id ON audit_logs(resource_type, resource_id);');
     console.log('Indexes for "audit_logs" checked/created.');
 
+    // Hero Banners Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hero_banners (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        subtitle TEXT,
+        button_text VARCHAR(100),
+        button_link VARCHAR(255),
+        image_url VARCHAR(255) NOT NULL,
+        alt_text VARCHAR(255),
+        is_active BOOLEAN DEFAULT TRUE NOT NULL,
+        sort_order INTEGER DEFAULT 0 NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "hero_banners" checked/created.');
+
+    await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS title VARCHAR(255) NOT NULL;`);
+    await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS subtitle TEXT;`);
+    await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS button_text VARCHAR(100);`);
+    await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS button_link VARCHAR(255);`);
+    await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS image_url VARCHAR(255) NOT NULL;`);
+    await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS alt_text VARCHAR(255);`);
+    await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE NOT NULL;`);
+    await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0 NOT NULL;`);
+    await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;`);
+    await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;`);
+    console.log('All columns for "hero_banners" table ensured/checked.');
+
+    // Trigger for updated_at on hero_banners
+    await client.query(`
+      DO $$
+      BEGIN
+          IF NOT EXISTS (
+              SELECT 1 FROM pg_trigger
+              WHERE tgname = 'trigger_update_hero_banners_updated_at'
+              AND tgrelid = 'hero_banners'::regclass
+          ) THEN
+              CREATE TRIGGER trigger_update_hero_banners_updated_at
+              BEFORE UPDATE ON hero_banners
+              FOR EACH ROW
+              EXECUTE FUNCTION trigger_set_timestamp(); -- Assuming trigger_set_timestamp is defined
+          END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "hero_banners.updated_at" ensured.');
+
+
     console.log('Schema creation process completed.');
   } catch (error) {
     console.error('Error creating schema:', error);
@@ -1574,6 +1624,7 @@ async function seedDatabase() {
     await seedInventoryBatches(client, seededDataIds);
     await seedCostHistory(client, seededDataIds);
     await seedStockMovements(client, seededDataIds);
+    await seedHeroBanners(client, seededDataIds); // Call the new function
 
 
     console.log('Database seeding completed successfully.');
