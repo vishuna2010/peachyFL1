@@ -214,6 +214,7 @@ watch(user, (currentUserData) => {
 
 
 const handleSubmit = async () => {
+  console.log('[EditUserPage] handleSubmit: $toast type:', typeof $toast, '$toast:', $toast);
   isSubmitting.value = true;
   submissionStatus.value = { message: '', isError: false, errors: [] };
 
