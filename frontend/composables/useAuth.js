@@ -11,33 +11,64 @@ export const useAuth = () => {
   const isAuthInitialized = useState('isAuthInitialized', () => false); // Flag to track initial load
 
   // Attempt to load token from localStorage on initialization (client-side)
-  const _initializeAuth = () => {
-    if (process.client && !isAuthInitialized.value) {
-    const storedToken = localStorage.getItem('authToken');
-    const storedUser = localStorage.getItem('authUser');
-    if (storedToken) {
-      authToken.value = storedToken;
-      if (storedToken) { // Set Axios header only if token actually exists
-          $axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+  const _initializeAuth = async () => {
+    if (process.client && !isAuthInitialized.value) { // Check prevents re-running if already initialized
+      console.log('useAuth: Starting initialization...');
+      // Explicitly ensure isAuthInitialized is false until fully done
+      // This helps if this function is called multiple times before completion.
+      // However, the outer check `!isAuthInitialized.value` should prevent re-entry.
+      // isAuthInitialized.value = false;
+
+      const storedToken = localStorage.getItem('authToken');
+      const storedUser = localStorage.getItem('authUser');
+
+      if (storedToken) {
+        authToken.value = storedToken;
+        $axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        console.log('useAuth: Token loaded from localStorage and Axios header set.');
+      } else {
+        console.log('useAuth: No token found in localStorage.');
       }
-    }
-    if (storedUser) {
-      try {
-        authUser.value = JSON.parse(storedUser);
-      } catch (e) {
-        console.error("Error parsing stored user", e);
-        localStorage.removeItem('authUser');
+
+      if (storedUser) {
+        try {
+          authUser.value = JSON.parse(storedUser);
+          console.log('useAuth: User data loaded from localStorage.');
+        } catch (e) {
+          console.error("useAuth: Error parsing stored user, removing item.", e);
+          localStorage.removeItem('authUser');
+          authUser.value = null; // Ensure authUser is reset
+        }
+      } else {
+        console.log('useAuth: No user data found in localStorage.');
       }
-    }
-    isAuthInitialized.value = true;
-    console.log('Auth initialized. Token:', !!authToken.value, 'User:', !!authUser.value);
+
+      // Crucially, set isAuthInitialized to true only AFTER all sync operations are done.
+      isAuthInitialized.value = true;
+      console.log('useAuth: Initialization complete. isAuthInitialized set to true. Token:', !!authToken.value, 'User:', !!authUser.value);
+
+      // Now, after initialization is complete and token is potentially loaded,
+      // decide if fetchUser needs to be called.
+      if (authToken.value && !authUser.value) {
+        console.log('useAuth: Token present but user data missing after init. Fetching user...');
+        await fetchUser(); // fetchUser is async, so await it.
+      } else if (authToken.value && authUser.value) {
+        console.log('useAuth: Token and user data both present after init. No immediate fetch needed.');
+      } else {
+        console.log('useAuth: No token or no user after init. No immediate fetch needed.');
+      }
+    } else if (process.client && isAuthInitialized.value) {
+      console.log('useAuth: Initialization already completed.');
     }
   };
 
+  // Call _initializeAuth when the composable is first set up on the client.
+  // This structure ensures it's called once.
   if (process.client && !isAuthInitialized.value) {
-      _initializeAuth();
+    // No await here, as composable setup is synchronous.
+    // Components will watch isAuthInitialized.
+    _initializeAuth();
   }
-
 
   const setToken = (newToken) => {
     authToken.value = newToken;
@@ -138,12 +169,6 @@ export const useAuth = () => {
         router.push('/login');
     }
   };
-
-  // Call fetchUser on init if token exists but user doesn't (e.g. after page reload and _initializeAuth)
-  if (process.client && authToken.value && !authUser.value && isAuthInitialized.value) {
-     // Check isAuthInitialized to ensure this doesn't run before localStorage load attempt
-    fetchUser();
-  }
 
   const isAuthenticated = computed(() => !!authToken.value && !!authUser.value);
 

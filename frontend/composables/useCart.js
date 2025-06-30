@@ -38,23 +38,30 @@ const saveCartToLocalStorage = () => {
 };
 
 const loadCartFromLocalStorage = () => {
+  // This function is synchronous and directly manipulates cartItems.value
+  // It's called by initCart, which handles the isCartInitialized flag.
   if (process.client) {
+    console.log('useCart: Attempting to load cart from localStorage...');
     const storedCart = localStorage.getItem(CART_STORAGE_KEY);
     if (storedCart) {
       try {
         const parsedCart = JSON.parse(storedCart);
         if (Array.isArray(parsedCart)) {
           cartItems.value = parsedCart;
+          console.log(`useCart: Cart loaded from localStorage. ${cartItems.value.length} items.`);
         } else {
-          console.warn('Stored cart data is not an array, resetting cart.');
+          console.warn('useCart: Stored cart data is not an array, resetting cart.');
           cartItems.value = [];
           localStorage.removeItem(CART_STORAGE_KEY);
         }
       } catch (error) {
-        console.error('Error parsing cart from localStorage:', error);
+        console.error('useCart: Error parsing cart from localStorage, resetting cart.', error);
         cartItems.value = [];
         localStorage.removeItem(CART_STORAGE_KEY);
       }
+    } else {
+      console.log('useCart: No cart data found in localStorage.');
+      cartItems.value = []; // Ensure cartItems is an empty array if nothing is stored
     }
   }
 };
@@ -163,22 +170,44 @@ export const useCart = () => {
 
 
   // --- Cart Initialization ---
-  const initCart = () => {
+  const initCart = async () => { // Made async to await fetchCartTaxDetails
     if (process.client && !isCartInitialized.value) {
-      loadCartFromLocalStorage();
+      console.log('useCart: Starting cart initialization...');
+      loadCartFromLocalStorage(); // Synchronously loads cart items
+
+      // Set isCartInitialized to true only AFTER cartItems are loaded
       isCartInitialized.value = true;
-      console.log('Cart initialized from localStorage. Cart items count:', cartItems.value.length);
-      // Fetch tax details once cart is loaded if items exist
+      console.log('useCart: Cart populated from localStorage. isCartInitialized set to true. Items count:', cartItems.value.length);
+
+      // Fetch tax details once cart is loaded and initialized, if items exist
       if (cartItems.value.length > 0) {
-        fetchCartTaxDetails(cartItems.value, isAuthenticated.value ? authUser.value?.id : null);
+        console.log('useCart: Cart has items, fetching tax details...');
+        // Ensure auth state is ready for user ID, or pass null
+        let userIdForTax = null;
+        if (isAuthenticated && typeof isAuthenticated.value === 'boolean' && isAuthenticated.value) {
+            if (authUser && typeof authUser.value === 'object' && authUser.value !== null && typeof authUser.value.id !== 'undefined') {
+                userIdForTax = authUser.value.id;
+            }
+        }
+        await fetchCartTaxDetails(cartItems.value, userIdForTax);
+      } else {
+        console.log('useCart: Cart is empty after initialization, no tax details to fetch.');
+        cartTaxDetails.value = null; // Ensure tax details are cleared if cart is empty
+        taxCalculationError.value = '';
       }
+    } else if (process.client && isCartInitialized.value) {
+      console.log('useCart: Cart initialization already completed.');
     }
   };
 
   // Ensure initCart is called when the composable is first used client-side
+  // This needs to be handled carefully as composable setup is sync.
+  // The onMounted hook is appropriate for client-side specific async initialization.
   if (process.client) {
-      onMounted(() => {
-          initCart();
+      onMounted(async () => { // Make onMounted async to await initCart
+        if (!isCartInitialized.value) { // Double check, initCart also checks
+          await initCart();
+        }
       });
   }
 

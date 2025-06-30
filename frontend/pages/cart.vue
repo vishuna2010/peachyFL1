@@ -131,7 +131,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watchEffect } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useCart } from '~/composables/useCart';
 import { useHead } from '#app';
 import { sanitizeAttributeValue } from '~/utils/sanitize'; // Import the sanitizer

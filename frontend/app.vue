@@ -7,16 +7,13 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
-import { useCart } from '~/composables/useCart'; // Adjust path if needed
+import { useCart } from '~/composables/useCart';
 
-// Initialize the cart from localStorage when the app mounts on the client-side
-// This ensures that the cart state is loaded from localStorage as soon as the app is ready on the client.
-const { initCart } = useCart();
+// By importing useCart, its setup function runs.
+// useCart itself now handles its initialization via its own onMounted hook.
+// So, no explicit call to initCart() is needed here in app.vue's onMounted.
+useCart(); // This ensures the composable is activated and its onMounted hook is registered.
 
-onMounted(() => {
-  initCart();
-});
 </script>
 
 <style>
