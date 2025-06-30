@@ -160,7 +160,12 @@ export const useCart = () => {
       console.log('Tax details fetched successfully:', response.data);
     } catch (error) {
       console.error('Error fetching cart tax details. Status:', error.response?.status, 'Data:', error.response?.data, 'Full Error:', error);
-      console.error('Detailed tax calculation error data from backend:', error.response?.data); // Added for detailed error inspection
+      // Log the specific first error object if available
+      if (error.response?.data?.errors && Array.isArray(error.response.data.errors) && error.response.data.errors.length > 0) {
+        console.error('Specific backend validation error for tax calculation:', error.response.data.errors[0]);
+      } else {
+        console.error('Detailed tax calculation error data from backend (no specific errors array found):', error.response?.data);
+      }
       const message = error.response?.data?.message || 'Failed to calculate taxes.';
       taxCalculationError.value = message;
       // toast.error(message); // Optionally show toast, or let UI handle taxCalculationError
