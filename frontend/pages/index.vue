@@ -21,22 +21,40 @@
     <section class="py-12 bg-venus-background">
       <div class="container mx-auto px-4">
         <h2 class="text-3xl font-serif text-venus-text-primary text-center mb-8">Shop By Category</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
+
+        <!-- Loading State -->
+        <div v-if="isLoadingFeaturedCategories" class="text-center text-venus-text-secondary">
+          <p>Loading categories...</p>
+          <!-- Optional: Add skeleton loaders for category cards -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 mt-4 opacity-50">
+            <div class="h-80 bg-venus-neutral-medium rounded-sm animate-pulse"></div>
+            <div class="h-80 bg-venus-neutral-medium rounded-sm animate-pulse"></div>
+            <div class="h-80 bg-venus-neutral-medium rounded-sm animate-pulse"></div>
+          </div>
+        </div>
+
+        <!-- Error State -->
+        <div v-else-if="featuredCategoriesError" class="text-center text-red-500">
+          <p>Could not load categories: {{ featuredCategoriesError }}</p>
+          <button @click="fetchFeaturedCategories" class="mt-2 px-4 py-2 bg-peach-pink text-white rounded hover:bg-opacity-90">
+            Try Again
+          </button>
+        </div>
+
+        <!-- Success State - Dynamic Rendering -->
+        <div v-else-if="featuredCategories.length > 0" class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
           <CategoryHighlightCard
-            categoryName="Dresses"
-            imageUrl="https://images.unsplash.com/photo-1595991209266-5ff5a3a2f020?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80"
-            categoryLink="#"
+            v-for="category in featuredCategories"
+            :key="category.id"
+            :categoryName="category.name"
+            :imageUrl="category.image_url || 'https://via.placeholder.com/400x300.png?text=No+Image'"
+            :categoryLink="generateCategoryLink(category)"
           />
-          <CategoryHighlightCard
-            categoryName="The Swim Shop"
-            imageUrl="https://images.unsplash.com/photo-1500304400269-bac1eda94035?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=774&q=80"
-            categoryLink="#"
-          />
-          <CategoryHighlightCard
-            categoryName="New Arrivals"
-            imageUrl="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1170&q=80"
-            categoryLink="#"
-          />
+        </div>
+
+        <!-- Empty State (after loading, no error, but no categories) -->
+        <div v-else class="text-center text-venus-text-secondary">
+          <p>No categories to display at the moment.</p>
         </div>
       </div>
     </section>
@@ -296,6 +314,11 @@ const toggleMobileFilters = () => {
 const productForQuickView = ref(null);
 const isQuickViewModalVisible = ref(false);
 
+// Featured Categories State
+const featuredCategories = ref([]);
+const isLoadingFeaturedCategories = ref(true);
+const featuredCategoriesError = ref(null);
+
 const openQuickViewModal = (product) => {
   productForQuickView.value = product;
   isQuickViewModalVisible.value = true;
@@ -409,9 +432,35 @@ function changePage(newPage) {
 onMounted(async () => {
   // Initialize filter states from URL query on mount
   // This is now largely handled by the watcher's immediate:true and its logic
-  await fetchCategories();
-  // Initial product fetch is handled by the watcher on route.query
+  await fetchCategories(); // For product filters
+  await fetchFeaturedCategories(); // For the "Shop by Category" section
+  // Initial product fetch for "Featured Products" is handled by the watcher on route.query
 });
+
+const generateCategoryLink = (category) => {
+  if (category && category.slug) {
+    return `/categories/${category.slug}`;
+  } else if (category && category.id) {
+    return `/products?category_id=${category.id}`;
+  }
+  return '#'; // Fallback
+};
+
+async function fetchFeaturedCategories() {
+  isLoadingFeaturedCategories.value = true;
+  featuredCategoriesError.value = null;
+  try {
+    // The $axios instance is already configured with the backendBaseUrl
+    const response = await $axios.get('/public/categories/featured');
+    featuredCategories.value = response.data || []; // Ensure it's an array
+  } catch (err) {
+    console.error('Failed to fetch featured categories:', err);
+    featuredCategoriesError.value = err.response?.data?.message || err.message || 'Could not load featured categories.';
+    featuredCategories.value = []; // Ensure it's an array on error
+  } finally {
+    isLoadingFeaturedCategories.value = false;
+  }
+}
 
 const handleDirectAddToCart = (product) => {
   if (!product) {

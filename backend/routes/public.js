@@ -2,7 +2,20 @@
 const express = require('express');
 const router = express.Router();
 const orderService = require('../services/orderService');
+const categoryService = require('../services/categoryService'); // Import categoryService
 const { AppError, BadRequestError, NotFoundError } = require('../utils/AppError'); // Import custom errors
+
+// GET /api/public/categories/featured
+router.get('/categories/featured', async (req, res, next) => {
+  try {
+    // Default limit can be set in the service, or passed here, e.g. req.query.limit
+    const featuredCategories = await categoryService.getFeaturedCategories();
+    res.json(featuredCategories);
+  } catch (error) {
+    // Pass to the main error handler, or handle specifically if needed
+    next(error);
+  }
+});
 
 // GET /api/public/delivery/confirm?orderId=...&token=...
 router.get('/delivery/confirm', async (req, res, next) => {

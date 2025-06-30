@@ -110,7 +110,9 @@ async function createSchema(client) {
     await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS parent_category_id INTEGER;`);
     await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;`);
     await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;`);
-    console.log('All columns for "categories" table ensured/checked (basic existence).');
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS slug VARCHAR(255) UNIQUE;`);
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS image_url TEXT;`);
+    console.log('All columns for "categories" table ensured/checked (basic existence), including slug and image_url.');
 
     // Tax Classes Table
     await client.query(`
@@ -1039,24 +1041,28 @@ async function seedSuppliers(client, seededDataIds) {
 
 async function seedCategories(client) {
   const sampleCategories = [
-    { name: 'Apparel', description: 'Clothing items including shirts, pants, and dresses.' },
-    { name: 'Accessories', description: 'Fashion accessories like belts, scarves, and hats.' },
-    { name: 'Electronics', description: 'Consumer electronics, gadgets, and related accessories.' },
-    { name: 'Footwear', description: 'Shoes, boots, sandals, and other types of footwear.' },
-    { name: 'Home Goods', description: 'Items for home decoration, kitchenware, and utilities.' },
-    { name: 'Books', description: 'Various genres of books, both fiction and non-fiction.' },
-    { name: 'Beauty', description: 'Cosmetics, skincare, and personal care products.' },
-    { name: 'Sports & Outdoors', description: 'Equipment and apparel for sports and outdoor activities.' },
-    { name: 'Digital Music', description: 'Music albums and tracks available for digital download or streaming.' },
-    { name: 'Toys & Games', description: 'Toys, board games, puzzles, and video games for all ages.' }
+    { name: 'Apparel', description: 'Clothing items including shirts, pants, and dresses.', slug: 'apparel', image_url: 'https://via.placeholder.com/400x300.png?text=Apparel' },
+    { name: 'Accessories', description: 'Fashion accessories like belts, scarves, and hats.', slug: 'accessories', image_url: 'https://via.placeholder.com/400x300.png?text=Accessories' },
+    { name: 'Electronics', description: 'Consumer electronics, gadgets, and related accessories.', slug: 'electronics', image_url: 'https://via.placeholder.com/400x300.png?text=Electronics' },
+    { name: 'Footwear', description: 'Shoes, boots, sandals, and other types of footwear.', slug: 'footwear', image_url: 'https://via.placeholder.com/400x300.png?text=Footwear' },
+    { name: 'Home Goods', description: 'Items for home decoration, kitchenware, and utilities.', slug: 'home-goods', image_url: 'https://via.placeholder.com/400x300.png?text=Home+Goods' },
+    { name: 'Books', description: 'Various genres of books, both fiction and non-fiction.', slug: 'books', image_url: 'https://via.placeholder.com/400x300.png?text=Books' },
+    { name: 'Beauty', description: 'Cosmetics, skincare, and personal care products.', slug: 'beauty', image_url: 'https://via.placeholder.com/400x300.png?text=Beauty' },
+    { name: 'Sports & Outdoors', description: 'Equipment and apparel for sports and outdoor activities.', slug: 'sports-outdoors', image_url: 'https://via.placeholder.com/400x300.png?text=Sports' },
+    { name: 'Digital Music', description: 'Music albums and tracks available for digital download or streaming.', slug: 'digital-music', image_url: 'https://via.placeholder.com/400x300.png?text=Music' },
+    { name: 'Toys & Games', description: 'Toys, board games, puzzles, and video games for all ages.', slug: 'toys-games', image_url: 'https://via.placeholder.com/400x300.png?text=Toys' }
   ];
 
   console.log('Seeding categories...');
   try {
-    for (const category of sampleCategories) { // Iterate over objects
+    for (const category of sampleCategories) {
+      // Generate slug if not provided (though sample data has them)
+      const slug = category.slug || category.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const imageUrl = category.image_url || `https://via.placeholder.com/400x300.png?text=${encodeURIComponent(category.name)}`;
+
       const result = await client.query(
-        'INSERT INTO categories (name, description) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, updated_at = CURRENT_TIMESTAMP RETURNING id',
-        [category.name, category.description] // Pass both name and description
+        'INSERT INTO categories (name, description, slug, image_url) VALUES ($1, $2, $3, $4) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description, slug = EXCLUDED.slug, image_url = EXCLUDED.image_url, updated_at = CURRENT_TIMESTAMP RETURNING id',
+        [category.name, category.description, slug, imageUrl]
       );
       if (result.rowCount > 0) {
         // This means a new row was inserted OR an existing row was updated by the DO UPDATE clause

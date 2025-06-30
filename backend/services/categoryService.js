@@ -237,6 +237,7 @@ module.exports = {
   updateCategory,
   deleteCategory,
   getAllPublicCategories, // Added new function
+  getFeaturedCategories, // Added new function
 };
 
 /**
@@ -252,5 +253,30 @@ async function getAllPublicCategories() {
   } catch (error) {
     console.error('[categoryService.getAllPublicCategories] Error fetching public categories:', error);
     throw new AppError('Failed to retrieve public categories.', 500, 'PUBLIC_CATEGORIES_FETCH_FAILED');
+  }
+}
+
+/**
+ * Retrieves a limited number of featured categories for public display.
+ * Fetches categories that have a slug and an image_url, ordered by ID.
+ * @param {number} [limit=5] - The maximum number of featured categories to retrieve.
+ * @returns {Promise<Array<object>>} A promise that resolves to an array of category objects,
+ *          each containing { id, name, slug, image_url }.
+ * @throws {AppError} If the database operation fails.
+ */
+async function getFeaturedCategories(limit = 5) {
+  try {
+    const query = `
+      SELECT id, name, slug, image_url
+      FROM categories
+      WHERE slug IS NOT NULL AND image_url IS NOT NULL
+      ORDER BY id ASC
+      LIMIT $1;
+    `;
+    const result = await db.query(query, [limit]);
+    return result.rows;
+  } catch (error) {
+    console.error('[categoryService.getFeaturedCategories] Error fetching featured categories:', error);
+    throw new AppError('Failed to retrieve featured categories.', 500, 'FEATURED_CATEGORIES_FETCH_FAILED');
   }
 }
