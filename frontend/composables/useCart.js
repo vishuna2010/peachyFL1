@@ -135,10 +135,14 @@ export const useCart = () => {
 
       const payload = {
         cartItems: itemsToTax, // Use the filtered and mapped items
-        userId: currentUserId || null,
       };
+      // Conditionally add userId only if it's a positive integer
+      if (currentUserId && Number.isInteger(currentUserId) && currentUserId > 0) {
+        payload.userId = currentUserId;
+      }
 
-      // If guest user (currentUserId is null), add a placeholder shipping address
+
+      // If guest user (currentUserId is null or not valid), add a placeholder shipping address
       // The backend requires a country for tax calculation for guests.
       if (!currentUserId) {
         payload.shippingAddress = shippingAddressForTax || {
