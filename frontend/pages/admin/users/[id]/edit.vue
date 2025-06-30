@@ -5,7 +5,6 @@
         &larr; Back to User List
       </NuxtLink>
 
-      <!-- Corrected v-if conditions to use destructured refs from useAsyncData directly -->
       <h1 v-if="user" class="text-3xl font-bold text-gray-800 mb-2">
         Edit User: {{ user.name }} (ID: {{ userId }})
       </h1>
@@ -40,8 +39,8 @@
             <div>
               <label for="role" class="block text-sm font-medium text-gray-700 mb-1">Role</label>
               <select v-model="form.role_id" id="role" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-white">
-                <option v-if="roles.pending" value="">Loading roles...</option>
-                <option v-for="role in availableRoles" :key="role.id" :value="role.id">{{ role.name }}</option>
+                <option v-if="rolesPending" value="">Loading roles...</option> <!-- Changed from roles.pending -->
+                <option v-for="roleItem in availableRoles" :key="roleItem.id" :value="roleItem.id">{{ roleItem.name }}</option>
               </select>
             </div>
           </div>
@@ -119,7 +118,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, watch } from 'vue'; // Removed onMounted as it's not explicitly used here
 import { useRoute, useRouter, useAsyncData, useNuxtApp } from '#app';
 
 definePageMeta({
@@ -129,8 +128,7 @@ definePageMeta({
 const route = useRoute();
 const router = useRouter();
 const { $axios } = useNuxtApp();
-const {$toast} = useNuxtApp();
-
+// $toast will be retrieved inside handleSubmit
 
 const userId = computed(() => route.params.id);
 
@@ -160,24 +158,24 @@ const { data: user, pending: userPending, error: userError, refresh: refreshUser
   () => $axios.get(`/admin/users/${userId.value}`),
   {
     watch: [userId],
-    transform: (response) => response.data // Assuming API returns user data directly in response.data
+    transform: (response) => response.data
   }
 );
 console.log('[EditUserPage] After user useAsyncData - user.value:', user.value, 'userError.value:', userError.value, 'userPending.value:', userPending.value);
 
 // Fetch available roles
-const { data: roles, pending: rolesPending, error: rolesError } = await useAsyncData(
+const { data: rolesData, pending: rolesPending, error: rolesError } = await useAsyncData( // Renamed 'roles' to 'rolesData' to avoid conflict
   'admin-roles-edit-user',
   () => $axios.get('/admin/roles'),
   {
-    transform: (response) => response.data // Assuming API returns array of roles in response.data
+    transform: (response) => response.data
   }
 );
 
-watch(roles, (newRoles) => {
+watch(rolesData, (newRoles) => { // Watch rolesData
   if (newRoles && Array.isArray(newRoles)) {
     availableRoles.value = newRoles;
-  } else if (rolesError.value) {
+  } else if (rolesError.value) { // Use rolesError from its own useAsyncData
      availableRoles.value = [{id: 1, name: 'Admin (Fallback)'}, {id: 2, name: 'User (Fallback)'}];
      console.warn('[EditUser] Failed to load roles, using fallback. Error:', rolesError.value);
   }
@@ -187,7 +185,7 @@ watch(roles, (newRoles) => {
 // Populate form when user data is loaded
 watch(user, (currentUserData) => {
   console.log('[EditUserPage] Watcher for user data triggered. currentUserData:', currentUserData, 'userError at this point:', userError.value);
-  if (currentUserData && Object.keys(currentUserData).length > 0) { // Check if currentUserData is not null/empty
+  if (currentUserData && Object.keys(currentUserData).length > 0) {
     console.log('[EditUserPage] Populating form with currentUserData:', JSON.parse(JSON.stringify(currentUserData)));
     form.value.name = currentUserData.name || '';
     form.value.email = currentUserData.email || '';
@@ -205,7 +203,6 @@ watch(user, (currentUserData) => {
         errors: userError.value?.data?.errors || []
       };
     } else if (!userPending.value && !currentUserData) {
-      // This case might happen if API returns success but no data (e.g. 200 with empty object after transform)
       console.warn('[EditUserPage] User data is empty after fetch, and no error reported by useAsyncData. This might indicate a transform issue or API returning empty success.');
        submissionStatus.value = { message: 'User data not found or is empty.', isError: true };
     }
@@ -214,14 +211,20 @@ watch(user, (currentUserData) => {
 
 
 const handleSubmit = async () => {
-  console.log('[EditUserPage] handleSubmit: $toast type:', typeof $toast, '$toast:', $toast);
+  const nuxtApp = useNuxtApp(); // Get nuxtApp instance here
+  console.log('[EditUserPage] handleSubmit: nuxtApp.$toast type:', typeof nuxtApp.$toast, 'nuxtApp.$toast:', nuxtApp.$toast);
+
   isSubmitting.value = true;
   submissionStatus.value = { message: '', isError: false, errors: [] };
 
   if (form.value.password && form.value.password !== form.value.confirm_password) {
     submissionStatus.value = { message: 'Passwords do not match.', isError: true };
     isSubmitting.value = false;
-    $toast.error('Passwords do not match.');
+    if (nuxtApp.$toast && typeof nuxtApp.$toast.error === 'function') {
+      nuxtApp.$toast.error('Passwords do not match.');
+    } else {
+      console.error("[EditUserPage] Toastr instance or toast.error method not available for password mismatch error.");
+    }
     return;
   }
 
@@ -235,7 +238,7 @@ const handleSubmit = async () => {
   };
 
   if (form.value.password) {
-    payload.password = form.value.password; // Only include password if provided
+    payload.password = form.value.password;
   }
 
   const url = `/admin/users/${userId.value}`;
@@ -253,19 +256,29 @@ const handleSubmit = async () => {
     const response = await $axios.put(url, payload);
     console.log('[EditUserPage] Update successful. Response:', response);
     submissionStatus.value = { message: 'User updated successfully!', isError: false };
-    $toast.success('User updated successfully!');
+    if (nuxtApp.$toast && typeof nuxtApp.$toast.success === 'function') {
+      nuxtApp.$toast.success('User updated successfully!');
+    } else {
+      console.log("[EditUserPage] Toastr instance or toast.success method not available, but user was updated.");
+    }
     router.push('/admin/users');
   } catch (err) {
     console.error('[EditUserPage] CAUGHT ERROR (raw):', err);
-    // Simplified error handling for now to ensure no secondary errors here
+    let errorToDisplay = err.message || 'An error occurred during update.';
+    let detailedValidationErrors = err.response?.data?.errors || [];
+
     submissionStatus.value = {
-      message: err.message || 'An error occurred during update.',
+      message: errorToDisplay,
       isError: true,
-      errors: err.response?.data?.errors || [] // Keep this if backend validation errors are possible
+      errors: detailedValidationErrors
     };
-    $toast.error(submissionStatus.value.message);
-    if (submissionStatus.value.errors && submissionStatus.value.errors.length > 0) {
-        submissionStatus.value.errors.forEach(e => $toast.error(e.msg || (typeof e === 'string' ? e : 'Detailed error')));
+    if (nuxtApp.$toast && typeof nuxtApp.$toast.error === 'function') {
+      nuxtApp.$toast.error(errorToDisplay);
+      if (detailedValidationErrors.length > 0) {
+          detailedValidationErrors.forEach(e => nuxtApp.$toast.error(e.msg || (typeof e === 'string' ? e : 'Detailed error')));
+      }
+    } else {
+      console.error("[EditUserPage] Toastr instance or toast.error method not available for error message:", errorToDisplay, detailedValidationErrors);
     }
   } finally {
     isSubmitting.value = false;
