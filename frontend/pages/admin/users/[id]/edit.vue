@@ -237,15 +237,25 @@ const handleSubmit = async () => {
     payload.password = form.value.password; // Only include password if provided
   }
 
+  const url = `/admin/users/${userId.value}`;
+  console.log('[EditUserPage] Attempting to PUT to URL:', url);
   try {
-    const response = await $axios.put(`/admin/users/${userId.value}`, payload);
+    // Safely log payload, avoiding issues with Proxy objects in console if stringified directly
+    console.log('[EditUserPage] Payload for PUT:', JSON.parse(JSON.stringify(payload)));
+  } catch (e) {
+    console.error('[EditUserPage] Could not stringify payload for logging:', e, payload);
+  }
+
+  try {
+    const response = await $axios.put(url, payload);
+    console.log('[EditUserPage] Update successful. Response:', response);
     submissionStatus.value = { message: 'User updated successfully!', isError: false };
     $toast.success('User updated successfully!');
     // Optionally, navigate away or refresh data
     // await refreshUser(); // Re-fetch to show updated data if staying on page
     router.push('/admin/users');
   } catch (err) {
-    console.error('Error updating user (raw error object):', err); // Log raw error
+    console.error('[EditUserPage] Error updating user (raw error object):', err);
     const errorData = err.response?.data;
     let errorMessage = 'Failed to update user. An unexpected error occurred.';
     let errorDetailsArray = [];
