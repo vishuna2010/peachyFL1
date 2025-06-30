@@ -184,17 +184,31 @@ watch(roles, (newRoles) => {
 
 // Populate form when user data is loaded
 watch(user, (currentUserData) => {
-  if (currentUserData) {
+  console.log('[EditUserPage] Watcher for user data triggered. currentUserData:', currentUserData);
+  if (currentUserData && Object.keys(currentUserData).length > 0) { // Check if currentUserData is not null/empty
+    console.log('[EditUserPage] Populating form with currentUserData:', JSON.parse(JSON.stringify(currentUserData)));
     form.value.name = currentUserData.name || '';
     form.value.email = currentUserData.email || '';
     form.value.role_id = currentUserData.role_id || null;
     form.value.is_tax_exempt = currentUserData.is_tax_exempt || false;
     form.value.tax_exemption_certificate_id = currentUserData.tax_exemption_certificate_id || '';
     form.value.tax_exemption_notes = currentUserData.tax_exemption_notes || '';
-  } else if (userError.value) {
-      submissionStatus.value = { message: `Failed to load user data: ${userError.value?.data?.message || userError.value_message || 'Unknown error'}`, isError: true, errors: userError.value?.data?.errors || [] };
+  } else {
+    console.log('[EditUserPage] currentUserData is null, undefined, or empty. Checking userError.value:', userError.value);
+    if (userError.value) {
+      console.error('[EditUserPage] Error details from userError.value:', JSON.parse(JSON.stringify(userError.value)));
+      submissionStatus.value = {
+        message: `Failed to load user data: ${userError.value?.data?.message || userError.value?.message || 'Unknown error'}`,
+        isError: true,
+        errors: userError.value?.data?.errors || []
+      };
+    } else if (!userPending.value && !currentUserData) {
+      // This case might happen if API returns success but no data (e.g. 200 with empty object after transform)
+      console.warn('[EditUserPage] User data is empty after fetch, and no error reported by useAsyncData. This might indicate a transform issue or API returning empty success.');
+       submissionStatus.value = { message: 'User data not found or is empty.', isError: true };
+    }
   }
-}, { immediate: true });
+}, { immediate: true, deep: true }); // Added deep: true
 
 
 const handleSubmit = async () => {
