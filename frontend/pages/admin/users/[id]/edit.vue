@@ -162,6 +162,7 @@ const { data: user, pending: userPending, error: userError, refresh: refreshUser
     transform: (response) => response.data // Assuming API returns user data directly in response.data
   }
 );
+console.log('[EditUserPage] After user useAsyncData - user.value:', user.value, 'userError.value:', userError.value, 'userPending.value:', userPending.value);
 
 // Fetch available roles
 const { data: roles, pending: rolesPending, error: rolesError } = await useAsyncData(
@@ -184,7 +185,7 @@ watch(roles, (newRoles) => {
 
 // Populate form when user data is loaded
 watch(user, (currentUserData) => {
-  console.log('[EditUserPage] Watcher for user data triggered. currentUserData:', currentUserData);
+  console.log('[EditUserPage] Watcher for user data triggered. currentUserData:', currentUserData, 'userError at this point:', userError.value);
   if (currentUserData && Object.keys(currentUserData).length > 0) { // Check if currentUserData is not null/empty
     console.log('[EditUserPage] Populating form with currentUserData:', JSON.parse(JSON.stringify(currentUserData)));
     form.value.name = currentUserData.name || '';
@@ -196,7 +197,7 @@ watch(user, (currentUserData) => {
   } else {
     console.log('[EditUserPage] currentUserData is null, undefined, or empty. Checking userError.value:', userError.value);
     if (userError.value) {
-      console.error('[EditUserPage] Error details from userError.value:', JSON.parse(JSON.stringify(userError.value)));
+      console.error('[EditUserPage] Error details from userError.value (in else block):', JSON.parse(JSON.stringify(userError.value)));
       submissionStatus.value = {
         message: `Failed to load user data: ${userError.value?.data?.message || userError.value?.message || 'Unknown error'}`,
         isError: true,
@@ -208,7 +209,7 @@ watch(user, (currentUserData) => {
        submissionStatus.value = { message: 'User data not found or is empty.', isError: true };
     }
   }
-}, { immediate: true, deep: true }); // Added deep: true
+}, { immediate: true, deep: true });
 
 
 const handleSubmit = async () => {
