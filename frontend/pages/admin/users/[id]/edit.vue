@@ -5,25 +5,26 @@
         &larr; Back to User List
       </NuxtLink>
 
-      <h1 v-if="user.data" class="text-3xl font-bold text-gray-800 mb-2">
-        Edit User: {{ user.data.name }} (ID: {{ userId }})
+      <!-- Corrected v-if conditions to use destructured refs from useAsyncData directly -->
+      <h1 v-if="user" class="text-3xl font-bold text-gray-800 mb-2">
+        Edit User: {{ user.name }} (ID: {{ userId }})
       </h1>
-      <h1 v-else-if="user.pending" class="text-3xl font-bold text-gray-800 mb-2">
+      <h1 v-else-if="userPending" class="text-3xl font-bold text-gray-800 mb-2">
         Loading User Data...
       </h1>
       <h1 v-else class="text-3xl font-bold text-red-600 mb-2">
         Error Loading User Data
       </h1>
 
-      <div v-if="user.pending" class="text-center py-10">
+      <div v-if="userPending" class="text-center py-10">
         <p>Loading...</p>
       </div>
-      <div v-else-if="user.error || !user.data" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
+      <div v-else-if="userError || !user" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
         <strong class="font-bold">Error!</strong>
-        <span class="block sm:inline">{{ user.error?.message || 'Could not load user data.' }}</span>
+        <span class="block sm:inline">{{ userError?.message || userError?.data?.message || 'Could not load user data.' }}</span>
       </div>
 
-      <form v-if="user.data" @submit.prevent="handleSubmit">
+      <form v-if="user" @submit.prevent="handleSubmit">
         <!-- User Details Section -->
         <section class="mb-8">
           <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">User Details</h2>
