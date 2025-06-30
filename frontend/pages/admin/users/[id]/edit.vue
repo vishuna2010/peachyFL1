@@ -238,43 +238,33 @@ const handleSubmit = async () => {
   }
 
   const url = `/admin/users/${userId.value}`;
-  console.log('[EditUserPage] Attempting to PUT to URL:', url);
+  console.log('[EditUserPage] PRE-SUBMIT: URL:', url);
+  console.log('[EditUserPage] PRE-SUBMIT: userId.value:', userId.value);
   try {
-    // Safely log payload, avoiding issues with Proxy objects in console if stringified directly
-    console.log('[EditUserPage] Payload for PUT:', JSON.parse(JSON.stringify(payload)));
+    console.log('[EditUserPage] PRE-SUBMIT: Payload:', JSON.parse(JSON.stringify(payload)));
   } catch (e) {
-    console.error('[EditUserPage] Could not stringify payload for logging:', e, payload);
+    console.error('[EditUserPage] PRE-SUBMIT: Could not stringify payload for logging:', e, payload);
   }
+  console.log('[EditUserPage] PRE-SUBMIT: $axios type:', typeof $axios, '$axios.put type:', typeof $axios.put);
+
 
   try {
     const response = await $axios.put(url, payload);
     console.log('[EditUserPage] Update successful. Response:', response);
     submissionStatus.value = { message: 'User updated successfully!', isError: false };
     $toast.success('User updated successfully!');
-    // Optionally, navigate away or refresh data
-    // await refreshUser(); // Re-fetch to show updated data if staying on page
     router.push('/admin/users');
   } catch (err) {
-    console.error('[EditUserPage] Error updating user (raw error object):', err);
-    const errorData = err.response?.data;
-    let errorMessage = 'Failed to update user. An unexpected error occurred.';
-    let errorDetailsArray = [];
-
-    if (errorData) {
-      errorMessage = errorData.message || 'Failed to update user. Please check the details.';
-      errorDetailsArray = errorData.errors || [];
-    } else if (err.message) {
-      errorMessage = err.message; // Use the general error message if no response object
-    }
-
+    console.error('[EditUserPage] CAUGHT ERROR (raw):', err);
+    // Simplified error handling for now to ensure no secondary errors here
     submissionStatus.value = {
-      message: errorMessage,
+      message: err.message || 'An error occurred during update.',
       isError: true,
-      errors: errorDetailsArray
+      errors: err.response?.data?.errors || [] // Keep this if backend validation errors are possible
     };
-    $toast.error(errorMessage);
-    if (errorDetailsArray.length > 0) {
-        errorDetailsArray.forEach(e => $toast.error(e.msg || (typeof e === 'string' ? e : 'Detailed error')));
+    $toast.error(submissionStatus.value.message);
+    if (submissionStatus.value.errors && submissionStatus.value.errors.length > 0) {
+        submissionStatus.value.errors.forEach(e => $toast.error(e.msg || (typeof e === 'string' ? e : 'Detailed error')));
     }
   } finally {
     isSubmitting.value = false;
