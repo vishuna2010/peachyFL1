@@ -1,4 +1,4 @@
-const db = require('../config/db'); // Assuming db.js exports the query function
+const db = require('../db'); // Assuming db.js exports the query function
 
 /**
  * Fetches active hero banners from the database, ordered by sort_order.
