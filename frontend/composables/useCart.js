@@ -146,19 +146,20 @@ export const useCart = () => {
           // state_province_region: null, // Optional based on backend needs
           // postalCode: null // Optional
         };
-        console.log('Guest user detected for tax calculation, using shippingAddress:', payload.shippingAddress);
+        console.log('Guest user detected for tax calculation. Shipping address being used:', JSON.stringify(payload.shippingAddress));
       } else if (shippingAddressForTax) {
         // If logged-in user AND a specific address is provided for estimation (e.g. from checkout page)
         payload.shippingAddress = shippingAddressForTax;
-         console.log('Logged-in user, explicit shippingAddress provided for tax calculation:', payload.shippingAddress);
+         console.log('Logged-in user, explicit shippingAddress provided for tax calculation:', JSON.stringify(payload.shippingAddress));
       }
       // If logged-in user and no shippingAddressForTax is provided, the backend will use the user's default.
 
+      console.log('Attempting to fetch tax details with payload:', JSON.stringify(payload, null, 2));
       const response = await $axios.post('/cart/calculate-taxes', payload);
       cartTaxDetails.value = response.data;
-      console.log('Tax details fetched:', response.data);
+      console.log('Tax details fetched successfully:', response.data);
     } catch (error) {
-      console.error('Error fetching cart tax details:', error);
+      console.error('Error fetching cart tax details. Status:', error.response?.status, 'Data:', error.response?.data, 'Full Error:', error);
       const message = error.response?.data?.message || 'Failed to calculate taxes.';
       taxCalculationError.value = message;
       // toast.error(message); // Optionally show toast, or let UI handle taxCalculationError
