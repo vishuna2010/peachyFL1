@@ -398,3 +398,39 @@ This section outlines the primary driver for future backend development, based o
     - [ ] Optional QR for delivery scanning
     - [ ] Custom line item notes
 ---
+
+---
+
+## Frontend Changes
+
+### High Priority (Addressing Bugs & Core Functionality)
+
+1.  **Fix Missing `handleDirectAddToCart` Function in QuickView:**
+    *   Implement this function in `frontend/pages/index.vue` to allow adding non-variant products to the cart from the QuickView modal. It should call `useCart().addToCart()` with correctly structured and sanitized product data.
+2.  **Make "Shop By Category" Section Dynamic:**
+    *   Create a new public API endpoint (e.g., `/api/categories/featured`) returning featured categories (name, image URL, slug/URL).
+    *   In `frontend/pages/index.vue`, fetch from this endpoint and use `v-for` to dynamically render `CategoryHighlightCard` components.
+3.  **Implement "Best Sellers" Section:**
+    *   Create a new public API endpoint (e.g., `/api/products/bestsellers`).
+    *   In `frontend/pages/index.vue`, fetch these products and display them using `ProductCard.vue` in a grid.
+
+### Medium Priority (Improving UX, Content & Conversions)
+
+4.  **Make "SALE" Badge on Product Cards Dynamic:**
+    *   Modify `frontend/components/ProductCard.vue` to conditionally display the "SALE" badge based on product data (e.g., `product.discount_price` or `is_on_sale` flag).
+5.  **Update Hero Banner and Promotional Banner Links:**
+    *   In `frontend/pages/index.vue`, change `heroData.buttonLink` and the sale `PromotionalBanner` `linkUrl` from `"#"` to actual relevant page URLs.
+6.  **Enhance SEO with Dynamic Meta Tags:**
+    *   In `frontend/pages/index.vue`, expand `useHead` to include a compelling meta description and Open Graph tags (og:title, og:description, og:image, og:url).
+
+### Low Priority (Refinements & Potential Enhancements)
+
+7.  **Address Unused Props in Components:**
+    *   **`HeroBanner.vue`:** If `imageUrl` prop is unused, remove it or re-implement its functionality.
+    *   **`PromotionalBanner.vue`:** If `subtitle` prop is unused, remove it or implement its display.
+8.  **Image Optimization Strategy:**
+    *   Investigate using Nuxt Image (`@nuxt/image`) for automatic optimization, responsive sizing, and modern formats for all frontend images.
+9.  **Accessibility (A11y) Review:**
+    *   Conduct a focused accessibility review (keyboard navigation, focus management, color contrast, ARIA attributes) for the homepage and its components.
+10. **Consider Advanced QuickView (Optional Future Enhancement):**
+    *   For a future iteration, consider enhancing the QuickView modal to allow variant selection and direct add-to-cart for products with variants.
