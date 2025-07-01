@@ -1,5 +1,5 @@
 import { useAuth } from '~/composables/useAuth';
-import { navigateTo, watch } from '#app';
+import { navigateTo } from '#app'; // watch is auto-imported or from 'vue'
 
 export default defineNuxtRouteMiddleware(async (to, from) => {
   if (process.server) {
