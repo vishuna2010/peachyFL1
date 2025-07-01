@@ -46,11 +46,12 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   }
 
   const allowedAdminRoles = ['admin', 'super_admin']; // Define allowed admin roles
-  if (!allowedAdminRoles.includes(finalUserRole)) {
-    console.log(`[AdminAuth] Path: ${path}. Final check failed: User role is "${finalUserRole}" (not in allowed admin roles: ${allowedAdminRoles.join(', ')}). Redirecting to homepage (/).`);
+  // Make the check case-insensitive by converting finalUserRole to lowercase
+  if (!finalUserRole || !allowedAdminRoles.includes(finalUserRole.toLowerCase())) {
+    console.log(`[AdminAuth] Path: ${path}. Final check failed: User role is "${finalUserRole}" (checking against ${allowedAdminRoles.join(', ')} after converting to lowercase). Redirecting to homepage (/).`);
     return navigateTo('/'); // User is known, but not an admin
   }
 
-  console.log(`[AdminAuth] Path: ${path}. User role "${finalUserRole}" is authorized. Access granted to admin section.`);
+  console.log(`[AdminAuth] Path: ${path}. User role "${finalUserRole}" (processed as ${finalUserRole?.toLowerCase()}) is authorized. Access granted to admin section.`);
   // Allow navigation by not returning anything explicitly
 });
