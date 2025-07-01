@@ -144,12 +144,16 @@ async function createSchema(client) {
         is_active BOOLEAN DEFAULT TRUE, is_featured BOOLEAN DEFAULT FALSE, image_url VARCHAR(255),
         tags TEXT[], average_rating DECIMAL(3, 2) DEFAULT 0.00, review_count INTEGER DEFAULT 0,
         tax_class_id INTEGER REFERENCES tax_classes(id), has_variants BOOLEAN DEFAULT FALSE NOT NULL,
+        -- JULES: Added reorder_threshold
+        reorder_threshold INTEGER DEFAULT 0,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('Table "products" checked/created.');
      await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS tax_class_id INTEGER REFERENCES tax_classes(id);`);
      await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS has_variants BOOLEAN DEFAULT FALSE NOT NULL;`);
+     // JULES: Ensure reorder_threshold exists if missed by CREATE IF NOT EXISTS (though it shouldn't be)
+     await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS reorder_threshold INTEGER DEFAULT 0;`);
 
 
     // Product Options (Global)
@@ -626,7 +630,8 @@ async function seedProducts(client, seededDataIds) {
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=Headphones', is_active: true,
-      has_variants: false // This will be set to true by seedProductOptionConfigurations if options are assigned
+      has_variants: false, // This will be set to true by seedProductOptionConfigurations if options are assigned
+      reorder_threshold: 5 // JULES: Added reorder_threshold example
     },
     {
       name: 'Men\'s Cotton T-Shirt', sku: 'TSHRT-MEN-COT-005', description: 'Comfortable and durable 100% cotton t-shirt for everyday wear.',
@@ -635,7 +640,8 @@ async function seedProducts(client, seededDataIds) {
       supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=T-Shirt', is_active: true,
-      has_variants: false // This will be set to true if options are assigned
+      has_variants: false, // This will be set to true if options are assigned
+      reorder_threshold: 10 // JULES: Added reorder_threshold example
     },
     {
       name: 'Simple LED Desk Lamp', sku: 'LAMP-DSK-LED-010', description: 'Modern LED desk lamp with adjustable brightness.',
@@ -644,20 +650,22 @@ async function seedProducts(client, seededDataIds) {
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=Desk+Lamp', is_active: true,
-      has_variants: false
+      has_variants: false,
+      reorder_threshold: 5 // JULES: Added reorder_threshold example
     },
   ];
 
   try {
     for (const prod of productsToSeed) {
       const result = await client.query(
-        `INSERT INTO products (name, sku, description, price, cost_price, stock_quantity, category_id, supplier_id, tax_class_id, image_url, is_active, has_variants)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `INSERT INTO products (name, sku, description, price, cost_price, stock_quantity, category_id, supplier_id, tax_class_id, image_url, is_active, has_variants, reorder_threshold)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          ON CONFLICT (sku) DO UPDATE SET
            name=EXCLUDED.name, description=EXCLUDED.description, price=EXCLUDED.price, cost_price=EXCLUDED.cost_price, stock_quantity=EXCLUDED.stock_quantity,
-           category_id=EXCLUDED.category_id, supplier_id=EXCLUDED.supplier_id, tax_class_id=EXCLUDED.tax_class_id, image_url=EXCLUDED.image_url, is_active=EXCLUDED.is_active, has_variants=EXCLUDED.has_variants
+           category_id=EXCLUDED.category_id, supplier_id=EXCLUDED.supplier_id, tax_class_id=EXCLUDED.tax_class_id, image_url=EXCLUDED.image_url, is_active=EXCLUDED.is_active, has_variants=EXCLUDED.has_variants,
+           reorder_threshold=EXCLUDED.reorder_threshold
          RETURNING id, sku;`,
-        [prod.name, prod.sku, prod.description, prod.price, prod.cost_price, prod.stock_quantity, prod.category_id, prod.supplier_id, prod.tax_class_id, prod.image_url, prod.is_active, prod.has_variants]
+        [prod.name, prod.sku, prod.description, prod.price, prod.cost_price, prod.stock_quantity, prod.category_id, prod.supplier_id, prod.tax_class_id, prod.image_url, prod.is_active, prod.has_variants, prod.reorder_threshold]
       );
       if (result.rows.length > 0) {
         // Store product ID and SKU for later reference
