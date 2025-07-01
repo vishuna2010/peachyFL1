@@ -115,68 +115,24 @@ async function createSchema(client) {
     `);
     console.log('Table "tax_classes" checked/created.');
 
-    // Tax Rates Table
+    // Tax Rates Table (Reverted to correct definition)
     await client.query(`
       CREATE TABLE IF NOT EXISTS tax_rates (
           id SERIAL PRIMARY KEY,
-          country VARCHAR(2) NOT NULL,
-          state_province VARCHAR(100),
+          tax_class_id INTEGER NOT NULL REFERENCES tax_classes(id) ON DELETE CASCADE,
+          country VARCHAR(2) NOT NULL, -- ISO 3166-1 alpha-2 country code
+          state_province VARCHAR(100), -- State, province, or region
           postal_code VARCHAR(20),
-          rate DECIMAL(10, 4) NOT NULL,
-          name VARCHAR(255) NOT NULL,
+          rate DECIMAL(10, 4) NOT NULL, -- e.g., 0.0825 for 8.25%
+          name VARCHAR(255) NOT NULL, -- e.g., "Sales Tax", "VAT"
           is_compound BOOLEAN DEFAULT FALSE NOT NULL,
-          priority INTEGER DEFAULT 0 NOT NULL,
+          priority INTEGER DEFAULT 0 NOT NULL, -- For multiple matching rates
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (tax_class_id, country, state_province, postal_code, name)
       );
     `);
-    // Note: tax_class_id and the UNIQUE constraint including it are intentionally omitted here for debugging.
-    // They will be added by the ALTER TABLE statement below.
-    console.log('Table "tax_rates" checked/created (initial attempt, without tax_class_id and specific UNIQUE constraint).');
-
-    // JULES: ADDED FOR DEBUGGING - Force add tax_class_id and log schema
-    try {
-        await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS tax_class_id INTEGER REFERENCES tax_classes(id) ON DELETE CASCADE;`);
-        console.log('DEBUG: Attempted to ADD COLUMN tax_class_id to tax_rates.');
-
-        // Attempt to add the unique constraint. This might require dropping an old one if it exists with a different definition.
-        // For simplicity in debugging the column presence, advanced constraint handling is deferred.
-        // A more robust approach would be:
-        // 1. Check if constraint exists.
-        // 2. If exists and is different, drop it.
-        // 3. Add the new constraint.
-        // For now, let's assume if the column is added, we can manually fix constraints later if needed, or the original UNIQUE might still work if it was only missing tax_class_id.
-        // A simple re-add attempt (might fail if an incompatible one exists):
-        try {
-            await client.query(`
-                ALTER TABLE tax_rates
-                ADD CONSTRAINT tax_rates_tax_class_id_country_state_province_postal_code_name_key
-                UNIQUE (tax_class_id, country, state_province, postal_code, name);
-            `);
-            console.log('DEBUG: Attempted to ADD UNIQUE constraint including tax_class_id.');
-        } catch (uniqueConstraintError) {
-            if (uniqueConstraintError.code === '42P07') { // constraint already exists
-                 console.log('DEBUG: UNIQUE constraint including tax_class_id likely already exists or a similar one does.');
-            } else if (uniqueConstraintError.code === '42710') { // duplicate constraint name (less likely here as we name it)
-                 console.log('DEBUG: UNIQUE constraint name conflict.');
-            } else {
-                console.warn('DEBUG: Could not add UNIQUE constraint (tax_class_id, country, ...), possibly due to existing incompatible constraint or data. Manual check might be needed. Error:', uniqueConstraintError.message);
-            }
-        }
-
-    } catch (e) {
-        console.error('DEBUG: Error during ALTER TABLE ADD COLUMN for tax_class_id on tax_rates:', e);
-    }
-
-    const taxRatesSchema = await client.query(`
-        SELECT column_name, data_type, is_nullable, column_default, character_maximum_length, numeric_precision, numeric_scale
-        FROM information_schema.columns
-        WHERE table_name = 'tax_rates' AND table_schema = 'public'
-        ORDER BY ordinal_position;
-    `);
-    console.log('DEBUG: Schema of tax_rates table after creation/alteration:');
-    console.table(taxRatesSchema.rows);
-    // END JULES DEBUGGING SECTION
+    console.log('Table "tax_rates" checked/created.');
 
     // Products Table
     await client.query(`
@@ -405,7 +361,6 @@ async function seedHeroBanners(client, seededDataIds) {
   }
 }
 
-// JULES: ADDED/MODIFIED START
 async function seedTaxConfiguration(client, seededDataIds) {
   console.log('Seeding tax configuration...');
   seededDataIds.taxClasses = seededDataIds.taxClasses || {};
@@ -453,9 +408,10 @@ async function seedTaxConfiguration(client, seededDataIds) {
     console.log('Tax configuration seeding completed.');
   } catch (error) {
     console.error('Error seeding tax configuration:', error);
+    // Propagate the error to ensure the transaction rolls back if this fails
+    throw error;
   }
 }
-// JULES: ADDED/MODIFIED END
 
 async function updateProductAverageRating(productId, client) {
     console.log(`Updating average rating for product ID ${productId}...`);
@@ -502,6 +458,7 @@ async function seedAdminUser(client, seededUserIds) {
     }
   } catch (error) {
     console.error('Error seeding admin user:', error);
+    throw error;
   }
 }
 
@@ -530,10 +487,10 @@ async function seedRegularUsers(client, seededUserIds) {
     console.log('Regular users seeding completed.');
   } catch (error) {
     console.error('Error seeding regular users:', error);
+    throw error;
   }
 }
 
-// JULES: ADDED/MODIFIED START
 async function seedSpecificGlobalOptionsAndValues(client, seededDataIds) {
   console.log('Seeding specific global options (Color, Size) and their values...');
   seededDataIds.options = seededDataIds.options || {};
@@ -588,9 +545,9 @@ async function seedSpecificGlobalOptionsAndValues(client, seededDataIds) {
     console.log('Finished seeding specific global options and their values.');
   } catch (error) {
     console.error('Error seeding global options and values:', error);
+    throw error;
   }
 }
-// JULES: ADDED/MODIFIED END
 
 async function seedSuppliers(client, seededDataIds) {
   console.log('Seeding suppliers...');
@@ -615,6 +572,7 @@ async function seedSuppliers(client, seededDataIds) {
     console.log('Suppliers seeding completed.');
   } catch (error) {
     console.error('Error seeding suppliers:', error);
+    throw error;
   }
 }
 
@@ -652,10 +610,10 @@ async function seedCategories(client, seededDataIds) {
     console.log('Categories seeding completed.');
   } catch (error) {
     console.error('Error seeding categories:', error);
+    throw error;
   }
 }
 
-// JULES: ADDED/MODIFIED START
 async function seedProducts(client, seededDataIds) {
   console.log('Seeding products...');
   seededDataIds.products = seededDataIds.products || {};
@@ -710,6 +668,7 @@ async function seedProducts(client, seededDataIds) {
     console.log('Products seeding completed.');
   } catch (error) {
     console.error('Error seeding products:', error);
+    throw error;
   }
 }
 
@@ -821,6 +780,7 @@ async function seedProductOptionConfigurations(client, seededDataIds, productSku
     console.log('Product option configurations seeding completed.');
   } catch (error) {
     console.error('Error seeding product option configurations:', error);
+    throw error;
   }
 }
 
@@ -934,9 +894,9 @@ async function seedProductVariants(client, seededDataIds) {
     console.log('Product variants seeding completed.');
   } catch (error) {
     console.error('Error seeding product variants:', error);
+    throw error;
   }
 }
-// JULES: ADDED/MODIFIED END
 
 
 async function seedProductReviews(client, seededDataIds) {
@@ -986,10 +946,10 @@ async function seedProductImages(client, seededDataIds) {
     console.log('Basic product images seeding completed.');
   } catch(error) {
       console.error('Error seeding product images:', error);
+      throw error;
   }
 }
 
-// JULES: ADDED/MODIFIED START
 async function seedInventoryBatches(client, seededDataIds) {
   console.log('Seeding inventory batches (for non-variant products)...');
   try {
@@ -1018,9 +978,9 @@ async function seedInventoryBatches(client, seededDataIds) {
     console.log('Inventory batches seeding for non-variant products completed.');
   } catch (error) {
     console.error('Error seeding inventory batches for non-variant products:', error);
+    throw error;
   }
 }
-// JULES: ADDED/MODIFIED END
 
 async function seedCostHistory(client, seededDataIds) { console.log("Placeholder: seedCostHistory"); }
 async function seedStockMovements(client, seededDataIds) { console.log("Placeholder: seedStockMovements"); }
@@ -1220,3 +1180,5 @@ if (require.main === module) {
 }
 
 module.exports = { seedDatabase, pool };
+
+[end of backend/seed.js]
