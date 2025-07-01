@@ -1884,7 +1884,7 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
       newAggregateStockForVariantTable = targetStock; // This will be set on product_variants table
 
       const existingBatchStockResult = await client.query(
-        `SELECT COALESCE(SUM(current_quantity), 0) AS total_batch_stock FROM inventory_batches WHERE variant_id = $1 AND product_id = $2`,
+        `SELECT COALESCE(SUM(quantity_remaining), 0) AS total_batch_stock FROM inventory_batches WHERE variant_id = $1 AND product_id = $2`, // Corrected: current_quantity to quantity_remaining
         [variantId, currentVariant.product_id]
       );
       const currentTotalBatchStock = parseInt(existingBatchStockResult.rows[0].total_batch_stock, 10);
@@ -1900,14 +1900,14 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
           );
           if (existingManualBatch.rows.length > 0) {
             await client.query(
-              `UPDATE inventory_batches SET current_quantity = current_quantity + $1, initial_quantity = initial_quantity + $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`,
+              `UPDATE inventory_batches SET quantity_remaining = quantity_remaining + $1, quantity_received = quantity_received + $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`, // Corrected: current_quantity to quantity_remaining, initial_quantity to quantity_received
               [stockChange, stockChange, existingManualBatch.rows[0].id]
             );
           } else {
             const costAtReceipt = variantData.cost_price !== undefined ? parseFloat(variantData.cost_price) : (currentVariant.cost_price !== null ? currentVariant.cost_price : 0);
             const currencyCodeAtReceipt = config.currency.defaultStoreCurrency || 'USD';
             await client.query(
-              `INSERT INTO inventory_batches (product_id, variant_id, batch_number, initial_quantity, current_quantity, cost_price_at_receipt, currency_code_at_receipt, received_date)
+              `INSERT INTO inventory_batches (product_id, variant_id, batch_number, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, received_date) // Corrected: initial_quantity to quantity_received, current_quantity to quantity_remaining
                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
               [currentVariant.product_id, variantId, manualBatchNumber, stockChange, stockChange, costAtReceipt, currencyCodeAtReceipt]
             );

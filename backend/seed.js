@@ -94,14 +94,12 @@ async function createSchema(client) {
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );`);
     console.log('Table "hero_banners" checked/created.');
-    // Ensure all columns exist (idempotent) for hero_banners
     const heroBannerColumns = ['title VARCHAR(255) NOT NULL', 'subtitle TEXT', 'button_text VARCHAR(100)',
                                'button_link VARCHAR(255)', 'image_url VARCHAR(255) NOT NULL', 'alt_text VARCHAR(255)',
                                'is_active BOOLEAN DEFAULT TRUE NOT NULL', 'sort_order INTEGER DEFAULT 0 NOT NULL',
                                'created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP', 'updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP'];
     for (const colDef of heroBannerColumns) { await client.query(`ALTER TABLE hero_banners ADD COLUMN IF NOT EXISTS ${colDef.split(' ')[0]} ${colDef.substring(colDef.indexOf(' ') + 1)};`).catch(e => console.log(`Note: Error adding column ${colDef.split(' ')[0]} to hero_banners: ${e.message}`)); }
     console.log('All columns for "hero_banners" table ensured/checked.');
-
 
     // Tax Classes Table
     await client.query(`
@@ -115,18 +113,18 @@ async function createSchema(client) {
     `);
     console.log('Table "tax_classes" checked/created.');
 
-    // Tax Rates Table (Reverted to correct definition)
+    // Tax Rates Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS tax_rates (
           id SERIAL PRIMARY KEY,
           tax_class_id INTEGER NOT NULL REFERENCES tax_classes(id) ON DELETE CASCADE,
-          country VARCHAR(2) NOT NULL, -- ISO 3166-1 alpha-2 country code
-          state_province VARCHAR(100), -- State, province, or region
+          country VARCHAR(2) NOT NULL,
+          state_province VARCHAR(100),
           postal_code VARCHAR(20),
-          rate DECIMAL(10, 4) NOT NULL, -- e.g., 0.0825 for 8.25%
-          name VARCHAR(255) NOT NULL, -- e.g., "Sales Tax", "VAT"
+          rate DECIMAL(10, 4) NOT NULL,
+          name VARCHAR(255) NOT NULL,
           is_compound BOOLEAN DEFAULT FALSE NOT NULL,
-          priority INTEGER DEFAULT 0 NOT NULL, -- For multiple matching rates
+          priority INTEGER DEFAULT 0 NOT NULL,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           UNIQUE (tax_class_id, country, state_province, postal_code, name)
@@ -145,7 +143,7 @@ async function createSchema(client) {
         tags TEXT[], average_rating DECIMAL(3, 2) DEFAULT 0.00, review_count INTEGER DEFAULT 0,
         tax_class_id INTEGER REFERENCES tax_classes(id), has_variants BOOLEAN DEFAULT FALSE NOT NULL,
         reorder_threshold INTEGER DEFAULT 0,
-        product_status VARCHAR(50) DEFAULT 'active', -- Ensuring product_status is here
+        product_status VARCHAR(50) DEFAULT 'active',
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -153,11 +151,9 @@ async function createSchema(client) {
      await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS tax_class_id INTEGER REFERENCES tax_classes(id);`);
      await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS has_variants BOOLEAN DEFAULT FALSE NOT NULL;`);
      await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS reorder_threshold INTEGER DEFAULT 0;`);
-     // JULES: Explicitly add product_status just in case CREATE IF NOT EXISTS isn't behaving as expected on an altered table
      await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS product_status VARCHAR(50) DEFAULT 'active';`);
-     console.log('DEBUG: Ensured product_status column on products table.');
+     console.log('DEBUG: Ensured all expected columns on products table (including product_status, reorder_threshold).');
 
-    // JULES: ADDED FOR DEBUGGING - Log schema of products table
     const productsSchemaLog = await client.query(`
         SELECT column_name, data_type, is_nullable, column_default
         FROM information_schema.columns
@@ -166,8 +162,6 @@ async function createSchema(client) {
     `);
     console.log('DEBUG: Schema of products table immediately after creation/alteration by seed script:');
     console.table(productsSchemaLog.rows);
-    // END JULES DEBUGGING SECTION
-
 
     // Product Options (Global)
     await client.query(`
@@ -189,7 +183,7 @@ async function createSchema(client) {
     `);
     console.log('Table "product_option_values" checked/created.');
 
-    // Product Assigned Options (Product-specific configuration of global options)
+    // Product Assigned Options
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_assigned_options (
         id SERIAL PRIMARY KEY, product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -200,7 +194,7 @@ async function createSchema(client) {
     `);
     console.log('Table "product_assigned_options" checked/created.');
 
-    // Product Assigned Option Specific Values (Which global values are allowed for this product's assigned option)
+    // Product Assigned Option Specific Values
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_assigned_option_specific_values (
         id SERIAL PRIMARY KEY,
@@ -212,7 +206,6 @@ async function createSchema(client) {
     `);
     console.log('Table "product_assigned_option_specific_values" checked/created.');
 
-
     // Product Variants Table
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_variants (
@@ -221,7 +214,7 @@ async function createSchema(client) {
         price_modifier DECIMAL(10, 2),
         stock_quantity INTEGER DEFAULT 0,
         cost_price DECIMAL(10, 2) DEFAULT 0.00,
-        wholesale_price_modifier DECIMAL(10, 2) DEFAULT NULL, -- JULES: ADDED wholesale_price_modifier
+        wholesale_price_modifier DECIMAL(10, 2) DEFAULT NULL,
         image_url VARCHAR(255),
         weight_override_kg DECIMAL(10,3),
         length_override_cm DECIMAL(10,2),
@@ -234,11 +227,11 @@ async function createSchema(client) {
     `);
     console.log('Table "product_variants" checked/created.');
 
-    // Product Variant Option Values (Link table: which specific option values define this variant)
+    // Product Variant Option Values
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_variant_option_values (
         variant_id INTEGER NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
-        product_option_value_id INTEGER NOT NULL REFERENCES product_option_values(id) ON DELETE CASCADE, -- Global option value ID
+        product_option_value_id INTEGER NOT NULL REFERENCES product_option_values(id) ON DELETE CASCADE,
         PRIMARY KEY (variant_id, product_option_value_id)
       );
     `);
@@ -248,9 +241,14 @@ async function createSchema(client) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_images (
         id SERIAL PRIMARY KEY, product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-        variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE, -- Optional: link image to a specific variant
-        image_url VARCHAR(255) NOT NULL, alt_text VARCHAR(255), is_primary BOOLEAN DEFAULT FALSE,
-        display_order INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
+        image_url VARCHAR(255) NOT NULL,
+        alt_text VARCHAR(255),
+        is_primary BOOLEAN DEFAULT FALSE,
+        display_order INTEGER DEFAULT 0,
+        s3_key TEXT,
+        s3_bucket VARCHAR(255),
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -260,7 +258,7 @@ async function createSchema(client) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_reviews (
         id SERIAL PRIMARY KEY, product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL, -- Allow anonymous reviews or keep user if account deleted
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5), title VARCHAR(255),
         comment TEXT, is_approved BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -272,20 +270,20 @@ async function createSchema(client) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS inventory_batches (
         id SERIAL PRIMARY KEY,
-        product_id INTEGER REFERENCES products(id) ON DELETE CASCADE, -- For non-variant products
-        variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE, -- For variant products
-        sku VARCHAR(100) NOT NULL, -- Denormalized for easier lookup, should match product/variant SKU
+        product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+        variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
+        sku VARCHAR(100) NOT NULL,
         quantity_received INTEGER NOT NULL,
         quantity_remaining INTEGER NOT NULL,
         cost_price_per_unit DECIMAL(10, 2) NOT NULL,
         received_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         expiry_date DATE,
         supplier_id INTEGER REFERENCES suppliers(id),
-        purchase_order_id VARCHAR(100), -- Or INTEGER if you have a PO table
+        purchase_order_id VARCHAR(100),
         notes TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT chk_product_or_variant CHECK ( (product_id IS NOT NULL AND variant_id IS NULL) OR (product_id IS NULL AND variant_id IS NOT NULL) OR (product_id IS NOT NULL AND variant_id IS NOT NULL) ) -- Allow variant_id to also have product_id for easier joins
+        CONSTRAINT chk_product_or_variant CHECK ( (product_id IS NOT NULL AND variant_id IS NULL) OR (product_id IS NULL AND variant_id IS NOT NULL) OR (product_id IS NOT NULL AND variant_id IS NOT NULL) )
       );
     `);
     console.log('Table "inventory_batches" checked/created.');
@@ -296,18 +294,17 @@ async function createSchema(client) {
         id SERIAL PRIMARY KEY,
         product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
         variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
-        inventory_batch_id INTEGER REFERENCES inventory_batches(id), -- Link to specific batch if applicable
-        movement_type VARCHAR(50) NOT NULL, -- e.g., 'initial_stock', 'sale', 'return', 'adjustment_in', 'adjustment_out', 'transfer'
-        quantity_changed INTEGER NOT NULL, -- Positive for increase, negative for decrease
+        inventory_batch_id INTEGER REFERENCES inventory_batches(id),
+        movement_type VARCHAR(50) NOT NULL,
+        quantity_changed INTEGER NOT NULL,
         reason TEXT,
-        reference_id VARCHAR(255), -- e.g., order_id, return_id, adjustment_id
+        reference_id VARCHAR(255),
         created_by_user_id INTEGER REFERENCES users(id),
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT chk_sm_product_or_variant CHECK ( (product_id IS NOT NULL AND variant_id IS NULL) OR (product_id IS NULL AND variant_id IS NOT NULL) OR (product_id IS NOT NULL AND variant_id IS NOT NULL) )
       );
     `);
     console.log('Table "stock_movement_logs" checked/created.');
-
 
     // Product Cost History Table
     await client.query(`
@@ -317,14 +314,13 @@ async function createSchema(client) {
         variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
         cost_price DECIMAL(10, 2) NOT NULL,
         start_date TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        end_date TIMESTAMPTZ, -- Null if current cost
+        end_date TIMESTAMPTZ,
         notes TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT chk_pch_product_or_variant CHECK ( (product_id IS NOT NULL AND variant_id IS NULL) OR (product_id IS NULL AND variant_id IS NOT NULL) OR (product_id IS NOT NULL AND variant_id IS NOT NULL) )
       );
     `);
     console.log('Table "product_cost_history" checked/created.');
-
 
     // Trigger function for updated_at timestamps
     await client.query(`
@@ -338,7 +334,6 @@ async function createSchema(client) {
     `);
     console.log('Function "trigger_set_timestamp" checked/created.');
 
-    // Apply trigger to tables that need it (example for users, add for others)
     const tablesWithTimestampTrigger = ['users', 'roles', 'permissions', 'suppliers', 'categories', 'hero_banners', 'products', 'product_options', 'product_option_values', 'product_variants', 'product_images', 'product_reviews', 'tax_classes', 'tax_rates', 'inventory_batches', 'product_assigned_options', 'product_assigned_option_specific_values', 'product_cost_history'];
     for (const tableName of tablesWithTimestampTrigger) {
       await client.query(`
@@ -353,7 +348,6 @@ async function createSchema(client) {
     throw error;
   }
 }
-
 
 async function seedHeroBanners(client, seededDataIds) {
   console.log('Seeding hero banners...');
@@ -378,7 +372,6 @@ async function seedHeroBanners(client, seededDataIds) {
       );
       if (result.rows.length > 0) {
         console.log(`Hero Banner "${result.rows[0].title}" seeded/updated with ID ${result.rows[0].id}.`);
-        // seededDataIds.heroBanners[result.rows[0].title] = result.rows[0].id; // If you need to reference them
       }
     }
     console.log('Hero banners seeding completed.');
@@ -393,7 +386,6 @@ async function seedTaxConfiguration(client, seededDataIds) {
   seededDataIds.taxRates = seededDataIds.taxRates || {};
 
   try {
-    // Seed Tax Classes
     const taxClasses = [
       { name: 'Standard Goods', description: 'Standard taxable goods' },
       { name: 'Reduced Rate Goods', description: 'Goods with a reduced tax rate' },
@@ -410,7 +402,6 @@ async function seedTaxConfiguration(client, seededDataIds) {
       }
     }
 
-    // Seed Tax Rates (Example for a generic US sales tax and a VAT)
     if (seededDataIds.taxClasses.standard_goods) {
       const taxRates = [
         { tax_class_id: seededDataIds.taxClasses.standard_goods, country: 'US', state_province: 'CA', postal_code: null, rate: 0.0825, name: 'CA State Sales Tax', is_compound: false, priority: 1 },
@@ -426,7 +417,6 @@ async function seedTaxConfiguration(client, seededDataIds) {
           [tr.tax_class_id, tr.country, tr.state_province, tr.postal_code, tr.rate, tr.name, tr.is_compound, tr.priority]
         );
         if (res.rows.length > 0) {
-          // seededDataIds.taxRates[res.rows[0].name] = res.rows[0].id; // If needed
           console.log(`Tax Rate "${res.rows[0].name}" seeded/updated with ID ${res.rows[0].id}.`);
         }
       }
@@ -434,7 +424,6 @@ async function seedTaxConfiguration(client, seededDataIds) {
     console.log('Tax configuration seeding completed.');
   } catch (error) {
     console.error('Error seeding tax configuration:', error);
-    // Propagate the error to ensure the transaction rolls back if this fails
     throw error;
   }
 }
@@ -475,11 +464,11 @@ async function seedAdminUser(client, seededUserIds) {
        ON CONFLICT (email) DO UPDATE SET
          name = EXCLUDED.name, password = EXCLUDED.password, role = EXCLUDED.role, is_email_verified = EXCLUDED.is_email_verified, updated_at = CURRENT_TIMESTAMP
        RETURNING id, email;`,
-      ['Admin User', adminEmail, hashedPassword, 'admin', true] // Legacy role 'admin'
+      ['Admin User', adminEmail, hashedPassword, 'admin', true]
     );
     if (result.rows.length > 0) {
-      seededUserIds.adminUserId = result.rows[0].id; // Store by a generic key
-      seededUserIds[adminEmail] = result.rows[0].id; // Also by email for review seeding
+      seededUserIds.adminUserId = result.rows[0].id;
+      seededUserIds[adminEmail] = result.rows[0].id;
       console.log(`Admin user "${result.rows[0].email}" seeded/updated with ID ${result.rows[0].id}.`);
     }
   } catch (error) {
@@ -491,7 +480,7 @@ async function seedAdminUser(client, seededUserIds) {
 async function seedRegularUsers(client, seededUserIds) {
   console.log('Seeding regular users...');
   const usersToSeed = [
-    { name: 'John Doe', email: 'john.doe@example.com', password: 'password123', role: 'customer' }, // Legacy role 'customer'
+    { name: 'John Doe', email: 'john.doe@example.com', password: 'password123', role: 'customer' },
     { name: 'Jane Smith', email: 'jane.smith@example.com', password: 'password123', role: 'customer' },
   ];
   try {
@@ -506,7 +495,7 @@ async function seedRegularUsers(client, seededUserIds) {
         [user.name, user.email, hashedPassword, user.role, true]
       );
       if (result.rows.length > 0) {
-        seededUserIds[user.email] = result.rows[0].id; // Store by email for easy reference
+        seededUserIds[user.email] = result.rows[0].id;
         console.log(`User "${result.rows[0].email}" seeded/updated with ID ${result.rows[0].id}.`);
       }
     }
@@ -520,10 +509,9 @@ async function seedRegularUsers(client, seededUserIds) {
 async function seedSpecificGlobalOptionsAndValues(client, seededDataIds) {
   console.log('Seeding specific global options (Color, Size) and their values...');
   seededDataIds.options = seededDataIds.options || {};
-  seededDataIds.optionValues = seededDataIds.optionValues || {}; // Ensure this is initialized
+  seededDataIds.optionValues = seededDataIds.optionValues || {};
 
   try {
-    // Seed "Color" Option
     const colorOptionRes = await client.query(
       "INSERT INTO product_options (name, display_order) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET display_order = EXCLUDED.display_order RETURNING id, name",
       ['Color', 1]
@@ -533,7 +521,7 @@ async function seedSpecificGlobalOptionsAndValues(client, seededDataIds) {
       console.log(`Seeded/Ensured option: ${colorOptionRes.rows[0].name} with ID: ${seededDataIds.options.colorOptionId}`);
 
       const colorValues = ['Red', 'Green', 'Blue', 'Black', 'White', 'Yellow', 'Orange', 'Pink', 'Purple', 'Brown', 'Gray', 'Aqua'];
-      seededDataIds.optionValues.color = {}; // Initialize color values map
+      seededDataIds.optionValues.color = {};
       for (let i = 0; i < colorValues.length; i++) {
         const valRes = await client.query(
           "INSERT INTO product_option_values (product_option_id, value, display_order) VALUES ($1, $2, $3) ON CONFLICT (product_option_id, value) DO UPDATE SET display_order = EXCLUDED.display_order RETURNING id, value",
@@ -546,7 +534,6 @@ async function seedSpecificGlobalOptionsAndValues(client, seededDataIds) {
       console.log(`Seeded values for Color option.`);
     }
 
-    // Seed "Size" Option
     const sizeOptionRes = await client.query(
       "INSERT INTO product_options (name, display_order) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET display_order = EXCLUDED.display_order RETURNING id, name",
       ['Size', 2]
@@ -556,7 +543,7 @@ async function seedSpecificGlobalOptionsAndValues(client, seededDataIds) {
       console.log(`Seeded/Ensured option: ${sizeOptionRes.rows[0].name} with ID: ${seededDataIds.options.sizeOptionId}`);
 
       const sizeValues = ['XS', 'Small', 'Medium', 'Large', 'XL', 'XXL'];
-      seededDataIds.optionValues.size = {}; // Initialize size values map
+      seededDataIds.optionValues.size = {};
       for (let i = 0; i < sizeValues.length; i++) {
         const valRes = await client.query(
           "INSERT INTO product_option_values (product_option_id, value, display_order) VALUES ($1, $2, $3) ON CONFLICT (product_option_id, value) DO UPDATE SET display_order = EXCLUDED.display_order RETURNING id, value",
@@ -622,14 +609,13 @@ async function seedCategories(client, seededDataIds) {
         console.log(`Category "${result.rows[0].name}" seeded/updated with ID ${result.rows[0].id}.`);
       }
     }
-    // Example of sub-category
     if (seededDataIds.categories['Electronics']) {
         const subCatRes = await client.query(
             `INSERT INTO categories (name, description, parent_category_id) VALUES ($1, $2, $3) ON CONFLICT (name) DO UPDATE SET description=EXCLUDED.description, parent_category_id=EXCLUDED.parent_category_id RETURNING id, name;`,
             ['Headphones', 'Audio listening devices', seededDataIds.categories['Electronics']]
         );
         if (subCatRes.rows.length > 0) {
-            seededDataIds.categories[subCatRes.rows[0].name] = subCatRes.rows[0].id; // Store sub-category ID
+            seededDataIds.categories[subCatRes.rows[0].name] = subCatRes.rows[0].id;
             console.log(`Sub-Category "${subCatRes.rows[0].name}" seeded/updated with ID ${subCatRes.rows[0].id}.`);
         }
     }
@@ -647,36 +633,36 @@ async function seedProducts(client, seededDataIds) {
   const productsToSeed = [
     {
       name: 'Wireless Bluetooth Headphones', sku: 'HDPHN-WL-BT-001', description: 'High-fidelity wireless headphones with noise cancellation and 20-hour battery life.',
-      price: 149.99, cost_price: 75.00, stock_quantity: 0, // Stock will be from variants
+      price: 149.99, cost_price: 75.00, stock_quantity: 0,
       category_id: seededDataIds.categories?.Headphones,
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=Headphones', is_active: true,
-      has_variants: false, // This will be set to true by seedProductOptionConfigurations if options are assigned
-      reorder_threshold: 5, // JULES: Added reorder_threshold example
-      product_status: 'active' // JULES: Added product_status example
+      has_variants: false,
+      reorder_threshold: 5,
+      product_status: 'active'
     },
     {
       name: 'Men\'s Cotton T-Shirt', sku: 'TSHRT-MEN-COT-005', description: 'Comfortable and durable 100% cotton t-shirt for everyday wear.',
-      price: 25.99, cost_price: 10.00, stock_quantity: 0, // Stock will be from variants
+      price: 25.99, cost_price: 10.00, stock_quantity: 0,
       category_id: seededDataIds.categories?.Apparel,
       supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=T-Shirt', is_active: true,
-      has_variants: false, // This will be set to true if options are assigned
-      reorder_threshold: 10, // JULES: Added reorder_threshold example
-      product_status: 'active' // JULES: Added product_status example
+      has_variants: false,
+      reorder_threshold: 10,
+      product_status: 'active'
     },
     {
       name: 'Simple LED Desk Lamp', sku: 'LAMP-DSK-LED-010', description: 'Modern LED desk lamp with adjustable brightness.',
-      price: 39.99, cost_price: 15.00, stock_quantity: 50, // Non-variant product with stock
+      price: 39.99, cost_price: 15.00, stock_quantity: 50,
       category_id: seededDataIds.categories?.['Home Goods'],
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=Desk+Lamp', is_active: true,
       has_variants: false,
-      reorder_threshold: 5, // JULES: Added reorder_threshold example
-      product_status: 'draft' // JULES: Added product_status example
+      reorder_threshold: 5,
+      product_status: 'draft'
     },
   ];
 
@@ -693,7 +679,6 @@ async function seedProducts(client, seededDataIds) {
         [prod.name, prod.sku, prod.description, prod.price, prod.cost_price, prod.stock_quantity, prod.category_id, prod.supplier_id, prod.tax_class_id, prod.image_url, prod.is_active, prod.has_variants, prod.reorder_threshold, prod.product_status]
       );
       if (result.rows.length > 0) {
-        // Store product ID and SKU for later reference
         seededDataIds.products[result.rows[0].sku] = { id: result.rows[0].id, sku: result.rows[0].sku, image_url: prod.image_url, cost_price: prod.cost_price };
         console.log(`Product "${prod.name}" (SKU: ${result.rows[0].sku}) seeded/updated with ID ${result.rows[0].id}.`);
       }
@@ -724,12 +709,11 @@ async function seedProductOptionConfigurations(client, seededDataIds, productSku
   const colorOptionId = seededDataIds.options.colorOptionId;
   const sizeOptionId = seededDataIds.options.sizeOptionId;
 
-  // Use a few specific values for configuration
   const colorValueIdsToAssign = [
       seededDataIds.optionValues.color['Red'],
       seededDataIds.optionValues.color['Blue'],
       seededDataIds.optionValues.color['Green']
-  ].filter(id => id); // Filter out undefined if a color wasn't seeded
+  ].filter(id => id);
 
   const sizeValueIdsToAssign = [
       seededDataIds.optionValues.size['Small'],
@@ -753,20 +737,18 @@ async function seedProductOptionConfigurations(client, seededDataIds, productSku
       const productId = productInfo.id;
       let optionsAssignedToProduct = false;
 
-      // Assign Color Option
       const assignedColorOptRes = await client.query(
         `INSERT INTO product_assigned_options (product_id, option_id) VALUES ($1, $2)
-         ON CONFLICT (product_id, option_id) DO NOTHING RETURNING id;`, // Get ID even on conflict by re-selecting
+         ON CONFLICT (product_id, option_id) DO NOTHING RETURNING id;`,
         [productId, colorOptionId]
       );
-      // Fetch the ID regardless of insert or conflict
       const assignedColorOptionQuery = await client.query('SELECT id FROM product_assigned_options WHERE product_id = $1 AND option_id = $2', [productId, colorOptionId]);
       const assignedColorOptionId = assignedColorOptionQuery.rows[0]?.id;
 
       if (assignedColorOptionId) {
         console.log(`Assigned/Ensured Color option to product ID ${productId} (AssignedOptionID: ${assignedColorOptionId})`);
         for (const colorValueId of colorValueIdsToAssign) {
-          if(colorValueId) { // Ensure value id exists
+          if(colorValueId) {
             await client.query(
               `INSERT INTO product_assigned_option_specific_values (product_assigned_option_id, product_option_value_id)
                VALUES ($1, $2) ON CONFLICT DO NOTHING;`,
@@ -778,7 +760,6 @@ async function seedProductOptionConfigurations(client, seededDataIds, productSku
         optionsAssignedToProduct = true;
       }
 
-      // Assign Size Option (only to T-Shirt for this example)
       if (sku === 'TSHRT-MEN-COT-005') {
         const assignedSizeOptRes = await client.query(
           `INSERT INTO product_assigned_options (product_id, option_id) VALUES ($1, $2)
@@ -788,11 +769,10 @@ async function seedProductOptionConfigurations(client, seededDataIds, productSku
         const assignedSizeOptionQuery = await client.query('SELECT id FROM product_assigned_options WHERE product_id = $1 AND option_id = $2', [productId, sizeOptionId]);
         const assignedSizeOptionId = assignedSizeOptionQuery.rows[0]?.id;
 
-
         if (assignedSizeOptionId) {
           console.log(`Assigned/Ensured Size option to product ID ${productId} (AssignedOptionID: ${assignedSizeOptionId})`);
           for (const sizeValueId of sizeValueIdsToAssign) {
-            if(sizeValueId) { // Ensure value id exists
+            if(sizeValueId) {
               await client.query(
                 `INSERT INTO product_assigned_option_specific_values (product_assigned_option_id, product_option_value_id)
                  VALUES ($1, $2) ON CONFLICT DO NOTHING;`,
@@ -866,14 +846,12 @@ async function seedProductVariants(client, seededDataIds) {
           continue;
       }
 
-
       const generateCombinations = (options, index = 0, currentCombination = []) => {
         if (index === options.length) {
           return [currentCombination];
         }
         let allCombinations = [];
         if (!options[index] || !options[index].values || options[index].values.length === 0) {
-            // If an option has no values, skip it or handle as needed. Here, we continue with current combination.
             return generateCombinations(options, index + 1, currentCombination);
         }
         for (const valueObj of options[index].values) {
@@ -888,20 +866,28 @@ async function seedProductVariants(client, seededDataIds) {
       console.log(`Generated ${variantValueCombinations.length} variant combinations for product ID ${productId}.`);
 
       for (const combination of variantValueCombinations) {
-        if (combination.length === 0) continue; // Skip if a combination ended up empty
+        if (combination.length === 0) continue;
 
         const variantSkuSuffix = combination.map(v => v.value.substring(0, 3).toUpperCase()).join('-');
         const variantSku = `${productSku}-${variantSkuSuffix}`;
-        const variantPriceOverride = null;
+        const variantPriceModifier = null;
         const variantStock = 10;
+        const variantCostPrice = productCostPrice; // Default variant cost to product cost
+        const variantWholesalePriceModifier = null;
+
 
         const variantRes = await client.query(
-          `INSERT INTO product_variants (product_id, sku, price_modifier, stock_quantity, is_active)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO product_variants (product_id, sku, price_modifier, stock_quantity, cost_price, wholesale_price_modifier, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (sku) DO UPDATE SET
-             price_modifier = EXCLUDED.price_modifier, stock_quantity = EXCLUDED.stock_quantity, is_active = EXCLUDED.is_active, product_id = EXCLUDED.product_id
+             price_modifier = EXCLUDED.price_modifier,
+             stock_quantity = EXCLUDED.stock_quantity,
+             cost_price = EXCLUDED.cost_price,
+             wholesale_price_modifier = EXCLUDED.wholesale_price_modifier,
+             is_active = EXCLUDED.is_active,
+             product_id = EXCLUDED.product_id
            RETURNING id, sku;`,
-          [productId, variantSku, variantPriceOverride, variantStock, true] // variantPriceOverride (which is null) will now be inserted into price_modifier
+          [productId, variantSku, variantPriceModifier, variantStock, variantCostPrice, variantWholesalePriceModifier, true]
         );
         const variantId = variantRes.rows[0].id;
         seededDataIds.variants[variantSku] = variantId;
@@ -918,8 +904,8 @@ async function seedProductVariants(client, seededDataIds) {
         await client.query(
           `INSERT INTO inventory_batches (variant_id, product_id, sku, quantity_received, quantity_remaining, cost_price_per_unit)
            VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT DO NOTHING;`, // Basic conflict handling for batches
-          [variantId, productId, variantSku, variantStock, variantStock, productCostPrice]
+           ON CONFLICT DO NOTHING;`,
+          [variantId, productId, variantSku, variantStock, variantStock, variantCostPrice]
         );
         console.log(`    Created/Ensured initial inventory batch for variant SKU ${variantSku}`);
       }
@@ -941,7 +927,7 @@ async function seedProductReviews(client, seededDataIds) {
   }
 
   const product1Info = seededDataIds.products['HDPHN-WL-BT-001'];
-  const userJohnId = seededDataIds.users['john.doe@example.com']; // User by email
+  const userJohnId = seededDataIds.users['john.doe@example.com'];
 
   if (product1Info && userJohnId) {
     try {
@@ -966,11 +952,10 @@ async function seedProductImages(client, seededDataIds) {
   try {
     for (const sku in seededDataIds.products) {
         const productInfo = seededDataIds.products[sku];
-        // Ensure productInfo and its properties exist
         if (productInfo && productInfo.id && productInfo.image_url) {
             await client.query(
-                `INSERT INTO product_images (product_id, image_url, alt_text, is_primary, display_order)
-                 VALUES ($1, $2, $3, $4, $5)
+                `INSERT INTO product_images (product_id, image_url, alt_text, is_primary, display_order, s3_key, s3_bucket)
+                 VALUES ($1, $2, $3, $4, $5, NULL, NULL)
                  ON CONFLICT DO NOTHING;`,
                 [productInfo.id, productInfo.image_url, `Main image for ${productInfo.sku}`, true, 0]
             );
@@ -992,7 +977,7 @@ async function seedInventoryBatches(client, seededDataIds) {
     const productsWithoutVariants = productsWithoutVariantsResult.rows;
 
     for (const product of productsWithoutVariants) {
-      const existingBatchResult = await client.query( // Check if a similar batch already exists
+      const existingBatchResult = await client.query(
         'SELECT id FROM inventory_batches WHERE product_id = $1 AND quantity_received = $2 AND cost_price_per_unit = $3 LIMIT 1',
         [product.id, product.stock_quantity, product.cost_price || 0]
       );
@@ -1074,7 +1059,7 @@ async function seedRbac(client, seededDataIds) {
     }
     const rolePermissionsToAssign = {
       'super_admin': Object.keys(seededDataIds.permissions),
-      'admin': Object.keys(seededDataIds.permissions), // Admin also gets all for now, effectively same as Super Admin
+      'admin': Object.keys(seededDataIds.permissions),
       'product_manager': [ 'admin:access_dashboard', 'products:view', 'products:create', 'products:edit', 'products:delete', 'categories:manage', 'tags:manage', 'options:manage_global', 'reviews:manage' ],
       'customer': ['products:view', 'orders:view_details']
     };
@@ -1119,7 +1104,7 @@ async function seedDatabase() {
     await seedRegularUsers(client, seededDataIds.users);
 
     console.log('Migrating users to role_ids...');
-    if (seededDataIds.roles.admin && seededDataIds.roles.customer) { // Check for 'admin' role specifically
+    if (seededDataIds.roles.admin && seededDataIds.roles.customer) {
       const allUsers = await client.query('SELECT id, email, role FROM users WHERE role_id IS NULL');
       for (const user of allUsers.rows) {
         let targetRoleId = null;
@@ -1128,7 +1113,6 @@ async function seedDatabase() {
         } else if (user.role.toLowerCase() === 'customer' || user.role.toLowerCase() === 'user' || user.role.toLowerCase() === 'guest') {
             targetRoleId = seededDataIds.roles.customer;
         }
-        // Add other role mappings if needed (e.g., product_manager based on email or legacy role)
 
         if (targetRoleId) {
           await client.query('UPDATE users SET role_id = $1 WHERE id = $2', [targetRoleId, user.id]);
@@ -1189,7 +1173,6 @@ async function seedDatabase() {
       console.error('Transaction rolled back.');
     }
     console.error('Error during database seeding:', error);
-    // Propagate error for process.exit(1) in the calling block
     throw error;
   } finally {
     if (client) {
@@ -1206,7 +1189,6 @@ if (require.main === module) {
     console.log("Seeding script finished successfully.");
     process.exit(0);
   }).catch(err => {
-    // Error is already logged by seedDatabase function
     console.error("Seeding script failed overall.");
     process.exit(1);
   });
