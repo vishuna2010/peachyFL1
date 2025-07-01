@@ -119,7 +119,6 @@ async function createSchema(client) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS tax_rates (
           id SERIAL PRIMARY KEY,
-          // tax_class_id INTEGER NOT NULL REFERENCES tax_classes(id) ON DELETE CASCADE, // Temporarily comment out for testing
           country VARCHAR(2) NOT NULL,
           state_province VARCHAR(100),
           postal_code VARCHAR(20),
@@ -129,10 +128,11 @@ async function createSchema(client) {
           priority INTEGER DEFAULT 0 NOT NULL,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-          // UNIQUE (tax_class_id, country, state_province, postal_code, name) // Temporarily comment out UNIQUE constraint
       );
     `);
-    console.log('Table "tax_rates" checked/created (initial attempt).');
+    // Note: tax_class_id and the UNIQUE constraint including it are intentionally omitted here for debugging.
+    // They will be added by the ALTER TABLE statement below.
+    console.log('Table "tax_rates" checked/created (initial attempt, without tax_class_id and specific UNIQUE constraint).');
 
     // JULES: ADDED FOR DEBUGGING - Force add tax_class_id and log schema
     try {
