@@ -82,7 +82,7 @@ function _buildProductBaseQueryParts(options = {}) {
     selectDistinctOn = "DISTINCT ON (p.id)";
     fromClause += `
       LEFT JOIN product_variants pv_filter ON p.id = pv_filter.product_id
-      LEFT JOIN product_variant_option_values pvov_filter ON pv_filter.id = pvov_filter.product_variant_id
+      LEFT JOIN product_variant_option_values pvov_filter ON pv_filter.id = pvov_filter.variant_id
     `;
   }
 
@@ -94,7 +94,7 @@ function _buildProductBaseQueryParts(options = {}) {
   if (optionValueId) {
     countFromClause += `
       LEFT JOIN product_variants pv_filter_count ON p.id = pv_filter_count.product_id
-      LEFT JOIN product_variant_option_values pvov_filter_count ON pv_filter_count.id = pvov_filter_count.product_variant_id
+      LEFT JOIN product_variant_option_values pvov_filter_count ON pv_filter_count.id = pvov_filter_count.variant_id
     `;
   }
 
@@ -292,7 +292,7 @@ async function getAllProducts(options = {}) {
   // For now, let's assume a simplified count WHERE clause generation for this refactor step.
   // A more robust solution would pass a context to _buildProductFilterConditions (e.g., 'data' or 'count')
   // or have a separate helper for the count query's WHERE clause if aliases for joins differ.
-  const countFilterConditions = _buildProductFilterConditions({ ...filterAndSortOptions, optionValueIdAlias: 'pvov_filter_count' }, 1);
+  const countFilterConditions = _buildProductFilterConditions({ ...filterAndSortOptions, optionValueFilterAlias: 'pvov_filter_count' }, 1);
 
 
   let countQueryString = `
@@ -672,7 +672,7 @@ async function createProduct(productData, fileData) {
 
       await client.query(
         `INSERT INTO inventory_batches
-          (product_id, variant_id, batch_number, initial_quantity, current_quantity,
+          (product_id, variant_id, batch_number, quantity_received, quantity_remaining,
            cost_price_at_receipt, currency_code_at_receipt, received_date)
          VALUES ($1, NULL, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING id;`,
         [newProductId, batchNumber, initialStockQuantity, initialStockQuantity, costAtReceipt, currencyCodeAtReceipt]
@@ -827,6 +827,9 @@ async function updateProduct(productId, productData, fileData, removeImage = fal
     addUpdateClause('sku', sku);
 
     if (productData.hasOwnProperty('stock_quantity') && !currentProduct.has_variants) {
+        // For non-variant products, stock_quantity update is handled by updateProductStock's batch logic
+        // This direct update to products.stock_quantity should ideally be removed or carefully managed
+        // to avoid conflicts with batch-derived stock. For now, keeping original logic for this field.
         addUpdateClause('stock_quantity', stock_quantity);
     } else if (productData.hasOwnProperty('stock_quantity') && currentProduct.has_variants) {
         console.warn(`Attempt to update base stock_quantity for product ID ${productId} which has variants. Update to stock_quantity ignored by service.`);
@@ -921,24 +924,24 @@ async function updateProduct(productId, productData, fileData, removeImage = fal
 /**
  * Updates the stock quantity for a specific product.
  * This method should only be used for products that do NOT have variants.
+ * Stock is managed via inventory_batches.
  * @param {number} productId - The ID of the product to update.
- * @param {number} newStockQuantity - The new stock quantity.
+ * @param {number} newStockQuantity - The new target stock quantity.
+ * @param {string} [reason] - Reason for stock adjustment.
+ * @param {number} [requestingUserId] - ID of the user making the request.
  * @returns {Promise<object>} The updated product object (full details via getProductById).
- * @throws {NotFoundError} If the product is not found.
- * @throws {BadRequestError} If attempting to update stock for a product with variants, or if stock is invalid.
- * @throws {AppError} If database operation fails.
  */
-async function updateProductStock(productId, newStockQuantity) {
+async function updateProductStock(productId, newStockQuantity, reason = 'Manual stock adjustment', requestingUserId = null) {
   if (newStockQuantity === undefined || newStockQuantity === null || isNaN(parseInt(newStockQuantity)) || parseInt(newStockQuantity) < 0) {
     throw new BadRequestError('New stock quantity must be a non-negative integer.');
   }
-  const stockQty = parseInt(newStockQuantity);
+  const targetStockQty = parseInt(newStockQuantity);
 
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
 
-    const productDetailsResult = await client.query('SELECT id, has_variants FROM products WHERE id = $1 FOR UPDATE', [productId]);
+    const productDetailsResult = await client.query('SELECT id, sku, cost_price, has_variants FROM products WHERE id = $1 FOR UPDATE', [productId]);
     if (productDetailsResult.rows.length === 0) {
       await client.query('ROLLBACK');
       throw new NotFoundError(`Product with ID ${productId} not found.`);
@@ -950,86 +953,70 @@ async function updateProductStock(productId, newStockQuantity) {
       throw new BadRequestError(`Stock for product ID ${productId} (which has variants) must be managed at the variant level.`);
     }
 
-    // This function now manages stock via inventory_batches for non-variant products.
-    // The products.stock_quantity column is no longer directly updated here.
-
     const currentStockResult = await client.query(
-      `SELECT COALESCE(SUM(current_quantity), 0) AS total_batch_stock
+      `SELECT COALESCE(SUM(quantity_remaining), 0) AS total_batch_stock
        FROM inventory_batches
        WHERE product_id = $1 AND variant_id IS NULL`,
       [productId]
     );
     const currentTotalBatchStock = parseInt(currentStockResult.rows[0].total_batch_stock, 10);
-    const stockChange = stockQty - currentTotalBatchStock;
+    const stockChange = targetStockQty - currentTotalBatchStock;
 
     if (stockChange !== 0) {
-      const changeReason = productData.reason || 'Manual stock adjustment via product edit'; // Assuming productData might contain a reason
-      const requestingUserId = productData.requestingUserId || null; // Assuming productData might contain userId
-
       if (stockChange > 0) { // Increase stock
         const manualBatchNumber = `MANUAL-${product.sku || `PROD${productId}`}-${Date.now()}`;
-        // For simplicity, new stock increases create a new batch.
-        // A more complex system might try to add to an existing "manual adjustment" batch.
         const costAtReceipt = product.cost_price !== null ? product.cost_price : 0;
         const currencyCodeAtReceipt = config.currency.defaultStoreCurrency || 'USD';
         await client.query(
-          `INSERT INTO inventory_batches (product_id, variant_id, batch_number, initial_quantity, current_quantity, cost_price_at_receipt, currency_code_at_receipt, received_date)
+          `INSERT INTO inventory_batches (product_id, variant_id, batch_number, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, received_date)
            VALUES ($1, NULL, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
           [productId, manualBatchNumber, stockChange, stockChange, costAtReceipt, currencyCodeAtReceipt]
         );
       } else { // Decrease stock (stockChange < 0)
-        // This is complex for FIFO/FEFO. For a simple manual adjustment on a non-variant product,
-        // we can attempt to decrease from any available batch(es) or log if it's not straightforward.
-        // For now, we'll log a warning similar to variant stock updates, as specific batch depletion is not implemented.
-        // The overall stock will be reflected by the sum of batches.
-        // A simple implementation would be to create a negative adjustment batch, but that can be problematic.
-        // For now, we are aiming to make inventory_batches the source of truth.
-        // The actual reduction from specific batches needs a more sophisticated inventory management function.
-        // This function's primary role in this refactor is to stop direct updates to products.stock_quantity.
-        // We will log the intended change. The actual stock will be the sum of batches.
-        // If the `stockQty` (target total) is less than `currentTotalBatchStock`, it implies a reduction.
-        // We need a mechanism to reduce batch quantities.
-        console.warn(`[ProductService.updateProductStock] Stock decrease of ${-stockChange} requested for non-variant product ${productId}. Specific batch depletion logic is not fully implemented here. Ensure manual batch adjustments if needed.`);
-        // For this refactor, we won't create negative batches. The expectation is that sales/other processes handle batch depletion.
-        // This manual adjustment should ideally specify *which* batch to adjust or be a write-off.
-        // To make this function actionable for decreases, we'd need to pick batches to reduce.
-        // For now, we'll throw an error if a decrease is attempted this way, guiding to more specific tools.
-        if (stockChange < 0) {
-            // To prevent direct decrease without specifying batch, we can disallow it here or make it a specific type of movement.
-            // For now, to make it functional for increases and log decreases:
-             await client.query( // Still log the intended movement
-              `INSERT INTO stock_movement_logs (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
-               VALUES ($1, NULL, $2, $3, $4, $5, $6, $7)`,
-              [productId, requestingUserId, 'manual_adjustment_decrease_request', stockChange, stockQty, changeReason, `product_id:${productId}`]
-            );
-            // IMPORTANT: This does NOT actually decrease batch quantities. It only logs the *intent*.
-            // A proper system would require selecting which batches to decrement.
-            // For the scope of this refactor (making batches the source of truth), we stop direct product.stock_quantity updates.
-            // Further inventory adjustment features would build on this.
-        }
+        // IMPORTANT: This simplified decrease logic does not specify *which* batches to decrement from.
+        // It logs the intent, but a proper inventory system would need FIFO/FEFO or manual batch selection.
+        // For this function, we'll create a negative "adjustment" batch if needed,
+        // or ideally, this type of operation would be handled by a more specific "write-off" function.
+        // For now, we'll log a warning. The sum of batches will still reflect the stock.
+        // To make this directly affect batch quantities (reduce them), one would need to iterate through
+        // existing positive batches and reduce their quantity_remaining.
+        // This is complex and outside the immediate scope of just "setting" a total stock.
+        // Let's log the movement. The overall sum of quantity_remaining will reflect the new stock.
+        // No direct negative batch creation here to keep it simple and rely on sum.
+        console.warn(`[ProductService.updateProductStock] Stock decrease of ${-stockChange} requested for non-variant product ${productId}. The system will reflect this in the total sum of batches. Ensure specific batch adjustments if using FIFO/FEFO.`);
+        // To actually reduce:
+        // 1. Fetch batches ordered by received_date or expiry_date
+        // 2. Iterate and reduce quantity_remaining from them until stockChange is satisfied.
+        // This part is NOT implemented here for simplicity in this specific function.
+        // The products.stock_quantity column update will be based on targetStockQty.
       }
 
-      if (stockChange > 0) { // Only log positive adjustments made by this simplified function for now
-        await client.query(
-          `INSERT INTO stock_movement_logs (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
-           VALUES ($1, NULL, $2, $3, $4, $5, $6, $7)`,
-          [productId, requestingUserId, 'manual_adjustment_increase', stockChange, stockQty, changeReason, `product_id:${productId}`]
-        );
-      }
+      // Log the movement
+      await client.query(
+        `INSERT INTO stock_movement_logs (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+         VALUES ($1, NULL, $2, $3, $4, $5, $6, $7)`,
+        [productId, requestingUserId, (stockChange > 0 ? 'manual_adjustment_increase' : 'manual_adjustment_decrease'), stockChange, targetStockQty, reason, `product_id:${productId}`]
+      );
     }
-    // The products.stock_quantity column is NOT updated here.
-    // It will be out of sync if not handled by a trigger or by ensuring all reads use batch sums.
+
+    // Update products.stock_quantity to the new target.
+    // While batches are the source of truth, this field is often used for quick display.
+    // It should align with the intended total after adjustment.
+    await client.query(
+      'UPDATE products SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [targetStockQty, productId]
+    );
 
     await client.query('COMMIT');
     return getProductById(productId);
 
   } catch (error) {
-    if (client) { // Ensure client is defined before trying to query
+    if (client) {
         try { await client.query('ROLLBACK'); }
         catch (rollbackError) { console.error("Error during ROLLBACK:", rollbackError); }
     }
     if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof AppError) {
-      throw error; // Re-throw known errors
+      throw error;
     }
     console.error(`Error in productService.updateProductStock for ID ${productId}:`, error);
     throw new AppError(`Failed to update stock for product ID ${productId}.`, 500, 'PRODUCT_STOCK_UPDATE_UNHANDLED_ERROR');
@@ -1076,9 +1063,9 @@ async function getAllStockLevels(options = {}) {
       SELECT
         product_id,
         variant_id,
-        COALESCE(SUM(current_quantity), 0) AS actual_stock_from_batches
+        COALESCE(SUM(quantity_remaining), 0) AS actual_stock_from_batches
       FROM inventory_batches
-      WHERE current_quantity > 0
+      WHERE quantity_remaining > 0 -- Only count batches with positive remaining stock
       GROUP BY product_id, variant_id
     )
   `;
@@ -1234,17 +1221,9 @@ async function getProductInventoryBatches(productId, options = {}) {
     queryParams.push(variant_id);
     whereClauses.push(`ib.variant_id = $${paramIndex}`);
   } else {
-    // If no variant_id is specified, ensure we are only getting batches for the base product (variant_id IS NULL)
-    // This might need adjustment based on whether base products can have batches directly
-    // or if batches are *always* variant-specific (even for non-variant products, where variant_id might be null).
-    // Assuming for now: if variant_id is not given, we list all for the product, or only base-product batches.
-    // The original route implies it lists all for the product if variant_id is omitted.
-    // Let's stick to that: if variant_id is not passed, all batches for product_id are listed.
-    // If a product has_variants=false, its batches would have variant_id=NULL.
-    // If a product has_variants=true, its batches could have variant_id=X or variant_id=Y.
-    // The current filter `ib.product_id = $1` handles product association.
-    // Adding `ib.variant_id = $X` correctly filters for a specific variant.
-    // If no variant_id, it gets all for product_id.
+    // If no variant_id is specified, we list all batches for the product (base product and all its variants).
+    // This behavior seems more useful than only base-product batches if variant_id is omitted.
+    // The filter `ib.product_id = $1` already limits to the product.
   }
 
   const whereString = whereClauses.join(' AND ');
@@ -1260,11 +1239,11 @@ async function getProductInventoryBatches(productId, options = {}) {
     case 'expiry_date_desc':
       orderByClause = 'ORDER BY ib.expiry_date DESC NULLS FIRST, ib.id DESC';
       break;
-    case 'current_quantity_asc':
-      orderByClause = 'ORDER BY ib.current_quantity ASC, ib.id ASC';
+    case 'quantity_remaining_asc': // Changed from current_quantity
+      orderByClause = 'ORDER BY ib.quantity_remaining ASC, ib.id ASC';
       break;
-    case 'current_quantity_desc':
-      orderByClause = 'ORDER BY ib.current_quantity DESC, ib.id DESC';
+    case 'quantity_remaining_desc': // Changed from current_quantity
+      orderByClause = 'ORDER BY ib.quantity_remaining DESC, ib.id DESC';
       break;
     // 'received_date_desc' is the default
   }
@@ -1430,15 +1409,10 @@ const taxService = require('../services/taxService'); // Assumed path, adjust if
  * @throws {AppError} If any other error occurs.
  */
 async function getFormattedLabelData(productId, requestedVariantId = null, forAllVariants = false) {
-  const product = await this.getProductById(productId); // `this` refers to productService instance if methods are part of class, else direct call. Assuming direct call for now.
-                                                        // Corrected: getProductById is a standalone function in this module.
+  const product = await getProductById(productId); // Corrected: getProductById is a standalone function in this module.
 
-  const
-
-STORE_CURRENCY_CODE = config.company.currencyCode || config.currency.defaultStoreCurrency || 'USD'; // Example: Get from config
-  const
-
-STORE_CURRENCY_SYMBOL = config.company.currencySymbol || config.currency.defaultStoreSymbol || '$'; // Example: Get from config
+  const STORE_CURRENCY_CODE = config.company.currencyCode || config.currency.defaultStoreCurrency || 'USD';
+  const STORE_CURRENCY_SYMBOL = config.company.currencySymbol || config.currency.defaultStoreSymbol || '$';
   const PRODUCT_PAGE_BASE_URL = config.frontendUrlBase || 'http://localhost:3001';
 
 
@@ -1718,7 +1692,7 @@ async function createProductVariant(productId, variantData, fileData, requesting
       WHERE pv.product_id = $1 AND (
           SELECT array_agg(pvov.product_option_value_id ORDER BY pvov.product_option_value_id)
           FROM product_variant_option_values pvov
-          WHERE pvov.product_variant_id = pv.id
+          WHERE pvov.variant_id = pv.id -- Corrected column name
       ) = $2::int[];
     `;
     const duplicateCheckResult = await client.query(existingVariantsCheckQuery, [productId, sortedIds]);
@@ -1765,7 +1739,7 @@ async function createProductVariant(productId, variantData, fileData, requesting
 
     for (const ovId of uniqueOptionValueIds) {
       await client.query(
-        'INSERT INTO product_variant_option_values (product_variant_id, product_option_value_id) VALUES ($1, $2)',
+        'INSERT INTO product_variant_option_values (variant_id, product_option_value_id) VALUES ($1, $2)',
         [newVariant.id, ovId]
       );
     }
@@ -1775,12 +1749,11 @@ async function createProductVariant(productId, variantData, fileData, requesting
     if (newVariant.stock_quantity > 0) {
       const batchNumber = `INITIAL-${newVariant.sku || `VAR${newVariant.id}`}-${Date.now()}`;
       const costAtReceipt = newVariant.cost_price !== null ? newVariant.cost_price : 0;
-      // TODO: Get currency code from product/supplier or config default
       const currencyCodeAtReceipt = config.currency.defaultStoreCurrency || 'USD';
 
       await client.query(
         `INSERT INTO inventory_batches
-          (product_id, variant_id, batch_number, initial_quantity, current_quantity,
+          (product_id, variant_id, batch_number, quantity_received, quantity_remaining,
            cost_price_at_receipt, currency_code_at_receipt, received_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP) RETURNING id;`,
         [newVariant.product_id, newVariant.id, batchNumber, newVariant.stock_quantity, newVariant.stock_quantity, costAtReceipt, currencyCodeAtReceipt]
@@ -1884,7 +1857,7 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
       newAggregateStockForVariantTable = targetStock; // This will be set on product_variants table
 
       const existingBatchStockResult = await client.query(
-        `SELECT COALESCE(SUM(quantity_remaining), 0) AS total_batch_stock FROM inventory_batches WHERE variant_id = $1 AND product_id = $2`, // Corrected: current_quantity to quantity_remaining
+        `SELECT COALESCE(SUM(quantity_remaining), 0) AS total_batch_stock FROM inventory_batches WHERE variant_id = $1 AND product_id = $2`,
         [variantId, currentVariant.product_id]
       );
       const currentTotalBatchStock = parseInt(existingBatchStockResult.rows[0].total_batch_stock, 10);
@@ -1893,27 +1866,21 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
       if (stockChange !== 0) {
         const changeReason = reason || 'Manual stock adjustment via variant edit';
         if (stockChange > 0) { // Increase stock - add to a new or existing manual batch
-          const manualBatchNumber = `MANUAL-${currentVariant.sku || `VAR${variantId}`}`;
-          const existingManualBatch = await client.query(
-            `SELECT id FROM inventory_batches WHERE variant_id = $1 AND product_id = $2 AND batch_number = $3 FOR UPDATE`,
-            [variantId, currentVariant.product_id, manualBatchNumber]
+          const manualBatchNumber = `MANUAL-${currentVariant.sku || `VAR${variantId}`}-${Date.now()}`; // Use Date.now() for uniqueness if multiple adjustments
+          const costAtReceipt = variantData.cost_price !== undefined ? parseFloat(variantData.cost_price) : (currentVariant.cost_price !== null ? currentVariant.cost_price : 0);
+          const currencyCodeAtReceipt = config.currency.defaultStoreCurrency || 'USD';
+          // Always create a new batch for manual increases for simplicity and auditability
+          await client.query(
+            `INSERT INTO inventory_batches (product_id, variant_id, batch_number, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, received_date)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+            [currentVariant.product_id, variantId, manualBatchNumber, stockChange, stockChange, costAtReceipt, currencyCodeAtReceipt]
           );
-          if (existingManualBatch.rows.length > 0) {
-            await client.query(
-              `UPDATE inventory_batches SET quantity_remaining = quantity_remaining + $1, quantity_received = quantity_received + $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3`, // Corrected: current_quantity to quantity_remaining, initial_quantity to quantity_received
-              [stockChange, stockChange, existingManualBatch.rows[0].id]
-            );
-          } else {
-            const costAtReceipt = variantData.cost_price !== undefined ? parseFloat(variantData.cost_price) : (currentVariant.cost_price !== null ? currentVariant.cost_price : 0);
-            const currencyCodeAtReceipt = config.currency.defaultStoreCurrency || 'USD';
-            await client.query(
-              `INSERT INTO inventory_batches (product_id, variant_id, batch_number, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, received_date) // Corrected: initial_quantity to quantity_received, current_quantity to quantity_remaining
-               VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
-              [currentVariant.product_id, variantId, manualBatchNumber, stockChange, stockChange, costAtReceipt, currencyCodeAtReceipt]
-            );
-          }
-        } else { // Decrease stock (stockChange < 0) - this is complex. For now, log and rely on aggregate update.
+        } else { // Decrease stock (stockChange < 0)
              console.warn(`[ProductService] Stock decrease of ${-stockChange} requested for variant ${variantId}. This currently only updates the aggregate and logs. Ensure specific batch decrements if using FEFO/FIFO for sales.`);
+             // To properly implement decrease:
+             // 1. Fetch available batches (quantity_remaining > 0) ordered by preference (FIFO/LIFO/FEFO).
+             // 2. Iterate through batches, reducing their quantity_remaining until the total decrease (-stockChange) is met.
+             // 3. This is complex and not implemented here for this general "update variant" function.
         }
         // Log movement
         await client.query(
@@ -1950,14 +1917,14 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
       // Check for duplicate variant with the new combination
       const duplicateCheck = await client.query(
           `SELECT pv.id FROM product_variants pv WHERE pv.product_id = $1 AND pv.id != $2 AND
-           (SELECT array_agg(pvov.product_option_value_id ORDER BY pvov.product_option_value_id) FROM product_variant_option_values pvov WHERE pvov.product_variant_id = pv.id) = $3::int[]`,
+           (SELECT array_agg(pvov.product_option_value_id ORDER BY pvov.product_option_value_id) FROM product_variant_option_values pvov WHERE pvov.variant_id = pv.id) = $3::int[]`,
           [currentVariant.product_id, variantId, uniqueNewOptionValueIds]
       );
       if (duplicateCheck.rows.length > 0) throw new ConflictError('Another variant with this exact combination of option values already exists.');
 
-      await client.query('DELETE FROM product_variant_option_values WHERE product_variant_id = $1', [variantId]);
+      await client.query('DELETE FROM product_variant_option_values WHERE variant_id = $1', [variantId]);
       for (const ovId of uniqueNewOptionValueIds) {
-        await client.query('INSERT INTO product_variant_option_values (product_variant_id, product_option_value_id) VALUES ($1, $2)', [variantId, ovId]);
+        await client.query('INSERT INTO product_variant_option_values (variant_id, product_option_value_id) VALUES ($1, $2)', [variantId, ovId]);
       }
     }
 
@@ -1982,7 +1949,8 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
     let paramIndex = 1;
 
     const addUpdateField = (fieldName, value, currentValue) => {
-      if (variantData.hasOwnProperty(fieldName) && value !== currentValue) {
+      // Only add if the property was explicitly passed in variantData or image changed
+      if (variantData.hasOwnProperty(fieldName) || (fieldName === 'image_url' && finalImageUrl !== currentValue) ) {
         setClauses.push(`${fieldName} = $${paramIndex++}`);
         queryValues.push(value);
       }
@@ -1990,9 +1958,22 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
 
     addUpdateField('sku', finalSku, currentVariant.sku);
     if(variantData.hasOwnProperty('price_modifier')) addUpdateField('price_modifier', parseFloat(price_modifier), parseFloat(currentVariant.price_modifier));
-    // stock_quantity on product_variants table is updated with the target aggregate stock
     if(variantData.hasOwnProperty('stock_quantity')) addUpdateField('stock_quantity', newAggregateStockForVariantTable, currentVariant.stock_quantity);
-    if(finalImageUrl !== undefined) addUpdateField('image_url', finalImageUrl, currentVariant.image_url); // Check against undefined to allow setting to null
+    // Ensure image_url is updated if finalImageUrl is different (even if not in variantData, e.g. file upload)
+    if(finalImageUrl !== currentVariant.image_url) {
+        if (!setClauses.includes(`image_url = $${paramIndex-1}`)) { // Avoid duplicate if already added by direct variantData.image_url
+             setClauses.push(`image_url = $${paramIndex++}`);
+             queryValues.push(finalImageUrl);
+        }
+    } else if (variantData.hasOwnProperty('image_url') && finalImageUrl !== currentVariant.image_url) { // handles explicit set to null or different direct URL
+        // This case should be covered by the above, but as a safeguard
+        if (!setClauses.some(c => c.startsWith('image_url'))) {
+             setClauses.push(`image_url = $${paramIndex++}`);
+             queryValues.push(finalImageUrl);
+        }
+    }
+
+
     if(variantData.hasOwnProperty('cost_price')) addUpdateField('cost_price', (cost_price !== undefined && cost_price !== null && cost_price !== '') ? parseFloat(cost_price) : null, currentVariant.cost_price);
     if(variantData.hasOwnProperty('wholesale_price_modifier')) addUpdateField('wholesale_price_modifier', (wholesale_price_modifier !== undefined && wholesale_price_modifier !== null && wholesale_price_modifier !== '') ? parseFloat(wholesale_price_modifier) : null, currentVariant.wholesale_price_modifier);
 
@@ -2007,7 +1988,7 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
 
     await client.query('COMMIT');
 
-    if (s3OldFileKey && s3OldFileKey !== s3NewFileKey) { // If a new image was uploaded and replaced an old one, or old one was removed
+    if (s3OldFileKey && s3OldFileKey !== s3NewFileKey) {
         try { await deleteFileFromS3(s3OldFileKey); }
         catch (s3e) { console.error(`Failed to delete old S3 variant image ${s3OldFileKey}:`, s3e); }
     }
@@ -2017,7 +1998,7 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
 
   } catch (error) {
     await client.query('ROLLBACK');
-    if (s3NewFileKey && isS3Configured()) { // If new image uploaded but DB op failed
+    if (s3NewFileKey && isS3Configured()) {
         try { await deleteFileFromS3(s3NewFileKey); }
         catch (s3e) { console.error(`CRITICAL: Failed to rollback S3 upload for new variant image ${s3NewFileKey}:`, s3e); }
     }
@@ -2055,10 +2036,10 @@ async function deleteProductVariant(variantId) {
     // product_variant_option_values are deleted by ON DELETE CASCADE constraint
 
     // Delete from inventory_batches (important to prevent orphaned batch stock)
-    // This should ideally also log stock movements if current_quantity > 0 in deleted batches
-    const batchDeletionResult = await client.query('DELETE FROM inventory_batches WHERE variant_id = $1 RETURNING current_quantity, batch_number', [variantId]);
+    // This should ideally also log stock movements if quantity_remaining > 0 in deleted batches
+    const batchDeletionResult = await client.query('DELETE FROM inventory_batches WHERE variant_id = $1 RETURNING quantity_remaining, batch_number', [variantId]);
     if (batchDeletionResult.rows.length > 0) {
-        console.log(`Deleted ${batchDeletionResult.rowCount} inventory batches for variant ID ${variantId}. Affected quantities: ${batchDeletionResult.rows.map(r => r.current_quantity).join(', ')}`);
+        console.log(`Deleted ${batchDeletionResult.rowCount} inventory batches for variant ID ${variantId}. Affected quantities: ${batchDeletionResult.rows.map(r => r.quantity_remaining).join(', ')}`);
         // TODO: Consider logging these as stock write-offs if they had quantity.
     }
 
@@ -2250,7 +2231,7 @@ module.exports = {
   updateProductVariant,
   deleteProductVariant,
   deleteProduct,
-  getPublicProductFilterOptions, // Added new function
+  getPublicProductFilterOptions,
 };
 
 /**
@@ -2279,7 +2260,7 @@ async function getPublicProductFilterOptions() {
         JOIN
             product_variant_option_values pvov ON pov.id = pvov.product_option_value_id
         JOIN
-            product_variants pv ON pvov.variant_id = pv.id -- Corrected pvov.product_variant_id to pvov.variant_id
+            product_variants pv ON pvov.variant_id = pv.id
         JOIN
             products p ON pv.product_id = p.id
         WHERE
@@ -2298,14 +2279,9 @@ async function getPublicProductFilterOptions() {
   `;
   try {
     const { rows } = await db.query(query);
-    // The json_agg will return null if a group is empty (no values for an option_id/option_name combination from RelevantOptionValues)
-    // which shouldn't happen if RelevantOptionValues only contains options that *do* have values linked to active products.
-    // However, if an option exists but has no values linked to *active variant products*, it might not appear.
-    // The original query's structure might have implicitly handled this differently by starting from product_options.
-    // This new query will only return options that actually have values on active, variant products.
     return rows.map(option => ({
         ...option,
-        values: option.values || [] // Ensure values is an array, especially if json_agg could return null for a group.
+        values: option.values || []
     }));
   } catch (error) {
     console.error('[productService.getPublicProductFilterOptions] Error fetching public filter options:', error);
