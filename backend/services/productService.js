@@ -23,24 +23,24 @@ function _buildProductStockCTEString() {
         CASE
           WHEN p_stock.has_variants THEN
             COALESCE(
-              (SELECT SUM(ib.current_quantity)
+              (SELECT SUM(ib.quantity_remaining)
                FROM inventory_batches ib
-               WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.current_quantity > 0),
+               WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.quantity_remaining > 0),
             0)
           ELSE
             COALESCE(
-              (SELECT SUM(ib.current_quantity)
+              (SELECT SUM(ib.quantity_remaining)
                FROM inventory_batches ib
-               WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.current_quantity > 0),
+               WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.quantity_remaining > 0),
             0)
         END as effective_stock_quantity,
         CASE
           WHEN p_stock.has_variants THEN
-            (COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.current_quantity > 0), 0) > 0 AND
-             COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.current_quantity > 0), 0) < p_stock.reorder_threshold)
+            (COALESCE((SELECT SUM(ib.quantity_remaining) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.quantity_remaining > 0), 0) > 0 AND
+             COALESCE((SELECT SUM(ib.quantity_remaining) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NOT NULL AND ib.quantity_remaining > 0), 0) < p_stock.reorder_threshold)
           ELSE
-            (COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.current_quantity > 0), 0) > 0 AND
-             COALESCE((SELECT SUM(ib.current_quantity) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.current_quantity > 0), 0) < p_stock.reorder_threshold)
+            (COALESCE((SELECT SUM(ib.quantity_remaining) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.quantity_remaining > 0), 0) > 0 AND
+             COALESCE((SELECT SUM(ib.quantity_remaining) FROM inventory_batches ib WHERE ib.product_id = p_stock.id AND ib.variant_id IS NULL AND ib.quantity_remaining > 0), 0) < p_stock.reorder_threshold)
         END as is_low_stock
       FROM products p_stock
     )
