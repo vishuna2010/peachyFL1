@@ -126,9 +126,12 @@ const applyAnimations = () => {
 onMounted(async () => {
   await fetchBanners();
   if (currentBanner.value) {
+    console.log('HeroBanner: Current Banner Data for Link:', JSON.parse(JSON.stringify(currentBanner.value))); // Log the banner data
     // Apply animations once the first banner is loaded
     // A watcher on currentBanner might be more robust if we implement a carousel
     applyAnimations();
+  } else {
+    console.log('HeroBanner: No current banner to display after fetch.');
   }
 });
 
