@@ -21,9 +21,9 @@ export const useAuth = () => {
     isLoadingPermissions.value = true;
     console.log('useAuth: Fetching user permissions...');
     try {
-      // Revert to using relative path, relying on axios plugin's baseURL
-      console.log(`useAuth: Attempting to fetch permissions from /api/auth/my-permissions`);
-      const response = await $axios.get('/api/auth/my-permissions');
+      // Path should be relative to the /api baseURL
+      console.log(`useAuth: Attempting to fetch permissions from /auth/my-permissions`);
+      const response = await $axios.get('/auth/my-permissions'); // Corrected: was /api/auth/my-permissions in my mental model, but should be this if baseURL is /api
       if (response.data && response.data.permissions) {
         if (authUser.value) { // Ensure authUser still exists
           const updatedUser = { ...authUser.value, permissions: response.data.permissions };
@@ -184,9 +184,9 @@ export const useAuth = () => {
     if (!authToken.value) {
       return;
     }
-    console.log('useAuth: Attempting to fetch user data from /api/auth/me');
+    console.log('useAuth: Attempting to fetch user data from /auth/me');
     try {
-      const response = await $axios.get('/api/auth/me');
+      const response = await $axios.get('/auth/me'); // Path relative to /api baseURL
       if (response.data && response.data.user) {
         // Set basic user data first, ensure permissions array exists
         const basicUser = { ...response.data.user, permissions: authUser.value?.permissions || [] };
