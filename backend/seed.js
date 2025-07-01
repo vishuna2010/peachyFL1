@@ -217,10 +217,18 @@ async function createSchema(client) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_variants (
         id SERIAL PRIMARY KEY, product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-        sku VARCHAR(100) UNIQUE NOT NULL, price_modifier DECIMAL(10, 2), stock_quantity INTEGER DEFAULT 0, -- Changed price_override to price_modifier
-        image_url VARCHAR(255), weight_override_kg DECIMAL(10,3), length_override_cm DECIMAL(10,2),
-        width_override_cm DECIMAL(10,2), height_override_cm DECIMAL(10,2), is_active BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        sku VARCHAR(100) UNIQUE NOT NULL,
+        price_modifier DECIMAL(10, 2),
+        stock_quantity INTEGER DEFAULT 0,
+        cost_price DECIMAL(10, 2) DEFAULT 0.00, -- JULES: ADDED cost_price
+        image_url VARCHAR(255),
+        weight_override_kg DECIMAL(10,3),
+        length_override_cm DECIMAL(10,2),
+        width_override_cm DECIMAL(10,2),
+        height_override_cm DECIMAL(10,2),
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('Table "product_variants" checked/created.');
