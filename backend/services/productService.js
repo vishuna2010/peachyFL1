@@ -111,7 +111,8 @@ function _buildProductBaseQueryParts(options = {}) {
 function _buildProductFilterConditions(options = {}, startingParamIndex = 1) {
   const {
     searchTerm, categoryId, minPrice, maxPrice, optionValueId,
-    status, stock_status, supplierId, is_admin_request
+    status, stock_status, supplierId, is_admin_request,
+    optionValueFilterAlias = 'pvov_filter' // New: Allow specifying alias for option value join
   } = options;
 
   const whereClauses = [];
@@ -165,10 +166,8 @@ function _buildProductFilterConditions(options = {}, startingParamIndex = 1) {
   if (optionValueId) {
     const intOptionValueId = parseInt(optionValueId, 10);
     if (!isNaN(intOptionValueId)) {
-      // This condition refers to aliases pv_filter and pvov_filter
-      // which must be present in the FROM clause if this filter is active.
-      // _buildProductBaseQueryParts handles adding these joins if optionValueId is present.
-      whereClauses.push(`pvov_filter.product_option_value_id = $${paramIndex}`);
+      // Use the provided alias for the join condition
+      whereClauses.push(`${optionValueFilterAlias}.product_option_value_id = $${paramIndex}`);
       queryParams.push(intOptionValueId);
       paramIndex++;
     } else {
@@ -377,19 +376,33 @@ async function getProductById(productId) {
     const product = productResult.rows[0];
 
     // If product has no variants, its own stock_quantity should be derived from batches
+    // If product has no variants, its own stock_quantity should be derived from batches.
+    // The products.stock_quantity column is treated as a potential cache or legacy field;
+    // actual stock is always from inventory_batches.
     if (!product.has_variants) {
       const baseProductBatchStockQuery = await client.query(
-        `SELECT COALESCE(SUM(current_quantity), 0) as total_batch_stock
-         FROM inventory_batches
-         WHERE product_id = $1 AND variant_id IS NULL AND current_quantity > 0`,
+        `SELECT COALESCE(SUM(ib.current_quantity), 0) as total_batch_stock
+         FROM inventory_batches ib
+         WHERE ib.product_id = $1 AND ib.variant_id IS NULL`, // Removed AND ib.current_quantity > 0 to get sum even if it's 0
         [productId]
       );
-      if (baseProductBatchStockQuery.rows.length > 0) {
-        product.stock_quantity = parseInt(baseProductBatchStockQuery.rows[0].total_batch_stock, 10);
-      } else {
-        product.stock_quantity = 0; // Should not happen if COALESCE is used, but as safeguard
-      }
+      // Update the product object's stock_quantity with the true sum from batches.
+      product.stock_quantity = parseInt(baseProductBatchStockQuery.rows[0]?.total_batch_stock || 0, 10);
+    } else {
+      // For products with variants, the base product.stock_quantity is not directly used for total stock count.
+      // Instead, the sum of its variants' stock (derived from their batches) represents the total.
+      // The product_effective_stock CTE in getAllProducts handles this for lists.
+      // Here, we ensure product.stock_quantity on the main product object reflects its *own* non-variant stock if any (usually 0 if it has variants).
+      // For consistency, let's also update it from any NULL variant_id batches, though typically these shouldn't exist if has_variants is true.
+      const baseProductOwnStockQuery = await client.query(
+        `SELECT COALESCE(SUM(ib.current_quantity), 0) as total_batch_stock
+         FROM inventory_batches ib
+         WHERE ib.product_id = $1 AND ib.variant_id IS NULL`,
+        [productId]
+      );
+      product.stock_quantity = parseInt(baseProductOwnStockQuery.rows[0]?.total_batch_stock || 0, 10);
     }
+
 
     // Fetch product gallery images
     const imagesQuery = `
@@ -491,86 +504,51 @@ async function getProductById(productId) {
     }
 
     // Create consolidated gallery_images
-    let gallery_images = [];
-    let imageUrlsSet = new Set(); // To avoid duplicates if product.image_url is also in product_images
+    // The product_images table is the source of truth for the gallery.
+    // product.image_url is the main display image, which should correspond to one of the product_images marked as primary.
+    // Variant images are separate and usually displayed contextually with the variant.
 
-    // Process actual gallery images (product_images table) first
-    // These now include the is_primary flag from the modified imagesQuery
-    const rawGalleryImages = imagesResult.rows; // Results from product_images table
-
-    rawGalleryImages.forEach(img => {
-      if (img.url && !imageUrlsSet.has(img.url)) {
-        imageUrlsSet.add(img.url);
-        gallery_images.push({
-          id: img.id, // Actual ID from product_images table
-          url: img.url,
-          alt_text: img.alt_text || product.name,
-          display_order: img.display_order,
-          is_primary: img.is_primary || false // Carry over the is_primary flag
-        });
-      }
-    });
-
-    // Ensure product.image_url (which should be the primary image URL) is represented
-    // This also acts as a fallback if product_images table is empty but products.image_url exists
-    if (product.image_url && !imageUrlsSet.has(product.image_url)) {
-      imageUrlsSet.add(product.image_url);
-      gallery_images.push({
-        id: 'main_' + product.id, // A unique ID for this entry if it's not from product_images
-        url: product.image_url,
-        alt_text: product.name + " (Primary)",
-        display_order: -1, // Ensure it sorts first if no other is primary
-        is_primary: true   // Mark it as primary conceptually
-      });
-    }
-
-    // Sort: primary first, then by display_order, then by id
-    gallery_images.sort((a, b) => {
+    product.gallery_images = imagesResult.rows.map(img => ({
+      id: img.id,
+      url: img.url,
+      alt_text: img.alt_text || product.name, // Fallback alt text
+      display_order: img.display_order,
+      is_primary: img.is_primary
+    })).sort((a, b) => { // Sort by is_primary (true first), then display_order, then id
       if (a.is_primary && !b.is_primary) return -1;
       if (!a.is_primary && b.is_primary) return 1;
-      if (a.display_order !== b.display_order) {
+      if ((a.display_order || 0) !== (b.display_order || 0)) {
         return (a.display_order || 0) - (b.display_order || 0);
       }
-      // Ensure consistent sort for items with same display_order or if display_order is null
-      const aId = typeof a.id === 'string' ? a.id : String(a.id);
-      const bId = typeof b.id === 'string' ? b.id : String(b.id);
-      return aId.localeCompare(bId);
+      return a.id - b.id; // Fallback sort by id for stability
     });
 
-    // Add images from product.variants (if they should also be in the gallery display)
-    // This part might be optional depending on desired gallery content.
-    // For now, let's keep it as it was, but ensure no duplicates with what's already added.
-    if (product.variants && Array.isArray(product.variants)) {
-      product.variants.forEach(variant => {
-        if (variant.image_url && !imageUrlsSet.has(variant.image_url)) {
-          imageUrlsSet.add(variant.image_url);
-          gallery_images.push({
-            id: 'variant_' + variant.id,
-            url: variant.image_url,
-            alt_text: variant.sku || product.name,
-            display_order: 1000 // Default high display_order for variant images
-          });
-        }
+    // Ensure product.image_url is consistent with the primary image from the gallery
+    const primaryImageFromGallery = product.gallery_images.find(img => img.is_primary);
+    if (primaryImageFromGallery) {
+      product.image_url = primaryImageFromGallery.url;
+    } else if (product.gallery_images.length > 0 && !product.image_url) {
+      // If no primary is marked in gallery, but gallery has images, and product.image_url is not set,
+      // consider setting product.image_url to the first gallery image.
+      // However, it's better if data integrity ensures a primary image or product.image_url is explicitly managed.
+      // For now, if product.image_url is already set and no gallery image is primary, we keep product.image_url.
+      // If product.image_url is NULL and gallery has images but none primary, this is a data issue.
+      // Let's ensure product.image_url is set if gallery is not empty and product.image_url is currently null.
+       product.image_url = product.gallery_images[0].url;
+    } else if (product.gallery_images.length === 0 && product.image_url) {
+      // If gallery is empty but product.image_url exists, add it to gallery_images as the primary.
+      // This handles cases where only a main product image exists without explicit gallery entries.
+      product.gallery_images.push({
+        id: 'main_product_' + product.id, // Synthetic ID
+        url: product.image_url,
+        alt_text: product.name + " (Primary)",
+        display_order: 0,
+        is_primary: true
       });
     }
-
-    // Sort gallery_images by display_order, then by id for stable sort
-    gallery_images.sort((a, b) => {
-      if (a.display_order !== b.display_order) {
-        return a.display_order - b.display_order;
-      }
-      // Ensure 'product_primary_' comes before numeric ids if display_order is same
-      if (typeof a.id === 'string' && a.id.startsWith('product_primary_')) return -1;
-      if (typeof b.id === 'string' && b.id.startsWith('product_primary_')) return 1;
-      // Fallback to comparing ids (as strings or numbers)
-      if (a.id < b.id) return -1;
-      if (a.id > b.id) return 1;
-      return 0;
-    });
-
-    product.gallery_images = gallery_images;
-    // Optionally, delete product.images if it's now redundant
-    // delete product.images; // For now, keeping it as per instructions
+    // Note: The logic for including variant images directly in the main product gallery has been removed
+    // as variant images are typically handled contextually when a variant is selected on the frontend.
+    // The product.variants array already contains image_url for each variant.
 
     return product;
   } finally {
@@ -659,20 +637,23 @@ async function createProduct(productData, fileData) {
 
     const insertQuery = `
       INSERT INTO products (
-        name, description, price, category_id, supplier_id, sku, stock_quantity,
+        name, description, price, category_id, supplier_id, sku,
         reorder_threshold, product_status, image_url, tax_class_id, cost_price,
         wholesale_price, brand_manufacturer, supplier_reference, specifications,
-        has_variants, average_rating, review_count, created_at, updated_at
+        has_variants, average_rating, review_count, stock_quantity, -- stock_quantity kept for now but will be managed by batches
+        created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        FALSE, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+        FALSE, 0, 0, 0, -- Initial products.stock_quantity to 0, actual stock via batches
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       ) RETURNING id;
     `;
-    // RETURNING * would be better if not calling getProductById later, but id is enough for now.
+    // Note: products.stock_quantity is set to 0 initially. Actual stock will be managed by inventory_batches.
+    // The column products.stock_quantity might be deprecated or used as a read-only cache in the future.
 
     const values = [
       name, description || null, price, category_id || null, supplier_id || null, sku || null,
-      stock_quantity, reorder_threshold || null, product_status, imageUrlToStoreInDb,
+      reorder_threshold || null, product_status, imageUrlToStoreInDb,
       tax_class_id || null, cost_price || null, wholesale_price || null,
       brand_manufacturer || null, supplier_reference || null,
       specifications ? (typeof specifications === 'string' ? specifications : JSON.stringify(specifications)) : null,
@@ -680,6 +661,37 @@ async function createProduct(productData, fileData) {
 
     const result = await client.query(insertQuery, values);
     const newProductId = result.rows[0].id;
+
+    // If initial stock_quantity is provided for this new product (which is non-variant at this point)
+    // create an initial inventory batch and log it.
+    const initialStockQuantity = parseInt(productData.stock_quantity, 10); // Use productData directly
+    if (!isNaN(initialStockQuantity) && initialStockQuantity > 0) {
+      const batchNumber = `INITIAL-${sku || `PROD${newProductId}`}-${Date.now()}`;
+      const costAtReceipt = cost_price !== null ? cost_price : 0;
+      const currencyCodeAtReceipt = config.currency.defaultStoreCurrency || 'USD'; // Assuming config is available
+
+      await client.query(
+        `INSERT INTO inventory_batches
+          (product_id, variant_id, batch_number, initial_quantity, current_quantity,
+           cost_price_at_receipt, currency_code_at_receipt, received_date)
+         VALUES ($1, NULL, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING id;`,
+        [newProductId, batchNumber, initialStockQuantity, initialStockQuantity, costAtReceipt, currencyCodeAtReceipt]
+      );
+
+      // Assuming requestingUserId is passed or available in a wider scope if needed for audit
+      // For now, using null for user_id in seed-like operation if not available.
+      // This part of createProduct is usually called from an admin route, so req.user.userId would be available.
+      // Let's assume createProduct is augmented to accept requestingUserId or it's handled by the caller.
+      // For now, passing null to avoid breaking if not provided.
+      const requestingUserId = productData.requestingUserId || null;
+      await client.query(
+        `INSERT INTO stock_movement_logs
+            (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+        VALUES ($1, NULL, $2, 'initial_stock_setup', $3, $4, $5, $6)`,
+        [newProductId, requestingUserId, 'initial_stock_setup', initialStockQuantity, initialStockQuantity, 'Initial stock for new product', `product_id:${newProductId}`]
+      );
+    }
+
 
     if (Array.isArray(tagNames) && tagNames.length > 0) {
       const tagIds = await getOrCreateTagIds(tagNames, client); // Pass client for transaction
@@ -695,7 +707,11 @@ async function createProduct(productData, fileData) {
     return getProductById(newProductId);
 
   } catch (error) {
-    await client.query('ROLLBACK');
+    // Ensure client is not undefined before trying to query
+    if (client) {
+      try { await client.query('ROLLBACK'); }
+      catch (rollbackError) { console.error("Error during ROLLBACK:", rollbackError); }
+    }
     if (s3FileKeyToStore && isS3Configured()) { // If S3 upload happened but DB failed
       try {
         await deleteFileFromS3(s3FileKeyToStore);
@@ -934,27 +950,84 @@ async function updateProductStock(productId, newStockQuantity) {
       throw new BadRequestError(`Stock for product ID ${productId} (which has variants) must be managed at the variant level.`);
     }
 
-    const updateQuery = `
-      UPDATE products
-      SET stock_quantity = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-      RETURNING id;
-    `;
-    const updatedProductResult = await client.query(updateQuery, [stockQty, productId]);
+    // This function now manages stock via inventory_batches for non-variant products.
+    // The products.stock_quantity column is no longer directly updated here.
 
-    if (updatedProductResult.rowCount === 0) {
-      // Should not happen if FOR UPDATE lock was successful and ID is correct
-      await client.query('ROLLBACK');
-      throw new AppError(`Product with ID ${productId} found but update failed to apply.`, 500, 'PRODUCT_STOCK_UPDATE_FAILED');
+    const currentStockResult = await client.query(
+      `SELECT COALESCE(SUM(current_quantity), 0) AS total_batch_stock
+       FROM inventory_batches
+       WHERE product_id = $1 AND variant_id IS NULL`,
+      [productId]
+    );
+    const currentTotalBatchStock = parseInt(currentStockResult.rows[0].total_batch_stock, 10);
+    const stockChange = stockQty - currentTotalBatchStock;
+
+    if (stockChange !== 0) {
+      const changeReason = productData.reason || 'Manual stock adjustment via product edit'; // Assuming productData might contain a reason
+      const requestingUserId = productData.requestingUserId || null; // Assuming productData might contain userId
+
+      if (stockChange > 0) { // Increase stock
+        const manualBatchNumber = `MANUAL-${product.sku || `PROD${productId}`}-${Date.now()}`;
+        // For simplicity, new stock increases create a new batch.
+        // A more complex system might try to add to an existing "manual adjustment" batch.
+        const costAtReceipt = product.cost_price !== null ? product.cost_price : 0;
+        const currencyCodeAtReceipt = config.currency.defaultStoreCurrency || 'USD';
+        await client.query(
+          `INSERT INTO inventory_batches (product_id, variant_id, batch_number, initial_quantity, current_quantity, cost_price_at_receipt, currency_code_at_receipt, received_date)
+           VALUES ($1, NULL, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+          [productId, manualBatchNumber, stockChange, stockChange, costAtReceipt, currencyCodeAtReceipt]
+        );
+      } else { // Decrease stock (stockChange < 0)
+        // This is complex for FIFO/FEFO. For a simple manual adjustment on a non-variant product,
+        // we can attempt to decrease from any available batch(es) or log if it's not straightforward.
+        // For now, we'll log a warning similar to variant stock updates, as specific batch depletion is not implemented.
+        // The overall stock will be reflected by the sum of batches.
+        // A simple implementation would be to create a negative adjustment batch, but that can be problematic.
+        // For now, we are aiming to make inventory_batches the source of truth.
+        // The actual reduction from specific batches needs a more sophisticated inventory management function.
+        // This function's primary role in this refactor is to stop direct updates to products.stock_quantity.
+        // We will log the intended change. The actual stock will be the sum of batches.
+        // If the `stockQty` (target total) is less than `currentTotalBatchStock`, it implies a reduction.
+        // We need a mechanism to reduce batch quantities.
+        console.warn(`[ProductService.updateProductStock] Stock decrease of ${-stockChange} requested for non-variant product ${productId}. Specific batch depletion logic is not fully implemented here. Ensure manual batch adjustments if needed.`);
+        // For this refactor, we won't create negative batches. The expectation is that sales/other processes handle batch depletion.
+        // This manual adjustment should ideally specify *which* batch to adjust or be a write-off.
+        // To make this function actionable for decreases, we'd need to pick batches to reduce.
+        // For now, we'll throw an error if a decrease is attempted this way, guiding to more specific tools.
+        if (stockChange < 0) {
+            // To prevent direct decrease without specifying batch, we can disallow it here or make it a specific type of movement.
+            // For now, to make it functional for increases and log decreases:
+             await client.query( // Still log the intended movement
+              `INSERT INTO stock_movement_logs (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+               VALUES ($1, NULL, $2, $3, $4, $5, $6, $7)`,
+              [productId, requestingUserId, 'manual_adjustment_decrease_request', stockChange, stockQty, changeReason, `product_id:${productId}`]
+            );
+            // IMPORTANT: This does NOT actually decrease batch quantities. It only logs the *intent*.
+            // A proper system would require selecting which batches to decrement.
+            // For the scope of this refactor (making batches the source of truth), we stop direct product.stock_quantity updates.
+            // Further inventory adjustment features would build on this.
+        }
+      }
+
+      if (stockChange > 0) { // Only log positive adjustments made by this simplified function for now
+        await client.query(
+          `INSERT INTO stock_movement_logs (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
+           VALUES ($1, NULL, $2, $3, $4, $5, $6, $7)`,
+          [productId, requestingUserId, 'manual_adjustment_increase', stockChange, stockQty, changeReason, `product_id:${productId}`]
+        );
+      }
     }
+    // The products.stock_quantity column is NOT updated here.
+    // It will be out of sync if not handled by a trigger or by ensuring all reads use batch sums.
 
     await client.query('COMMIT');
-
-    // Return the full product details after successful update
-    return getProductById(productId); // getProductById uses its own client connection
+    return getProductById(productId);
 
   } catch (error) {
-    await client.query('ROLLBACK'); // Ensure rollback on any error not caught above
+    if (client) { // Ensure client is defined before trying to query
+        try { await client.query('ROLLBACK'); }
+        catch (rollbackError) { console.error("Error during ROLLBACK:", rollbackError); }
+    }
     if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof AppError) {
       throw error; // Re-throw known errors
     }

@@ -51,28 +51,50 @@ router.get(
   }
 );
 
-// Placeholder for POST /api/admin/hero-banners - Create new hero banner
+// Validation middleware for banner data
+const validateBannerData = [
+  body('title').trim().notEmpty().withMessage('Title is required.').isLength({ max: 255 }).withMessage('Title cannot exceed 255 characters.'),
+  body('subtitle').optional({ checkFalsy: true }).trim().isLength({ max: 500 }).withMessage('Subtitle cannot exceed 500 characters.'),
+  body('buttonText').optional({ checkFalsy: true }).trim().isLength({ max: 100 }).withMessage('Button text cannot exceed 100 characters.'),
+  body('buttonLink').optional({ checkFalsy: true }).trim().isURL().withMessage('Button link must be a valid URL.').isLength({ max: 255 }).withMessage('Button link cannot exceed 255 characters.'),
+  body('imageUrl').trim().notEmpty().withMessage('Image URL is required.').isURL().withMessage('Image URL must be a valid URL.').isLength({ max: 255 }).withMessage('Image URL cannot exceed 255 characters.'),
+  body('altText').optional({ checkFalsy: true }).trim().isLength({ max: 255 }).withMessage('Alt text cannot exceed 255 characters.'),
+  body('isActive').optional().isBoolean().withMessage('Is active must be a boolean.').toBoolean(),
+  body('sortOrder').optional().isInt({ min: 0 }).withMessage('Sort order must be a non-negative integer.').toInt()
+];
+
+// POST /api/admin/hero-banners - Create new hero banner
 router.post(
   '/',
   isAuthenticated,
   checkPermission('marketing:manage_hero_banners'),
-  // TODO: Add express-validator checks for banner creation payload
+  validateBannerData,
   async (req, res, next) => {
-    // const errors = validationResult(req);
-    // if (!errors.isEmpty()) {
-    //   return res.status(400).json({ errors: errors.array() });
-    // }
-    // try {
-    //   const newBanner = await cmsService.createHeroBanner(req.body);
-    //   res.status(201).json({ data: newBanner });
-    // } catch (error) {
-    //   next(error);
-    // }
-    res.status(501).json({ message: 'Create hero banner endpoint not yet implemented.' });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      // Provide default values if not present, especially for optional fields that have DB defaults or constraints
+      const bannerData = {
+        title: req.body.title,
+        subtitle: req.body.subtitle || null,
+        buttonText: req.body.buttonText || null,
+        buttonLink: req.body.buttonLink || null,
+        imageUrl: req.body.imageUrl,
+        altText: req.body.altText || null,
+        isActive: req.body.isActive === undefined ? true : req.body.isActive, // Default to true if not provided
+        sortOrder: req.body.sortOrder === undefined ? 0 : req.body.sortOrder, // Default to 0 if not provided
+      };
+      const newBanner = await cmsService.createHeroBanner(bannerData);
+      res.status(201).json({ data: newBanner });
+    } catch (error) {
+      next(error); // Errors from service (AppError) will be handled by global error handler
+    }
   }
 );
 
-// Placeholder for GET /api/admin/hero-banners/:id - Get single hero banner
+// GET /api/admin/hero-banners/:id - Get single hero banner
 router.get(
   '/:id',
   isAuthenticated,
@@ -81,51 +103,59 @@ router.get(
     param('id').isInt({ gt: 0 }).withMessage('Banner ID must be a positive integer.').toInt()
   ],
   async (req, res, next) => {
-    // const errors = validationResult(req);
-    // if (!errors.isEmpty()) {
-    //   return res.status(400).json({ errors: errors.array() });
-    // }
-    // try {
-    //   const banner = await cmsService.getHeroBannerById(req.params.id);
-    //   if (!banner) {
-    //     return next(new AppError('Hero banner not found', 404));
-    //   }
-    //   res.json({ data: banner });
-    // } catch (error) {
-    //   next(error);
-    // }
-    res.status(501).json({ message: `Get hero banner ${req.params.id} endpoint not yet implemented.` });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const banner = await cmsService.getHeroBannerById(req.params.id);
+      // Service throws NotFoundError if not found, which will be handled by global error handler
+      res.json({ data: banner });
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
-// Placeholder for PUT /api/admin/hero-banners/:id - Update hero banner
+// PUT /api/admin/hero-banners/:id - Update hero banner
 router.put(
   '/:id',
   isAuthenticated,
   checkPermission('marketing:manage_hero_banners'),
   [
     param('id').isInt({ gt: 0 }).withMessage('Banner ID must be a positive integer.').toInt(),
-    // TODO: Add express-validator checks for banner update payload
+    ...validateBannerData // Reuse the same validation rules as for POST
   ],
   async (req, res, next) => {
-    // const errors = validationResult(req);
-    // if (!errors.isEmpty()) {
-    //   return res.status(400).json({ errors: errors.array() });
-    // }
-    // try {
-    //   const updatedBanner = await cmsService.updateHeroBanner(req.params.id, req.body);
-    //    if (!updatedBanner) {
-    //     return next(new AppError('Hero banner not found or update failed', 404));
-    //   }
-    //   res.json({ data: updatedBanner });
-    // } catch (error) {
-    //   next(error);
-    // }
-    res.status(501).json({ message: `Update hero banner ${req.params.id} endpoint not yet implemented.` });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      // Ensure all fields are passed to the service, even if they didn't change,
+      // as the service's UPDATE query updates all fields.
+      // Alternatively, the service could be modified to build a dynamic SET clause.
+      // For now, assume the service expects all fields for an update.
+      const bannerData = {
+        title: req.body.title,
+        subtitle: req.body.subtitle || null,
+        buttonText: req.body.buttonText || null,
+        buttonLink: req.body.buttonLink || null,
+        imageUrl: req.body.imageUrl,
+        altText: req.body.altText || null,
+        isActive: req.body.isActive === undefined ? true : req.body.isActive,
+        sortOrder: req.body.sortOrder === undefined ? 0 : req.body.sortOrder,
+      };
+      const updatedBanner = await cmsService.updateHeroBanner(req.params.id, bannerData);
+      // Service throws NotFoundError if not found, handled by global error handler
+      res.json({ data: updatedBanner });
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
-// Placeholder for DELETE /api/admin/hero-banners/:id - Delete hero banner
+// DELETE /api/admin/hero-banners/:id - Delete hero banner
 router.delete(
   '/:id',
   isAuthenticated,
@@ -134,17 +164,20 @@ router.delete(
     param('id').isInt({ gt: 0 }).withMessage('Banner ID must be a positive integer.').toInt()
   ],
   async (req, res, next) => {
-    // const errors = validationResult(req);
-    // if (!errors.isEmpty()) {
-    //   return res.status(400).json({ errors: errors.array() });
-    // }
-    // try {
-    //   await cmsService.deleteHeroBanner(req.params.id);
-    //   res.status(204).send();
-    // } catch (error) {
-    //   next(error);
-    // }
-    res.status(501).json({ message: `Delete hero banner ${req.params.id} endpoint not yet implemented.` });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const deletedBanner = await cmsService.deleteHeroBanner(req.params.id);
+      // Service throws NotFoundError if not found, handled by global error handler
+      // Return 200 with deleted banner data, or 204 No Content.
+      // For consistency with GET/PUT, returning data might be useful for client.
+      res.status(200).json({ message: `Hero banner with ID ${req.params.id} deleted successfully.`, data: deletedBanner });
+      // Alternatively: res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
   }
 );
 
