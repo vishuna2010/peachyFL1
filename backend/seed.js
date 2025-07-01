@@ -656,7 +656,7 @@ async function createSchema(client) {
   }
 }
 
-// Definition of seedHeroBanners placed before other seed helper functions
+// Definition of seedHeroBanners placed here
 async function seedHeroBanners(client, seededDataIds) {
   console.log('Seeding hero banners...');
   seededDataIds.heroBanners = seededDataIds.heroBanners || {};

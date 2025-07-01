@@ -405,11 +405,11 @@ This section outlines the primary driver for future backend development, based o
 - [x] **Robust Initialization (`useAuth.js`, `useCart.js`)**
 - [x] **Page Component Updates for Initialization Awareness** (`profile.vue`, `AppHeader.vue`, `cart.vue`, `checkout.vue`)
 - [x] **Review `app.vue`** (Removed redundant `initCart()` call)
-- [~] **Testing** (Awaiting user feedback on committed changes)
+- [x] **Testing** (Core frontend stability, initialization, and tax calculation verified)
 
 **Phase 2: Hero Banner Enhancements**
-- [ ] **Dynamic Hero Banner - Frontend Component**: Modify `HeroBanner.vue` to fetch and display images dynamically from an API.
-- [ ] **Hero Banner - Backend API (Dependency)**: Requires backend API to serve hero banner images and data.
+- [x] **Dynamic Hero Banner - Frontend Component**: Modified `HeroBanner.vue` to fetch and display images dynamically from an API.
+- [x] **Hero Banner - Backend API**: Implemented `/api/cms/hero-banners/active` endpoint.
 - [ ] **Hero Banner - Admin Management (Frontend - Placeholder/Future)**: Plan for admin UI to manage hero banners.
 
 **Phase 3: Product Display & Filtering**
@@ -425,3 +425,5 @@ This section outlines the primary driver for future backend development, based o
 - [ ] **RBAC Review**: Ensure new frontend components (especially admin) respect RBAC rules.
 - [ ] **Comprehensive Testing**: Test all new and modified features.
 ---
+
+[end of todo.md]
