@@ -119,20 +119,64 @@ async function createSchema(client) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS tax_rates (
           id SERIAL PRIMARY KEY,
-          tax_class_id INTEGER NOT NULL REFERENCES tax_classes(id) ON DELETE CASCADE,
-          country VARCHAR(2) NOT NULL, -- ISO 3166-1 alpha-2 country code
-          state_province VARCHAR(100), -- State, province, or region
+          // tax_class_id INTEGER NOT NULL REFERENCES tax_classes(id) ON DELETE CASCADE, // Temporarily comment out for testing
+          country VARCHAR(2) NOT NULL,
+          state_province VARCHAR(100),
           postal_code VARCHAR(20),
-          rate DECIMAL(10, 4) NOT NULL, -- e.g., 0.0825 for 8.25%
-          name VARCHAR(255) NOT NULL, -- e.g., "Sales Tax", "VAT"
+          rate DECIMAL(10, 4) NOT NULL,
+          name VARCHAR(255) NOT NULL,
           is_compound BOOLEAN DEFAULT FALSE NOT NULL,
-          priority INTEGER DEFAULT 0 NOT NULL, -- For multiple matching rates
+          priority INTEGER DEFAULT 0 NOT NULL,
           created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE (tax_class_id, country, state_province, postal_code, name)
+          updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+          // UNIQUE (tax_class_id, country, state_province, postal_code, name) // Temporarily comment out UNIQUE constraint
       );
     `);
-    console.log('Table "tax_rates" checked/created.');
+    console.log('Table "tax_rates" checked/created (initial attempt).');
+
+    // JULES: ADDED FOR DEBUGGING - Force add tax_class_id and log schema
+    try {
+        await client.query(`ALTER TABLE tax_rates ADD COLUMN IF NOT EXISTS tax_class_id INTEGER REFERENCES tax_classes(id) ON DELETE CASCADE;`);
+        console.log('DEBUG: Attempted to ADD COLUMN tax_class_id to tax_rates.');
+
+        // Attempt to add the unique constraint. This might require dropping an old one if it exists with a different definition.
+        // For simplicity in debugging the column presence, advanced constraint handling is deferred.
+        // A more robust approach would be:
+        // 1. Check if constraint exists.
+        // 2. If exists and is different, drop it.
+        // 3. Add the new constraint.
+        // For now, let's assume if the column is added, we can manually fix constraints later if needed, or the original UNIQUE might still work if it was only missing tax_class_id.
+        // A simple re-add attempt (might fail if an incompatible one exists):
+        try {
+            await client.query(`
+                ALTER TABLE tax_rates
+                ADD CONSTRAINT tax_rates_tax_class_id_country_state_province_postal_code_name_key
+                UNIQUE (tax_class_id, country, state_province, postal_code, name);
+            `);
+            console.log('DEBUG: Attempted to ADD UNIQUE constraint including tax_class_id.');
+        } catch (uniqueConstraintError) {
+            if (uniqueConstraintError.code === '42P07') { // constraint already exists
+                 console.log('DEBUG: UNIQUE constraint including tax_class_id likely already exists or a similar one does.');
+            } else if (uniqueConstraintError.code === '42710') { // duplicate constraint name (less likely here as we name it)
+                 console.log('DEBUG: UNIQUE constraint name conflict.');
+            } else {
+                console.warn('DEBUG: Could not add UNIQUE constraint (tax_class_id, country, ...), possibly due to existing incompatible constraint or data. Manual check might be needed. Error:', uniqueConstraintError.message);
+            }
+        }
+
+    } catch (e) {
+        console.error('DEBUG: Error during ALTER TABLE ADD COLUMN for tax_class_id on tax_rates:', e);
+    }
+
+    const taxRatesSchema = await client.query(`
+        SELECT column_name, data_type, is_nullable, column_default, character_maximum_length, numeric_precision, numeric_scale
+        FROM information_schema.columns
+        WHERE table_name = 'tax_rates' AND table_schema = 'public'
+        ORDER BY ordinal_position;
+    `);
+    console.log('DEBUG: Schema of tax_rates table after creation/alteration:');
+    console.table(taxRatesSchema.rows);
+    // END JULES DEBUGGING SECTION
 
     // Products Table
     await client.query(`
