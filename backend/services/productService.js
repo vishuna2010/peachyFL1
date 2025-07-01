@@ -6,7 +6,7 @@ async function getVariantOptionValueIds(variantId, client) {
   const query = `
     SELECT product_option_value_id
     FROM product_variant_option_values
-    WHERE product_variant_id = $1
+    WHERE variant_id = $1
     ORDER BY product_option_value_id ASC;
   `;
   const result = await client.query(query, [variantId]);
@@ -381,9 +381,9 @@ async function getProductById(productId) {
     // actual stock is always from inventory_batches.
     if (!product.has_variants) {
       const baseProductBatchStockQuery = await client.query(
-        `SELECT COALESCE(SUM(ib.current_quantity), 0) as total_batch_stock
+        `SELECT COALESCE(SUM(ib.quantity_remaining), 0) as total_batch_stock
          FROM inventory_batches ib
-         WHERE ib.product_id = $1 AND ib.variant_id IS NULL`, // Removed AND ib.current_quantity > 0 to get sum even if it's 0
+         WHERE ib.product_id = $1 AND ib.variant_id IS NULL`, // Removed AND ib.quantity_remaining > 0 to get sum even if it's 0
         [productId]
       );
       // Update the product object's stock_quantity with the true sum from batches.
@@ -395,7 +395,7 @@ async function getProductById(productId) {
       // Here, we ensure product.stock_quantity on the main product object reflects its *own* non-variant stock if any (usually 0 if it has variants).
       // For consistency, let's also update it from any NULL variant_id batches, though typically these shouldn't exist if has_variants is true.
       const baseProductOwnStockQuery = await client.query(
-        `SELECT COALESCE(SUM(ib.current_quantity), 0) as total_batch_stock
+        `SELECT COALESCE(SUM(ib.quantity_remaining), 0) as total_batch_stock
          FROM inventory_batches ib
          WHERE ib.product_id = $1 AND ib.variant_id IS NULL`,
         [productId]
@@ -471,9 +471,9 @@ async function getProductById(productId) {
 
         // Get actual stock from inventory_batches for this variant
         const batchStockQuery = await client.query(
-          `SELECT COALESCE(SUM(current_quantity), 0) as total_batch_stock
+          `SELECT COALESCE(SUM(quantity_remaining), 0) as total_batch_stock
            FROM inventory_batches
-           WHERE variant_id = $1 AND product_id = $2 AND current_quantity > 0`,
+           WHERE variant_id = $1 AND product_id = $2 AND quantity_remaining > 0`,
           [variant.id, product.id]
         );
         if (batchStockQuery.rows.length > 0) {
@@ -1582,7 +1582,7 @@ async function _getVariantOptionDetails(variantId, client) {
     FROM product_variant_option_values pvov
     JOIN product_option_values pov ON pvov.product_option_value_id = pov.id
     JOIN product_options po ON pov.product_option_id = po.id
-    WHERE pvov.product_variant_id = $1
+    WHERE pvov.variant_id = $1
     ORDER BY po.name, pov.value;
   `;
   // Use the provided client if available (for transactions), otherwise use the pool.
@@ -2279,7 +2279,7 @@ async function getPublicProductFilterOptions() {
         JOIN
             product_variant_option_values pvov ON pov.id = pvov.product_option_value_id
         JOIN
-            product_variants pv ON pvov.product_variant_id = pv.id
+            product_variants pv ON pvov.variant_id = pv.id -- Corrected pvov.product_variant_id to pvov.variant_id
         JOIN
             products p ON pv.product_id = p.id
         WHERE
