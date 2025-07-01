@@ -1,6 +1,9 @@
 import { useState, useRouter, useNuxtApp, useRuntimeConfig } from '#app'; // Auto-imported by Nuxt, added useRuntimeConfig
 
 export const useAuth = () => {
+import { useState, useRouter, useNuxtApp, useRuntimeConfig, nextTick } from '#app'; // Auto-imported by Nuxt, added useRuntimeConfig and nextTick
+
+export const useAuth = () => {
   const { $axios } = useNuxtApp();
   const router = useRouter();
   const config = useRuntimeConfig(); // Get runtime config
@@ -29,12 +32,14 @@ export const useAuth = () => {
           const updatedUser = { ...authUser.value, permissions: response.data.permissions };
           setUser(updatedUser); // Use setUser to also update localStorage
           console.log('useAuth: User permissions fetched and set:', response.data.permissions);
+          await nextTick(); // Ensure reactivity propagates before isLoadingPermissions is set to false
         }
       } else {
         console.warn('useAuth: Permissions not found in /api/auth/my-permissions response.');
         if (authUser.value) {
           const updatedUser = { ...authUser.value, permissions: [] }; // Default to empty array
           setUser(updatedUser);
+          await nextTick();
         }
       }
     } catch (error) {
@@ -42,6 +47,7 @@ export const useAuth = () => {
       if (authUser.value) {
         const updatedUser = { ...authUser.value, permissions: [] }; // Default to empty array on error
         setUser(updatedUser);
+        await nextTick();
       }
       // Optionally handle specific errors, e.g., 401 might require logout
       if (error.response && (error.response.status === 401 || error.response.status === 403)) {
@@ -51,6 +57,7 @@ export const useAuth = () => {
         // For now, we just ensure permissions array is empty or not set.
       }
     } finally {
+      await nextTick(); // Ensure reactive updates from try/catch (setUser) propagate
       isLoadingPermissions.value = false;
     }
   };
