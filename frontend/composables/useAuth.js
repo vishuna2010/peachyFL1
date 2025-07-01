@@ -1,8 +1,9 @@
-import { useState, useRouter } from '#app'; // Auto-imported by Nuxt
+import { useState, useRouter, useNuxtApp, useRuntimeConfig } from '#app'; // Auto-imported by Nuxt, added useRuntimeConfig
 
 export const useAuth = () => {
   const { $axios } = useNuxtApp();
   const router = useRouter();
+  const config = useRuntimeConfig(); // Get runtime config
 
   // Reactive state for token and user
   // Using useState for simple global state within Nuxt's context
@@ -20,6 +21,8 @@ export const useAuth = () => {
     isLoadingPermissions.value = true;
     console.log('useAuth: Fetching user permissions...');
     try {
+      // Revert to using relative path, relying on axios plugin's baseURL
+      console.log(`useAuth: Attempting to fetch permissions from /api/auth/my-permissions`);
       const response = await $axios.get('/api/auth/my-permissions');
       if (response.data && response.data.permissions) {
         if (authUser.value) { // Ensure authUser still exists
