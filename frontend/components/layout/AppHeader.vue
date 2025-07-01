@@ -12,14 +12,28 @@
         <NuxtLink to="#" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-medium transition-colors duration-200 ease-in-out">Tops</NuxtLink>
         <NuxtLink to="#" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-medium transition-colors duration-200 ease-in-out">Dresses</NuxtLink>
         <NuxtLink to="#" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-medium transition-colors duration-200 ease-in-out">Swim</NuxtLink>
-        <NuxtLink to="#" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-bold transition-colors duration-200 ease-in-out">Sale</NuxtLink>
+        <NuxtLink :to="{ path: '/products', query: { on_sale: 'true' } }" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-bold transition-colors duration-200 ease-in-out">Sale</NuxtLink>
       </nav>
 
-      <!-- Action Icons -->
+      <!-- Search and Action Icons -->
       <div class="flex items-center space-x-4">
-        <button aria-label="Search" class="text-venus-text-primary hover:text-peach-pink transition-colors duration-200 ease-in-out">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-        </button>
+        <!-- Header Search -->
+        <form @submit.prevent="submitHeaderSearch" class="relative group">
+          <input
+            type="text"
+            v-model="headerSearchTerm"
+            placeholder="Search products..."
+            class="px-4 py-2 w-40 md:w-56 border border-gray-300 rounded-md text-sm text-venus-text-secondary shadow-sm focus:ring-1 focus:ring-peach-pink focus:border-peach-pink transition-all duration-300 ease-in-out md:group-hover:w-64 focus:w-64"
+            aria-label="Search products"
+          />
+          <button
+            type="submit"
+            class="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-peach-pink transition-colors"
+            aria-label="Submit search"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          </button>
+        </form>
 
         <!-- Conditional Auth Links: Wrap in ClientOnly to prevent hydration mismatch -->
         <ClientOnly>
@@ -49,8 +63,19 @@
   </header>
 </template>
 <script setup>
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useAuth } from '~/composables/useAuth';
 
 // Added isAuthInitialized to prevent flicker
 const { isAuthenticated, authUser, isAuthInitialized } = useAuth();
+const router = useRouter();
+const headerSearchTerm = ref('');
+
+const submitHeaderSearch = () => {
+  if (headerSearchTerm.value.trim()) {
+    router.push({ path: '/products', query: { searchTerm: headerSearchTerm.value.trim() } });
+    headerSearchTerm.value = ''; // Clear input after search
+  }
+};
 </script>
