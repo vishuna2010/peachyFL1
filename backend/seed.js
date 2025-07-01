@@ -220,7 +220,8 @@ async function createSchema(client) {
         sku VARCHAR(100) UNIQUE NOT NULL,
         price_modifier DECIMAL(10, 2),
         stock_quantity INTEGER DEFAULT 0,
-        cost_price DECIMAL(10, 2) DEFAULT 0.00, -- JULES: ADDED cost_price
+        cost_price DECIMAL(10, 2) DEFAULT 0.00,
+        wholesale_price_modifier DECIMAL(10, 2) DEFAULT NULL, -- JULES: ADDED wholesale_price_modifier
         image_url VARCHAR(255),
         weight_override_kg DECIMAL(10,3),
         length_override_cm DECIMAL(10,2),
