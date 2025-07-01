@@ -217,7 +217,7 @@ async function createSchema(client) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_variants (
         id SERIAL PRIMARY KEY, product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-        sku VARCHAR(100) UNIQUE NOT NULL, price_override DECIMAL(10, 2), stock_quantity INTEGER DEFAULT 0,
+        sku VARCHAR(100) UNIQUE NOT NULL, price_modifier DECIMAL(10, 2), stock_quantity INTEGER DEFAULT 0, -- Changed price_override to price_modifier
         image_url VARCHAR(255), weight_override_kg DECIMAL(10,3), length_override_cm DECIMAL(10,2),
         width_override_cm DECIMAL(10,2), height_override_cm DECIMAL(10,2), is_active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -887,12 +887,12 @@ async function seedProductVariants(client, seededDataIds) {
         const variantStock = 10;
 
         const variantRes = await client.query(
-          `INSERT INTO product_variants (product_id, sku, price_override, stock_quantity, is_active)
+          `INSERT INTO product_variants (product_id, sku, price_modifier, stock_quantity, is_active)
            VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT (sku) DO UPDATE SET
-             price_override = EXCLUDED.price_override, stock_quantity = EXCLUDED.stock_quantity, is_active = EXCLUDED.is_active, product_id = EXCLUDED.product_id
+             price_modifier = EXCLUDED.price_modifier, stock_quantity = EXCLUDED.stock_quantity, is_active = EXCLUDED.is_active, product_id = EXCLUDED.product_id
            RETURNING id, sku;`,
-          [productId, variantSku, variantPriceOverride, variantStock, true]
+          [productId, variantSku, variantPriceOverride, variantStock, true] // variantPriceOverride (which is null) will now be inserted into price_modifier
         );
         const variantId = variantRes.rows[0].id;
         seededDataIds.variants[variantSku] = variantId;
