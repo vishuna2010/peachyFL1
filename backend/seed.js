@@ -144,16 +144,29 @@ async function createSchema(client) {
         is_active BOOLEAN DEFAULT TRUE, is_featured BOOLEAN DEFAULT FALSE, image_url VARCHAR(255),
         tags TEXT[], average_rating DECIMAL(3, 2) DEFAULT 0.00, review_count INTEGER DEFAULT 0,
         tax_class_id INTEGER REFERENCES tax_classes(id), has_variants BOOLEAN DEFAULT FALSE NOT NULL,
-        -- JULES: Added reorder_threshold
         reorder_threshold INTEGER DEFAULT 0,
+        product_status VARCHAR(50) DEFAULT 'active', -- Ensuring product_status is here
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('Table "products" checked/created.');
      await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS tax_class_id INTEGER REFERENCES tax_classes(id);`);
      await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS has_variants BOOLEAN DEFAULT FALSE NOT NULL;`);
-     // JULES: Ensure reorder_threshold exists if missed by CREATE IF NOT EXISTS (though it shouldn't be)
      await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS reorder_threshold INTEGER DEFAULT 0;`);
+     // JULES: Explicitly add product_status just in case CREATE IF NOT EXISTS isn't behaving as expected on an altered table
+     await client.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS product_status VARCHAR(50) DEFAULT 'active';`);
+     console.log('DEBUG: Ensured product_status column on products table.');
+
+    // JULES: ADDED FOR DEBUGGING - Log schema of products table
+    const productsSchemaLog = await client.query(`
+        SELECT column_name, data_type, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_name = 'products' AND table_schema = 'public'
+        ORDER BY ordinal_position;
+    `);
+    console.log('DEBUG: Schema of products table immediately after creation/alteration by seed script:');
+    console.table(productsSchemaLog.rows);
+    // END JULES DEBUGGING SECTION
 
 
     // Product Options (Global)
@@ -631,7 +644,8 @@ async function seedProducts(client, seededDataIds) {
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=Headphones', is_active: true,
       has_variants: false, // This will be set to true by seedProductOptionConfigurations if options are assigned
-      reorder_threshold: 5 // JULES: Added reorder_threshold example
+      reorder_threshold: 5, // JULES: Added reorder_threshold example
+      product_status: 'active' // JULES: Added product_status example
     },
     {
       name: 'Men\'s Cotton T-Shirt', sku: 'TSHRT-MEN-COT-005', description: 'Comfortable and durable 100% cotton t-shirt for everyday wear.',
@@ -641,7 +655,8 @@ async function seedProducts(client, seededDataIds) {
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=T-Shirt', is_active: true,
       has_variants: false, // This will be set to true if options are assigned
-      reorder_threshold: 10 // JULES: Added reorder_threshold example
+      reorder_threshold: 10, // JULES: Added reorder_threshold example
+      product_status: 'active' // JULES: Added product_status example
     },
     {
       name: 'Simple LED Desk Lamp', sku: 'LAMP-DSK-LED-010', description: 'Modern LED desk lamp with adjustable brightness.',
@@ -651,21 +666,22 @@ async function seedProducts(client, seededDataIds) {
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=Desk+Lamp', is_active: true,
       has_variants: false,
-      reorder_threshold: 5 // JULES: Added reorder_threshold example
+      reorder_threshold: 5, // JULES: Added reorder_threshold example
+      product_status: 'draft' // JULES: Added product_status example
     },
   ];
 
   try {
     for (const prod of productsToSeed) {
       const result = await client.query(
-        `INSERT INTO products (name, sku, description, price, cost_price, stock_quantity, category_id, supplier_id, tax_class_id, image_url, is_active, has_variants, reorder_threshold)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `INSERT INTO products (name, sku, description, price, cost_price, stock_quantity, category_id, supplier_id, tax_class_id, image_url, is_active, has_variants, reorder_threshold, product_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          ON CONFLICT (sku) DO UPDATE SET
            name=EXCLUDED.name, description=EXCLUDED.description, price=EXCLUDED.price, cost_price=EXCLUDED.cost_price, stock_quantity=EXCLUDED.stock_quantity,
            category_id=EXCLUDED.category_id, supplier_id=EXCLUDED.supplier_id, tax_class_id=EXCLUDED.tax_class_id, image_url=EXCLUDED.image_url, is_active=EXCLUDED.is_active, has_variants=EXCLUDED.has_variants,
-           reorder_threshold=EXCLUDED.reorder_threshold
+           reorder_threshold=EXCLUDED.reorder_threshold, product_status=EXCLUDED.product_status
          RETURNING id, sku;`,
-        [prod.name, prod.sku, prod.description, prod.price, prod.cost_price, prod.stock_quantity, prod.category_id, prod.supplier_id, prod.tax_class_id, prod.image_url, prod.is_active, prod.has_variants, prod.reorder_threshold]
+        [prod.name, prod.sku, prod.description, prod.price, prod.cost_price, prod.stock_quantity, prod.category_id, prod.supplier_id, prod.tax_class_id, prod.image_url, prod.is_active, prod.has_variants, prod.reorder_threshold, prod.product_status]
       );
       if (result.rows.length > 0) {
         // Store product ID and SKU for later reference
