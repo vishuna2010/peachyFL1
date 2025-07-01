@@ -12,12 +12,12 @@
 </template>
 
 <script setup>
-import { onMounted, watch } from 'vue';
+import { onMounted, onUnmounted, watch } from 'vue'; // Added onUnmounted
 import { useAuth } from '~/composables/useAuth';
 import { useRouter, useRoute } from '#app';
 
 definePageMeta({
-  layout: 'minimal', // A layout without headers/footers if you have one, or default
+  layout: false, // Use no layout for this simple callback page
 });
 
 useHead({
@@ -36,7 +36,9 @@ onMounted(() => {
   //   `authUser permissions: ${JSON.stringify(authUser.value?.permissions)}`
   // );
 
-  const stopWatch = watch(
+  let stopWatch = null; // Declare with let, initialized to null
+
+  stopWatch = watch( // Assign here
     [isAuthInitialized, isAuthenticated, isLoadingPermissions, () => authUser.value?.permissions], // Watch all relevant states
     ([authInitialized, authenticated, loadingPermissions, permissionsArray]) => {
       // console.log('[AuthCallback] Watch triggered. State:',
@@ -51,7 +53,9 @@ onMounted(() => {
         // The check for permissionsArray?.length might be too strict if a user legitimately has no permissions.
         // The main thing is that isLoadingPermissions is false.
 
-        stopWatch(); // Stop watching once conditions are met
+        if (stopWatch) { // Check if it has been assigned (it should have been by this point)
+          stopWatch();
+        }
 
         let intendedRedirect = route.query.redirect || '/'; // Fallback to homepage
 
@@ -91,13 +95,22 @@ onMounted(() => {
   );
 
   // Safety timeout in case the watch condition is never met (e.g., an error in auth flow)
-  setTimeout(() => {
-    stopWatch(); // Clean up watcher
+  const safetyTimeout = setTimeout(() => {
+    if (stopWatch) {
+      stopWatch(); // Clean up watcher
+    }
     if (router.currentRoute.value.path === '/auth/callback') { // Check if still on callback page
         console.warn('[AuthCallback] Timeout reached. User may not be fully authenticated or permissions not loaded. Redirecting to homepage.');
         router.replace('/');
     }
   }, 5000); // 5 seconds timeout
+
+  onUnmounted(() => {
+    clearTimeout(safetyTimeout);
+    if (stopWatch) {
+      stopWatch(); // Ensure watcher is cleaned up if component unmounts for any other reason
+    }
+  });
 });
 </script>
 
