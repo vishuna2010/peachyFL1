@@ -1,110 +1,109 @@
 import { useAuth } from '~/composables/useAuth';
 import { usePermissions } from '~/composables/usePermissions';
-import { navigateTo, abortNavigation } from '#app';
+import { navigateTo } from '#app'; // Removed abortNavigation as it's not standard for blocking
 
 export default defineNuxtRouteMiddleware(async (to, from) => {
-  // Skip middleware on server-side for initial load if permissions depend on client-side auth resolution,
-  // or handle SSR auth state carefully. For now, let's focus on client-side navigation guards post-initial load,
-  // or assume auth state (including permissions) is resolved by the time this runs.
-  // The useAuth composable should ideally handle initial auth state restoration.
-
-  if (process.server) {
-    // During SSR, if auth state isn't definitively known (e.g. relies on client-side token),
-    // it's often better to let the page render and then have client-side checks / redirects.
-    // Or, ensure useAuth().initAuth() or similar is completed.
-    // For now, we'll mostly let SSR pass and rely on client-side enforcement / API protection.
-    // However, if a user is definitively known to be unauth on SSR, we can redirect.
-    // const { isAuthenticatedSsr } = useAuth(); // Assuming useAuth could provide an SSR-safe auth check
-    // if (to.path.startsWith('/admin') && !isAuthenticatedSsr.value && to.path !== '/login') {
-    //   console.log('[Middleware SSR] Admin route, user not authenticated on server. Aborting/redirecting.');
-    //   return navigateTo(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
-    // }
-    return; // Let SSR proceed, client-side will handle finer details or redirects after hydration.
+  // Skip RBAC checks for non-admin routes or during SSR if auth isn't fully resolved.
+  if (process.server || !to.path.startsWith('/admin')) {
+    // console.log(`[RBAC] Skipping for path: ${to.path}, server: ${process.server}`);
+    return;
   }
 
-  const { isAuthenticated, authUser } = useAuth();
-  const { fetchUserPermissions, can, userPermissions, isLoadingPermissions } = usePermissions();
+  console.log(`[RBAC] Middleware triggered. Navigating from ${from.path} to: ${to.path}`);
 
-  // If navigating to an admin route
-  if (to.path.startsWith('/admin')) {
-    // If not authenticated, redirect to login
-    if (!isAuthenticated.value) {
-      if (to.path !== '/login') { // Avoid redirect loop if already on login
-        console.log('[rbac.global.js] Admin route, user not authenticated. Redirecting to login.');
-        return navigateTo(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
-      }
-      return; // Already on login page
-    }
+  const { isAuthenticated, authUser, isAuthInitialized } = useAuth();
+  const { can, isLoadingPermissions, userPermissions, fetchUserPermissions } = usePermissions();
 
-    // User is authenticated, ensure permissions are loaded.
-    // console.log(`[rbac.global.js] User authenticated. Checking permissions for path: ${to.path}. Current isLoadingPermissions: ${isLoadingPermissions.value}, Permissions loaded: ${userPermissions.value.length > 0}`);
-
-    if (!isLoadingPermissions.value && userPermissions.value.length === 0 && authUser.value?.id) {
-        // console.log(`[rbac.global.js] Permissions not loaded and not currently loading. Fetching for user ${authUser.value.id}...`);
-        await fetchUserPermissions(); // Wait for permissions to be fetched
-        // console.log(`[rbac.global.js] Permissions fetch completed. isLoading: ${isLoadingPermissions.value}, Permissions count: ${userPermissions.value.length}`);
-    } else if (isLoadingPermissions.value) {
-        // console.log(`[rbac.global.js] Permissions are currently loading. Setting up watcher to wait...`);
-        await new Promise(resolve => {
-            const unwatch = watch(isLoadingPermissions, (newValue) => {
-                if (!newValue) {
-                    // console.log(`[rbac.global.js] Watcher: Permissions finished loading. isLoading: ${isLoadingPermissions.value}, Permissions count: ${userPermissions.value.length}`);
-                    unwatch();
-                    resolve();
-                }
-            });
-            setTimeout(() => { // Timeout for safety
-                // console.warn('[rbac.global.js] Watcher: Timeout waiting for permissions to load.');
+  // Ensure auth is initialized before proceeding with RBAC checks on client
+  if (!isAuthInitialized.value) {
+    console.log(`[RBAC] Auth not yet initialized for ${to.path}. Waiting (this should be brief).`);
+    // This simple await might not be enough if init takes time.
+    // A more robust solution would involve a watcher or event from useAuth.
+    await new Promise(resolve => {
+        const unwatch = watch(isAuthInitialized, (isInit) => {
+            if (isInit) {
+                console.log(`[RBAC] Auth now initialized.`);
                 unwatch();
                 resolve();
-            }, 5000);
+            }
         });
-    } else {
-        // console.log(`[rbac.global.js] Permissions already loaded or no user ID. Count: ${userPermissions.value.length}`);
-    }
-    // At this point, permissions should have been given a chance to load.
-
-    // Check for base admin access permission
-    const hasAdminDashboardAccess = can('admin:access_dashboard');
-    // console.log(`[rbac.global.js] Checking 'admin:access_dashboard'. User: ${authUser.value?.email}. Has permission (computed.value): ${hasAdminDashboardAccess.value}. Permissions list for check: ${JSON.stringify(userPermissions.value)}`);
-
-    if (!hasAdminDashboardAccess.value) {
-      // console.log(`[rbac.global.js] User ${authUser.value?.email} lacks 'admin:access_dashboard' permission for ${to.path}. Redirecting to '/'.`);
-      return navigateTo('/');
-    }
-
-    // Specific page permissions
-    if (to.path.startsWith('/admin/users') && !can('users:view').value) {
-      // console.log(`[RBAC] User ${authUser.value?.email} lacks 'users:view' for ${to.path}. Redirecting to /admin.`);
-      return navigateTo('/admin');
-    }
-    if (to.path.startsWith('/admin/products') && !can('products:view').value) {
-      // console.log(`[RBAC] User ${authUser.value?.email} lacks 'products:view' for ${to.path}. Redirecting to /admin.`);
-      return navigateTo('/admin');
-    }
-    if (to.path.startsWith('/admin/roles') && !can('rbac:manage').value) {
-      // console.log(`[RBAC] User ${authUser.value?.email} lacks 'rbac:manage' for ${to.path}. Redirecting to /admin.`);
-      return navigateTo('/admin');
-    }
-    if (to.path.startsWith('/admin/marketing') && !can('marketing:send_emails').value) {
-      // console.log(`[RBAC] User ${authUser.value?.email} lacks 'marketing:send_emails' for ${to.path}. Redirecting to /admin.`);
-      return navigateTo('/admin');
-    }
-    if (to.path.startsWith('/admin/orders') && !to.path.includes('shipping-label') && !can('orders:view_all').value) {
-        // console.log(`[RBAC] User ${authUser.value?.email} lacks 'orders:view_all' for ${to.path}. Redirecting to /admin.`);
-        return navigateTo('/admin');
-    }
-    // Example: Settings page check
-    if (to.path.startsWith('/admin/settings') && !can('settings:manage_general').value) {
-      // console.log(`[RBAC] User ${authUser.value?.email} lacks 'settings:manage_general' for ${to.path}. Redirecting to /admin.`);
-      return navigateTo('/admin');
-    }
-
-  } else if (to.path === '/login' && isAuthenticated.value) {
-    // console.log('[RBAC] Authenticated user on login page. Redirecting to /admin.');
-    return navigateTo('/admin');
+         // Timeout for safety, in case isAuthInitialized never becomes true
+        setTimeout(() => {
+            console.warn('[RBAC] Timeout waiting for auth initialization.');
+            unwatch(); // Clean up watcher
+            resolve(); // Resolve promise to prevent indefinite blocking
+        }, 2000); // 2 seconds timeout
+    });
   }
 
-  // Allow navigation if none of the above conditions are met
-  return;
+  // If not authenticated (after init check), redirect to login, unless already on login
+  if (!isAuthenticated.value) {
+    if (to.path !== '/login') {
+      console.log(`[RBAC] User not authenticated for admin path ${to.path}. Redirecting to login.`);
+      return navigateTo(`/login?redirect=${encodeURIComponent(to.fullPath)}`);
+    }
+    console.log('[RBAC] User not authenticated, already on login page.');
+    return; // Allow staying on login page
+  }
+
+  // User is authenticated. Now check permissions.
+  console.log(`[RBAC] User ${authUser.value?.email} is authenticated. Checking permissions for ${to.path}.`);
+  console.log(`  - isLoadingPermissions: ${isLoadingPermissions.value}`);
+
+  // If permissions are not loaded and not currently loading, fetch them.
+  if (userPermissions.value.size === 0 && !isLoadingPermissions.value) {
+    console.warn(`[RBAC] Permissions set is empty for ${authUser.value?.email} and not loading. Attempting to fetch for ${to.path}.`);
+    await fetchUserPermissions();
+    console.log(`  - Permissions after explicit fetch attempt:`, JSON.stringify(Array.from(userPermissions.value)));
+  }
+  // If still loading after an attempt or was already loading.
+  if (isLoadingPermissions.value) {
+    console.log(`[RBAC] Permissions are still loading for ${to.path}. Waiting for permissions to load...`);
+    await new Promise(resolve => {
+        const unwatchPerms = watch(isLoadingPermissions, (loading) => {
+            if (!loading) {
+                console.log(`[RBAC] Watcher: Permissions finished loading for ${to.path}. Final count: ${userPermissions.value.size}`);
+                unwatchPerms();
+                resolve();
+            }
+        });
+        setTimeout(() => { // Safety timeout
+            console.warn(`[RBAC] Watcher: Timeout waiting for permissions to load for path ${to.path}.`);
+            unwatchPerms();
+            resolve();
+        }, 3000); // 3 seconds timeout
+    });
+  }
+
+  console.log(`  - Final check. User permissions list:`, JSON.stringify(Array.from(userPermissions.value)));
+
+  // --- Route-Specific Permission Check (using to.meta.permission) ---
+  const requiredPermission = to.meta.permission;
+  console.log(`[RBAC] Required meta permission for ${to.path}: ${requiredPermission}`);
+
+  if (requiredPermission) {
+    if (!can(requiredPermission).value) {
+      console.error(`[RBAC] Access DENIED to ${to.path}. User ${authUser.value?.email} lacks meta permission: "${requiredPermission}". Redirecting to /admin/unauthorized`);
+      return navigateTo('/admin/unauthorized', { replace: true });
+    }
+    console.log(`[RBAC] Access GRANTED to ${to.path} via meta permission: "${requiredPermission}".`);
+    return; // Permission granted
+  }
+
+  // --- Fallback/General Admin Access (if no specific meta.permission) ---
+  // This part might be too broad or conflict if meta.permission is the standard.
+  // For /admin dashboard, 'admin:access_dashboard' is a good check.
+  if (to.path === '/admin' || to.path === '/admin/') {
+    if (!can('admin:access_dashboard').value) {
+      console.error(`[RBAC] Access DENIED to ${to.path}. User ${authUser.value?.email} lacks 'admin:access_dashboard' permission. Redirecting to / (homepage).`);
+      return navigateTo('/', { replace: true }); // Or to a general unauthorized page
+    }
+    console.log(`[RBAC] Access GRANTED to ${to.path} via 'admin:access_dashboard' permission.`);
+    return;
+  }
+
+  // If a route within /admin/* does not have a meta.permission,
+  // it implies it might be accessible to anyone who passed admin-auth.
+  // Or, you might want a default deny here if all admin sub-routes *must* have a permission.
+  console.log(`[RBAC] No specific meta.permission for admin route ${to.path} and not the main dashboard. Allowing based on admin-auth completion.`);
 });
