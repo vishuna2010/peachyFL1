@@ -18,22 +18,31 @@
       <!-- Search and Action Icons -->
       <div class="flex items-center space-x-4">
         <!-- Header Search -->
-        <form @submit.prevent="submitHeaderSearch" class="relative group">
-          <input
-            type="text"
-            v-model="headerSearchTerm"
-            placeholder="Search products..."
-            class="px-4 py-2 w-40 md:w-56 border border-gray-300 rounded-md text-sm text-venus-text-secondary shadow-sm focus:ring-1 focus:ring-peach-pink focus:border-peach-pink transition-all duration-300 ease-in-out md:group-hover:w-64 focus:w-64"
-            aria-label="Search products"
-          />
+        <div class="flex items-center space-x-2">
+          <form @submit.prevent="submitHeaderSearch" class="relative group">
+            <input
+              type="text"
+              v-model="headerSearchTerm"
+              placeholder="Search products..."
+              class="px-4 py-2 w-40 md:w-56 border border-gray-300 rounded-md text-sm text-venus-text-secondary shadow-sm focus:ring-1 focus:ring-peach-pink focus:border-peach-pink transition-all duration-300 ease-in-out md:group-hover:w-60 focus:w-60"
+              aria-label="Search products"
+            />
+            <button
+              type="submit"
+              class="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-peach-pink transition-colors"
+              aria-label="Submit search"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </button>
+          </form>
           <button
-            type="submit"
-            class="absolute right-0 top-0 h-full px-3 text-gray-400 hover:text-peach-pink transition-colors"
-            aria-label="Submit search"
+            @click="goToAdvancedFilters"
+            aria-label="Advanced Filters"
+            class="p-2 text-gray-500 hover:text-peach-pink transition-colors"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L13 10.414V15a1 1 0 01-.293.707l-2 2A1 1 0 019 17v-6.586L4.293 6.707A1 1 0 014 6V3zm2 2v1h10V5H5zm0 3h10l-2 2H7L5 8z" clip-rule="evenodd"></path></svg>
           </button>
-        </form>
+        </div>
 
         <!-- Conditional Auth Links: Wrap in ClientOnly to prevent hydration mismatch -->
         <ClientOnly>
@@ -77,5 +86,14 @@ const submitHeaderSearch = () => {
     router.push({ path: '/products', query: { searchTerm: headerSearchTerm.value.trim() } });
     headerSearchTerm.value = ''; // Clear input after search
   }
+};
+
+const goToAdvancedFilters = () => {
+  const query = {};
+  if (headerSearchTerm.value.trim()) {
+    query.searchTerm = headerSearchTerm.value.trim();
+  }
+  router.push({ path: '/products', query });
+  // headerSearchTerm.value = ''; // Optionally clear search term after navigating
 };
 </script>
