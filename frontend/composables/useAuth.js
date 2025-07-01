@@ -1,7 +1,5 @@
-import { useState, useRouter, useNuxtApp, useRuntimeConfig } from '#app'; // Auto-imported by Nuxt, added useRuntimeConfig
-
-export const useAuth = () => {
-import { useState, useRouter, useNuxtApp, useRuntimeConfig, nextTick } from '#app'; // Auto-imported by Nuxt, added useRuntimeConfig and nextTick
+// Nuxt 3 auto-imports composables like useState, useRouter, useNuxtApp, useRuntimeConfig, nextTick
+// No explicit import needed from '#app' for these in most cases.
 
 export const useAuth = () => {
   const { $axios } = useNuxtApp();
