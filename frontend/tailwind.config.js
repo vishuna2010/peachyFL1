@@ -21,12 +21,13 @@ export default {
         'venus-neutral-medium': '#e0e0e0',
         'venus-neutral-dark': '#333333',
 
+
         // New E-commerce Palette
-        'peach-pink': '#FC7099',
-        'sky-blue': '#26A7E2',
-        'lemon-yellow': '#F9D849',
-        'fresh-green': '#5BAA41',
-        'orange-gold': '#F6A03C',
+        'peach-pink': '#FC7099', //Primary, Logo, Buttons, Headers
+        'sky-blue': '#26A7E2', //Scondary, Badges, Banners
+        'lemon-yellow': '#F9D849',// Accent, Sale tags, Icons
+        'fresh-green': '#5BAA41', // Secondary, Promotional labels
+        'orange-gold': '#F6A03C', // Accent, Icons, Highlights
         'neutral-bg-soft': '#FFF5F8', // Very light pastel pink
         'sky-blue-deep': '#17729D', // Darker shade of Sky Blue
       },
