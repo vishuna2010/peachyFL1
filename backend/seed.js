@@ -997,20 +997,25 @@ async function seedInventoryBatches(client, seededDataIds) {
     const productsWithoutVariants = productsWithoutVariantsResult.rows;
 
     for (const product of productsWithoutVariants) {
+      const seedBatchNumber = `SEED-NONVARIANT-${product.sku}`;
+      const costAtReceipt = product.cost_price || 0;
+      const currencyCode = (config.company && config.company.currencyCode) || 'USD';
+
+      // Check if a batch with the same characteristics already exists
       const existingBatchResult = await client.query(
-        'SELECT id FROM inventory_batches WHERE product_id = $1 AND quantity_received = $2 AND cost_price_per_unit = $3 LIMIT 1',
-        [product.id, product.stock_quantity, product.cost_price || 0]
+        'SELECT id FROM inventory_batches WHERE product_id = $1 AND variant_id IS NULL AND quantity_received = $2 AND cost_price_at_receipt = $3 AND batch_number = $4 LIMIT 1',
+        [product.id, product.stock_quantity, costAtReceipt, seedBatchNumber]
       );
 
       if (existingBatchResult.rows.length === 0) {
         await client.query(
-          `INSERT INTO inventory_batches (product_id, sku, quantity_received, quantity_remaining, cost_price_per_unit)
-           VALUES ($1, $2, $3, $4, $5);`,
-          [product.id, product.sku, product.stock_quantity, product.stock_quantity, product.cost_price || 0]
+          `INSERT INTO inventory_batches (product_id, variant_id, sku, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, batch_number, received_date)
+           VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, NOW());`,
+          [product.id, product.sku, product.stock_quantity, product.stock_quantity, costAtReceipt, currencyCode, seedBatchNumber]
         );
-        console.log(`Created initial inventory batch for non-variant product SKU ${product.sku}, quantity ${product.stock_quantity}.`);
+        console.log(`Created initial inventory batch for non-variant product SKU ${product.sku}, quantity ${product.stock_quantity}, batch: ${seedBatchNumber}.`);
       } else {
-        console.log(`Skipping batch creation for non-variant product SKU ${product.sku} as a similar batch already exists.`);
+        console.log(`Skipping batch creation for non-variant product SKU ${product.sku} (batch: ${seedBatchNumber}) as a similar batch already exists.`);
       }
     }
     console.log('Inventory batches seeding for non-variant products completed.');
