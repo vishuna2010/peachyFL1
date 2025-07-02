@@ -1071,7 +1071,8 @@ async function seedRbac(client, seededDataIds) {
     { name: 'reviews:manage', description: 'Can manage product reviews (approve, reject, delete).', group_name: 'Products' },
     { name: 'auditlogs:view', description: 'Can view system audit logs.', group_name: 'System' },
     { name: 'marketing:send_emails', description: 'Allows sending of marketing emails to user segments.', group_name: 'Marketing' },
-    { name: 'marketing:manage_hero_banners', description: 'Can create, read, update, and delete hero banners.', group_name: 'Marketing' }
+    { name: 'marketing:manage_hero_banners', description: 'Can create, read, update, and delete hero banners.', group_name: 'Marketing' },
+    { name: 'products:view_stock', description: 'Can view product stock levels and inventory batches.', group_name: 'Products' } // Added new permission
   ];
   try {
     for (const role of rolesToSeed) {
@@ -1085,7 +1086,7 @@ async function seedRbac(client, seededDataIds) {
     const rolePermissionsToAssign = {
       'super_admin': Object.keys(seededDataIds.permissions),
       'admin': Object.keys(seededDataIds.permissions),
-      'product_manager': [ 'admin:access_dashboard', 'products:view', 'products:create', 'products:edit', 'products:delete', 'categories:manage', 'tags:manage', 'options:manage_global', 'reviews:manage' ],
+      'product_manager': [ 'admin:access_dashboard', 'products:view', 'products:create', 'products:edit', 'products:delete', 'categories:manage', 'tags:manage', 'options:manage_global', 'reviews:manage', 'products:view_stock' ], // Added products:view_stock
       'customer': ['products:view', 'orders:view_details']
     };
     for (const roleNameKey in rolePermissionsToAssign) {
