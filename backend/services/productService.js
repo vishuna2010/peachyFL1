@@ -932,8 +932,9 @@ async function createProductVariant(productId, variantData, fileData, requesting
 
   try {
     await client.query('BEGIN');
-    const productResult = await client.query('SELECT id, name FROM products WHERE id = $1 FOR UPDATE', [productId]);
+    const productResult = await client.query('SELECT id, name, sku as parent_sku FROM products WHERE id = $1 FOR UPDATE', [productId]); // Added parent_sku
     if (productResult.rows.length === 0) throw new NotFoundError(`Product with ID ${productId} not found.`);
+    const parentProductSku = productResult.rows[0].parent_sku;
 
     const selectedGlobalOptionTypes = new Set();
     for (const globalValueId of uniqueOptionValueIds) {
@@ -952,6 +953,12 @@ async function createProductVariant(productId, variantData, fileData, requesting
       (SELECT array_agg(pvov.product_option_value_id ORDER BY pvov.product_option_value_id) FROM product_variant_option_values pvov WHERE pvov.variant_id = pv.id) = $2::int[];`;
     const duplicateCheckResult = await client.query(existingVariantsCheckQuery, [productId, sortedIds]);
     if (duplicateCheckResult.rows.length > 0) throw new ConflictError('A variant with this combination of option values already exists.');
+
+    const skuForBatch = finalSku || parentProductSku || `VAR_NEW_BATCH_${productId}`; // Determine SKU for batch
+    if (!skuForBatch) { // Should not happen with the fallback, but as a safeguard
+        throw new AppError('Cannot determine SKU for inventory batch creation.', 500, 'BATCH_SKU_DETERMINATION_FAILED');
+    }
+
 
     if (finalSku) {
       const skuCheck = await client.query(`SELECT id FROM product_variants WHERE sku = $1 UNION SELECT id FROM products WHERE sku = $1`, [finalSku]);
@@ -981,11 +988,11 @@ async function createProductVariant(productId, variantData, fileData, requesting
     if (newVariant.stock_quantity > 0) {
       const batchNumber = `INITIAL-${newVariant.sku || `VAR${newVariant.id}`}-${Date.now()}`;
       const costAtReceipt = newVariant.cost_price !== null ? newVariant.cost_price : 0;
-      const currencyCodeAtReceipt = (config.company && config.company.currencyCode) || 'USD'; // Corrected
+      const currencyCodeAtReceipt = (config.company && config.company.currencyCode) || 'USD';
       await client.query(
-        `INSERT INTO inventory_batches (product_id, variant_id, batch_number, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, received_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP) RETURNING id;`,
-        [newVariant.product_id, newVariant.id, batchNumber, newVariant.stock_quantity, newVariant.stock_quantity, costAtReceipt, currencyCodeAtReceipt]
+        `INSERT INTO inventory_batches (product_id, variant_id, batch_number, sku, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, received_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP) RETURNING id;`,
+        [newVariant.product_id, newVariant.id, batchNumber, skuForBatch, newVariant.stock_quantity, newVariant.stock_quantity, costAtReceipt, currencyCodeAtReceipt]
       );
       await client.query(
         `INSERT INTO stock_movement_logs (product_id, variant_id, user_id, movement_type, quantity_changed, new_quantity_on_hand, reason, reference_id)
@@ -1053,11 +1060,24 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
         if (stockChange > 0) {
           const manualBatchNumber = `MANUAL-${currentVariant.sku || `VAR${variantId}`}-${Date.now()}`;
           const costAtReceipt = variantData.cost_price !== undefined ? parseFloat(variantData.cost_price) : (currentVariant.cost_price !== null ? currentVariant.cost_price : 0);
-          const currencyCodeAtReceipt = (config.company && config.company.currencyCode) || 'USD'; // Corrected
+          const currencyCodeAtReceipt = (config.company && config.company.currencyCode) || 'USD';
+
+          let batchSku = currentVariant.sku;
+          if (!batchSku) {
+            const productSkuResult = await client.query('SELECT sku FROM products WHERE id = $1', [currentVariant.product_id]);
+            if (productSkuResult.rows.length > 0 && productSkuResult.rows[0].sku) {
+              batchSku = productSkuResult.rows[0].sku;
+              console.log(`Variant ${variantId} has no SKU, using parent product SKU '${batchSku}' for inventory batch.`);
+            } else {
+              batchSku = `VAR_BATCH_${variantId}`;
+              console.warn(`Variant ${variantId} and its parent product ${currentVariant.product_id} have no SKU. Using placeholder '${batchSku}' for inventory batch.`);
+            }
+          }
+
           await client.query(
-            `INSERT INTO inventory_batches (product_id, variant_id, batch_number, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, received_date)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
-            [currentVariant.product_id, variantId, manualBatchNumber, stockChange, stockChange, costAtReceipt, currencyCodeAtReceipt]
+            `INSERT INTO inventory_batches (product_id, variant_id, batch_number, sku, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, received_date)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+            [currentVariant.product_id, variantId, manualBatchNumber, batchSku, stockChange, stockChange, costAtReceipt, currencyCodeAtReceipt]
           );
         } else {
              console.warn(`[ProductService] Stock decrease of ${-stockChange} for variant ${variantId}. Batch depletion logic not fully implemented here.`);
@@ -1259,3 +1279,5 @@ module.exports = {
   getProductAssignedOptions, getProductVariants, getVariantById, createProductVariant, updateProductVariant,
   deleteProductVariant, deleteProduct, getPublicProductFilterOptions,
 };
+
+[end of backend/services/productService.js]
