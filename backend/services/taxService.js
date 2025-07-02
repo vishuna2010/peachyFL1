@@ -291,18 +291,6 @@ async function linkRateToClass(classId, rateId) {
     if (classCheck.rows.length === 0) throw new NotFoundError(`Tax class with ID ${classId} not found.`);
     const rateCheck = await db.query('SELECT id FROM tax_rates WHERE id = $1', [rateId]);
     if (rateCheck.rows.length === 0) throw new BadRequestError(`Tax rate with ID ${rateId} not found.`);
-    // The join table tax_class_rates is not in the provided seed.js.
-    // Assuming it should be: CREATE TABLE tax_class_rates (tax_class_id INT, tax_rate_id INT, PRIMARY KEY (tax_class_id, tax_rate_id));
-    // For now, this function will likely fail if that table doesn't exist.
-    // If the intention was that tax_rates has a tax_class_id directly, this function is redundant.
-    // The seed implies tax_rates.tax_class_id directly links.
-    // This function might be for a many-to-many setup not reflected in current seed for tax_rates.
-    // console.warn("[taxService.linkRateToClass] This function assumes a 'tax_class_rates' join table which might not match current schema.");
-    // If tax_rates.tax_class_id is the link, this function might be about setting that field on tax_rates,
-    // but that would be an updateTaxRate operation.
-    // For now, assuming the join table `tax_class_rates` was intended for a M2M relationship:
-    // const result = await db.query('INSERT INTO tax_class_rates (tax_class_id, tax_rate_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING *', [classId, rateId]);
-    // return result.rows[0];
     throw new AppError('Tax rate linking to class via join table is not fully implemented based on current schema understanding.', 501);
   } catch (error) {
     if (error.code === '23505') throw new ConflictError('This tax rate is already linked to this tax class.');
@@ -316,7 +304,6 @@ async function getRatesForClass(classId) {
   try {
     const classCheck = await db.query('SELECT id FROM tax_classes WHERE id = $1', [classId]);
     if (classCheck.rows.length === 0) throw new NotFoundError(`Tax class with ID ${classId} not found.`);
-    // Assumes tax_rates.tax_class_id is the link as per seed.js
     const result = await db.query(`SELECT * FROM tax_rates WHERE tax_class_id = $1 ORDER BY name ASC;`, [classId]);
     return result.rows;
   } catch (error) {
@@ -328,12 +315,6 @@ async function getRatesForClass(classId) {
 
 async function unlinkRateFromClass(classId, rateId) {
   try {
-    // This function implies a join table `tax_class_rates`.
-    // If tax_rates.tax_class_id is the link, this would mean setting tax_rates.tax_class_id to NULL for that rate.
-    // console.warn("[taxService.unlinkRateFromClass] This function assumes a 'tax_class_rates' join table.");
-    // const result = await db.query('DELETE FROM tax_class_rates WHERE tax_class_id = $1 AND tax_rate_id = $2 RETURNING *', [classId, rateId]);
-    // if (result.rowCount === 0) throw new NotFoundError(`Link not found.`);
-    // return result.rows[0];
     throw new AppError('Tax rate unlinking from class via join table is not fully implemented based on current schema understanding.', 501);
   } catch (error) {
     if (error instanceof AppError) throw error;
@@ -343,17 +324,14 @@ async function unlinkRateFromClass(classId, rateId) {
 }
 
 async function createTaxRate(taxRateData) {
-  const { name, rate, country, state_province, postal_code, is_compound, priority, tax_class_id } = taxRateData; // Changed rate_percentage to rate
+  const { name, rate, country, state_province, postal_code, is_compound, priority, tax_class_id } = taxRateData;
 
   if (!name || name.trim() === '') throw new BadRequestError('Tax rate name is required.');
   if (rate === undefined || isNaN(parseFloat(rate))) throw new BadRequestError('Rate is required and must be a number.');
   const numRate = parseFloat(rate);
-  // Assuming rate is stored as decimal e.g. 0.0825 for 8.25%
-  if (numRate < 0) throw new BadRequestError('Rate must be non-negative.'); // Max check might depend on how it's used (e.g. > 1 if it's a percentage like 20 for 20%)
-                                                                          // Seed stores 0.0825, 0.20. So this check is fine.
+  if (numRate < 0) throw new BadRequestError('Rate must be non-negative.');
   if (!country || country.trim() === '') throw new BadRequestError('Country code is required.');
   if (!tax_class_id || isNaN(parseInt(tax_class_id))) throw new BadRequestError('Valid Tax Class ID is required.');
-
 
   try {
     const existingRate = await db.query(
@@ -374,7 +352,7 @@ async function createTaxRate(taxRateData) {
     );
     return result.rows[0];
   } catch (error) {
-    if (error.code === '23505') { // unique_violation for the table's defined UNIQUE constraints
+    if (error.code === '23505') {
       throw new ConflictError('A tax rate with these parameters already exists (database constraint).');
     }
     if (error instanceof AppError) throw error;
@@ -384,7 +362,7 @@ async function createTaxRate(taxRateData) {
 }
 
 async function getAllTaxRates(filterOptions = {}, paginationOptions = {}) {
-  const { tax_class_id, country, is_active } = filterOptions; // is_active not in schema
+  const { tax_class_id, country } = filterOptions;
   let { page = 1, limit = 10, sortBy = 'name', sortOrder = 'ASC' } = paginationOptions;
 
   page = parseInt(page, 10); if (isNaN(page) || page < 1) page = 1;
@@ -398,7 +376,6 @@ async function getAllTaxRates(filterOptions = {}, paginationOptions = {}) {
 
   if (tax_class_id) { whereClauses.push(`tr.tax_class_id = $${paramIndex++}`); queryParams.push(tax_class_id); }
   if (country) { whereClauses.push(`tr.country = $${paramIndex++}`); queryParams.push(country.toUpperCase()); }
-  // is_active filter removed as column not in schema
 
   const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
@@ -406,7 +383,6 @@ async function getAllTaxRates(filterOptions = {}, paginationOptions = {}) {
   const safeSortBy = allowedSorts[sortBy] || 'tr.name';
   const safeSortOrder = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
   const orderByClause = `ORDER BY ${safeSortBy} ${safeSortOrder}, tr.id ${safeSortOrder}`;
-
 
   try {
     const dataQuery = `
@@ -434,7 +410,7 @@ async function getAllTaxRates(filterOptions = {}, paginationOptions = {}) {
       pagination: { total: totalRecords, page, limit, totalPages, sortBy, sortOrder: safeSortOrder }
     };
   } catch (error) {
-    console.error('[taxService.getAllTaxRates] Error:', error.message, error.stack); // Log more details
+    console.error('[taxService.getAllTaxRates] Error:', error.message, error.stack);
     throw new AppError('Failed to retrieve tax rates.', 500, 'TAX_RATE_FETCH_ALL_FAILED', {originalError: error.message});
   }
 }
@@ -456,7 +432,7 @@ async function getTaxRateById(taxRateId) {
 }
 
 async function updateTaxRate(taxRateId, updateData) {
-  const { name, rate, country, state_province, postal_code, is_compound, priority, tax_class_id } = updateData; // Changed rate_percentage to rate
+  const { name, rate, country, state_province, postal_code, is_compound, priority, tax_class_id } = updateData;
   const updatableFields = ['name', 'rate', 'country', 'state_province', 'postal_code', 'is_compound', 'priority', 'tax_class_id'];
 
   const client = await db.pool.connect();
@@ -516,4 +492,23 @@ async function deleteTaxRate(taxRateId) {
   }
 }
 
-[end of backend/services/taxService.js]
+module.exports = {
+  calculatePriceWithAppliedTaxes,
+  calculateTaxForCartItems,
+
+  createTaxClass,
+  getAllTaxClasses,
+  getTaxClassById,
+  updateTaxClass,
+  deleteTaxClass,
+
+  linkRateToClass,
+  getRatesForClass,
+  unlinkRateFromClass,
+
+  createTaxRate,
+  getAllTaxRates,
+  getTaxRateById,
+  updateTaxRate,
+  deleteTaxRate,
+};
