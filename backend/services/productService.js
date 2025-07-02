@@ -1280,4 +1280,4 @@ module.exports = {
   deleteProductVariant, deleteProduct, getPublicProductFilterOptions,
 };
 
-
+[end of backend/services/productService.js]

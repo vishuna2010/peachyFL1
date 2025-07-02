@@ -1,4 +1,6 @@
-const db = require('../db'); // Assuming db.js is in the parent directory
+const db = require('../db');
+const { NotFoundError, BadRequestError, AppError, ConflictError } = require('../utils/AppError');
+const auditLogService = require('./auditLogService'); // Assuming path
 
 /**
  * Calculates the price with applied taxes based on a tax class.
@@ -11,45 +13,45 @@ const db = require('../db'); // Assuming db.js is in the parent directory
  *    - taxAmount: The total calculated tax amount (formatted).
  *    - priceWithTax: The base price plus total tax amount (formatted).
  *    - appliedRates: An array of objects detailing each applied tax rate
- *      (e.g., { name, rate_percentage, amount }).
+ *      (e.g., { name, rate, amount }). Note: 'rate' here is the decimal representation.
  */
 async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, dbClientOptional) {
   const queryRunner = dbClientOptional || db;
-
-  // Ensure basePrice is a number, default to 0 if null/undefined for calculation safety,
-  // but return original if it was null/undefined for the basePrice field in response.
   const originalBasePrice = (basePrice === null || basePrice === undefined) ? null : parseFloat(basePrice);
 
   if (taxClassId === null || taxClassId === undefined || originalBasePrice === null) {
     const price = originalBasePrice !== null ? originalBasePrice.toFixed(2) : null;
     return {
       basePrice: price,
-      taxAmount: (0.00).toFixed(2), // Ensure formatting for zero
+      taxAmount: (0.00).toFixed(2),
       priceWithTax: price,
       appliedRates: [],
     };
   }
 
-  const numericBasePrice = parseFloat(basePrice); // Ensure it's a number for calculations
-
-  let taxRates = [];
+  const numericBasePrice = parseFloat(basePrice);
+  let taxRatesDbResult = [];
   try {
     const sql = `
-      SELECT tr.id, tr.name, tr.rate_percentage, tr.tax_type
+      SELECT tr.id, tr.name, tr.rate, tr.is_compound -- Changed rate_percentage to rate, tax_type removed as it's not in DB schema
       FROM tax_rates tr
-      JOIN tax_class_rates tcr ON tr.id = tcr.tax_rate_id
-      WHERE tcr.tax_class_id = $1 AND tr.is_active = TRUE
+      -- Assuming direct link or join table if tax_rates are directly associated with tax_classes.
+      -- The original query used tax_class_rates, which is not defined in the provided seed schema for tax_rates.
+      -- For now, assuming tax_rates has a direct tax_class_id or is joined through a common mechanism.
+      -- The provided seed has tax_rates.tax_class_id.
+      WHERE tr.tax_class_id = $1 -- AND tr.is_active = TRUE (is_active not in tax_rates schema from seed)
       ORDER BY tr.priority ASC, tr.id ASC;
     `;
+    // If tax_rates are not directly linked via tax_class_id and is_active, this query needs adjustment.
+    // For now, proceeding with the assumption tax_rates has tax_class_id based on seed.
     const result = await queryRunner.query(sql, [taxClassId]);
-    taxRates = result.rows;
+    taxRatesDbResult = result.rows;
   } catch (error) {
     console.error('Error fetching tax rates:', error);
-    // Depending on desired behavior, you might throw the error or return with no tax
-    throw error; // Or return structure with error indication
+    throw error;
   }
 
-  if (taxRates.length === 0) {
+  if (taxRatesDbResult.length === 0) {
     return {
       basePrice: numericBasePrice.toFixed(2),
       taxAmount: (0.00).toFixed(2),
@@ -60,34 +62,38 @@ async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, dbClientOpt
 
   let totalTaxAmount = 0;
   const appliedRatesDetailed = [];
+  let currentTaxableBase = numericBasePrice; // For compound taxes
 
-  for (const rate of taxRates) {
-    const ratePercentage = parseFloat(rate.rate_percentage);
-    if (isNaN(ratePercentage)) {
-        console.warn(`Invalid rate_percentage for tax rate ID ${rate.id}: ${rate.rate_percentage}`);
-        continue; // Skip this tax rate
+  for (const rateInfo of taxRatesDbResult) {
+    const rateDecimal = parseFloat(rateInfo.rate); // rate is the decimal (e.g., 0.0825)
+    if (isNaN(rateDecimal)) {
+        console.warn(`Invalid rate for tax rate ID ${rateInfo.id}: ${rateInfo.rate}`);
+        continue;
     }
-    // The `ratePercentage` is already the decimal factor (e.g., 0.0825 for 8.25%)
-    // as it's fetched directly from `rate.rate_percentage` which should be stored as such.
-    // The seed script was updated to store it as a decimal (e.g., 8.25 / 100 = 0.0825).
-    const currentRateTax = numericBasePrice * ratePercentage;
-    totalTaxAmount += currentRateTax;
+
+    let taxOnThisRate;
+    if (rateInfo.is_compound) {
+        taxOnThisRate = currentTaxableBase * rateDecimal;
+        currentTaxableBase += taxOnThisRate; // Add this tax to the base for the next compound tax
+    } else {
+        taxOnThisRate = numericBasePrice * rateDecimal; // Non-compound tax applies to original base
+    }
+
+    totalTaxAmount += taxOnThisRate;
     appliedRatesDetailed.push({
-      id: rate.id,
-      name: rate.name,
-      rate_percentage: ratePercentage, // This is the decimal factor, e.g., 0.0825
-      amount: parseFloat(currentRateTax.toFixed(4)),
+      id: rateInfo.id,
+      name: rateInfo.name,
+      rate: rateDecimal, // Store the decimal rate
+      amount: parseFloat(taxOnThisRate.toFixed(4)), // Higher precision for intermediate sum
+      is_compound: rateInfo.is_compound,
     });
   }
 
   const priceWithTax = numericBasePrice + totalTaxAmount;
-
-  // Format final applied rates amounts to 2 decimal places for currency representation
   const formattedAppliedRates = appliedRatesDetailed.map(r => ({
       ...r,
-      amount: r.amount.toFixed(2)
+      amount: r.amount.toFixed(2) // Final formatting to 2 decimal places
   }));
-
 
   return {
     basePrice: numericBasePrice.toFixed(2),
@@ -97,26 +103,20 @@ async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, dbClientOpt
   };
 }
 
-// New function to calculate taxes for an entire cart
 async function calculateTaxForCartItems(cartItems, userId, addressForTaxCalculation, userIsTaxExempt, dbClientOptional) {
   const queryRunner = dbClientOptional || db;
   const line_items_with_tax_details = [];
   let overall_total_tax_amount = 0;
-  const tax_summary_details = {}; // Example: { "CA Sales Tax": { total_taxable_amount: X, total_tax_collected: Y } }
-
-  // userIsTaxExempt is now passed as a parameter.
-  // The internal fetch for user's tax exemption status is removed as orders.js handles it.
+  const tax_summary_details = {};
 
   if (userIsTaxExempt) {
-    console.log(`User ID ${userId} is tax exempt. Applying zero tax to cart items.`);
-    // If user is exempt, all tax amounts are zero
     for (const item of cartItems) {
       line_items_with_tax_details.push({
-        ...item, // Spread original item details like product_id, variant_id, quantity
-        calculated_exclusive_unit_price: parseFloat(item.unit_price).toFixed(2), // Assuming unit_price is pre-tax
+        ...item,
+        calculated_exclusive_unit_price: parseFloat(item.unit_price).toFixed(2),
         line_item_tax_amount: 0,
-        applied_tax_rate_percentage: 0,
-        tax_class_id_at_purchase: null, // Tax class ID might still be relevant for records, even if no tax applied
+        applied_tax_rate: 0, // Changed from applied_tax_rate_percentage
+        tax_class_id_at_purchase: null,
         applied_rates: []
       });
     }
@@ -130,81 +130,53 @@ async function calculateTaxForCartItems(cartItems, userId, addressForTaxCalculat
   for (const item of cartItems) {
     let productTaxClassId = null;
     try {
-      // Fetch product's tax_class_id
-      // Ensure product_id is used if variant_id is not present or if tax class is always on base product
-      const productInfoQuery = await queryRunner.query(
-        'SELECT tax_class_id FROM products WHERE id = $1',
-        [item.product_id] // item.product_id should be the base product ID
-      );
-      if (productInfoQuery.rows.length > 0) {
-        productTaxClassId = productInfoQuery.rows[0].tax_class_id;
-      }
+      const productInfoQuery = await queryRunner.query('SELECT tax_class_id FROM products WHERE id = $1', [item.product_id]);
+      if (productInfoQuery.rows.length > 0) productTaxClassId = productInfoQuery.rows[0].tax_class_id;
     } catch (productError) {
       console.error(`Error fetching tax_class_id for product ID ${item.product_id}:`, productError);
-      // Continue, will result in no tax for this item if taxClassId remains null
     }
 
-    // Assuming item.unit_price is the pre-tax price
     const basePriceForItem = parseFloat(item.unit_price);
     let itemTaxDetails;
 
     if (productTaxClassId) {
-      // Call the existing function for individual item tax calculation
-      // Note: calculatePriceWithAppliedTaxes expects basePrice for a single unit.
-      // The total line item tax will be quantity * taxAmountPerUnit.
       const singleItemTaxCalc = await calculatePriceWithAppliedTaxes(basePriceForItem, productTaxClassId, queryRunner);
       itemTaxDetails = {
         calculated_exclusive_unit_price: parseFloat(singleItemTaxCalc.basePrice).toFixed(2),
         line_item_tax_amount: parseFloat(singleItemTaxCalc.taxAmount) * item.quantity,
-        // For simplicity, let's find the primary rate or sum percentages if multiple apply.
-        // This part needs refinement based on how applied_tax_rate_percentage should be stored.
-        // For now, if multiple rates, we can sum them or pick the first one.
-        // Or, store the full appliedRates array if the DB schema for order_items allows.
-        applied_tax_rate_percentage: singleItemTaxCalc.appliedRates.length > 0
-            ? singleItemTaxCalc.appliedRates.reduce((sum, rate) => sum + rate.rate_percentage, 0) // Example: sum of rates
-            : 0,
-        applied_rates_summary: singleItemTaxCalc.appliedRates, // Keep the detailed breakdown
-        tax_class_id_at_purchase: productTaxClassId // Store the tax class ID used
+        applied_tax_rate: singleItemTaxCalc.appliedRates.length > 0 ? singleItemTaxCalc.appliedRates.reduce((sum, rate) => sum + rate.rate, 0) : 0, // Sum of decimal rates
+        applied_rates_summary: singleItemTaxCalc.appliedRates,
+        tax_class_id_at_purchase: productTaxClassId
       };
     } else {
-      // No tax class ID found or applicable
       itemTaxDetails = {
         calculated_exclusive_unit_price: basePriceForItem.toFixed(2),
         line_item_tax_amount: 0,
-        applied_tax_rate_percentage: 0,
+        applied_tax_rate: 0,
         applied_rates_summary: [],
         tax_class_id_at_purchase: null
       };
     }
 
-    line_items_with_tax_details.push({
-      ...item, // Original item properties (product_id, variant_id, quantity, unit_price)
-      ...itemTaxDetails
-    });
+    line_items_with_tax_details.push({ ...item, ...itemTaxDetails });
     overall_total_tax_amount += itemTaxDetails.line_item_tax_amount;
 
-    // Populate tax_summary_details
     itemTaxDetails.applied_rates_summary.forEach(rate => {
       if (rate && typeof rate.name === 'string' && rate.name.trim() !== '') {
         const rateNameKey = rate.name.trim();
         if (!tax_summary_details[rateNameKey]) {
-          tax_summary_details[rateNameKey] = { total_taxable_amount: 0, total_tax_collected: 0, rate_percentage: rate.rate_percentage };
+          tax_summary_details[rateNameKey] = { total_taxable_amount: 0, total_tax_collected: 0, rate: rate.rate }; // Changed to rate
         }
-        // Assuming basePriceForItem * item.quantity is the taxable amount for this rate component
         tax_summary_details[rateNameKey].total_taxable_amount += (basePriceForItem * item.quantity);
         tax_summary_details[rateNameKey].total_tax_collected += (parseFloat(rate.amount) * item.quantity);
-      } else {
-        console.warn('Skipping tax rate in summary due to missing or invalid name:', rate);
       }
     });
   }
 
-  // Ensure totals are correctly formatted and round taxable amounts appropriately
   for (const key in tax_summary_details) {
       tax_summary_details[key].total_taxable_amount = parseFloat(tax_summary_details[key].total_taxable_amount.toFixed(2));
       tax_summary_details[key].total_tax_collected = parseFloat(tax_summary_details[key].total_tax_collected.toFixed(2));
   }
-
 
   return {
     line_items_with_tax_details,
@@ -213,90 +185,43 @@ async function calculateTaxForCartItems(cartItems, userId, addressForTaxCalculat
   };
 }
 
-
-const { NotFoundError, ConflictError, BadRequestError, AppError } = require('../utils/AppError'); // Assuming AppError and others are in utils
-
-// --- Tax Class CRUD ---
-
-/**
- * Creates a new tax class.
- * @param {object} taxClassData - Contains name (string, required) and description (string, optional).
- * @returns {Promise<object>} The newly created tax class object.
- */
 async function createTaxClass(taxClassData) {
   const { name, description } = taxClassData;
-  if (!name || name.trim() === '') {
-    throw new BadRequestError('Tax class name is required.');
-  }
-
+  if (!name || name.trim() === '') throw new BadRequestError('Tax class name is required.');
   try {
     const existingClass = await db.query('SELECT id FROM tax_classes WHERE LOWER(name) = LOWER($1)', [name.trim()]);
-    if (existingClass.rows.length > 0) {
-      throw new ConflictError('A tax class with this name already exists.');
-    }
-
-    const result = await db.query(
-      'INSERT INTO tax_classes (name, description, created_at, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING *',
-      [name.trim(), description || null]
-    );
+    if (existingClass.rows.length > 0) throw new ConflictError('A tax class with this name already exists.');
+    const result = await db.query('INSERT INTO tax_classes (name, description) VALUES ($1, $2) RETURNING *', [name.trim(), description || null]);
     return result.rows[0];
   } catch (error) {
-    if (error.code === '23505') { // unique_violation
-      throw new ConflictError('A tax class with this name already exists (database constraint).');
-    }
+    if (error.code === '23505') throw new ConflictError('A tax class with this name already exists (DB constraint).');
     if (error instanceof AppError) throw error;
     console.error('[taxService.createTaxClass] Error:', error);
     throw new AppError('Failed to create tax class.', 500, 'TAX_CLASS_CREATION_FAILED');
   }
 }
 
-/**
- * Retrieves a paginated list of all tax classes.
- * @param {object} paginationOptions - Contains page (number, default 1) and limit (number, default 10).
- * @returns {Promise<object>} An object containing data (array of tax classes) and pagination details.
- */
 async function getAllTaxClasses(paginationOptions = {}) {
   const { page = 1, limit = 10 } = paginationOptions;
   const offset = (page - 1) * limit;
-
   try {
     const dataQuery = 'SELECT * FROM tax_classes ORDER BY name ASC LIMIT $1 OFFSET $2;';
     const dataResult = await db.query(dataQuery, [limit, offset]);
-
     const countQuery = 'SELECT COUNT(*) FROM tax_classes;';
     const countResult = await db.query(countQuery);
     const totalRecords = parseInt(countResult.rows[0].count, 10);
     const totalPages = Math.ceil(totalRecords / limit);
-
-    return {
-      data: dataResult.rows,
-      pagination: {
-        total: totalRecords,
-        page: page,
-        limit: limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1
-      }
-    };
+    return { data: dataResult.rows, pagination: { total: totalRecords, page, limit, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 } };
   } catch (error) {
     console.error('[taxService.getAllTaxClasses] Error:', error);
     throw new AppError('Failed to retrieve tax classes.', 500, 'TAX_CLASS_FETCH_ALL_FAILED');
   }
 }
 
-/**
- * Retrieves a specific tax class by its ID.
- * @param {number} taxClassId - The ID of the tax class.
- * @returns {Promise<object>} The tax class object.
- * @throws {NotFoundError} If not found.
- */
 async function getTaxClassById(taxClassId) {
   try {
     const result = await db.query('SELECT * FROM tax_classes WHERE id = $1', [taxClassId]);
-    if (result.rows.length === 0) {
-      throw new NotFoundError(`Tax class with ID ${taxClassId} not found.`);
-    }
+    if (result.rows.length === 0) throw new NotFoundError(`Tax class with ID ${taxClassId} not found.`);
     return result.rows[0];
   } catch (error) {
     if (error instanceof AppError) throw error;
@@ -305,77 +230,41 @@ async function getTaxClassById(taxClassId) {
   }
 }
 
-/**
- * Updates an existing tax class.
- * @param {number} taxClassId - The ID of the tax class to update.
- * @param {object} updateData - Contains name (string, optional) and/or description (string, optional).
- * @returns {Promise<object>} The updated tax class object.
- */
 async function updateTaxClass(taxClassId, updateData) {
   const { name, description } = updateData;
-
-  if (name === undefined && description === undefined) {
-    throw new BadRequestError('No fields provided for update. Please provide name or description.');
-  }
-
+  if (name === undefined && description === undefined) throw new BadRequestError('No fields provided for update.');
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
     const currentClassResult = await client.query('SELECT name, description FROM tax_classes WHERE id = $1 FOR UPDATE', [taxClassId]);
-    if (currentClassResult.rows.length === 0) {
-      throw new NotFoundError(`Tax class with ID ${taxClassId} not found.`);
-    }
+    if (currentClassResult.rows.length === 0) throw new NotFoundError(`Tax class with ID ${taxClassId} not found.`);
     const currentClass = currentClassResult.rows[0];
-
     const updateFields = {};
     let needsUpdate = false;
-
     if (name !== undefined && name.trim() !== currentClass.name) {
       const trimmedName = name.trim();
-      if (trimmedName === '') throw new BadRequestError('Tax class name cannot be empty if provided.');
+      if (trimmedName === '') throw new BadRequestError('Tax class name cannot be empty.');
       const existingClass = await client.query('SELECT id FROM tax_classes WHERE LOWER(name) = LOWER($1) AND id != $2', [trimmedName, taxClassId]);
-      if (existingClass.rows.length > 0) {
-        throw new ConflictError('Another tax class with this name already exists.');
-      }
+      if (existingClass.rows.length > 0) throw new ConflictError('Another tax class with this name already exists.');
       updateFields.name = trimmedName;
       needsUpdate = true;
     }
-
     if (description !== undefined && description !== currentClass.description) {
       updateFields.description = description === null || description.trim() === '' ? null : description.trim();
       needsUpdate = true;
     }
-
-    if (!needsUpdate && name === undefined && description === undefined) {
-        // This case should be caught by the initial check, but as a safeguard:
-        // if name or description were provided but identical to current, this path might be hit.
-        // The route handler already checks if name and description are both undefined.
-        // This ensures if they are provided but same as current, we don't proceed.
-        return currentClass; // No actual change
-    }
-
-    if (Object.keys(updateFields).length === 0) {
-        // All provided fields were identical to existing ones
-        return currentClass; // No actual change needed
-    }
-
-
+    if (!needsUpdate) return currentClass;
     const setClauses = Object.keys(updateFields).map((key, i) => `${key} = $${i + 1}`);
     const values = Object.values(updateFields);
     setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
-
     const updateQuery = `UPDATE tax_classes SET ${setClauses.join(', ')} WHERE id = $${values.length + 1} RETURNING *;`;
     values.push(taxClassId);
-
     const result = await client.query(updateQuery, values);
     await client.query('COMMIT');
     return result.rows[0];
-
   } catch (error) {
     if(client) await client.query('ROLLBACK');
-    if (error.code === '23505') {
-      throw new ConflictError('Another tax class with this name already exists (database constraint).');
-    }
+    if (error.code === '23505') throw new ConflictError('Another tax class with this name already exists (DB constraint).');
     if (error instanceof AppError) throw error;
     console.error(`[taxService.updateTaxClass] Error for ID ${taxClassId}:`, error);
     throw new AppError('Failed to update tax class.', 500, 'TAX_CLASS_UPDATE_FAILED');
@@ -384,19 +273,10 @@ async function updateTaxClass(taxClassId, updateData) {
   }
 }
 
-/**
- * Deletes a tax class.
- * @param {number} taxClassId - The ID of the tax class to delete.
- * @returns {Promise<object>} The data of the deleted tax class.
- */
 async function deleteTaxClass(taxClassId) {
   try {
-    // products.tax_class_id is ON DELETE SET NULL.
-    // tax_class_rates.tax_class_id is ON DELETE CASCADE.
     const result = await db.query('DELETE FROM tax_classes WHERE id = $1 RETURNING *', [taxClassId]);
-    if (result.rowCount === 0) {
-      throw new NotFoundError(`Tax class with ID ${taxClassId} not found.`);
-    }
+    if (result.rowCount === 0) throw new NotFoundError(`Tax class with ID ${taxClassId} not found.`);
     return result.rows[0];
   } catch (error) {
     if (error instanceof AppError) throw error;
@@ -405,60 +285,39 @@ async function deleteTaxClass(taxClassId) {
   }
 }
 
-// --- Tax Class Rates Management ---
-
-/**
- * Links a tax rate to a tax class.
- * @param {number} classId - The ID of the tax class.
- * @param {number} rateId - The ID of the tax rate.
- * @returns {Promise<object>} The new tax_class_rates record.
- */
 async function linkRateToClass(classId, rateId) {
   try {
     const classCheck = await db.query('SELECT id FROM tax_classes WHERE id = $1', [classId]);
-    if (classCheck.rows.length === 0) {
-      throw new NotFoundError(`Tax class with ID ${classId} not found.`);
-    }
+    if (classCheck.rows.length === 0) throw new NotFoundError(`Tax class with ID ${classId} not found.`);
     const rateCheck = await db.query('SELECT id FROM tax_rates WHERE id = $1', [rateId]);
-    if (rateCheck.rows.length === 0) {
-      throw new BadRequestError(`Tax rate with ID ${rateId} not found.`);
-    }
-
-    const result = await db.query(
-      'INSERT INTO tax_class_rates (tax_class_id, tax_rate_id) VALUES ($1, $2) RETURNING *',
-      [classId, rateId]
-    );
-    return result.rows[0];
+    if (rateCheck.rows.length === 0) throw new BadRequestError(`Tax rate with ID ${rateId} not found.`);
+    // The join table tax_class_rates is not in the provided seed.js.
+    // Assuming it should be: CREATE TABLE tax_class_rates (tax_class_id INT, tax_rate_id INT, PRIMARY KEY (tax_class_id, tax_rate_id));
+    // For now, this function will likely fail if that table doesn't exist.
+    // If the intention was that tax_rates has a tax_class_id directly, this function is redundant.
+    // The seed implies tax_rates.tax_class_id directly links.
+    // This function might be for a many-to-many setup not reflected in current seed for tax_rates.
+    // console.warn("[taxService.linkRateToClass] This function assumes a 'tax_class_rates' join table which might not match current schema.");
+    // If tax_rates.tax_class_id is the link, this function might be about setting that field on tax_rates,
+    // but that would be an updateTaxRate operation.
+    // For now, assuming the join table `tax_class_rates` was intended for a M2M relationship:
+    // const result = await db.query('INSERT INTO tax_class_rates (tax_class_id, tax_rate_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING *', [classId, rateId]);
+    // return result.rows[0];
+    throw new AppError('Tax rate linking to class via join table is not fully implemented based on current schema understanding.', 501);
   } catch (error) {
-    if (error.code === '23505') { // unique_violation
-      throw new ConflictError('This tax rate is already linked to this tax class.');
-    }
+    if (error.code === '23505') throw new ConflictError('This tax rate is already linked to this tax class.');
     if (error instanceof AppError) throw error;
     console.error(`[taxService.linkRateToClass] Error linking rate ${rateId} to class ${classId}:`, error);
     throw new AppError('Failed to link tax rate to class.', 500, 'TAX_CLASS_RATE_LINK_FAILED');
   }
 }
 
-/**
- * Lists all tax rates linked to a specific tax class.
- * @param {number} classId - The ID of the tax class.
- * @returns {Promise<Array<object>>} An array of tax rate objects.
- */
 async function getRatesForClass(classId) {
   try {
     const classCheck = await db.query('SELECT id FROM tax_classes WHERE id = $1', [classId]);
-    if (classCheck.rows.length === 0) {
-      throw new NotFoundError(`Tax class with ID ${classId} not found.`);
-    }
-
-    const result = await db.query(
-      `SELECT tr.*
-       FROM tax_rates tr
-       JOIN tax_class_rates tcr ON tr.id = tcr.tax_rate_id
-       WHERE tcr.tax_class_id = $1
-       ORDER BY tr.name ASC;`,
-      [classId]
-    );
+    if (classCheck.rows.length === 0) throw new NotFoundError(`Tax class with ID ${classId} not found.`);
+    // Assumes tax_rates.tax_class_id is the link as per seed.js
+    const result = await db.query(`SELECT * FROM tax_rates WHERE tax_class_id = $1 ORDER BY name ASC;`, [classId]);
     return result.rows;
   } catch (error) {
     if (error instanceof AppError) throw error;
@@ -467,22 +326,15 @@ async function getRatesForClass(classId) {
   }
 }
 
-/**
- * Unlinks a tax rate from a tax class.
- * @param {number} classId - The ID of the tax class.
- * @param {number} rateId - The ID of the tax rate.
- * @returns {Promise<object>} Data of the unlinked relation.
- */
 async function unlinkRateFromClass(classId, rateId) {
   try {
-    const result = await db.query(
-      'DELETE FROM tax_class_rates WHERE tax_class_id = $1 AND tax_rate_id = $2 RETURNING *',
-      [classId, rateId]
-    );
-    if (result.rowCount === 0) {
-      throw new NotFoundError(`Link between tax class ID ${classId} and tax rate ID ${rateId} not found.`);
-    }
-    return result.rows[0];
+    // This function implies a join table `tax_class_rates`.
+    // If tax_rates.tax_class_id is the link, this would mean setting tax_rates.tax_class_id to NULL for that rate.
+    // console.warn("[taxService.unlinkRateFromClass] This function assumes a 'tax_class_rates' join table.");
+    // const result = await db.query('DELETE FROM tax_class_rates WHERE tax_class_id = $1 AND tax_rate_id = $2 RETURNING *', [classId, rateId]);
+    // if (result.rowCount === 0) throw new NotFoundError(`Link not found.`);
+    // return result.rows[0];
+    throw new AppError('Tax rate unlinking from class via join table is not fully implemented based on current schema understanding.', 501);
   } catch (error) {
     if (error instanceof AppError) throw error;
     console.error(`[taxService.unlinkRateFromClass] Error unlinking rate ${rateId} from class ${classId}:`, error);
@@ -490,80 +342,40 @@ async function unlinkRateFromClass(classId, rateId) {
   }
 }
 
-
-module.exports = {
-  calculatePriceWithAppliedTaxes,
-  calculateTaxForCartItems, // Export the new function
-
-  // Tax Class CRUD
-  createTaxClass,
-  getAllTaxClasses,
-  getTaxClassById,
-  updateTaxClass,
-  deleteTaxClass,
-
-  // Tax Class Rates Management
-  linkRateToClass,
-  getRatesForClass,
-  unlinkRateFromClass,
-
-  // Tax Rate CRUD
-  createTaxRate,
-  getAllTaxRates,
-  getTaxRateById,
-  updateTaxRate,
-  deleteTaxRate,
-};
-
-// --- Tax Rate CRUD ---
-
-/**
- * Creates a new tax rate.
- * @param {object} taxRateData - Contains name, rate_percentage, jurisdiction, tax_type, etc.
- * @returns {Promise<object>} The newly created tax rate object.
- */
 async function createTaxRate(taxRateData) {
-  const {
-    name, rate_percentage, jurisdiction, tax_type, tax_code,
-    is_active, valid_from, valid_until
-  } = taxRateData;
+  const { name, rate, country, state_province, postal_code, is_compound, priority, tax_class_id } = taxRateData; // Changed rate_percentage to rate
 
-  // Validations from route handler
   if (!name || name.trim() === '') throw new BadRequestError('Tax rate name is required.');
-  if (name.trim().length < 2 || name.trim().length > 255) throw new BadRequestError('Name must be between 2 and 255 characters.');
-  if (rate_percentage === undefined || isNaN(parseFloat(rate_percentage))) throw new BadRequestError('Rate percentage is required and must be a number.');
-  const numRatePercentage = parseFloat(rate_percentage);
-  if (numRatePercentage < 0 || numRatePercentage > 1) throw new BadRequestError('Rate percentage must be a decimal between 0.0000 and 1.0000.');
-  if (!jurisdiction || jurisdiction.trim() === '') throw new BadRequestError('Jurisdiction is required.');
-  if (!tax_type || tax_type.trim() === '') throw new BadRequestError('Tax type is required.');
+  if (rate === undefined || isNaN(parseFloat(rate))) throw new BadRequestError('Rate is required and must be a number.');
+  const numRate = parseFloat(rate);
+  // Assuming rate is stored as decimal e.g. 0.0825 for 8.25%
+  if (numRate < 0) throw new BadRequestError('Rate must be non-negative.'); // Max check might depend on how it's used (e.g. > 1 if it's a percentage like 20 for 20%)
+                                                                          // Seed stores 0.0825, 0.20. So this check is fine.
+  if (!country || country.trim() === '') throw new BadRequestError('Country code is required.');
+  if (!tax_class_id || isNaN(parseInt(tax_class_id))) throw new BadRequestError('Valid Tax Class ID is required.');
 
-  const finalValidFrom = valid_from ? new Date(valid_from) : null;
-  const finalValidUntil = valid_until ? new Date(valid_until) : null;
-
-  if (finalValidFrom && finalValidUntil && finalValidUntil < finalValidFrom) {
-    throw new BadRequestError('Valid until date cannot be before valid from date.');
-  }
 
   try {
-    const existingRate = await db.query('SELECT id FROM tax_rates WHERE LOWER(name) = LOWER($1)', [name.trim()]);
+    const existingRate = await db.query(
+        'SELECT id FROM tax_rates WHERE LOWER(name) = LOWER($1) AND tax_class_id = $2 AND country = $3 AND COALESCE(state_province, \'\') = COALESCE($4, \'\') AND COALESCE(postal_code, \'\') = COALESCE($5, \'\')',
+        [name.trim(), tax_class_id, country.trim().toUpperCase(), state_province ? state_province.trim() : null, postal_code ? postal_code.trim() : null]
+    );
     if (existingRate.rows.length > 0) {
-      throw new ConflictError('A tax rate with this name already exists.');
+      throw new ConflictError('A tax rate with these exact parameters (name, class, jurisdiction) already exists.');
     }
 
     const result = await db.query(
-      `INSERT INTO tax_rates (name, rate_percentage, jurisdiction, tax_type, tax_code, is_active, valid_from, valid_until, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING *`,
+      `INSERT INTO tax_rates (name, rate, country, state_province, postal_code, is_compound, priority, tax_class_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [
-        name.trim(), numRatePercentage, jurisdiction.trim(), tax_type.trim(), tax_code || null,
-        is_active === undefined ? true : is_active,
-        finalValidFrom,
-        finalValidUntil
+        name.trim(), numRate, country.trim().toUpperCase(), state_province ? state_province.trim() : null, postal_code ? postal_code.trim() : null,
+        is_compound || false, priority || 0, tax_class_id
       ]
     );
     return result.rows[0];
   } catch (error) {
-    if (error.code === '23505') { // Unique violation on name (DB constraint)
-      throw new ConflictError('A tax rate with this name already exists (database constraint).');
+    if (error.code === '23505') { // unique_violation for the table's defined UNIQUE constraints
+      throw new ConflictError('A tax rate with these parameters already exists (database constraint).');
     }
     if (error instanceof AppError) throw error;
     console.error('[taxService.createTaxRate] Error:', error);
@@ -571,57 +383,47 @@ async function createTaxRate(taxRateData) {
   }
 }
 
-/**
- * Retrieves a paginated and filtered list of all tax rates.
- * @param {object} filterOptions - Contains is_active, tax_type, jurisdiction.
- * @param {object} paginationOptions - Contains page and limit.
- * @returns {Promise<object>} An object containing data (array of tax rates) and pagination details.
- */
 async function getAllTaxRates(filterOptions = {}, paginationOptions = {}) {
-  const { is_active, tax_type, jurisdiction } = filterOptions;
-  let { page = 1, limit = 10 } = paginationOptions;
+  const { tax_class_id, country, is_active } = filterOptions; // is_active not in schema
+  let { page = 1, limit = 10, sortBy = 'name', sortOrder = 'ASC' } = paginationOptions;
 
-  page = parseInt(page, 10);
-  if (isNaN(page) || page < 1) page = 1;
-  limit = parseInt(limit, 10);
-  if (isNaN(limit) || limit < 1) limit = 10;
-  limit = Math.min(limit, 1000); // Max limit
-
+  page = parseInt(page, 10); if (isNaN(page) || page < 1) page = 1;
+  limit = parseInt(limit, 10); if (isNaN(limit) || limit < 1) limit = 10;
+  limit = Math.min(limit, 100);
   const offset = (page - 1) * limit;
 
   const queryParams = [];
   const whereClauses = [];
   let paramIndex = 1;
 
-  if (is_active !== undefined) {
-    whereClauses.push(`is_active = $${paramIndex++}`);
-    queryParams.push(is_active);
-  }
-  if (tax_type) {
-    whereClauses.push(`LOWER(tax_type) = LOWER($${paramIndex++})`);
-    queryParams.push(tax_type);
-  }
-  if (jurisdiction) {
-    whereClauses.push(`LOWER(jurisdiction) = LOWER($${paramIndex++})`);
-    queryParams.push(jurisdiction);
-  }
+  if (tax_class_id) { whereClauses.push(`tr.tax_class_id = $${paramIndex++}`); queryParams.push(tax_class_id); }
+  if (country) { whereClauses.push(`tr.country = $${paramIndex++}`); queryParams.push(country.toUpperCase()); }
+  // is_active filter removed as column not in schema
 
   const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
+  const allowedSorts = { 'name': 'tr.name', 'rate': 'tr.rate', 'country': 'tr.country', 'tax_class_name': 'tc.name' };
+  const safeSortBy = allowedSorts[sortBy] || 'tr.name';
+  const safeSortOrder = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+  const orderByClause = `ORDER BY ${safeSortBy} ${safeSortOrder}, tr.id ${safeSortOrder}`;
+
+
   try {
     const dataQuery = `
-      SELECT id, name, rate_percentage, jurisdiction, tax_type, tax_code,
-             is_active, priority, valid_from, valid_until, created_at, updated_at
-      FROM tax_rates
+      SELECT tr.id, tr.name, tr.rate, tr.country, tr.state_province, tr.postal_code,
+             tr.is_compound, tr.priority, tr.tax_class_id, tc.name as tax_class_name,
+             tr.created_at, tr.updated_at
+      FROM tax_rates tr
+      JOIN tax_classes tc ON tr.tax_class_id = tc.id
       ${whereString}
-      ORDER BY name ASC
+      ${orderByClause}
       LIMIT $${paramIndex++} OFFSET $${paramIndex++};
     `;
     const dataParams = [...queryParams, limit, offset];
     const dataResult = await db.query(dataQuery, dataParams);
 
-    const countQuery = `SELECT COUNT(*) FROM tax_rates ${whereString};`;
-    const countParams = queryParams.slice(0, paramIndex - 2); // Only filter params
+    const countQuery = `SELECT COUNT(tr.id) FROM tax_rates tr ${whereString};`;
+    const countParams = queryParams.slice(0, paramIndex - 2);
     const countResult = await db.query(countQuery, countParams);
 
     const totalRecords = parseInt(countResult.rows[0].count, 10);
@@ -629,37 +431,22 @@ async function getAllTaxRates(filterOptions = {}, paginationOptions = {}) {
 
     return {
       data: dataResult.rows,
-      pagination: {
-        total: totalRecords,
-        page,
-        limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-        filters: {
-          is_active: is_active !== undefined ? is_active : null,
-          tax_type: tax_type || null,
-          jurisdiction: jurisdiction || null
-        }
-      }
+      pagination: { total: totalRecords, page, limit, totalPages, sortBy, sortOrder: safeSortOrder }
     };
   } catch (error) {
-    console.error('[taxService.getAllTaxRates] Error:', error);
-    throw new AppError('Failed to retrieve tax rates.', 500, 'TAX_RATE_FETCH_ALL_FAILED');
+    console.error('[taxService.getAllTaxRates] Error:', error.message, error.stack); // Log more details
+    throw new AppError('Failed to retrieve tax rates.', 500, 'TAX_RATE_FETCH_ALL_FAILED', {originalError: error.message});
   }
 }
 
-/**
- * Retrieves a specific tax rate by its ID.
- * @param {number} taxRateId - The ID of the tax rate.
- * @returns {Promise<object>} The tax rate object.
- */
 async function getTaxRateById(taxRateId) {
   try {
-    const result = await db.query('SELECT * FROM tax_rates WHERE id = $1', [taxRateId]);
-    if (result.rows.length === 0) {
-      throw new NotFoundError(`Tax rate with ID ${taxRateId} not found.`);
-    }
+    const result = await db.query(
+      `SELECT tr.*, tc.name as tax_class_name
+       FROM tax_rates tr
+       JOIN tax_classes tc ON tr.tax_class_id = tc.id
+       WHERE tr.id = $1`, [taxRateId]);
+    if (result.rows.length === 0) throw new NotFoundError(`Tax rate with ID ${taxRateId} not found.`);
     return result.rows[0];
   } catch (error) {
     if (error instanceof AppError) throw error;
@@ -668,91 +455,37 @@ async function getTaxRateById(taxRateId) {
   }
 }
 
-/**
- * Updates an existing tax rate.
- * @param {number} taxRateId - The ID of the tax rate to update.
- * @param {object} updateData - Object containing fields to update.
- * @returns {Promise<object>} The updated tax rate object.
- */
 async function updateTaxRate(taxRateId, updateData) {
-  const updatableFields = ['name', 'rate_percentage', 'jurisdiction', 'tax_type', 'tax_code', 'is_active', 'valid_from', 'valid_until'];
-  const hasUpdates = updatableFields.some(field => updateData[field] !== undefined);
-  if (!hasUpdates) {
-    throw new BadRequestError('No fields provided for update.');
-  }
+  const { name, rate, country, state_province, postal_code, is_compound, priority, tax_class_id } = updateData; // Changed rate_percentage to rate
+  const updatableFields = ['name', 'rate', 'country', 'state_province', 'postal_code', 'is_compound', 'priority', 'tax_class_id'];
 
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-
     const currentRateResult = await client.query('SELECT * FROM tax_rates WHERE id = $1 FOR UPDATE', [taxRateId]);
-    if (currentRateResult.rows.length === 0) {
-      throw new NotFoundError(`Tax rate with ID ${taxRateId} not found.`);
-    }
-    const currentRate = currentRateResult.rows[0];
-
-    const finalUpdateData = { ...updateData }; // Clone to avoid mutating original
-
-    // Validate and prepare fields
-    if (finalUpdateData.name !== undefined) finalUpdateData.name = finalUpdateData.name.trim();
-    if (finalUpdateData.rate_percentage !== undefined) {
-      finalUpdateData.rate_percentage = parseFloat(finalUpdateData.rate_percentage);
-      if (isNaN(finalUpdateData.rate_percentage) || finalUpdateData.rate_percentage < 0 || finalUpdateData.rate_percentage > 1) {
-        throw new BadRequestError('Rate percentage must be a decimal between 0.0000 and 1.0000.');
-      }
-    }
-    if (finalUpdateData.jurisdiction !== undefined) finalUpdateData.jurisdiction = finalUpdateData.jurisdiction.trim();
-    if (finalUpdateData.tax_type !== undefined) finalUpdateData.tax_type = finalUpdateData.tax_type.trim();
-    if (finalUpdateData.tax_code !== undefined && finalUpdateData.tax_code !== null) finalUpdateData.tax_code = finalUpdateData.tax_code.trim();
-
-
-    let finalValidFrom = finalUpdateData.valid_from !== undefined ? (finalUpdateData.valid_from ? new Date(finalUpdateData.valid_from) : null) : (currentRate.valid_from ? new Date(currentRate.valid_from) : null);
-    let finalValidUntil = finalUpdateData.valid_until !== undefined ? (finalUpdateData.valid_until ? new Date(finalUpdateData.valid_until) : null) : (currentRate.valid_until ? new Date(currentRate.valid_until) : null);
-
-    // Store effective dates back into finalUpdateData for SET clause construction
-    if (finalUpdateData.valid_from !== undefined) finalUpdateData.valid_from = finalValidFrom;
-    if (finalUpdateData.valid_until !== undefined) finalUpdateData.valid_until = finalValidUntil;
-
-
-    if (finalValidFrom && finalValidUntil && finalValidUntil < finalValidFrom) {
-      throw new BadRequestError('Valid until date cannot be before valid from date.');
-    }
-
-    if (finalUpdateData.name && finalUpdateData.name !== currentRate.name) {
-      const existingRate = await client.query('SELECT id FROM tax_rates WHERE LOWER(name) = LOWER($1) AND id != $2', [finalUpdateData.name, taxRateId]);
-      if (existingRate.rows.length > 0) {
-        throw new ConflictError('Another tax rate with this name already exists.');
-      }
-    }
+    if (currentRateResult.rows.length === 0) throw new NotFoundError(`Tax rate with ID ${taxRateId} not found.`);
 
     const setClauses = [];
     const values = [];
     let paramIndex = 1;
 
     updatableFields.forEach(field => {
-      if (finalUpdateData[field] !== undefined) {
-        // Check if the new value is actually different from the current one
-        // For dates, compare Date objects if they are not null
-        let currentValue = currentRate[field];
-        let newValue = finalUpdateData[field];
-
-        if ((field === 'valid_from' || field === 'valid_until')) {
-             currentValue = currentValue ? new Date(currentValue).toISOString() : null;
-             newValue = newValue ? new Date(newValue).toISOString() : null;
+      if (updateData[field] !== undefined) {
+        let valueToSet = updateData[field];
+        if (field === 'rate' && (isNaN(parseFloat(valueToSet)) || parseFloat(valueToSet) < 0)) {
+             throw new BadRequestError('Rate must be a non-negative number.');
         }
+        if (field === 'country' && valueToSet) valueToSet = valueToSet.trim().toUpperCase();
+        if ((field === 'state_province' || field === 'postal_code' || field === 'name') && valueToSet) valueToSet = valueToSet.trim();
 
-        if (newValue !== currentValue) {
-            setClauses.push(`${field} = $${paramIndex++}`);
-            values.push(finalUpdateData[field] === '' && (field === 'tax_code') ? null : finalUpdateData[field]);
-        }
+        setClauses.push(`${field} = $${paramIndex++}`);
+        values.push(valueToSet === '' && (field === 'state_province' || field === 'postal_code') ? null : valueToSet);
       }
     });
 
     if (setClauses.length === 0) {
-      await client.query('ROLLBACK'); // Release lock
-      return currentRate; // No actual changes to apply
+      await client.query('ROLLBACK'); return currentRateResult.rows[0];
     }
-
     setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(taxRateId);
 
@@ -760,12 +493,9 @@ async function updateTaxRate(taxRateId, updateData) {
     const result = await client.query(updateQuery, values);
     await client.query('COMMIT');
     return result.rows[0];
-
   } catch (error) {
     if(client) await client.query('ROLLBACK');
-    if (error.code === '23505' && error.constraint && error.constraint.includes('name')) { // More specific check for name constraint
-      throw new ConflictError('Another tax rate with this name already exists (database constraint).');
-    }
+    if (error.code === '23505') throw new ConflictError('A tax rate with these parameters already exists (DB constraint).');
     if (error instanceof AppError) throw error;
     console.error(`[taxService.updateTaxRate] Error for ID ${taxRateId}:`, error);
     throw new AppError('Failed to update tax rate.', 500, 'TAX_RATE_UPDATE_FAILED');
@@ -774,18 +504,10 @@ async function updateTaxRate(taxRateId, updateData) {
   }
 }
 
-/**
- * Deletes a tax rate.
- * @param {number} taxRateId - The ID of the tax rate to delete.
- * @returns {Promise<object>} The data of the deleted tax rate.
- */
 async function deleteTaxRate(taxRateId) {
   try {
-    // tax_class_rates.tax_rate_id is ON DELETE CASCADE
     const result = await db.query('DELETE FROM tax_rates WHERE id = $1 RETURNING *', [taxRateId]);
-    if (result.rowCount === 0) {
-      throw new NotFoundError(`Tax rate with ID ${taxRateId} not found.`);
-    }
+    if (result.rowCount === 0) throw new NotFoundError(`Tax rate with ID ${taxRateId} not found.`);
     return result.rows[0];
   } catch (error) {
     if (error instanceof AppError) throw error;
@@ -793,3 +515,5 @@ async function deleteTaxRate(taxRateId) {
     throw new AppError('Failed to delete tax rate.', 500, 'TAX_RATE_DELETE_FAILED');
   }
 }
+
+[end of backend/services/taxService.js]
