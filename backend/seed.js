@@ -2,6 +2,7 @@
 require('dotenv').config();
 
 const { Pool } = require('pg');
+const config = require('./config'); // Added for currencyCode access
 const bcrypt = require('bcrypt');
 
 // Configure the database connection using environment variables
@@ -921,10 +922,10 @@ async function seedProductVariants(client, seededDataIds) {
         }
 
         await client.query(
-          `INSERT INTO inventory_batches (variant_id, product_id, sku, quantity_received, quantity_remaining, cost_price_per_unit)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT DO NOTHING;`,
-          [variantId, productId, variantSku, variantStock, variantStock, variantCostPrice]
+          `INSERT INTO inventory_batches (variant_id, product_id, sku, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, batch_number, received_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+           ON CONFLICT (product_id, variant_id, batch_number) DO NOTHING;`, // Using the unique constraint for conflict
+          [variantId, productId, variantSku, variantStock, variantStock, variantCostPrice, (config.company && config.company.currencyCode) || 'USD', `SEED-${variantSku}`]
         );
         console.log(`    Created/Ensured initial inventory batch for variant SKU ${variantSku}`);
       }
