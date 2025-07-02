@@ -3,7 +3,7 @@ const router = express.Router();
 const { isAuthenticated, checkPermission } = require('../auth');
 const { query, param, body, validationResult } = require('express-validator');
 const reviewService = require('../services/reviewService');
-const { NotFoundError } = require('../utils/AppError'); // Only NotFoundError might be directly thrown by routes if service handles others
+const { NotFoundError, BadRequestError } = require('../utils/AppError'); // Added BadRequestError
 
 // Endpoint 1: GET /api/admin/reviews (List All Reviews for Admin)
 router.get(
@@ -13,7 +13,7 @@ router.get(
   [
     query('page').optional().isInt({ min: 1 }).toInt().default(1),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10),
-    query('status').optional().isString().isIn(['pending', 'approved', 'rejected']),
+    query('status').optional().isString().trim().toLowerCase().isIn(['pending', 'approved', 'rejected']), // 'rejected' will map to is_approved: false
     query('productId').optional().isInt({ gt: 0 }).toInt(),
     query('userId').optional().isInt({ gt: 0 }).toInt(),
     query('rating').optional().isInt({ min: 1, max: 5 }).toInt(),
@@ -27,7 +27,7 @@ router.get(
       return true;
     }),
     query('sortBy').optional().isString().trim().isIn([
-      'created_at', 'rating', 'status', 'product_name', 'user_name'
+      'created_at', 'rating', 'is_approved', 'product_name', 'user_name' // Changed 'status' to 'is_approved'
     ]).withMessage('Invalid sortBy parameter.').default('created_at'),
     query('sortOrder').optional().isString().trim().toUpperCase().isIn(['ASC', 'DESC']).default('DESC')
   ],
@@ -38,12 +38,13 @@ router.get(
     }
 
     try {
-      // Pass all validated and sanitized query params to the service
+      // The reviewService.getAllReviews now handles mapping string 'status' query param
+      // to boolean 'is_approved' logic.
       const options = { ...req.query };
       const result = await reviewService.getAllReviews(options);
-      res.json(result); // Service returns { data: [], pagination: {} }
+      res.json(result);
     } catch (error) {
-      next(error); // Pass errors from service to global error handler
+      next(error);
     }
   }
 );
@@ -61,8 +62,7 @@ router.get(
     const { reviewId } = req.params;
     try {
       const review = await reviewService.getReviewById(reviewId);
-      // reviewService.getReviewById throws NotFoundError if not found
-      res.json(review);
+      res.json(review); // reviewService now returns is_approved instead of status
     } catch (error) {
       next(error);
     }
@@ -70,33 +70,43 @@ router.get(
 );
 
 // Endpoint 3: PUT /api/admin/reviews/:reviewId/status (Update Review Status)
-// This route specifically updates status. A more general PUT /:reviewId could update other fields.
 router.put(
   '/:reviewId/status',
   isAuthenticated,
-  checkPermission('reviews:manage'), // Or a more specific 'reviews:edit_status'
+  checkPermission('reviews:manage'),
   [
     param('reviewId').isInt({ gt: 0 }).withMessage('Review ID must be a positive integer.').toInt(),
-    body('status').isString().isIn(['approved', 'rejected', 'pending']).withMessage("Status must be one of: 'pending', 'approved', 'rejected'.")
+    body('status').isString().trim().toLowerCase().isIn(['approved', 'rejected', 'pending']).withMessage("Status must be one of: 'pending', 'approved', 'rejected'.")
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { reviewId } = req.params;
-    const { status } = req.body;
+    const { status } = req.body; // status is 'approved', 'pending', or 'rejected'
     const adminUserId = req.user.userId;
     const adminUserEmail = req.user.email;
 
+    let is_approved_value;
+    if (status === 'approved') {
+      is_approved_value = true;
+    } else if (status === 'pending' || status === 'rejected') {
+      // Both 'pending' and 'rejected' map to is_approved = false
+      // The distinction, if needed, would have to be handled by another field or not at all if only approval matters.
+      is_approved_value = false;
+    } else {
+      // This case should ideally not be reached due to isIn validator, but as a safeguard:
+      return next(new BadRequestError("Invalid status value provided."));
+    }
+
     try {
-      // The service method `updateReview` can handle just status updates
       const updatedReview = await reviewService.updateReview(
         reviewId,
-        { status }, // Pass only status in updateData
+        { is_approved: is_approved_value }, // Pass the boolean is_approved
         adminUserId,
         adminUserEmail
       );
-      res.json(updatedReview);
+      res.json(updatedReview); // reviewService now returns is_approved
     } catch (error) {
       next(error);
     }
@@ -107,7 +117,7 @@ router.put(
 router.delete(
   '/:reviewId',
   isAuthenticated,
-  checkPermission('reviews:manage'), // Or a more specific 'reviews:delete'
+  checkPermission('reviews:manage'),
   [param('reviewId').isInt({ gt: 0 }).withMessage('Review ID must be a positive integer.').toInt()],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -119,7 +129,6 @@ router.delete(
 
     try {
       await reviewService.deleteReview(reviewId, adminUserId, adminUserEmail);
-      // deleteReview service method handles NotFoundError and internal transaction.
       res.status(204).send();
     } catch (error) {
       next(error);
