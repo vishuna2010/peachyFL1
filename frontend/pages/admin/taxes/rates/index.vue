@@ -3,7 +3,7 @@
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-semibold text-gray-900">Tax Rates</h1>
       <NuxtLink to="/admin/taxes/rates/new"
-        class="inline-flex items-center justify-center rounded-md border border-transparent bg-brand-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-primary-dark focus:outline-none focus:ring-2 focus:ring-brand-primary-light focus:ring-offset-2 sm:w-auto">
+        class="inline-flex items-center justify-center rounded-md border border-transparent bg-peach-pink px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-blue-deep focus:outline-none focus:ring-2 focus:ring-peach-pink focus:ring-offset-2 sm:w-auto">
         Add New Tax Rate
       </NuxtLink>
     </div>

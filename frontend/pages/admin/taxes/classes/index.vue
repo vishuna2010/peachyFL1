@@ -3,7 +3,7 @@
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-semibold text-gray-900">Tax Classes</h1>
       <NuxtLink to="/admin/taxes/classes/new"
-        class="inline-flex items-center justify-center rounded-md border border-transparent bg-brand-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-primary-dark focus:outline-none focus:ring-2 focus:ring-brand-primary-light focus:ring-offset-2 sm:w-auto">
+        class="inline-flex items-center justify-center rounded-md border border-transparent bg-peach-pink px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-blue-deep focus:outline-none focus:ring-2 focus:ring-peach-pink focus:ring-offset-2 sm:w-auto">
         Add New Tax Class
       </NuxtLink>
     </div>
@@ -18,7 +18,7 @@
       <p class="text-lg text-red-600">Could not load tax classes.</p>
       <p class="text-sm text-red-500 mt-1">{{ fetchError }}</p>
       <button @click="fetchTaxClasses"
-        class="mt-4 py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-brand-primary hover:bg-brand-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary-light">
+        class="mt-4 py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-peach-pink hover:bg-sky-blue-deep focus:outline-none focus:ring-2 focus:ring-peach-pink focus:ring-offset-2">
         Retry
       </button>
     </div>
