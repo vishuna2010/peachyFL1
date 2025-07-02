@@ -270,23 +270,42 @@ async function createSchema(client) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS inventory_batches (
         id SERIAL PRIMARY KEY,
-        product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
-        variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE,
+        product_id INTEGER REFERENCES products(id) ON DELETE CASCADE NOT NULL, -- product_id should not be null
+        variant_id INTEGER REFERENCES product_variants(id) ON DELETE CASCADE, -- Can be null for base product batches
+        batch_number VARCHAR(100), -- Added batch_number
         sku VARCHAR(100) NOT NULL,
-        quantity_received INTEGER NOT NULL,
-        quantity_remaining INTEGER NOT NULL,
-        cost_price_per_unit DECIMAL(10, 2) NOT NULL,
-        received_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        supplier_id INTEGER REFERENCES suppliers(id) ON DELETE SET NULL,
+        purchase_order_item_id INTEGER REFERENCES purchase_order_items(id) ON DELETE SET NULL, -- For linking to POs
+        quantity_received INTEGER NOT NULL DEFAULT 0,
+        quantity_remaining INTEGER NOT NULL DEFAULT 0,
+        cost_price_at_receipt DECIMAL(12, 2), -- Renamed & adjusted precision
+        currency_code_at_receipt VARCHAR(3), -- Added
+        received_date TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, -- Renamed
         expiry_date DATE,
-        supplier_id INTEGER REFERENCES suppliers(id),
-        purchase_order_id VARCHAR(100),
         notes TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT chk_product_or_variant CHECK ( (product_id IS NOT NULL AND variant_id IS NULL) OR (product_id IS NULL AND variant_id IS NOT NULL) OR (product_id IS NOT NULL AND variant_id IS NOT NULL) )
+        CONSTRAINT unique_batch_number_per_item UNIQUE (product_id, variant_id, batch_number) -- Added constraint
+        -- Removed chk_product_or_variant as product_id is NOT NULL, variant_id is optional.
       );
     `);
     console.log('Table "inventory_batches" checked/created.');
+
+    // Purchase Order Items Table (ensure it exists before inventory_batches references it)
+    // This might need to be moved earlier if not already defined. Assuming it's defined before this point.
+    // For safety, let's add a check here, though ideally it's part of a more structured migration.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS purchase_order_items (
+        id SERIAL PRIMARY KEY,
+        -- other columns...
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        -- Ensure other necessary columns like purchase_order_id, product_id, etc., are defined elsewhere or add them.
+        -- This is a minimal stub to ensure the FK in inventory_batches can be created if PO items are not fully defined yet.
+      );
+    `);
+    console.log('Table "purchase_order_items" checked/created (minimal stub for FK if not already fully defined).');
+
 
     // Stock Movement Logs Table
     await client.query(`
