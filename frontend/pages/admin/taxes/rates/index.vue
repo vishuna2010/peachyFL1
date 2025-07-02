@@ -198,7 +198,11 @@ const fetchTaxRates = async () => {
 
   try {
     const response = await $axios.get('/admin/tax-rates', { params });
-    taxRates.value = response.data.data;
+    console.log('Tax rates data from API:', response.data.data); // DEBUGGING
+    taxRates.value = response.data.data.map(rate => ({
+      ...rate,
+      rate: typeof rate.rate === 'string' ? parseFloat(rate.rate) : rate.rate // Ensure rate is a number
+    }));
     totalPages.value = response.data.pagination.totalPages || 1;
     totalRates.value = response.data.pagination.totalItems || response.data.pagination.total || 0; // Adjusted to match potential variations
     currentPage.value = response.data.pagination.currentPage || response.data.pagination.page || 1;
