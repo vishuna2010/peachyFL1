@@ -338,7 +338,7 @@ async function getBestSellingProducts(limit = 8, orderStatusFilters = ['complete
         p.original_price AS db_original_price, -- Explicit RRP from DB
         p.sale_price AS db_sale_price,         -- Sale price from DB
         p.is_on_sale, p.sale_percentage,
-        p.image_url, p.slug, p.average_rating, p.review_count,
+        p.image_url, p.average_rating, p.review_count, -- p.slug removed
         p.has_variants, -- useful for frontend card
         roi.units_sold AS total_units_sold
     FROM products p
