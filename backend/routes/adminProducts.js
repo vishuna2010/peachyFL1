@@ -183,6 +183,7 @@ const validateCreateProductParams = [
   body('original_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Original price must be a non-negative number.').toFloat(),
   body('sale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Sale price must be a non-negative number.').toFloat(),
   body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean(),
+  body('sale_percentage').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('Sale percentage must be between 0 and 100.').toFloat(),
   // image_url is not typically set directly on creation via this field; image upload is separate.
   // has_variants is determined by whether variants are created, not a direct input here.
 ];
@@ -282,7 +283,8 @@ const validateUpdateProductParams = [
   // New sale fields validation
   body('original_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Original price must be a non-negative number.').toFloat(),
   body('sale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Sale price must be a non-negative number.').toFloat(),
-  body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean()
+  body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean(),
+  body('sale_percentage').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('Sale percentage must be between 0 and 100.').toFloat()
 ];
 
 router.put(

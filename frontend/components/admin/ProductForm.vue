@@ -24,14 +24,15 @@
     <!-- Sale Fields -->
     <div class="p-4 border border-orange-300 rounded-md bg-orange-50 my-4">
       <h3 class="text-md font-medium text-orange-700 mb-3">Sale Configuration</h3>
+      <p class="text-xs text-gray-600 mb-3">The 'Selling Price' above will be used as the Regular/Original Price if a sale is active.</p>
       <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
         <div>
-          <label for="original_price" class="block text-sm font-medium text-gray-700 mb-1">Original Price (RRP):</label>
-          <input type="number" id="original_price" v-model.number="formData.original_price" min="0" step="0.01" placeholder="e.g., 19.99" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" :disabled="!props.canEditPrice && props.isEditMode" />
+          <label for="sale_percentage" class="block text-sm font-medium text-gray-700 mb-1">Sale Discount Percentage (%):</label>
+          <input type="number" id="sale_percentage" v-model.number="formData.sale_percentage" min="0" max="100" step="0.01" placeholder="e.g., 10 for 10%" @input="calculateSalePriceFromPercentage" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" :disabled="!props.canEditPrice && props.isEditMode" />
         </div>
         <div>
-          <label for="sale_price" class="block text-sm font-medium text-gray-700 mb-1">Sale Price:</label>
-          <input type="number" id="sale_price" v-model.number="formData.sale_price" min="0" step="0.01" placeholder="e.g., 15.99" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" :disabled="!props.canEditPrice && props.isEditMode" />
+          <label for="sale_price" class="block text-sm font-medium text-gray-700 mb-1">Calculated/Override Sale Price:</label>
+          <input type="number" id="sale_price" v-model.number="formData.sale_price" min="0" step="0.01" placeholder="e.g., 15.99" @input="handleManualSalePriceInput" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" :disabled="!props.canEditPrice && props.isEditMode" />
         </div>
       </div>
       <div class="mt-4">
@@ -169,9 +170,9 @@ const props = defineProps({
       tags: [],
       image_url: null,
       // Sale fields defaults
-      original_price: null,
       sale_price: null,
       is_on_sale: false,
+      sale_percentage: null,
     })
   },
   categories: {
@@ -235,9 +236,10 @@ const initialFormData = {
   image_url: null,
   tax_class_id: null,
   cost_price: null,
-  original_price: null,
+  // original_price is removed from here as formData.price is RRP base
   sale_price: null,
   is_on_sale: false,
+  sale_percentage: null,
   ...props.initialData // Spread initialData to overwrite defaults
 };
 const formData = reactive(initialFormData);
@@ -265,9 +267,10 @@ watch(() => props.initialData, (newData) => {
     formData.tax_class_id = newData.tax_class_id === undefined ? null : newData.tax_class_id;
     formData.cost_price = newData.cost_price === undefined ? null : newData.cost_price;
     // Update sale fields
-    formData.original_price = newData.original_price === undefined ? null : newData.original_price;
+    // formData.original_price = newData.original_price === undefined ? null : newData.original_price; // Removed
     formData.sale_price = newData.sale_price === undefined ? null : newData.sale_price;
     formData.is_on_sale = newData.is_on_sale === undefined ? false : newData.is_on_sale;
+    formData.sale_percentage = newData.sale_percentage === undefined ? null : newData.sale_percentage;
 
 
     tagsInput.value = newData.tags ? newData.tags.join(', ') : '';
@@ -276,6 +279,24 @@ watch(() => props.initialData, (newData) => {
     imageRemovalFlag.value = false;
   }
 }, { immediate: true, deep: true });
+
+function calculateSalePriceFromPercentage() {
+  if (formData.price && formData.sale_percentage !== null && formData.sale_percentage >= 0 && formData.sale_percentage <= 100) {
+    const discountAmount = (formData.price * formData.sale_percentage) / 100;
+    formData.sale_price = parseFloat((formData.price - discountAmount).toFixed(2));
+  } else if (formData.sale_percentage === null || formData.sale_percentage === '') {
+    // If percentage is cleared, user might want to set sale_price manually or not have one.
+    // We don't automatically clear sale_price here, allowing manual entry.
+  }
+}
+
+function handleManualSalePriceInput() {
+  // If user types in sale_price, clear percentage so manual value takes precedence.
+  // Alternatively, could try to calculate percentage, but that might be confusing.
+  if (formData.sale_price !== null && formData.sale_price !== '') {
+    formData.sale_percentage = null;
+  }
+}
 
 function handleFileChange(event) {
   const file = event.target.files[0];

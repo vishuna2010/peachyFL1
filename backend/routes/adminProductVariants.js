@@ -40,7 +40,8 @@ router.post(
     // New sale fields validation for creating variants
     body('original_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Original price must be a non-negative number.').toFloat(),
     body('sale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Sale price must be a non-negative number.').toFloat(),
-    body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean()
+    body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean(),
+    body('sale_percentage').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('Sale percentage must be between 0 and 100.').toFloat()
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -127,7 +128,8 @@ router.put(
     // New sale fields validation for updating variants
     body('original_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Original price must be a non-negative number.').toFloat(),
     body('sale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Sale price must be a non-negative number.').toFloat(),
-    body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean()
+    body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean(),
+    body('sale_percentage').optional({ nullable: true }).isFloat({ min: 0, max: 100 }).withMessage('Sale percentage must be between 0 and 100.').toFloat()
   ],
   productImageUploadMiddleware, // Added for image uploads
   handleMulterError,            // Added for image uploads

@@ -29,9 +29,10 @@ async function applySchemaMigrations(client) {
       ALTER TABLE products
       ADD COLUMN IF NOT EXISTS original_price DECIMAL(10, 2) NULL,
       ADD COLUMN IF NOT EXISTS sale_price DECIMAL(10, 2) NULL,
-      ADD COLUMN IF NOT EXISTS is_on_sale BOOLEAN DEFAULT FALSE;
+      ADD COLUMN IF NOT EXISTS is_on_sale BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS sale_percentage DECIMAL(5, 2) NULL;
     `);
-    console.log('Sales columns ensured on products table.');
+    console.log('Sales columns (including percentage) ensured on products table.');
   } catch (e) {
     // Catching all errors here as IF NOT EXISTS might not be universally supported for all parts of ADD COLUMN or specific PG versions.
     // A more robust migration system would handle this better.
@@ -43,9 +44,10 @@ async function applySchemaMigrations(client) {
       ALTER TABLE product_variants
       ADD COLUMN IF NOT EXISTS original_price DECIMAL(10, 2) NULL,
       ADD COLUMN IF NOT EXISTS sale_price DECIMAL(10, 2) NULL,
-      ADD COLUMN IF NOT EXISTS is_on_sale BOOLEAN DEFAULT FALSE;
+      ADD COLUMN IF NOT EXISTS is_on_sale BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS sale_percentage DECIMAL(5, 2) NULL;
     `);
-    console.log('Sales columns ensured on product_variants table.');
+    console.log('Sales columns (including percentage) ensured on product_variants table.');
   } catch (e) {
     console.error('Error altering product_variants table (or columns already exist):', e.message);
   }

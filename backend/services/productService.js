@@ -59,7 +59,7 @@ function _buildProductBaseQueryParts(options = {}) {
     p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold,
     p.has_variants, p.average_rating, p.review_count, p.product_status,
     p.tax_class_id, p.created_at, p.updated_at,
-    p.original_price, p.sale_price, p.is_on_sale -- Added new sale columns
+    p.original_price, p.sale_price, p.is_on_sale, p.sale_percentage -- Added sale_percentage
   `;
 
   let selectColumns = `${productColumns},
@@ -284,13 +284,16 @@ async function getAllProducts(options = {}) {
 
     const processedProducts = productsResult.rows.map(product => {
       const p = { ...product };
-      // Adjust price for products on sale (variants are not typically fetched in full detail here)
+      const rrp_base = p.original_price !== null && p.original_price !== undefined ? p.original_price : p.price;
+
       if (p.is_on_sale && p.sale_price !== null) {
-        // If p.original_price is not set from DB, use the current p.price as original
-        if (p.original_price === null || p.original_price === undefined) {
-          p.original_price = p.price;
-        }
-        p.price = p.sale_price;
+        p.original_price = rrp_base; // Ensure original_price in response is the RRP
+        p.price = p.sale_price;   // Effective price becomes sale_price
+      } else {
+        p.price = rrp_base; // Effective price is RRP
+        // If not on sale, original_price (RRP) is already set correctly from db or defaulted to db.price
+        // To avoid confusion on frontend, if original_price is same as price (and not on sale),
+        // we could set response p.original_price to null, but it's better to consistently send the RRP.
       }
       // Note: Full variant details including their sale prices are not usually fetched in getAllProducts
       // for performance reasons. If variants need to show sale prices on listing pages,
@@ -337,20 +340,27 @@ async function getProductById(productId) {
     }
     const product = productResult.rows[0];
 
-    // Store the DB price as original_price if not already set (for backward compatibility or if original_price is null)
-    // The DB schema now has original_price, so this line might only be a fallback.
-    // product.original_price = product.original_price !== null ? product.original_price : product.price; (Handled by schema now)
+    // The product.price from DB is now considered the RRP.
+    // If an explicit product.original_price is set in DB (e.g. MSRP higher than normal price), it takes precedence as RRP.
+    // Otherwise, product.price is the RRP.
+    const rrp_base = product.original_price !== null && product.original_price !== undefined ? product.original_price : product.price;
 
     if (product.is_on_sale && product.sale_price !== null) {
-      // If product.original_price is not already set by the DB, set it to the current product.price before overwriting.
-      if (product.original_price === null || product.original_price === undefined) {
-        product.original_price = product.price;
-      }
-      product.price = product.sale_price; // Set the main price to sale price
+      product.original_price = rrp_base; // Ensure original_price in response is the RRP
+      product.price = product.sale_price;   // Effective price becomes sale_price
     } else {
-      // Ensure original_price is set if not on sale, typically to its own price, or null if no specific RRP logic beyond current price.
-      // If original_price column exists and is populated, it will be used.
-      // If original_price is null in DB and not on sale, then there's no distinct "original" price to show.
+      // Not on sale, or sale_price not set. Effective price is RRP.
+      // original_price in response should be null or same as price if no specific higher RRP is set.
+      // If product.original_price was set in DB, it's already the RRP. If not, product.price is RRP.
+      // For clarity, if not on sale, original_price in response might be set to null if it's same as price.
+      // However, frontend usually expects original_price only if there's a sale.
+      // Let's ensure product.price is the RRP if not on sale.
+      product.price = rrp_base; // This should already be the case if original_price wasn't set
+      if (product.original_price === product.price) { // If RRP is just the normal price
+          // product.original_price = null; // Optional: clear original_price if no sale and it's same as price
+      }
+      // No, keep product.original_price as is from DB, it's the true RRP.
+      // product.price is the current selling price.
     }
 
 
@@ -421,29 +431,27 @@ async function getProductById(productId) {
       for (const variant of product.variants) {
         variant.option_value_ids = await getVariantOptionValueIds(variant.id, client);
 
-        // Calculate initial final_price based on base product's current price (which might be sale price)
-        let calculated_final_price = (parseFloat(product.price) + parseFloat(variant.price_modifier)).toFixed(2);
-
-        // If variant has its own original_price from DB, use that as the basis for original_final_price.
-        // Otherwise, calculate it from the product's original_price (if available) + variant modifier.
+        // Determine the variant's Regular Price (RRP for the variant)
+        // If variant has its own absolute original_price, that's its RRP.
+        // Otherwise, its RRP is base_product_RRP + variant_price_modifier.
+        let variant_rrp;
         if (variant.original_price !== null && variant.original_price !== undefined) {
-          variant.original_final_price = parseFloat(variant.original_price).toFixed(2);
-        } else if (product.original_price !== null && product.original_price !== undefined) {
-          variant.original_final_price = (parseFloat(product.original_price) + parseFloat(variant.price_modifier)).toFixed(2);
+            variant_rrp = parseFloat(variant.original_price);
         } else {
-          // Fallback if no original price context from product or variant itself
-          variant.original_final_price = calculated_final_price;
+            // Use the product's RRP (which is product.original_price if set, else product.price from DB before sale adjustment)
+            const base_product_rrp_for_variant_calc = product.original_price !== null && product.original_price !== undefined ? product.original_price : (product.is_on_sale && product.sale_price !== null ? (await client.query('SELECT price FROM products WHERE id = $1', [product.id])).rows[0].price : product.price);
+            variant_rrp = parseFloat(base_product_rrp_for_variant_calc) + parseFloat(variant.price_modifier || 0);
         }
+        variant.original_final_price = variant_rrp.toFixed(2);
 
         if (variant.is_on_sale && variant.sale_price !== null) {
           variant.final_price = parseFloat(variant.sale_price).toFixed(2);
-          // Ensure original_final_price reflects the price before this sale, if not already set by variant.original_price
-          if (variant.original_price === null || variant.original_price === undefined) { // only if variant itself didn't define an original_price
-             variant.original_final_price = calculated_final_price; // The price it would have been without this specific variant sale
-          }
         } else {
-          variant.final_price = calculated_final_price;
+          variant.final_price = variant_rrp.toFixed(2); // Not on sale, or no sale_price, so final_price is its RRP
         }
+
+        // Ensure sale_percentage is passed through if it exists
+        // variant.sale_percentage = variant.sale_percentage; // Already on variant object from query
 
         const batchStockQuery = await client.query(
           `SELECT COALESCE(SUM(quantity_remaining), 0) as total_batch_stock
@@ -520,7 +528,7 @@ async function createProduct(productData, fileData) {
     brand_manufacturer, supplier_reference, specifications,
     tags: tagNames,
     // New fields for sale
-    original_price, sale_price, is_on_sale
+    original_price, sale_price, is_on_sale, sale_percentage
   } = productData;
 
   const client = await db.pool.connect();
@@ -544,22 +552,34 @@ async function createProduct(productData, fileData) {
         reorder_threshold, product_status, image_url, tax_class_id, cost_price,
         wholesale_price, brand_manufacturer, supplier_reference, specifications,
         has_variants, average_rating, review_count, stock_quantity,
-        original_price, sale_price, is_on_sale, -- Added new columns
+        original_price, sale_price, is_on_sale, sale_percentage, -- Updated columns
         created_at, updated_at
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, -- Base fields
         FALSE, 0, 0, 0, -- has_variants, average_rating, review_count, stock_quantity
-        $16, $17, $18, -- original_price, sale_price, is_on_sale
+        $16, $17, $18, $19, -- original_price, sale_price, is_on_sale, sale_percentage
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP -- created_at, updated_at
       )
       RETURNING id;`;
+
+    let finalSalePrice = sale_price;
+    if (is_on_sale && sale_percentage !== null && sale_percentage !== undefined && (sale_price === null || sale_price === undefined)) {
+      if (price !== null && price !== undefined) {
+        const discount = (parseFloat(price) * parseFloat(sale_percentage)) / 100;
+        finalSalePrice = parseFloat((parseFloat(price) - discount).toFixed(2));
+      }
+    }
+
     const values = [
-      name, description || null, price, category_id || null, supplier_id || null, sku || null,
+      name, description || null, price, category_id || null, supplier_id || null, sku || null, // price is RRP
       reorder_threshold || null, product_status, imageUrlToStoreInDb,
       tax_class_id || null, cost_price || null, wholesale_price || null,
       brand_manufacturer || null, supplier_reference || null,
       specifications ? (typeof specifications === 'string' ? specifications : JSON.stringify(specifications)) : null,
-      original_price || null, sale_price || null, is_on_sale || false
+      original_price || price, // Default original_price to price (RRP) if not provided
+      finalSalePrice, // Calculated or provided sale_price
+      is_on_sale || false,
+      sale_percentage || null
     ];
     const result = await client.query(insertQuery, values);
     const newProductId = result.rows[0].id;
@@ -624,10 +644,25 @@ async function updateProduct(productId, productData, fileData, removeImage = fal
 
   try {
     await client.query('BEGIN');
-    const currentProductResult = await client.query('SELECT image_url, sku, has_variants FROM products WHERE id = $1 FOR UPDATE', [productId]);
+    const currentProductResult = await client.query('SELECT * FROM products WHERE id = $1 FOR UPDATE', [productId]); // Fetch more fields
     if (currentProductResult.rows.length === 0) throw new NotFoundError(`Product with ID ${productId} not found.`);
     const currentProduct = currentProductResult.rows[0];
     finalImageUrlToStoreInDb = currentProduct.image_url;
+
+    // Logic for sale price calculation if percentage is given
+    let finalSalePrice = productData.sale_price;
+    const regularPrice = productData.price !== undefined ? productData.price : currentProduct.price; // Use new price if provided, else current
+
+    if (productData.is_on_sale && productData.sale_percentage !== null && productData.sale_percentage !== undefined && (productData.sale_price === null || productData.sale_price === undefined)) {
+        const discount = (parseFloat(regularPrice) * parseFloat(productData.sale_percentage)) / 100;
+        finalSalePrice = parseFloat((parseFloat(regularPrice) - discount).toFixed(2));
+        productData.sale_price = finalSalePrice; // Update productData to ensure this calculated value is saved
+    } else if (productData.hasOwnProperty('sale_price') && (productData.sale_price !== null && productData.sale_price !== undefined) ) {
+        // If sale_price is explicitly set, it takes precedence, clear percentage if they mismatch significantly
+        // (This could be more complex if we want to auto-calc percentage from manual sale_price)
+        productData.sale_percentage = null; // Or recalculate based on new sale_price and regularPrice
+    }
+
 
     if (fileData) {
       if (!isS3Configured()) throw new AppError("Image upload service is not configured.", 500, "S3_NOT_CONFIGURED");
@@ -670,9 +705,11 @@ async function updateProduct(productId, productData, fileData, removeImage = fal
     addUpdateClause('supplier_reference', supplier_reference);
     addUpdateClause('specifications', specifications, true);
     // Add new sale fields
-    addUpdateClause('original_price', original_price === '' ? null : original_price);
-    addUpdateClause('sale_price', sale_price === '' ? null : sale_price);
-    addUpdateClause('is_on_sale', is_on_sale);
+    addUpdateClause('original_price', productData.original_price === '' || productData.original_price === undefined ? (productData.price !== undefined ? productData.price : currentProduct.price) : productData.original_price);
+    addUpdateClause('sale_price', productData.sale_price === '' ? null : productData.sale_price); // productData.sale_price is now calculated if percentage was given
+    addUpdateClause('is_on_sale', productData.is_on_sale);
+    addUpdateClause('sale_percentage', productData.sale_percentage === '' ? null : productData.sale_percentage);
+
 
     let productUpdated = false;
     if (setClauses.length > 0) {
@@ -990,10 +1027,10 @@ async function createProductVariant(productId, variantData, fileData, requesting
     sku, price_modifier, stock_quantity, image_url: directImageUrl, option_value_ids,
     cost_price, wholesale_price_modifier,
     // New sale fields for variants
-    original_price, sale_price, is_on_sale
+    original_price, sale_price, is_on_sale, sale_percentage
   } = variantData;
   const finalSku = sku && sku.trim() !== '' ? sku.trim() : null;
-  const numPriceModifier = parseFloat(price_modifier); // This might need re-evaluation if we store absolute sale_price
+  const numPriceModifier = parseFloat(price_modifier);
   const numStockQuantity = parseInt(stock_quantity, 10);
   const numCostPrice = (cost_price !== undefined && cost_price !== null && cost_price !== '') ? parseFloat(cost_price) : null;
   const numWholesalePriceModifier = (wholesale_price_modifier !== undefined && wholesale_price_modifier !== null && wholesale_price_modifier !== '') ? parseFloat(wholesale_price_modifier) : null;
@@ -1057,13 +1094,16 @@ async function createProductVariant(productId, variantData, fileData, requesting
     const variantInsertResult = await client.query(
       `INSERT INTO product_variants (
          product_id, sku, price_modifier, stock_quantity, image_url, cost_price, wholesale_price_modifier,
-         original_price, sale_price, is_on_sale
+         original_price, sale_price, is_on_sale, sale_percentage
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [
         productId, finalSku, numPriceModifier, numStockQuantity, variantImageUrl,
         numCostPrice, numWholesalePriceModifier,
-        original_price || null, sale_price || null, is_on_sale || false
+        original_price || null, // User might still provide an explicit original price for variant
+        sale_price || null, // User might provide explicit sale price, or it's calculated if percentage
+        is_on_sale || false,
+        sale_percentage || null
       ]
     );
     const newVariant = variantInsertResult.rows[0];
@@ -1110,7 +1150,7 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
     sku, price_modifier, stock_quantity, image_url: directImageUrl, option_value_ids, reason,
     cost_price, wholesale_price_modifier,
     // New sale fields
-    original_price, sale_price, is_on_sale
+    original_price, sale_price, is_on_sale, sale_percentage
   } = variantData;
   const client = await db.pool.connect();
   let s3NewFileKey = null;
@@ -1230,9 +1270,25 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
     if(variantData.hasOwnProperty('cost_price')) addUpdateField('cost_price', (cost_price !== undefined && cost_price !== null && cost_price !== '') ? parseFloat(cost_price) : null, currentVariant.cost_price);
     if(variantData.hasOwnProperty('wholesale_price_modifier')) addUpdateField('wholesale_price_modifier', (wholesale_price_modifier !== undefined && wholesale_price_modifier !== null && wholesale_price_modifier !== '') ? parseFloat(wholesale_price_modifier) : null, currentVariant.wholesale_price_modifier);
     // Add new sale fields
-    if(variantData.hasOwnProperty('original_price')) addUpdateField('original_price', (original_price !== undefined && original_price !== null && original_price !== '') ? parseFloat(original_price) : null, currentVariant.original_price);
-    if(variantData.hasOwnProperty('sale_price')) addUpdateField('sale_price', (sale_price !== undefined && sale_price !== null && sale_price !== '') ? parseFloat(sale_price) : null, currentVariant.sale_price);
-    if(variantData.hasOwnProperty('is_on_sale')) addUpdateField('is_on_sale', is_on_sale, currentVariant.is_on_sale);
+    // Sale price calculation for variants
+    let finalVariantSalePrice = variantData.sale_price;
+    const baseProductPriceResult = await client.query('SELECT price FROM products WHERE id = $1', [currentVariant.product_id]);
+    const baseProductPriceForCalc = baseProductPriceResult.rows.length > 0 ? parseFloat(baseProductPriceResult.rows[0].price) : 0;
+    const variantRegularPrice = baseProductPriceForCalc + (variantData.price_modifier !== undefined ? parseFloat(variantData.price_modifier) : parseFloat(currentVariant.price_modifier || 0));
+
+    if (variantData.is_on_sale && variantData.sale_percentage !== null && variantData.sale_percentage !== undefined && (variantData.sale_price === null || variantData.sale_price === undefined)) {
+        const discount = (variantRegularPrice * parseFloat(variantData.sale_percentage)) / 100;
+        finalVariantSalePrice = parseFloat((variantRegularPrice - discount).toFixed(2));
+        variantData.sale_price = finalVariantSalePrice; // Update variantData for saving
+    } else if (variantData.hasOwnProperty('sale_price') && (variantData.sale_price !== null && variantData.sale_price !== undefined)) {
+        variantData.sale_percentage = null; // Manual sale price clears percentage
+    }
+
+
+    if(variantData.hasOwnProperty('original_price')) addUpdateField('original_price', (variantData.original_price !== undefined && variantData.original_price !== null && variantData.original_price !== '') ? parseFloat(variantData.original_price) : null, currentVariant.original_price);
+    if(variantData.hasOwnProperty('sale_price')) addUpdateField('sale_price', (variantData.sale_price !== undefined && variantData.sale_price !== null && variantData.sale_price !== '') ? parseFloat(variantData.sale_price) : null, currentVariant.sale_price);
+    if(variantData.hasOwnProperty('is_on_sale')) addUpdateField('is_on_sale', variantData.is_on_sale, currentVariant.is_on_sale);
+    if(variantData.hasOwnProperty('sale_percentage')) addUpdateField('sale_percentage', (variantData.sale_percentage !== undefined && variantData.sale_percentage !== null && variantData.sale_percentage !== '') ? parseFloat(variantData.sale_percentage) : null, currentVariant.sale_percentage);
 
 
     let updatedVariant = currentVariant;
