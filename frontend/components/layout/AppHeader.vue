@@ -200,19 +200,36 @@ const handleResetHeaderFilters = () => {
 
 // Category Hover Dropdown Logic
 const handleCategoryMouseEnter = async (category, event) => {
+  console.log('[AppHeader] Mouse enter category:', category.name, 'ID:', category.id);
   clearDropdownTimeout();
   hoveredCategoryId.value = category.id;
+  console.log('[AppHeader] hoveredCategoryId set to:', hoveredCategoryId.value);
+
+  // Check if currentHoveredCategory is found
+  // Note: currentHoveredCategory is a computed, so it will update when hoveredCategoryId changes.
+  // We can log its value after setting hoveredCategoryId or within a watch/nextTick if needed for timing.
+
   isDropdownLoading.value = true;
 
   const rect = event.currentTarget.getBoundingClientRect();
   const smallGap = 4; // 4px gap
   dropdownPositionStyle.top = `${rect.bottom + window.scrollY + smallGap}px`;
   dropdownPositionStyle.left = `${rect.left + window.scrollX}px`;
+  console.log('[AppHeader] Dropdown position:', JSON.stringify(dropdownPositionStyle));
+
+  // Log currentHoveredCategory value *after* hoveredCategoryId has been set
+  // Need to use nextTick or watch if currentHoveredCategory depends on DOM update cycle,
+  // but since it's a computed based on reactive refs, it should update.
+  // For robust logging of computed, a watcher is better, but let's try direct log.
+  console.log('[AppHeader] currentHoveredCategory (computed):', currentHoveredCategory.value ? currentHoveredCategory.value.name : 'Not found');
+
 
   if (productPreviewCache[category.id]) {
     hoveredCategoryProducts.value = productPreviewCache[category.id];
+    console.log('[AppHeader] Products loaded from cache for category:', category.name, hoveredCategoryProducts.value);
     isDropdownLoading.value = false;
   } else {
+    console.log('[AppHeader] Fetching products for category:', category.name);
     try {
       const response = await $axios.get('/products', {
         params: {
@@ -224,17 +241,23 @@ const handleCategoryMouseEnter = async (category, event) => {
       });
       hoveredCategoryProducts.value = response.data.products || [];
       productPreviewCache[category.id] = hoveredCategoryProducts.value; // Cache the result
+      console.log('[AppHeader] Products fetched successfully for', category.name, hoveredCategoryProducts.value);
     } catch (error) {
-      console.error(`Error fetching products for category ${category.name}:`, error);
+      console.error(`[AppHeader] Error fetching products for category ${category.name}:`, error);
       hoveredCategoryProducts.value = []; // Clear products on error
     } finally {
       isDropdownLoading.value = false;
+      console.log('[AppHeader] isDropdownLoading set to false for', category.name);
     }
   }
+  // Check the v-if condition parts
+  console.log(`[AppHeader] Dropdown v-if check: hoveredCategoryId=${hoveredCategoryId.value}, currentHoveredCategory exists? ${!!currentHoveredCategory.value}`);
 };
 
 const handleCategoryMouseLeave = () => {
+  console.log('[AppHeader] Mouse leave category or dropdown');
   activeDropdownTimeoutId.value = setTimeout(() => {
+    console.log('[AppHeader] Hiding dropdown due to timeout');
     hoveredCategoryId.value = null;
     hoveredCategoryProducts.value = [];
     isDropdownLoading.value = false;
