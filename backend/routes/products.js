@@ -79,6 +79,28 @@ router.get('/', [
   }
 });
 
+// GET /api/products/best-sellers - Get best selling products
+router.get('/best-sellers', [
+    query('limit').optional().isInt({ min: 1, max: 20 }).toInt().default(8),
+    // Potentially add query param for order status filter if needed by frontend:
+    // query('order_statuses').optional().isString().customSanitizer(value => value.split(',').map(s => s.trim()))
+  ], async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array().map(e => ({ field: e.param, message: e.msg })) });
+    }
+    try {
+      const { limit } = req.query;
+      // const orderStatuses = req.query.order_statuses; // Example if using query param for status
+      // For now, service uses default ['completed', 'shipped']
+      const bestSellers = await productService.getBestSellingProducts(limit);
+      res.status(200).json({ products: bestSellers });
+    } catch (error) {
+      next(error);
+    }
+});
+
+
 // GET /products/:id - Get a single product by ID with variants
 router.get('/:id', async (req, res, next) => {
   try {

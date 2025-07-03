@@ -315,6 +315,67 @@ async function getAllProducts(options = {}) {
   }
 }
 
+async function getBestSellingProducts(limit = 8, orderStatusFilters = ['completed', 'shipped']) {
+  const orderStatusFilterClause = orderStatusFilters && orderStatusFilters.length > 0
+    ? `JOIN orders o ON oi.order_id = o.id WHERE o.status = ANY($2::varchar[])`
+    : '';
+  const queryParams = [limit];
+  if (orderStatusFilters && orderStatusFilters.length > 0) {
+    queryParams.push(orderStatusFilters);
+  }
+
+  const bestSellersQuery = `
+    WITH relevant_order_items AS (
+        SELECT
+            oi.product_id,
+            SUM(oi.quantity) as units_sold
+        FROM order_items oi
+        ${orderStatusFilterClause}
+        GROUP BY oi.product_id
+    )
+    SELECT
+        p.id, p.name, p.description, p.price AS rrp, -- Renaming for clarity before sale adjustment
+        p.original_price AS db_original_price, -- Explicit RRP from DB
+        p.sale_price AS db_sale_price,         -- Sale price from DB
+        p.is_on_sale, p.sale_percentage,
+        p.image_url, p.slug, p.average_rating, p.review_count,
+        p.has_variants, -- useful for frontend card
+        roi.units_sold AS total_units_sold
+    FROM products p
+    JOIN relevant_order_items roi ON p.id = roi.product_id
+    WHERE p.product_status = 'active'
+    ORDER BY roi.units_sold DESC
+    LIMIT $1;
+  `;
+
+  try {
+    const { rows } = await db.query(bestSellersQuery, queryParams);
+    // Apply the same price adjustment logic as in getProductById / getAllProducts
+    return rows.map(p => {
+      const product = { ...p };
+      const rrpBase = product.db_original_price !== null && product.db_original_price !== undefined
+                      ? product.db_original_price
+                      : product.rrp;
+
+      if (product.is_on_sale && product.db_sale_price !== null) {
+        product.original_price = parseFloat(rrpBase).toFixed(2); // What's shown crossed out
+        product.price = parseFloat(product.db_sale_price).toFixed(2);   // Effective price is sale_price
+      } else {
+        product.price = parseFloat(rrpBase).toFixed(2); // Effective price is RRP
+        // If not on sale, original_price for display can be null if it's same as current price
+        product.original_price = (parseFloat(rrpBase).toFixed(2) === product.price) ? null : parseFloat(rrpBase).toFixed(2);
+      }
+      delete product.rrp; // remove temporary rrp field
+      delete product.db_original_price;
+      delete product.db_sale_price;
+      return product;
+    });
+  } catch (error) {
+    console.error('Error fetching best selling products:', error);
+    throw new AppError('Failed to retrieve best selling products.', 500, 'BEST_SELLERS_FETCH_FAILED');
+  }
+}
+
 async function getProductById(productId) {
   const client = await db.pool.connect();
   try {
@@ -1483,7 +1544,7 @@ module.exports = {
   getAllProducts, getProductById, calculateProfitMargin, createProduct, updateProduct, updateProductStock,
   getAllStockLevels, getProductInventoryBatches, getProductCostHistory, getFormattedLabelData,
   getProductAssignedOptions, getProductVariants, getVariantById, createProductVariant, updateProductVariant,
-  deleteProductVariant, deleteProduct, getPublicProductFilterOptions,
+  deleteProductVariant, deleteProduct, getPublicProductFilterOptions, getBestSellingProducts
 };
 
 

@@ -41,18 +41,26 @@
       </div>
     </section>
 
-    <section class="py-12 bg-venus-neutral-light"> <!-- Using a slightly different bg for visual separation -->
+    <section class="py-12 bg-venus-neutral-light">
       <div class="container mx-auto px-4">
         <h2 class="text-3xl font-serif text-venus-text-primary text-center mb-8">Best Sellers</h2>
-        <div class="text-center text-venus-text-secondary">
-          <p>Our most loved looks - this section is under construction!</p>
-          <!-- Placeholder for a grid of product cards later -->
-          <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6 opacity-50">
-            <div class="h-64 bg-venus-neutral-medium rounded-sm animate-pulse"></div>
-            <div class="h-64 bg-venus-neutral-medium rounded-sm animate-pulse"></div>
-            <div class="h-64 bg-venus-neutral-medium rounded-sm animate-pulse md:block hidden"></div>
-            <div class="h-64 bg-venus-neutral-medium rounded-sm animate-pulse lg:block hidden"></div>
-          </div>
+
+        <div v-if="isLoadingBestSellers" class="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
+          <ProductCardSkeleton v-for="n in 4" :key="`bs-skeleton-${n}`" />
+        </div>
+        <div v-else-if="bestSellersError" class="text-center py-6">
+          <p class="text-lg text-red-500">Could not load best sellers: {{ bestSellersError }}</p>
+        </div>
+        <div v-else-if="!bestSellerProducts || bestSellerProducts.length === 0" class="text-center py-6">
+          <p class="text-lg text-venus-text-secondary">No best sellers to display at the moment.</p>
+        </div>
+        <div v-else class="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
+          <ProductCard
+            v-for="product in bestSellerProducts"
+            :key="`bs-${product.id}`"
+            :product="product"
+            @open-quick-view="openQuickViewModal"
+          />
         </div>
       </div>
     </section>
@@ -173,8 +181,12 @@ const paginationData = ref({
   hasNextPage: false,
   hasPrevPage: false
 });
-const isLoading = ref(true);
-const fetchError = ref(null);
+const isLoading = ref(true); // For main product list
+const fetchError = ref(null); // For main product list
+
+const bestSellerProducts = ref([]);
+const isLoadingBestSellers = ref(true);
+const bestSellersError = ref(null);
 
 // const isMobileFiltersOpen = ref(false); // Removed
 // const toggleMobileFilters = () => { // Removed
@@ -318,7 +330,23 @@ onMounted(async () => {
   // This is now largely handled by the watcher's immediate:true and its logic
   await fetchCategories();
   // Initial product fetch is handled by the watcher on route.query
+  fetchBestSellers();
 });
+
+async function fetchBestSellers() {
+  isLoadingBestSellers.value = true;
+  bestSellersError.value = null;
+  try {
+    const response = await $axios.get('/products/best-sellers', { params: { limit: 4 } }); // Fetch top 4
+    bestSellerProducts.value = response.data.products || [];
+  } catch (err) {
+    console.error('Failed to fetch best sellers:', err);
+    bestSellersError.value = err.response?.data?.message || 'Could not load best sellers.';
+    bestSellerProducts.value = [];
+  } finally {
+    isLoadingBestSellers.value = false;
+  }
+}
 
 watch(
   () => route.query,
