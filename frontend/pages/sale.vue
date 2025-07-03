@@ -113,7 +113,7 @@ async function fetchSaleProducts() {
       page: filters.page,
       limit: pagination.pageSize,
       category_id: filters.selectedCategoryId,
-      search: filters.searchTerm,
+      search_term: filters.searchTerm, // Corrected to search_term
       min_price: filters.minPrice,
       max_price: filters.maxPrice,
       sort_by: filters.sortBy.split('_')[0],

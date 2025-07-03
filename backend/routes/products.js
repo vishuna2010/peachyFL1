@@ -22,6 +22,7 @@ router.get('/', [
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10)
   ],
   async (req, res, next) => {
+    console.log('[DEBUG] /api/products route received query:', JSON.stringify(req.query)); // Log received query
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       // Map validation errors to a more structured format if desired
@@ -29,7 +30,7 @@ router.get('/', [
     }
   try {
     // Use validated and sanitized values from req.query
-    const { search_term, category_id, min_price, max_price, sort_by, optionValueId, page, limit } = req.query;
+    const { search_term, category_id, min_price, max_price, sort_by, optionValueId, page, limit, on_sale } = req.query; // Added on_sale here for clarity
 
     // Validation and Parsing (some parsing already handled by express-validator's toInt/toFloat)
     // Re-parsing might not be strictly necessary if trusting express-validator output, but explicit parsing ensures type.
