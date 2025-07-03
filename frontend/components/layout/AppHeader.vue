@@ -6,12 +6,16 @@
         <img src="/Logo.svg" alt="Site Logo" class="h-10 w-auto"> <!-- Corrected to Logo.svg -->
       </NuxtLink>
 
-      <!-- Navigation Links (Placeholders) -->
+      <!-- Navigation Links -->
       <nav class="hidden md:flex space-x-6 items-center">
-        <NuxtLink to="#" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-medium transition-colors duration-200 ease-in-out">New</NuxtLink>
-        <NuxtLink to="#" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-medium transition-colors duration-200 ease-in-out">Tops</NuxtLink>
-        <NuxtLink to="#" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-medium transition-colors duration-200 ease-in-out">Dresses</NuxtLink>
-        <NuxtLink to="#" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-medium transition-colors duration-200 ease-in-out">Swim</NuxtLink>
+        <NuxtLink
+          v-for="category in headerCategories"
+          :key="category.id"
+          :to="`/categories/${category.slug}`"
+          class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-medium transition-colors duration-200 ease-in-out"
+        >
+          {{ category.name }}
+        </NuxtLink>
         <NuxtLink :to="{ path: '/products', query: { on_sale: 'true' } }" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-bold transition-colors duration-200 ease-in-out">Sale</NuxtLink>
       </nav>
 
@@ -36,7 +40,7 @@
             </button>
           </form>
           <button
-            @click="goToAdvancedFilters"
+            @click="openFilterModal"
             aria-label="Advanced Filters"
             class="p-2 text-gray-500 hover:text-peach-pink transition-colors"
           >
@@ -69,31 +73,95 @@
         </NuxtLink>
       </div>
     </div>
+    <HeaderFilterModal
+      :is-open="isFilterModalOpen"
+      @close="closeFilterModal"
+      @apply-header-filters="handleApplyHeaderFilters"
+      @reset-header-filters="handleResetHeaderFilters"
+    />
   </header>
 </template>
 <script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted } from 'vue';
+import { useRouter, useNuxtApp } from '#app';
 import { useAuth } from '~/composables/useAuth';
+import HeaderFilterModal from '~/components/modals/HeaderFilterModal.vue'; // Import the modal
 
 // Added isAuthInitialized to prevent flicker
 const { isAuthenticated, authUser, isAuthInitialized } = useAuth();
 const router = useRouter();
-const headerSearchTerm = ref('');
+const { $axios } = useNuxtApp();
 
-const submitHeaderSearch = () => {
-  if (headerSearchTerm.value.trim()) {
-    router.push({ path: '/products', query: { searchTerm: headerSearchTerm.value.trim() } });
-    headerSearchTerm.value = ''; // Clear input after search
+const headerSearchTerm = ref('');
+const headerCategories = ref([]);
+const isFilterModalOpen = ref(false); // State for filter modal
+
+const fetchHeaderCategories = async () => {
+  try {
+    const response = await $axios.get('/categories');
+    headerCategories.value = response.data || [];
+  } catch (error) {
+    console.error('Error fetching categories for header:', error);
+    headerCategories.value = [];
   }
 };
 
-const goToAdvancedFilters = () => {
+onMounted(() => {
+  fetchHeaderCategories();
+});
+
+const submitHeaderSearch = () => {
+  // When submitting search from header, apply only the search term and navigate.
+  // Advanced filters are applied separately via the modal.
+  if (headerSearchTerm.value.trim()) {
+    router.push({ path: '/products', query: { searchTerm: headerSearchTerm.value.trim() } });
+    // Do not clear headerSearchTerm here, user might want to refine with advanced filters.
+  } else {
+    // If search term is empty, just go to products page (might show all or default sort)
+    router.push({ path: '/products' });
+  }
+};
+
+const openFilterModal = () => { // Renamed from goToAdvancedFilters
+  isFilterModalOpen.value = true;
+};
+
+const closeFilterModal = () => {
+  isFilterModalOpen.value = false;
+};
+
+const handleApplyHeaderFilters = (appliedFilters) => {
+  const query = { ...appliedFilters }; // Filters from ProductFilters
+
+  // Ensure headerSearchTerm is included if present, potentially overriding what was in ProductFilters' own search
+  if (headerSearchTerm.value.trim()) {
+    query.searchTerm = headerSearchTerm.value.trim();
+  } else if (query.searchTerm) {
+     // If header search is empty, but ProductFilters had one (e.g. from URL), keep it.
+     // Or, decide if header search always wins. For now, let headerSearchTerm take precedence.
+     // If headerSearchTerm is empty, and appliedFilters.searchTerm is also empty/null, it's fine.
+  }
+
+
+  // Remove null/undefined values from query to keep URL clean
+  Object.keys(query).forEach(key => {
+    if (query[key] === null || query[key] === undefined || query[key] === '') {
+      delete query[key];
+    }
+  });
+
+  router.push({ path: '/products', query });
+  closeFilterModal();
+};
+
+const handleResetHeaderFilters = () => {
+  // Navigate to /products with only the current header search term, if any.
   const query = {};
   if (headerSearchTerm.value.trim()) {
     query.searchTerm = headerSearchTerm.value.trim();
   }
   router.push({ path: '/products', query });
-  // headerSearchTerm.value = ''; // Optionally clear search term after navigating
+  closeFilterModal();
 };
+
 </script>

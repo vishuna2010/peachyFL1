@@ -247,8 +247,14 @@ module.exports = {
  */
 async function getAllPublicCategories() {
   try {
-    const result = await db.query('SELECT id, name FROM categories ORDER BY name ASC');
-    return result.rows;
+    // Assuming a 'slug' column exists in the 'categories' table
+    const result = await db.query('SELECT id, name, slug FROM categories WHERE parent_category_id IS NULL ORDER BY name ASC');
+    return result.rows.map(category => ({
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      // TODO: Potentially fetch children categories if a nested menu is desired
+    }));
   } catch (error) {
     console.error('[categoryService.getAllPublicCategories] Error fetching public categories:', error);
     throw new AppError('Failed to retrieve public categories.', 500, 'PUBLIC_CATEGORIES_FETCH_FAILED');

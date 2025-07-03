@@ -55,11 +55,18 @@ function _buildProductBaseQueryParts(options = {}) {
   const { optionValueId, include_total_stock } = options;
 
   const productColumns = `
-    p.id, p.name, p.description, p.price, p.category_id, p.image_url,
+    p.id, p.name, p.description, p.price, p.original_price, p.category_id, p.image_url,
     p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold,
     p.has_variants, p.average_rating, p.review_count, p.product_status,
     p.tax_class_id, p.created_at, p.updated_at
   `;
+
+  // Ensure final_price is considered if it exists as a concept (e.g. from discounts)
+  // For now, assume p.price is the current selling price, and p.original_price is the RRP.
+  // The ProductCard already uses product.final_price if available, then product.price.
+  // So, if the backend provides 'price' as the current sell price and 'original_price',
+  // the ProductCard should work. We need to ensure these fields are selected.
+  // Let's ensure product objects returned by getAllProducts contain 'price' and 'original_price'.
 
   let selectColumns = `${productColumns},
     c.name as category_name, s.name as supplier_name,
@@ -383,7 +390,23 @@ async function getProductById(productId) {
 
       for (const variant of product.variants) {
         variant.option_value_ids = await getVariantOptionValueIds(variant.id, client);
+
+        // Current selling price for the variant
         variant.final_price = (parseFloat(product.price) + parseFloat(variant.price_modifier)).toFixed(2);
+
+        // Calculate original price for the variant if the base product has an original price
+        if (product.original_price !== null && product.original_price !== undefined) {
+          const baseOriginalPrice = parseFloat(product.original_price);
+          const priceModifier = parseFloat(variant.price_modifier);
+          if (!isNaN(baseOriginalPrice) && !isNaN(priceModifier)) {
+            variant.original_final_price = (baseOriginalPrice + priceModifier).toFixed(2);
+          } else {
+            variant.original_final_price = null; // Fallback if numbers are invalid
+          }
+        } else {
+          variant.original_final_price = null; // No original price if base product doesn't have one
+        }
+
         const batchStockQuery = await client.query(
           `SELECT COALESCE(SUM(quantity_remaining), 0) as total_batch_stock
            FROM inventory_batches
