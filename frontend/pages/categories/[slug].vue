@@ -11,16 +11,16 @@
     </div>
 
     <div class="lg:grid lg:grid-cols-4 lg:gap-8">
-      {-- Filters Column (Desktop) - Removed --}
-      {-- <aside class="hidden lg:block lg:col-span-1"> ... </aside> --}
+      <!-- Filters Column (Desktop) - Removed -->
+      <!-- <aside class="hidden lg:block lg:col-span-1"> ... </aside> -->
 
       <!-- Products Grid Column - Spans full width now -->
       <main class="lg:col-span-4">
-        {-- Mobile Filter Trigger - Removed --}
-        {-- <div class="lg:hidden mb-4"> ... </div> --}
+        <!-- Mobile Filter Trigger - Removed -->
+        <!-- <div class="lg:hidden mb-4"> ... </div> -->
 
-        {-- Mobile Filters Panel - Removed --}
-        {-- <div v-if="showMobileFilters" class="lg:hidden mb-6"> ... </div> --}
+        <!-- Mobile Filters Panel - Removed -->
+        <!-- <div v-if="showMobileFilters" class="lg:hidden mb-6"> ... </div> -->
 
         <div v-if="productsPending" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
           <ProductCardSkeleton v-for="n in 6" :key="`skeleton-${n}`" />
