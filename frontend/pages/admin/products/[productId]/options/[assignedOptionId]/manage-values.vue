@@ -79,7 +79,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue';
-import { useNuxtApp, useRouter, useRoute, definePageMeta, useHead } from '#app';
+import { useNuxtApp, useRouter, useRoute, useHead } from '#app';
 import { useToast } from 'vue-toastification';
 
 definePageMeta({

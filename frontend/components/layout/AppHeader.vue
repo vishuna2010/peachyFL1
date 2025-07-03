@@ -7,7 +7,7 @@
       </NuxtLink>
 
       <!-- Navigation Links -->
-      <nav class="hidden md:flex space-x-1 items-center"> {/* Reduced space-x slightly for wrapper divs */}
+      <nav class="hidden md:flex space-x-1 items-center"> <!-- Reduced space-x slightly for wrapper divs -->
         <div
           v-for="category in headerCategories"
           :key="category.id"

@@ -46,7 +46,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRoute, definePageMeta, useHead } from '#app'; // Or specific imports for Nuxt 3
+import { useRoute, useHead } from '#app'; // Or specific imports for Nuxt 3
 
 definePageMeta({
   layout: 'admin',

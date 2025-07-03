@@ -54,8 +54,8 @@ const props = defineProps({
     required: true,
   },
   categorySlug: {
-    type: String,
-    required: true,
+    type: [String, null], // Allow null
+    default: null, // Default to null
   },
   isLoading: { // To show a loading state
     type: Boolean,
@@ -70,7 +70,10 @@ const displayedProducts = computed(() => {
 });
 
 const categoryLink = computed(() => {
-  return `/categories/${props.categorySlug}`;
+  if (props.categorySlug) {
+    return `/categories/${props.categorySlug}`;
+  }
+  return '/products'; // Fallback if slug is not available
 });
 
 const formatCurrency = (value) => {
