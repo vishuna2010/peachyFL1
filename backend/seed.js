@@ -681,29 +681,29 @@ async function seedProducts(client, seededDataIds) {
     {
       name: 'Wireless Bluetooth Headphones', sku: 'HDPHN-WL-BT-001', description: 'High-fidelity wireless headphones with noise cancellation and 20-hour battery life.',
       price: 149.99, cost_price: 75.00, stock_quantity: 0,
-      category_id: seededDataIds.categories?.Headphones,
+      category_id: seededDataIds.categories?.Headphones?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=Headphones', is_active: true,
-      has_variants: false,
+      has_variants: false, // Will be set to true later if options/variants are added
       reorder_threshold: 5,
       product_status: 'active'
     },
     {
       name: 'Men\'s Cotton T-Shirt', sku: 'TSHRT-MEN-COT-005', description: 'Comfortable and durable 100% cotton t-shirt for everyday wear.',
       price: 25.99, cost_price: 10.00, stock_quantity: 0,
-      category_id: seededDataIds.categories?.Apparel,
+      category_id: seededDataIds.categories?.Apparel?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=T-Shirt', is_active: true,
-      has_variants: false,
+      has_variants: false, // Will be set to true later if options/variants are added
       reorder_threshold: 10,
       product_status: 'active'
     },
     {
       name: 'Simple LED Desk Lamp', sku: 'LAMP-DSK-LED-010', description: 'Modern LED desk lamp with adjustable brightness.',
-      price: 39.99, cost_price: 15.00, stock_quantity: 50,
-      category_id: seededDataIds.categories?.['Home Goods'],
+      price: 39.99, cost_price: 15.00, stock_quantity: 50, // Stock_quantity here is for the base product if no variants
+      category_id: seededDataIds.categories?.['Home Goods']?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=Desk+Lamp', is_active: true,
