@@ -280,23 +280,81 @@ watch(() => props.initialData, (newData) => {
   }
 }, { immediate: true, deep: true });
 
-function calculateSalePriceFromPercentage() {
-  if (formData.price && formData.sale_percentage !== null && formData.sale_percentage >= 0 && formData.sale_percentage <= 100) {
-    const discountAmount = (formData.price * formData.sale_percentage) / 100;
-    formData.sale_price = parseFloat((formData.price - discountAmount).toFixed(2));
-  } else if (formData.sale_percentage === null || formData.sale_percentage === '') {
-    // If percentage is cleared, user might want to set sale_price manually or not have one.
-    // We don't automatically clear sale_price here, allowing manual entry.
+// Helper to update is_on_sale based on current form data
+function updateIsOnSaleStatus() {
+  const rrp = parseFloat(formData.price);
+  const salePrice = parseFloat(formData.sale_price);
+  const percentage = parseFloat(formData.sale_percentage);
+
+  if (!isNaN(rrp)) {
+    if (!isNaN(percentage) && percentage > 0 && percentage <= 100) {
+      // If there's a valid positive percentage, it's on sale
+      formData.is_on_sale = true;
+    } else if (!isNaN(salePrice) && salePrice < rrp && (isNaN(percentage) || percentage === 0 || percentage === null)) {
+      // If there's a valid sale_price less than RRP, and no overriding percentage, it's on sale
+      formData.is_on_sale = true;
+    } else {
+      formData.is_on_sale = false;
+    }
+  } else {
+    formData.is_on_sale = false; // Cannot determine sale if RRP is invalid
   }
 }
 
-function handleManualSalePriceInput() {
-  // If user types in sale_price, clear percentage so manual value takes precedence.
-  // Alternatively, could try to calculate percentage, but that might be confusing.
-  if (formData.sale_price !== null && formData.sale_price !== '') {
-    formData.sale_percentage = null;
+function calculateSalePriceFromPercentage() {
+  const rrp = parseFloat(formData.price);
+  const percentage = parseFloat(formData.sale_percentage);
+
+  if (!isNaN(rrp) && !isNaN(percentage) && percentage >= 0 && percentage <= 100) {
+    const discountAmount = (rrp * percentage) / 100;
+    formData.sale_price = parseFloat((rrp - discountAmount).toFixed(2));
+  } else if (isNaN(percentage) || percentage === null || percentage === '') {
+     // If percentage is cleared, do nothing to sale_price, user might be entering it manually
   }
+  updateIsOnSaleStatus();
 }
+
+function handleManualSalePriceInput() {
+  const rrp = parseFloat(formData.price);
+  const salePrice = parseFloat(formData.sale_price);
+
+  if (!isNaN(rrp) && !isNaN(salePrice)) {
+    if (salePrice < rrp) {
+      formData.sale_percentage = null; // Manual sale price overrides percentage
+    } else {
+      // If sale_price is not less than RRP, it's not a valid sale discount.
+      // User might be correcting a mistake or RRP changed.
+      // We could clear sale_percentage here too if we want strict manual override.
+      // formData.sale_percentage = null;
+    }
+  } else if (formData.sale_price === null || formData.sale_price === '') {
+      // Sale price cleared, percentage might still apply.
+      // If percentage is also null/0, then is_on_sale will become false.
+  }
+  updateIsOnSaleStatus();
+}
+
+// Watcher for is_on_sale checkbox
+watch(() => formData.is_on_sale, (newVal, oldVal) => {
+  if (!newVal) { // If user unchecks "Is On Sale"
+    formData.sale_price = null;
+    formData.sale_percentage = null;
+  } else {
+    // If user checks "Is On Sale" and there's no valid discount yet,
+    // encourage them to set a percentage or sale price.
+    // For now, this just allows it to be true, calculations will determine actual sale.
+    // updateIsOnSaleStatus will run if price/percentage/sale_price changes.
+  }
+});
+
+// Watcher for RRP (formData.price)
+watch(() => formData.price, (newRrp, oldRrp) => {
+    if (formData.sale_percentage !== null && formData.sale_percentage !== '' && formData.sale_percentage > 0) {
+        calculateSalePriceFromPercentage(); // Recalculate sale_price if percentage exists
+    }
+    updateIsOnSaleStatus(); // Re-evaluate sale status
+});
+
 
 function handleFileChange(event) {
   const file = event.target.files[0];

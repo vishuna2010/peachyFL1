@@ -277,21 +277,69 @@ function handleGalleryImageSelected(imageUrl) {
   showImagePickerModal.value = false;
 }
 
-function calculateVariantSalePriceFromPercentage() {
-  const regularVariantPrice = (baseProductPrice.value || 0) + (newVariantForm.price_modifier || 0);
-  if (regularVariantPrice > 0 && newVariantForm.sale_percentage !== null && newVariantForm.sale_percentage >= 0 && newVariantForm.sale_percentage <= 100) {
-    const discountAmount = (regularVariantPrice * newVariantForm.sale_percentage) / 100;
-    newVariantForm.sale_price = parseFloat((regularVariantPrice - discountAmount).toFixed(2));
-  } else if (newVariantForm.sale_percentage === null || newVariantForm.sale_percentage === '') {
-    // Don't clear sale_price, allow manual entry
+function getVariantRRP() {
+  return (baseProductPrice.value || 0) + (newVariantForm.price_modifier || 0);
+}
+
+function updateVariantIsOnSaleStatus() {
+  const rrp = getVariantRRP();
+  const salePrice = parseFloat(newVariantForm.sale_price);
+  const percentage = parseFloat(newVariantForm.sale_percentage);
+
+  if (rrp > 0) {
+    if (!isNaN(percentage) && percentage > 0 && percentage <= 100) {
+      newVariantForm.is_on_sale = true;
+    } else if (!isNaN(salePrice) && salePrice < rrp && (isNaN(percentage) || percentage === 0 || percentage === null)) {
+      newVariantForm.is_on_sale = true;
+    } else {
+      newVariantForm.is_on_sale = false;
+    }
+  } else {
+    newVariantForm.is_on_sale = false;
   }
 }
 
-function handleManualVariantSalePriceInput() {
-  if (newVariantForm.sale_price !== null && newVariantForm.sale_price !== '') {
-    newVariantForm.sale_percentage = null; // Clear percentage if sale price is manually set
+function calculateVariantSalePriceFromPercentage() {
+  const rrp = getVariantRRP();
+  const percentage = parseFloat(newVariantForm.sale_percentage);
+
+  if (rrp > 0 && !isNaN(percentage) && percentage >= 0 && percentage <= 100) {
+    const discountAmount = (rrp * percentage) / 100;
+    newVariantForm.sale_price = parseFloat((rrp - discountAmount).toFixed(2));
+  } else if (isNaN(percentage) || percentage === null || percentage === '') {
+    // Percentage cleared
   }
+  updateVariantIsOnSaleStatus();
 }
+
+function handleManualVariantSalePriceInput() {
+  const rrp = getVariantRRP();
+  const salePrice = parseFloat(newVariantForm.sale_price);
+
+  if (!isNaN(rrp) && !isNaN(salePrice)) {
+    if (salePrice < rrp) {
+      newVariantForm.sale_percentage = null;
+    }
+  }
+  updateVariantIsOnSaleStatus();
+}
+
+// Watcher for variant is_on_sale checkbox
+watch(() => newVariantForm.is_on_sale, (newVal) => {
+  if (!newVal) {
+    newVariantForm.sale_price = null;
+    newVariantForm.sale_percentage = null;
+  }
+});
+
+// Watchers for variant RRP components
+watch([baseProductPrice, () => newVariantForm.price_modifier], () => {
+    if (newVariantForm.sale_percentage !== null && newVariantForm.sale_percentage !== '' && newVariantForm.sale_percentage > 0) {
+        calculateVariantSalePriceFromPercentage();
+    }
+    updateVariantIsOnSaleStatus();
+});
+
 
 // Modal Control Methods
 function openAddVariantModal() {
