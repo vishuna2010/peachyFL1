@@ -12,7 +12,7 @@
         @apply-filters="onApplyFilters"
         @reset-filters="onResetFilters"
         :is-mobile="true" <!-- Use mobile styling for compactness if desired, or make it responsive -->
-      />
+      ></ProductFilters>
     </div>
     <template #footer>
       <div class="flex justify-end p-4 bg-gray-50 border-t">
