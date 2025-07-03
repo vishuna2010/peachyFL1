@@ -25,19 +25,6 @@
         <NuxtLink :to="{ path: '/products', query: { on_sale: 'true' } }" class="text-venus-text-primary px-3 py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-bold transition-colors duration-200 ease-in-out">Sale</NuxtLink>
       </nav>
 
-      <!-- Conditionally rendered Dropdown -->
-      <CategoryProductPreviewDropdown
-        v-if="hoveredCategoryId && currentHoveredCategory"
-        :products="hoveredCategoryProducts"
-        :category-name="currentHoveredCategory.name"
-        :category-slug="currentHoveredCategory.slug"
-        :is-loading="isDropdownLoading"
-        :style="dropdownPositionStyle"
-        @mouseenter="clearDropdownTimeout"
-        @mouseleave="handleCategoryMouseLeave()"
-        class="absolute" <!-- Positioning will be dynamic via style prop -->
-      ></CategoryProductPreviewDropdown>
-
       <!-- Search and Action Icons -->
       <div class="flex items-center space-x-4">
         <!-- Header Search -->
@@ -98,6 +85,18 @@
       @apply-header-filters="handleApplyHeaderFilters"
       @reset-header-filters="handleResetHeaderFilters"
     />
+    <!-- Category Product Preview Dropdown - Placed here for better DOM structure with absolute positioning -->
+    <CategoryProductPreviewDropdown
+      v-if="hoveredCategoryId && currentHoveredCategory"
+      :products="hoveredCategoryProducts"
+      :category-name="currentHoveredCategory.name"
+      :category-slug="currentHoveredCategory.slug"
+      :is-loading="isDropdownLoading"
+      :style="dropdownPositionStyle"
+      @mouseenter="clearDropdownTimeout"
+      @mouseleave="handleCategoryMouseLeave()"
+      class="absolute" <!-- Positioning will be dynamic via style prop -->
+    ></CategoryProductPreviewDropdown>
   </header>
 </template>
 <script setup>
