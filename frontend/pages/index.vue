@@ -84,7 +84,6 @@
       </div>
 
       <div class="lg:grid lg:grid-cols-4 lg:gap-x-6 xl:gap-x-8">
-        {/* The filter sidebar has been removed. The content below will now span all 4 columns on large screens. */}
         <div class="lg:col-span-4">
           <div v-if="isLoading" class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6">
             <ProductCardSkeleton v-for="n in limit" :key="`skeleton-${n}`" />
