@@ -644,23 +644,51 @@ async function updateProduct(productId, productData, fileData, removeImage = fal
 
   try {
     await client.query('BEGIN');
-    const currentProductResult = await client.query('SELECT * FROM products WHERE id = $1 FOR UPDATE', [productId]); // Fetch more fields
+    const currentProductResult = await client.query('SELECT * FROM products WHERE id = $1 FOR UPDATE', [productId]);
     if (currentProductResult.rows.length === 0) throw new NotFoundError(`Product with ID ${productId} not found.`);
     const currentProduct = currentProductResult.rows[0];
     finalImageUrlToStoreInDb = currentProduct.image_url;
 
-    // Logic for sale price calculation if percentage is given
-    let finalSalePrice = productData.sale_price;
-    const regularPrice = productData.price !== undefined ? productData.price : currentProduct.price; // Use new price if provided, else current
+    // Determine the base price for RRP (Regular Price)
+    // If productData contains 'price', that's the new RRP. Otherwise, use current RRP from DB.
+    const rrpBase = productData.hasOwnProperty('price') ? parseFloat(productData.price) : parseFloat(currentProduct.price);
 
-    if (productData.is_on_sale && productData.sale_percentage !== null && productData.sale_percentage !== undefined && (productData.sale_price === null || productData.sale_price === undefined)) {
-        const discount = (parseFloat(regularPrice) * parseFloat(productData.sale_percentage)) / 100;
-        finalSalePrice = parseFloat((parseFloat(regularPrice) - discount).toFixed(2));
-        productData.sale_price = finalSalePrice; // Update productData to ensure this calculated value is saved
-    } else if (productData.hasOwnProperty('sale_price') && (productData.sale_price !== null && productData.sale_price !== undefined) ) {
-        // If sale_price is explicitly set, it takes precedence, clear percentage if they mismatch significantly
-        // (This could be more complex if we want to auto-calc percentage from manual sale_price)
-        productData.sale_percentage = null; // Or recalculate based on new sale_price and regularPrice
+    // Determine sale status
+    const isOnSale = productData.hasOwnProperty('is_on_sale') ? productData.is_on_sale : currentProduct.is_on_sale;
+
+    if (isOnSale) {
+      if (productData.hasOwnProperty('sale_percentage') && productData.sale_percentage !== null && productData.sale_percentage !== '') {
+        const percentage = parseFloat(productData.sale_percentage);
+        if (percentage >= 0 && percentage <= 100) {
+          const discount = (rrpBase * percentage) / 100;
+          productData.sale_price = parseFloat((rrpBase - discount).toFixed(2));
+          // If percentage is set, it drives the sale_price.
+        } else {
+          // Invalid percentage, potentially clear or retain existing sale_price if any.
+          // For now, if an invalid percentage is sent, we might ignore it and an existing sale_price might persist or be overwritten by an explicit productData.sale_price
+           if (!productData.hasOwnProperty('sale_price')) { // If no explicit sale_price, and percentage is bad, nullify sale_price
+                productData.sale_price = null;
+           }
+        }
+      } else if (productData.hasOwnProperty('sale_price') && productData.sale_price !== null && productData.sale_price !== '') {
+        // Sale price is explicitly set, so clear any percentage to avoid conflict.
+        productData.sale_percentage = null;
+      } else if (!productData.hasOwnProperty('sale_price') && !productData.hasOwnProperty('sale_percentage')) {
+        // is_on_sale is true, but no new sale_price or sale_percentage provided.
+        // Keep existing currentProduct.sale_price and currentProduct.sale_percentage.
+        // So, ensure these are not accidentally nulled if not present in productData.
+        if (!productData.hasOwnProperty('sale_price')) productData.sale_price = currentProduct.sale_price;
+        if (!productData.hasOwnProperty('sale_percentage')) productData.sale_percentage = currentProduct.sale_percentage;
+      }
+    } else {
+      // Not on sale / turning sale off
+      productData.sale_price = null;
+      productData.sale_percentage = null;
+    }
+
+    // Ensure original_price is RRP. If not explicitly set in productData, default to rrpBase.
+    if (!productData.hasOwnProperty('original_price') || productData.original_price === null || productData.original_price === '') {
+        productData.original_price = rrpBase;
     }
 
 
@@ -1269,26 +1297,50 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
     }
     if(variantData.hasOwnProperty('cost_price')) addUpdateField('cost_price', (cost_price !== undefined && cost_price !== null && cost_price !== '') ? parseFloat(cost_price) : null, currentVariant.cost_price);
     if(variantData.hasOwnProperty('wholesale_price_modifier')) addUpdateField('wholesale_price_modifier', (wholesale_price_modifier !== undefined && wholesale_price_modifier !== null && wholesale_price_modifier !== '') ? parseFloat(wholesale_price_modifier) : null, currentVariant.wholesale_price_modifier);
-    // Add new sale fields
-    // Sale price calculation for variants
-    let finalVariantSalePrice = variantData.sale_price;
-    const baseProductPriceResult = await client.query('SELECT price FROM products WHERE id = $1', [currentVariant.product_id]);
-    const baseProductPriceForCalc = baseProductPriceResult.rows.length > 0 ? parseFloat(baseProductPriceResult.rows[0].price) : 0;
-    const variantRegularPrice = baseProductPriceForCalc + (variantData.price_modifier !== undefined ? parseFloat(variantData.price_modifier) : parseFloat(currentVariant.price_modifier || 0));
 
-    if (variantData.is_on_sale && variantData.sale_percentage !== null && variantData.sale_percentage !== undefined && (variantData.sale_price === null || variantData.sale_price === undefined)) {
-        const discount = (variantRegularPrice * parseFloat(variantData.sale_percentage)) / 100;
-        finalVariantSalePrice = parseFloat((variantRegularPrice - discount).toFixed(2));
-        variantData.sale_price = finalVariantSalePrice; // Update variantData for saving
-    } else if (variantData.hasOwnProperty('sale_price') && (variantData.sale_price !== null && variantData.sale_price !== undefined)) {
-        variantData.sale_percentage = null; // Manual sale price clears percentage
+    // Sale price calculation logic for variants
+    const baseProductInfo = await client.query('SELECT price, original_price FROM products WHERE id = $1', [currentVariant.product_id]);
+    const baseProductRRP = baseProductInfo.rows.length > 0 ?
+        (baseProductInfo.rows[0].original_price !== null ? parseFloat(baseProductInfo.rows[0].original_price) : parseFloat(baseProductInfo.rows[0].price))
+        : 0;
+
+    const variantPriceModifier = variantData.hasOwnProperty('price_modifier') ? parseFloat(variantData.price_modifier) : parseFloat(currentVariant.price_modifier || 0);
+    const variantRRP = variantData.hasOwnProperty('original_price') && variantData.original_price !== null ?
+        parseFloat(variantData.original_price)
+        : (baseProductRRP + variantPriceModifier);
+
+    const effectiveIsOnSaleVariant = variantData.hasOwnProperty('is_on_sale') ? variantData.is_on_sale : currentVariant.is_on_sale;
+
+    if (effectiveIsOnSaleVariant) {
+        if (variantData.hasOwnProperty('sale_percentage') && variantData.sale_percentage !== null && variantData.sale_percentage !== '') {
+            const percentage = parseFloat(variantData.sale_percentage);
+            if (percentage >= 0 && percentage <= 100) {
+                const discount = (variantRRP * percentage) / 100;
+                variantData.sale_price = parseFloat((variantRRP - discount).toFixed(2));
+            } else {
+                 if (!variantData.hasOwnProperty('sale_price')) variantData.sale_price = null;
+            }
+        } else if (variantData.hasOwnProperty('sale_price') && variantData.sale_price !== null && variantData.sale_price !== '') {
+            variantData.sale_percentage = null;
+        } else if (!variantData.hasOwnProperty('sale_price') && !variantData.hasOwnProperty('sale_percentage')) {
+            if (!variantData.hasOwnProperty('sale_price')) variantData.sale_price = currentVariant.sale_price;
+            if (!variantData.hasOwnProperty('sale_percentage')) variantData.sale_percentage = currentVariant.sale_percentage;
+        }
+    } else {
+        if (variantData.hasOwnProperty('is_on_sale') && !variantData.is_on_sale) {
+            variantData.sale_price = null;
+            variantData.sale_percentage = null;
+        }
+    }
+    // Ensure variant's original_price is set to its RRP if not explicitly provided
+    if (!variantData.hasOwnProperty('original_price') || variantData.original_price === null || variantData.original_price === '') {
+        variantData.original_price = variantRRP;
     }
 
-
-    if(variantData.hasOwnProperty('original_price')) addUpdateField('original_price', (variantData.original_price !== undefined && variantData.original_price !== null && variantData.original_price !== '') ? parseFloat(variantData.original_price) : null, currentVariant.original_price);
-    if(variantData.hasOwnProperty('sale_price')) addUpdateField('sale_price', (variantData.sale_price !== undefined && variantData.sale_price !== null && variantData.sale_price !== '') ? parseFloat(variantData.sale_price) : null, currentVariant.sale_price);
-    if(variantData.hasOwnProperty('is_on_sale')) addUpdateField('is_on_sale', variantData.is_on_sale, currentVariant.is_on_sale);
-    if(variantData.hasOwnProperty('sale_percentage')) addUpdateField('sale_percentage', (variantData.sale_percentage !== undefined && variantData.sale_percentage !== null && variantData.sale_percentage !== '') ? parseFloat(variantData.sale_percentage) : null, currentVariant.sale_percentage);
+    addUpdateField('original_price', variantData.original_price, currentVariant.original_price);
+    addUpdateField('sale_price', variantData.sale_price, currentVariant.sale_price);
+    addUpdateField('is_on_sale', variantData.is_on_sale, currentVariant.is_on_sale);
+    addUpdateField('sale_percentage', variantData.sale_percentage, currentVariant.sale_percentage);
 
 
     let updatedVariant = currentVariant;
