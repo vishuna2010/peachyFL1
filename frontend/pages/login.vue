@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-neutral-bg-soft flex flex-col justify-center py-12 sm:px-6 lg:px-8"> <!-- Changed background -->
+  <div class="min-h-screen bg-neutral-bg-soft flex flex-col justify-center py-12 sm:px-6 lg:px-8">
     <div class="sm:mx-auto sm:w-full sm:max-w-md">
-      <img class="mx-auto h-16 w-auto" src="/Logo.svg" alt="Site Logo" /> <!-- Corrected to Logo.svg -->
+      <img class="mx-auto h-16 w-auto" src="/Logo.svg" alt="Site Logo" />
       <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
         {{ isTwoFactorStep ? 'Enter Verification Code' : 'Sign in to your account' }}
       </h2>
@@ -34,7 +34,7 @@
             </div>
           </template>
           <template v-else>
-            <p class="p-3 text-sm text-sky-blue bg-sky-blue/10 rounded-md border border-sky-blue/20 text-center"> <!-- Themed message -->
+            <p class="p-3 text-sm text-sky-blue bg-sky-blue/10 rounded-md border border-sky-blue/20 text-center">
               A verification code has been sent to your authenticator app. Please enter it below.
             </p>
             <div>
@@ -96,8 +96,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { useRouter, useRoute, useNuxtApp, useHead } from '#app'; // Added useHead
+import { ref, computed, nextTick } from 'vue'; // Added nextTick
+import { useRouter, useRoute, useNuxtApp, useHead } from '#app';
 import { useAuth } from '~/composables/useAuth';
 
 const email = ref('');
@@ -105,12 +105,11 @@ const password = ref('');
 const errorMessage = ref('');
 const isLoading = ref(false);
 
-const { loginSuccess, authUser } = useAuth(); // Use the new loginSuccess function, get authUser for role check
+const { loginSuccess, authUser } = useAuth();
 const router = useRouter();
-const route = useRoute(); // To get redirect query param
+const route = useRoute();
 const { $axios } = useNuxtApp();
 
-// --- 2FA State ---
 const isTwoFactorStep = ref(false);
 const userIdFor2FA = ref(null);
 const twoFactorToken = ref('');
@@ -121,7 +120,7 @@ const handleLogin = async () => {
   isLoading.value = true;
   errorMessage.value = '';
   try {
-    const response = await $axios.post('/auth/login', {
+    const response = await $axios.post('/auth/login', { // Path relative to /api base
       email: email.value,
       password: password.value,
     });
@@ -130,27 +129,29 @@ const handleLogin = async () => {
       if (response.data.twoFactorRequired) {
         isTwoFactorStep.value = true;
         userIdFor2FA.value = response.data.userId;
-        password.value = ''; // Clear password field for security
-        errorMessage.value = response.data.message || 'Please enter your 2FA code.'; // Inform user
+        password.value = '';
+        errorMessage.value = response.data.message || 'Please enter your 2FA code.';
       } else {
-        // Standard login successful (2FA not enabled or already handled)
-        if (loginSuccess(response.data)) { // response.data should be { token, user }
-          let targetPath = route.query.redirect;
-          if (!targetPath) {
-            if (authUser.value && authUser.value.role === 'admin') {
-              targetPath = '/admin';
+        const loginOk = await loginSuccess(response.data);
+        if (loginOk) {
+          // All async operations in loginSuccess (incl. permissions) are awaited.
+          // Determine original target path
+          let originalTargetPath = route.query.redirect?.toString() || '';
+          if (!originalTargetPath || originalTargetPath === '/') {
+            const currentUser = authUser.value;
+            if (currentUser && currentUser.role && currentUser.role.toLowerCase().includes('admin') && currentUser.permissions?.includes('admin:access_dashboard')) {
+              originalTargetPath = '/admin';
             } else {
-              targetPath = '/profile';
+              originalTargetPath = '/profile';
             }
           }
-          console.log('[Login Page] Login successful. Redirecting to:', targetPath);
-          router.push(targetPath);
+          console.log('[Login Page] Login successful, redirecting to auth callback. Original target:', originalTargetPath);
+          router.push({ path: '/auth/callback', query: { redirect: originalTargetPath } });
         } else {
-            errorMessage.value = 'Login failed: Invalid response data from server.';
+          errorMessage.value = 'Login failed: Could not process login response.';
         }
       }
     } else {
-      // This case might not be hit if backend returns non-200 for login failure
       errorMessage.value = response.data.message || 'Login failed. Please check your credentials.';
     }
   } catch (error) {
@@ -169,24 +170,26 @@ const handleTwoFactorVerify = async () => {
   isLoading.value = true;
   errorMessage.value = '';
   try {
-    const response = await $axios.post('/auth/2fa/login-verify', {
+    const response = await $axios.post('/auth/2fa/login-verify', { // Path relative to /api base
       userId: userIdFor2FA.value,
       token: twoFactorToken.value,
     });
 
     if (response.data.success && response.data.token) {
-      if (loginSuccess(response.data)) { // response.data should be { token, user }
-        let targetPath = route.query.redirect;
-        if (!targetPath) {
-          if (authUser.value && authUser.value.role === 'admin') {
-            targetPath = '/admin';
-          } else {
-            targetPath = '/profile';
+      const loginOk = await loginSuccess(response.data);
+      if (loginOk) {
+        let originalTargetPath = route.query.redirect?.toString() || '';
+         if (!originalTargetPath || originalTargetPath === '/') {
+            const currentUser = authUser.value;
+            if (currentUser && currentUser.role && currentUser.role.toLowerCase().includes('admin') && currentUser.permissions?.includes('admin:access_dashboard')) {
+              originalTargetPath = '/admin';
+            } else {
+              originalTargetPath = '/profile';
+            }
           }
-        }
-        console.log('[Login Page] 2FA Login successful. Redirecting to:', targetPath);
-        router.push(targetPath);
-        // Reset 2FA state
+        console.log('[Login Page] 2FA Login successful, redirecting to auth callback. Original target:', originalTargetPath);
+        router.push({ path: '/auth/callback', query: { redirect: originalTargetPath } });
+
         isTwoFactorStep.value = false;
         userIdFor2FA.value = null;
         twoFactorToken.value = '';
@@ -208,13 +211,11 @@ const cancelTwoFactor = () => {
   isTwoFactorStep.value = false;
   userIdFor2FA.value = null;
   twoFactorToken.value = '';
-  errorMessage.value = ''; // Clear any 2FA specific errors
-  password.value = ''; // Clear password field as user might want to re-enter
+  errorMessage.value = '';
+  password.value = '';
 };
 
 useHead({
   title: 'Login',
 });
 </script>
-
-<!--// No <style scoped> block needed with Tailwind CSS -->

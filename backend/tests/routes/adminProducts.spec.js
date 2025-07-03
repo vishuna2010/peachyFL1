@@ -1,36 +1,211 @@
-import request from 'supertest'; // Or your preferred HTTP testing client if not using supertest directly
-import express from 'express'; // To setup a minimal app for testing routes
-import adminProductsRouter from '../../routes/adminProducts'; // Adjust path
+import request from 'supertest';
+import express from 'express';
+import adminProductsRouter from '../../routes/adminProducts';
 import productService from '../../services/productService';
 import taxService from '../../services/taxService';
-import { isAuthenticated, isAdmin } from '../../auth'; // Mock these
+import auditLogService from '../../services/auditLogService';
+import { isAuthenticated, checkPermission } from '../../auth'; // Corrected to use checkPermission
+// const { productImageUploadMiddleware, handleMulterError } = require('../../middleware/fileUpload'); // Not directly testing file upload logic here
 
 // Mock services
 vi.mock('../../services/productService');
 vi.mock('../../services/taxService');
+vi.mock('../../services/auditLogService');
 
 // Mock auth middleware
 vi.mock('../../auth', () => ({
-  isAuthenticated: vi.fn((req, res, next) => next()),
-  isAdmin: vi.fn((req, res, next) => next()),
+  isAuthenticated: vi.fn((req, res, next) => {
+    req.user = { userId: 1, email: 'admin@example.com' }; // Mock user for audit log and other needs
+    return next();
+  }),
+  checkPermission: vi.fn((permission) => (req, res, next) => {
+    // Default pass for permission checks; specific tests can override this mock for permission denial scenarios
+    return next();
+  }),
 }));
+
+// Mock fileUpload middleware - basic pass-through.
+// We are not testing the file upload itself in these route tests, just that the middleware is called.
+vi.mock('../../middleware/fileUpload', async () => {
+  const actual = await vi.importActual('../../middleware/fileUpload');
+  return {
+    ...actual, // Spread actual to keep other exports if any
+    productImageUploadMiddleware: vi.fn((req, res, next) => {
+      // Simulate that multer might add req.file if a file was part of the request
+      // For tests that need to simulate a file upload, req.file can be manually set on the mock request object.
+      // e.g., mockReq.file = { originalname: 'test.jpg', buffer: Buffer.from('test'), mimetype: 'image/jpeg' };
+      next();
+    }),
+    handleMulterError: vi.fn((err, req, res, next) => {
+      if (err) {
+        // Simplified multer error handling for tests
+        return res.status(400).json({ message: `File upload error: ${err.message}` });
+      }
+      next();
+    }),
+  };
+});
+
 
 const app = express();
 app.use(express.json());
-// Mount the router under a path similar to how it's done in the main app
-// Assuming adminProductsRouter handles routes starting from '/' relative to its mount point
-app.use('/products', adminProductsRouter);
+app.use('/api/admin/products', adminProductsRouter); // Mount router
+
+// Simplified global error handler for testing error propagation from services
+app.use((err, req, res, next) => {
+  const statusCode = err.statusCode || 500;
+  const response = {
+    message: err.message || 'Internal Server Error',
+    ...(err.errorCode && { errorCode: err.errorCode }),
+    ...(err.errors && { errors: err.errors }), // For express-validator errors
+  };
+  res.status(statusCode).json(response);
+});
 
 
-describe('Admin Products Routes - GET /products/:productId/label-data', () => {
+describe('Admin Products Routes', () => {
   beforeEach(() => {
-    vi.resetAllMocks();
-    // Default successful auth
-    isAuthenticated.mockImplementation((req, res, next) => next());
-    isAdmin.mockImplementation((req, res, next) => next());
+    vi.clearAllMocks();
+    // Ensure default mocks for auth are set if not overridden by specific tests
+    isAuthenticated.mockImplementation((req, res, next) => {
+      req.user = { userId: 1, email: 'admin@example.com' };
+      next();
+    });
+    checkPermission.mockImplementation((permission) => (req, res, next) => next());
+    auditLogService.recordAuditEvent.mockResolvedValue(undefined);
   });
 
-  const mockProductBase = {
+  // --- GET /api/admin/products ---
+  describe('GET /api/admin/products', () => {
+    test('should get products with default options and call checkPermission with products:view', async () => {
+      productService.getAllProducts.mockResolvedValue({ products: [], totalProducts: 0, page: 1, limit: 10, totalPages: 0 });
+      const response = await request(app).get('/api/admin/products');
+
+      expect(checkPermission).toHaveBeenCalledWith('products:view');
+      expect(response.status).toBe(200);
+      expect(productService.getAllProducts).toHaveBeenCalledWith(expect.objectContaining({
+        page: 1,
+        limit: 10,
+        is_admin_request: true
+      }));
+    });
+  });
+
+  // --- POST /api/admin/products ---
+  describe('POST /api/admin/products', () => {
+    const productData = { name: 'New Gadget', price: 99.99, sku: 'NG001', stock_quantity: 10 }; // Added stock_quantity
+    const createdProduct = { id: 1, ...productData };
+
+    test('should create a product, call service, log audit, and call checkPermission with products:create', async () => {
+      productService.createProduct.mockResolvedValue(createdProduct);
+      const response = await request(app)
+        .post('/api/admin/products')
+        .send(productData);
+
+      expect(checkPermission).toHaveBeenCalledWith('products:create');
+      expect(response.status).toBe(201);
+      expect(response.body.data).toEqual(createdProduct);
+      // req.file will be undefined as productImageUploadMiddleware mock is just a pass-through without file
+      expect(productService.createProduct).toHaveBeenCalledWith(expect.objectContaining(productData), undefined);
+      expect(auditLogService.recordAuditEvent).toHaveBeenCalled();
+    });
+
+    test('should return 400 if validation fails (e.g. missing name)', async () => {
+      const response = await request(app)
+        .post('/api/admin/products')
+        .send({ price: 99.99 }); // Name is required by validator
+      expect(response.status).toBe(400);
+      expect(response.body.errors).toBeInstanceOf(Array);
+      expect(productService.createProduct).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- PUT /api/admin/products/:productId ---
+  describe('PUT /api/admin/products/:productId', () => {
+    const productId = 1;
+    const updateData = { name: 'Updated Gadget', price: 109.99 };
+    const updatedProduct = { id: productId, ...updateData };
+
+    test('should update a product, call service, log audit, and call checkPermission with products:edit', async () => {
+      productService.updateProduct.mockResolvedValue(updatedProduct);
+      const response = await request(app)
+        .put(`/api/admin/products/${productId}`)
+        .send(updateData);
+
+      expect(checkPermission).toHaveBeenCalledWith('products:edit');
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(updatedProduct);
+      expect(productService.updateProduct).toHaveBeenCalledWith(productId, expect.objectContaining(updateData), undefined, false);
+      expect(auditLogService.recordAuditEvent).toHaveBeenCalled();
+    });
+  });
+
+  // --- PUT /api/admin/products/:id/stock ---
+  describe('PUT /api/admin/products/:id/stock', () => {
+    const productId = 1;
+    const stockUpdateData = { new_stock_quantity: 50 };
+    const productAfterStockUpdate = { id: productId, name: "Test Product", stock_quantity: 50 }; // Stock quantity here is what getProductById would return
+
+    test('should update product stock, call service, log audit, and call checkPermission with products:edit_inventory', async () => {
+      // productService.updateProductStock is called with (id, new_stock_quantity)
+      // It then calls getProductById internally.
+      // We mock updateProductStock to return the expected final product shape.
+      productService.updateProductStock.mockResolvedValue(productAfterStockUpdate);
+
+      const response = await request(app)
+        .put(`/api/admin/products/${productId}/stock`)
+        .send(stockUpdateData);
+
+      expect(checkPermission).toHaveBeenCalledWith('products:edit_inventory');
+      expect(response.status).toBe(200);
+      expect(response.body.product).toEqual(productAfterStockUpdate); // The route returns the full product
+      expect(productService.updateProductStock).toHaveBeenCalledWith(productId, stockUpdateData.new_stock_quantity);
+      expect(auditLogService.recordAuditEvent).toHaveBeenCalled();
+    });
+
+    test('should return 400 for invalid stock_quantity', async () => {
+        const response = await request(app)
+            .put(`/api/admin/products/${productId}/stock`)
+            .send({ new_stock_quantity: -5 }); // Invalid stock
+        expect(response.status).toBe(400);
+        expect(productService.updateProductStock).not.toHaveBeenCalled();
+    });
+
+    test('should propagate BadRequestError from service if product has variants', async () => {
+        const { BadRequestError } = require('../../utils/AppError'); // Ensure this is the actual error class
+        productService.updateProductStock.mockRejectedValue(new BadRequestError('Stock for product with variants must be managed at the variant level.'));
+
+        const response = await request(app)
+            .put(`/api/admin/products/${productId}/stock`)
+            .send(stockUpdateData);
+
+        expect(response.status).toBe(400); // Assuming global error handler maps BadRequestError to 400
+        expect(response.body.message).toContain('Stock for product with variants');
+    });
+  });
+
+  // --- DELETE /api/admin/products/:id ---
+  describe('DELETE /api/admin/products/:id', () => {
+    const productId = 1;
+    const deletedProduct = { id: productId, name: 'Deleted Product' };
+
+    test('should delete a product, log audit, and call checkPermission with products:delete', async () => {
+      productService.deleteProduct.mockResolvedValue(deletedProduct);
+      const response = await request(app)
+        .delete(`/api/admin/products/${productId}`);
+
+      expect(checkPermission).toHaveBeenCalledWith('products:delete');
+      expect(response.status).toBe(200);
+      expect(response.body.product).toEqual(deletedProduct);
+      expect(productService.deleteProduct).toHaveBeenCalledWith(productId);
+      expect(auditLogService.recordAuditEvent).toHaveBeenCalled();
+    });
+  });
+
+
+  // --- Original Label Data Tests (adapted for new base path and auth) ---
+  describe('GET /api/admin/products/:productId/label-data', () => {
+    const mockProductBase = {
     id: 1,
     name: 'Test Product',
     sku: 'PRODSKU123',

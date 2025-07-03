@@ -2,9 +2,11 @@
   <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 min-h-[calc(100vh-theme(spacing.16))]">
     <h1 class="text-3xl sm:text-4xl font-bold text-text-primary mb-10 text-center">My Profile</h1>
 
-    <div v-if="isLoading" class="text-center py-10 text-lg text-text-secondary font-medium">Loading profile...</div>
+    <!-- Updated v-if to use isAuthLoading -->
+    <div v-if="isAuthLoading" class="text-center py-10 text-lg text-text-secondary font-medium">Loading profile...</div>
 
-    <div v-else-if="user" class="user-profile-content space-y-8"> <!-- Added space-y-8 to parent -->
+    <!-- Display content if authentication is initialized and user exists -->
+    <div v-else-if="isAuthenticated && user" class="user-profile-content space-y-8"> <!-- Added space-y-8 to parent -->
       <div class="user-info bg-white p-6 sm:p-8 rounded-lg shadow-md border border-neutral-medium">
         <h2 class="text-2xl font-semibold text-text-primary mb-6">User Profile</h2>
         <p class="mb-3 text-text-secondary"><strong class="font-medium text-text-primary">Email:</strong> {{ user.email }}</p>
@@ -98,27 +100,36 @@
       </div>
     </div>
 
-    <div v-else class="my-6 p-8 bg-white text-text-secondary rounded-lg shadow-md text-center border border-neutral-medium">
+    <!-- Display message if authentication is initialized but user is not logged in -->
+    <div v-else-if="!isAuthenticated && !isAuthLoading" class="my-6 p-8 bg-white text-text-secondary rounded-lg shadow-md text-center border border-neutral-medium">
       <p class="text-lg mb-4">You are not logged in. Please log in to view your profile.</p>
       <NuxtLink to="/login" class="mt-4 inline-block px-6 py-3 bg-brand-primary text-white font-medium rounded-md hover:bg-opacity-80 transition-colors">Login</NuxtLink>
     </div>
+    <!-- Implicitly, if isAuthLoading is false, and isAuthenticated is false, the above block renders.
+         If isAuthLoading is false, and isAuthenticated is true BUT user is null (edge case),
+         the main content block might not render correctly if it solely relies on `user`.
+         The `v-else-if="isAuthenticated && user"` handles this.
+         A final v-else could catch unexpected states, but might be overkill. -->
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'; // Added computed
+import { ref, computed, watch, watchEffect } from 'vue'; // Added watch, watchEffect
 import { useAuth } from '~/composables/useAuth';
-import { useRouter } from 'vue-router'; // useRouter might not be needed if not navigating
+// useRouter not currently used
 import { useToast } from 'vue-toastification';
 import { useNuxtApp } from '#app'; // To get $axios
 
-const { authUser, authToken, fetchUser, setUser } = useAuth(); // Added setUser
-// const router = useRouter(); // Not strictly needed if only staying on page
+// isAuthInitialized is crucial for knowing when auth status is definitively known.
+// isAuthenticated is true if both token and user are present.
+const { authUser, authToken, setUser, isAuthInitialized, isAuthenticated } = useAuth();
 const toast = useToast();
-const { $axios } = useNuxtApp(); // Get $axios instance
+const { $axios } = useNuxtApp();
 
-const user = computed(() => authUser.value); // Use computed for reactivity from composable
-const isLoading = ref(false);
+const user = computed(() => authUser.value);
+
+// isLoading is true UNTIL isAuthInitialized is true.
+const isAuthLoading = computed(() => !isAuthInitialized.value);
 
 // For Profile Update
 const profileName = ref('');
@@ -216,32 +227,45 @@ const handleUpdateProfile = async () => {
   }
 };
 
-onMounted(async () => {
-  isLoading.value = true;
-  if (authToken.value && !authUser.value) {
-    await fetchUser(); // This might not fetch 'name' currently
-  }
-  // Initialize profileName after user data is potentially available
-  // authUser.value might be populated directly from localStorage or by fetchUser
-  if (authUser.value) {
-    profileName.value = authUser.value.name || '';
-  }
-  isLoading.value = false;
-
-  if (!authToken.value) {
-    console.log("Profile page: No auth token found on mount. User will be shown 'not logged in' message.");
+// watchEffect to react to changes in isAuthInitialized and authUser
+watchEffect(() => {
+  // This effect runs initially and whenever its dependencies change.
+  console.log(`ProfilePage: watchEffect triggered. isAuthInitialized: ${isAuthInitialized.value}, authUser: ${authUser.value ? authUser.value.email : null}`);
+  if (isAuthInitialized.value) {
+    if (authUser.value) {
+      profileName.value = authUser.value.name || '';
+      console.log(`ProfilePage: Auth initialized and user present. Profile name set to: '${profileName.value}'`);
+    } else {
+      // Auth is initialized, but there's no user (e.g., not logged in)
+      profileName.value = '';
+      console.log("ProfilePage: Auth initialized but no user. Profile name cleared.");
+    }
+  } else {
+    // Auth is not yet initialized, profileName remains empty or its initial state.
+    console.log("ProfilePage: Auth not yet initialized.");
   }
 });
 
+// The previous onMounted and direct watch on authUser for profileName are now covered by the watchEffect.
+// The watch on authUser can be kept if specific logic for *only* authUser changes (post-init) is needed,
+// but for initializing profileName, watchEffect handles the isAuthInitialized dependency better.
+// For simplicity, we'll rely on the watchEffect above. If profileName needs to react *only*
+// when authUser changes *after* initialization, a separate watch could be added:
+/*
 watch(authUser, (newUser) => {
-  if (newUser) {
-    profileName.value = newUser.name || '';
-  } else {
-    profileName.value = '';
+  if (isAuthInitialized.value) { // Ensure this runs only after init
+    if (newUser) {
+      profileName.value = newUser.name || '';
+    } else {
+      profileName.value = '';
+    }
   }
-}, { immediate: true }); // immediate: true to run on component mount as well
+}, { deep: true }); // deep: true if authUser could have nested changes affecting name
+*/
+// The { immediate: true } on the old watch(authUser, ...) is effectively handled by watchEffect.
 
 useHead({
+  title: 'My Profile',
 });
 
 useHead({

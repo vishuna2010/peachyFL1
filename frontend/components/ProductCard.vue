@@ -19,7 +19,10 @@
       >
         Quick View
       </button>
-      <div class="absolute top-3 left-3 bg-orange-gold text-white text-xs font-bold px-2 py-0.5 rounded-sm">
+      <div
+        v-if="isProductOnSale"
+        class="absolute top-3 left-3 bg-orange-gold text-white text-xs font-bold px-2 py-0.5 rounded-sm z-10"
+      >
         SALE
       </div>
     </div>
@@ -35,9 +38,15 @@
       <p v-if="product.tax_class_name" class="text-xs text-venus-text-secondary mb-1 truncate">
         Tax: {{ product.tax_class_name }}
       </p>
-      <p class="font-sans text-base text-orange-gold font-semibold mt-auto pt-2"> <!-- Changed text color -->
-        {{ formattedPrice }}
-      </p>
+      <div class="font-sans text-base font-semibold mt-auto pt-2">
+        <span class="text-orange-gold">{{ formattedPrice }}</span>
+        <span
+          v-if="isProductOnSale && product.original_price"
+          class="text-sm text-gray-400 line-through ml-2"
+        >
+          {{ formatCurrency(product.original_price) }}
+        </span>
+      </div>
       <div class="mt-3">
         <NuxtLink
           v-if="product.has_variants"
@@ -79,6 +88,8 @@ const props = defineProps({
       id: 0,
       name: 'Unnamed Product',
       price: 0.00,
+      original_price: null, // Added for sale detection
+      final_price: null,    // Added for sale price
       image_url: '',
       category_name: '',
       has_variants: false,
@@ -88,22 +99,33 @@ const props = defineProps({
   }
 });
 
-const formattedPrice = computed(() => {
-  let priceToParse = null;
-
-  if (props.product.final_price !== undefined && props.product.final_price !== null) {
-    priceToParse = props.product.final_price;
-  } else if (props.product.price !== undefined && props.product.price !== null) {
-    priceToParse = props.product.price;
+const formatCurrency = (value) => {
+  const numericValue = parseFloat(value);
+  if (!isNaN(numericValue)) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(numericValue);
   }
+  return ''; // Fallback for invalid value
+};
 
-  const numericPrice = parseFloat(priceToParse);
+const currentPrice = computed(() => {
+  // Use final_price if available (this could be the sale price), otherwise use price
+  return parseFloat(props.product.final_price !== undefined && props.product.final_price !== null ? props.product.final_price : props.product.price);
+});
 
+const isProductOnSale = computed(() => {
+  const original = parseFloat(props.product.original_price);
+  const current = currentPrice.value;
+  return !isNaN(original) && !isNaN(current) && original > current;
+});
+
+const formattedPrice = computed(() => {
+  const numericPrice = currentPrice.value;
   if (!isNaN(numericPrice)) {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(numericPrice);
+    return formatCurrency(numericPrice);
   }
   return '$0.00'; // Fallback for invalid or missing price
 });
+
 
 const handleAddToCart = () => {
   const priceForCart = parseFloat(

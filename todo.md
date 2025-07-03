@@ -398,3 +398,32 @@ This section outlines the primary driver for future backend development, based o
     - [ ] Optional QR for delivery scanning
     - [ ] Custom line item notes
 ---
+
+## FrontEnd FIX
+
+**Phase 1: Core Frontend Stability**
+- [x] **Robust Initialization (`useAuth.js`, `useCart.js`)**
+- [x] **Page Component Updates for Initialization Awareness** (`profile.vue`, `AppHeader.vue`, `cart.vue`, `checkout.vue`)
+- [x] **Review `app.vue`** (Removed redundant `initCart()` call)
+- [x] **Testing** (Core frontend stability, initialization, and tax calculation verified)
+
+**Phase 2: Hero Banner Enhancements**
+- [x] **Dynamic Hero Banner - Frontend Component**: Modified `HeroBanner.vue` to fetch and display images dynamically from an API.
+- [x] **Hero Banner - Backend API**: Implemented `/api/cms/hero-banners/active` endpoint.
+- [ ] **Hero Banner - Admin Management (Frontend - Placeholder/Future)**: Plan for admin UI to manage hero banners.
+
+**Phase 3: Product Display & Filtering**
+- [ ] **Quick View with Variants**: Enhance product quick view to allow variant selection (size, color, etc.) and update price/image/availability dynamically.
+- [ ] **Refactor Product Filters to Search Bar**: Integrate existing filter functionality from `ProductFilters.vue` into the main site search bar area.
+
+**Phase 4: Sales and Categories**
+- [ ] **Sales Functionality - Frontend**: Display sale prices, distinguish sale items visually.
+- [ ] **Sales Functionality - Backend (Dependency)**: Requires backend support to define sales.
+- [ ] **Category Integration - Frontend**: Enable product filtering by category, display category info, potentially create category landing pages.
+
+**Phase 5: RBAC Review and Testing**
+- [ ] **RBAC Review**: Ensure new frontend components (especially admin) respect RBAC rules.
+- [ ] **Comprehensive Testing**: Test all new and modified features.
+---
+
+[end of todo.md]

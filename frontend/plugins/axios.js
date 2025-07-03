@@ -4,6 +4,7 @@ import { defineNuxtPlugin, useRuntimeConfig, useState } from '#app'; // Explicit
 export default defineNuxtPlugin((nuxtApp) => {
   const config = useRuntimeConfig();
   const backendBaseUrl = config.public.backendBaseUrl || 'http://localhost:3000'; // Fallback if not set
+  // baseURL should include /api
   const baseURL = `${backendBaseUrl}/api`;
 
   // Initialize useState hooks in the main plugin scope

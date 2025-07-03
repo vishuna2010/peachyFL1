@@ -1,43 +1,125 @@
-import { useState, useRouter } from '#app'; // Auto-imported by Nuxt
+// Nuxt 3 auto-imports composables like useState, useRouter, useNuxtApp, useRuntimeConfig, nextTick
+// No explicit import needed from '#app' for these in most cases.
 
 export const useAuth = () => {
   const { $axios } = useNuxtApp();
   const router = useRouter();
+  const config = useRuntimeConfig(); // Get runtime config
 
   // Reactive state for token and user
   // Using useState for simple global state within Nuxt's context
   const authToken = useState('authToken', () => null);
   const authUser = useState('authUser', () => null);
   const isAuthInitialized = useState('isAuthInitialized', () => false); // Flag to track initial load
+  const isLoadingPermissions = useState('isLoadingPermissions', () => false);
+
+
+  const _fetchUserPermissions = async () => {
+    if (!authToken.value || !authUser.value || !authUser.value.id) {
+      console.log('useAuth: Cannot fetch permissions without token or user ID.');
+      return;
+    }
+    isLoadingPermissions.value = true;
+    console.log('useAuth: Fetching user permissions...');
+    try {
+      // Path should be relative to the /api baseURL
+      console.log(`useAuth: Attempting to fetch permissions from /auth/my-permissions`);
+      const response = await $axios.get('/auth/my-permissions'); // Corrected: was /api/auth/my-permissions in my mental model, but should be this if baseURL is /api
+      if (response.data && response.data.permissions) {
+        if (authUser.value) { // Ensure authUser still exists
+          const updatedUser = { ...authUser.value, permissions: response.data.permissions };
+          setUser(updatedUser); // Use setUser to also update localStorage
+          console.log('useAuth: User permissions fetched and set:', response.data.permissions);
+          await nextTick(); // Ensure reactivity propagates before isLoadingPermissions is set to false
+        }
+      } else {
+        console.warn('useAuth: Permissions not found in /api/auth/my-permissions response.');
+        if (authUser.value) {
+          const updatedUser = { ...authUser.value, permissions: [] }; // Default to empty array
+          setUser(updatedUser);
+          await nextTick();
+        }
+      }
+    } catch (error) {
+      console.error('useAuth: Error fetching user permissions:', error.response?.data?.message || error.message);
+      if (authUser.value) {
+        const updatedUser = { ...authUser.value, permissions: [] }; // Default to empty array on error
+        setUser(updatedUser);
+        await nextTick();
+      }
+      // Optionally handle specific errors, e.g., 401 might require logout
+      if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+        console.log('useAuth: Unauthorized fetching permissions. Logging out.');
+        // Consider if logout is appropriate or if permissions are just optional enhancement
+        // For RBAC, permissions are critical, so logout might be too aggressive if basic user info is still valid.
+        // For now, we just ensure permissions array is empty or not set.
+      }
+    } finally {
+      await nextTick(); // Ensure reactive updates from try/catch (setUser) propagate
+      isLoadingPermissions.value = false;
+    }
+  };
+
 
   // Attempt to load token from localStorage on initialization (client-side)
-  const _initializeAuth = () => {
+  const _initializeAuth = async () => {
     if (process.client && !isAuthInitialized.value) {
-    const storedToken = localStorage.getItem('authToken');
-    const storedUser = localStorage.getItem('authUser');
-    if (storedToken) {
-      authToken.value = storedToken;
-      if (storedToken) { // Set Axios header only if token actually exists
-          $axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+      console.log('useAuth: Starting initialization...');
+
+      const storedToken = localStorage.getItem('authToken');
+      const storedUser = localStorage.getItem('authUser');
+
+      if (storedToken) {
+        authToken.value = storedToken;
+        $axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        console.log('useAuth: Token loaded from localStorage and Axios header set.');
+      } else {
+        console.log('useAuth: No token found in localStorage.');
       }
-    }
-    if (storedUser) {
-      try {
-        authUser.value = JSON.parse(storedUser);
-      } catch (e) {
-        console.error("Error parsing stored user", e);
-        localStorage.removeItem('authUser');
+
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          // Ensure permissions are initialized as an array if not present from old localStorage
+          if (!parsedUser.permissions) {
+            parsedUser.permissions = [];
+          }
+          authUser.value = parsedUser;
+          console.log('useAuth: User data loaded from localStorage:', authUser.value);
+        } catch (e) {
+          console.error("useAuth: Error parsing stored user, removing item.", e);
+          localStorage.removeItem('authUser');
+          authUser.value = null;
+        }
+      } else {
+        console.log('useAuth: No user data found in localStorage.');
       }
-    }
-    isAuthInitialized.value = true;
-    console.log('Auth initialized. Token:', !!authToken.value, 'User:', !!authUser.value);
+
+      isAuthInitialized.value = true;
+      console.log('useAuth: Initialization complete. isAuthInitialized set to true. Token:', !!authToken.value, 'User:', !!authUser.value);
+
+      if (authToken.value) {
+        if (!authUser.value || !authUser.value.id) { // If user data is incomplete or missing
+          console.log('useAuth: Token present but user data missing/incomplete after init. Fetching user...');
+          await fetchUser(); // This will also trigger _fetchUserPermissions if successful
+        } else if (authUser.value && (!authUser.value.permissions || authUser.value.permissions.length === 0)) {
+          // User data loaded, but permissions might be missing (e.g. from older localStorage) or need refresh
+          console.log('useAuth: User data present, but permissions might be missing. Fetching permissions...');
+          await _fetchUserPermissions();
+        } else {
+           console.log('useAuth: Token and user data (including permissions) present after init.');
+        }
+      } else {
+        console.log('useAuth: No token after init. No immediate fetch needed.');
+      }
+    } else if (process.client && isAuthInitialized.value) {
+      console.log('useAuth: Initialization already completed.');
     }
   };
 
   if (process.client && !isAuthInitialized.value) {
-      _initializeAuth();
+    _initializeAuth();
   }
-
 
   const setToken = (newToken) => {
     authToken.value = newToken;
@@ -69,14 +151,18 @@ export const useAuth = () => {
   // The login page will call API directly then call loginSuccess.
   // async function login(email, password) { ... } // Original login logic might be removed or adapted
 
-  const loginSuccess = (apiResponseData) => {
+  const loginSuccess = async (apiResponseData) => { // Made async
     // Expects apiResponseData to be { token, user }
     if (apiResponseData.token && apiResponseData.user) {
       setToken(apiResponseData.token);
-      setUser(apiResponseData.user); // Assuming user object from API is safe to store
-                                     // (e.g., excludes password, sensitive fields)
-      console.log('Login successful, user set:', authUser.value);
-      // router.push(router.currentRoute.value.query.redirect || '/profile'); // Moved to page
+      // Set basic user data first
+      const basicUser = { ...apiResponseData.user, permissions: [] }; // Initialize with empty permissions
+      setUser(basicUser);
+      console.log('Login successful, basic user set:', authUser.value);
+
+      // After setting basic user, fetch their permissions
+      await _fetchUserPermissions(); // await the permission fetching
+
       return true;
     }
     console.error('loginSuccess called with invalid data:', apiResponseData);
@@ -101,32 +187,31 @@ export const useAuth = () => {
 
   const fetchUser = async () => {
     if (!authToken.value) {
-      // console.log('fetchUser: No auth token found.');
-      return; // No token, no user to fetch
+      return;
     }
-    // console.log('fetchUser: Attempting to fetch user data from /api/auth/me');
+    console.log('useAuth: Attempting to fetch user data from /auth/me');
     try {
-      const response = await $axios.get('/api/auth/me'); // Use $axios from useNuxtApp()
+      const response = await $axios.get('/auth/me'); // Path relative to /api baseURL
       if (response.data && response.data.user) {
-        setUser(response.data.user); // The /me endpoint returns { user: { id, email, role, ... } }
-        // console.log('fetchUser: User data fetched and set:', response.data.user);
+        // Set basic user data first, ensure permissions array exists
+        const basicUser = { ...response.data.user, permissions: authUser.value?.permissions || [] };
+        setUser(basicUser);
+        console.log('useAuth: Basic user data fetched and set:', authUser.value);
+
+        // After setting basic user, fetch their permissions
+        await _fetchUserPermissions();
       } else {
-        // This case might indicate an issue with the /me endpoint's response structure
-        // or if the token is valid but user data can't be retrieved for some reason.
-        console.warn('fetchUser: User data not found in /api/auth/me response, or response structure is unexpected.');
-        // Potentially clear user state if response is malformed or indicates an issue
-        // setUser(null); // Or handle as an error state
+        console.warn('useAuth: User data not found in /api/auth/me response.');
+        setUser(null); // Clear user if /me fails to return valid data
       }
     } catch (error) {
-      console.error('fetchUser: Error fetching user data from /api/auth/me:', error.response?.data?.message || error.message);
-      // If the error is 401 (Unauthorized) or similar, it means the token is invalid or expired.
-      // In this case, we should log the user out.
+      console.error('useAuth: Error fetching user data from /api/auth/me:', error.response?.data?.message || error.message);
       if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-        console.log('fetchUser: Unauthorized or invalid token. Logging out.');
-        logout(); // Call the logout function from useAuth
+        console.log('useAuth: Unauthorized fetching user data. Logging out.');
+        logout();
+      } else {
+        setUser(null); // Clear user on other errors too
       }
-      // Do not call setUser(null) here if logout() already does it, to avoid duplicate actions.
-      // logout() should handle clearing token and user state.
     }
   };
 
@@ -134,31 +219,23 @@ export const useAuth = () => {
   const logout = () => {
     setToken(null);
     setUser(null);
-    if (process.client) { // Ensure router is only used client-side initially
+    isLoadingPermissions.value = false; // Reset loading state on logout
+    if (process.client) {
         router.push('/login');
     }
   };
 
-  // Call fetchUser on init if token exists but user doesn't (e.g. after page reload and _initializeAuth)
-  if (process.client && authToken.value && !authUser.value && isAuthInitialized.value) {
-     // Check isAuthInitialized to ensure this doesn't run before localStorage load attempt
-    fetchUser();
-  }
-
-  const isAuthenticated = computed(() => !!authToken.value && !!authUser.value);
+  const isAuthenticated = computed(() => !!authToken.value && !!authUser.value && !!authUser.value.id); // Check for user.id too
 
   return {
-    authToken: computed(() => authToken.value), // Expose as computed for read-only pattern
+    authToken: computed(() => authToken.value),
     authUser: computed(() => authUser.value),
-    isAuthenticated, // Export the new computed property
-    isAuthInitialized: computed(() => isAuthInitialized.value), // Expose initialization status
-    // login, // Original login function might be deprecated for page-level handling
-    loginSuccess, // New function to finalize login
+    isAuthenticated,
+    isAuthInitialized: computed(() => isAuthInitialized.value),
+    isLoadingPermissions: computed(() => isLoadingPermissions.value), // Expose this
+    loginSuccess,
     register,
     logout,
     fetchUser,
-    // Expose setters if direct manipulation from outside is ever needed, though typically not.
-    // _setToken: setToken,
-    // _setUser: setUser,
   };
 };

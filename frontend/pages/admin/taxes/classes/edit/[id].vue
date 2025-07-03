@@ -75,8 +75,8 @@
               <tr v-for="rate in linkedRates" :key="rate.id">
                 <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">{{ rate.id }}</td>
                 <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{{ rate.name }}</td>
-                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">{{ (rate.rate_percentage * 100).toFixed(2) }}%</td>
-                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">{{ rate.jurisdiction_name || rate.jurisdiction_code || 'N/A' }}</td>
+                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">{{ (rate.rate * 100).toFixed(2) }}%</td>
+                <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">{{ rate.country || 'N/A' }}{{ rate.state_province ? ', ' + rate.state_province : '' }}</td>
                 <td class="px-4 py-2 whitespace-nowrap text-sm">
                   <button @click="handleUnlinkRate(rate.id, rate.name)" class="text-red-600 hover:text-red-800">Unlink</button>
                 </td>
@@ -98,7 +98,7 @@
                   class="block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
             <option :value="null" disabled>Select a rate to link</option>
             <option v-for="rate in availableRatesToLink" :key="rate.id" :value="rate.id">
-              {{ rate.name }} ({{ (rate.rate_percentage * 100).toFixed(2) }}%) - {{ rate.jurisdiction_name || rate.jurisdiction_code || 'Global' }}
+              {{ rate.name }} ({{ (rate.rate * 100).toFixed(2) }}%) - {{ rate.country }}{{ rate.state_province ? ', ' + rate.state_province : '' }}
             </option>
           </select>
           <button @click="handleLinkRate" :disabled="!selectedRateToLink"
@@ -176,8 +176,9 @@ const fetchLinkedRates = async () => {
 const fetchAllRates = async () => {
   // isRatesLoading can also cover this as they load in parallel often
   try {
-    const response = await $axios.get('/admin/tax-rates?limit=1000'); // Fetch all, or implement pagination if list is huge
-    allRates.value = response.data.data;
+    // Use limit 100 to align with backend validator, add sorting for consistent display
+    const response = await $axios.get('/admin/tax-rates?limit=100&sortBy=name&sortOrder=ASC');
+    allRates.value = response.data.data; // Assuming response.data.data is the array of rates
   } catch (error) {
     console.error('Error fetching all rates:', error);
     toast.error(error.response?.data?.message || 'Failed to load available tax rates for linking.');

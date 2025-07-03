@@ -34,6 +34,7 @@ const adminReturnsRoutes = require('./routes/adminReturns');
 const adminTaxClassesRoutes = require('./routes/adminTaxClasses');
 const adminTaxRatesRoutes = require('./routes/adminTaxRates'); // New import
 const adminMarketingRoutes = require('./routes/adminMarketing'); // Import admin marketing routes
+const adminHeroBannerRoutes = require('./routes/adminHeroBanners'); // Import admin hero banner routes
 // Duplicate imports for adminOptionManagementRoutes and adminProductSpecificOptionsRoutes were removed by only keeping the first ones.
 const reviewRoutes = require('./routes/reviews'); // Import review routes
 const userRoutes = require('./routes/users'); // Import user profile routes
@@ -168,6 +169,7 @@ app.use('/api/admin/returns', adminReturnsRoutes);
 app.use('/api/admin/tax-classes', adminTaxClassesRoutes);
 app.use('/api/admin/tax-rates', adminTaxRatesRoutes); // New mount
 app.use('/api/admin/marketing', adminMarketingRoutes); // Mount admin marketing routes
+app.use('/api/admin/hero-banners', adminHeroBannerRoutes); // Mount admin hero banner routes
 
 
 // --- User Profile Routes ---
@@ -178,6 +180,10 @@ app.use('/api/categories', categoryRoutes);
 
 // --- Public Cart Routes (e.g. for discount validation) ---
 app.use('/api/cart', cartRoutes);
+
+// --- CMS Routes (e.g., for Hero Banners) ---
+const cmsRoutes = require('./routes/cmsRoutes');
+app.use('/api/cms', cmsRoutes);
 
 // --- Public Order Routes (e.g., for user to create their own order) ---
 app.use('/api/orders', orderRoutes);

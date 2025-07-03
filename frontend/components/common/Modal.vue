@@ -39,7 +39,7 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits, watch, onMounted, onUnmounted } from 'vue';
+import { watch, onMounted, onUnmounted } from 'vue';
 
 const props = defineProps({
   isOpen: {

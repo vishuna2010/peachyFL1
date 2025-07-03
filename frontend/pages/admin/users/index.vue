@@ -205,16 +205,20 @@ const availableRoles = ref([]); // Populate this from an API or define staticall
 
 const fetchAvailableRoles = async () => {
   try {
-    const response = await $axios.get('/admin/roles/all'); // Assuming an endpoint to fetch all roles
-    if (response.data && Array.isArray(response.data.roles)) {
-      availableRoles.value = response.data.roles;
+    // Corrected endpoint to fetch all roles
+    const response = await $axios.get('/admin/roles');
+    // The GET /api/admin/roles route returns an array of role objects directly
+    if (response.data && Array.isArray(response.data)) {
+      availableRoles.value = response.data; // The response itself is the array of roles
+      console.log('[UsersPage] Fetched available roles:', availableRoles.value);
     } else {
-      availableRoles.value = [{id: 'admin', name: 'Admin'}, {id: 'user', name: 'User'}]; // Fallback
+      console.warn('[UsersPage] Unexpected response structure for roles, using fallback. Response:', response.data);
+      availableRoles.value = [{id: 1, name: 'Admin (Fallback)'}, {id: 2, name: 'User (Fallback)'}];
     }
   } catch (err) {
-    console.error('Error fetching roles:', err);
+    console.error('[UsersPage] Error fetching roles:', err);
     // Fallback or default roles if API fails
-    availableRoles.value = [{id: 'admin', name: 'Admin'}, {id: 'user', name: 'User'}]; // Example
+    availableRoles.value = [{id: 1, name: 'Admin (Fallback)'}, {id: 2, name: 'User (Fallback)'}];
   }
 };
 
@@ -230,7 +234,7 @@ const queryParams = computed(() => {
   if (selectedStatus.value) params.append('status', selectedStatus.value);
   params.append('page', currentPage.value.toString());
   params.append('limit', itemsPerPage.value.toString());
-  console.log('[UsersPage] Computed queryParams:', Object.fromEntries(params.entries()));
+  // console.log('[UsersPage] Computed queryParams:', Object.fromEntries(params.entries()));
   return params;
 });
 
@@ -239,7 +243,7 @@ const { data: usersApiResponse, pending, error, refresh: refreshUsers } = await 
   'admin-users',
   () => {
     const paramsObject = Object.fromEntries(queryParams.value.entries());
-    console.log('[UsersPage] Fetching users with params:', paramsObject);
+    // console.log('[UsersPage] Fetching users with params:', paramsObject);
     return $axios.get('/admin/users', { params: paramsObject });
   },
   {
@@ -250,73 +254,82 @@ const { data: usersApiResponse, pending, error, refresh: refreshUsers } = await 
 
 watch(error, (newError) => {
   if (newError) {
-    console.error('[UsersPage] Error fetching users (useAsyncData):', newError);
+    // console.error('[UsersPage] Error fetching users (useAsyncData):', newError);
   }
 });
 
 const usersToDisplay = computed(() => {
-  console.log('[UsersPage] usersApiResponse raw:', usersApiResponse.value);
-  if (usersApiResponse.value && usersApiResponse.value.data && Array.isArray(usersApiResponse.value.data.users)) {
-    const mappedUsers = usersApiResponse.value.data.users.map(user => ({
+  // console.log('[UsersPage CPTD] Evaluating usersToDisplay. usersApiResponse.value:', usersApiResponse.value);
+
+  const responseData = usersApiResponse.value?.data; // This is {data: Array, pagination: Object}
+
+  if (responseData && responseData.data && Array.isArray(responseData.data)) {
+    // console.log('[UsersPage CPTD] Condition TRUE. Mapping users from responseData.data. Length:', responseData.data.length);
+    const mappedUsers = responseData.data.map(user => ({
       ...user,
       role: user.role_name || user.legacy_role || 'N/A',
       created_at: new Date(user.created_at).toLocaleDateString(),
     }));
-    console.log('[UsersPage] Mapped usersToDisplay:', mappedUsers);
+    // console.log('[UsersPage CPTD] Mapped usersToDisplay:', mappedUsers);
     return mappedUsers;
   }
-  console.log('[UsersPage] usersToDisplay returning empty array.');
+  // console.log('[UsersPage CPTD] Condition FALSE or data not in expected format. Returning empty array. responseData:', responseData);
   return [];
 });
 
 // Update totalUsers when data is fetched/updated
 watch(usersApiResponse, (newResponse) => {
-  console.log('[UsersPage] usersApiResponse watcher triggered. New response:', newResponse);
+  // console.log('[UsersPage] usersApiResponse watcher triggered. New response:', newResponse);
   if (newResponse && newResponse.data) {
-    // Log the exact structure of newResponse.data
     try {
-      console.log('[UsersPage] RAW API newResponse.data:', JSON.parse(JSON.stringify(newResponse.data)));
+      // console.log('[UsersPage] RAW API newResponse.data:', JSON.parse(JSON.stringify(newResponse.data)));
     } catch (e) {
-      console.error('[UsersPage] Could not stringify newResponse.data', e);
-      console.log('[UsersPage] RAW API newResponse.data (direct):', newResponse.data);
+      // console.error('[UsersPage] Could not stringify newResponse.data', e);
+      // console.log('[UsersPage] RAW API newResponse.data (direct):', newResponse.data);
     }
 
-    totalUsers.value = newResponse.data.total_users || 0; // This is where the issue might be
-    console.log('[UsersPage] Attempted to set total_users from newResponse.data.total_users. Value found:', newResponse.data.total_users);
-    console.log('[UsersPage] Total users set to:', totalUsers.value);
+    const apiData = newResponse.data;
 
-    if (Array.isArray(newResponse.data.users)) {
-      console.log('[UsersPage] newResponse.data.users is an array. Length:', newResponse.data.users.length);
+    if (apiData && apiData.pagination) {
+      totalUsers.value = apiData.pagination.total || 0;
+      // console.log('[UsersPage] Attempted to set total_users from apiData.pagination.total. Value found:', apiData.pagination.total);
     } else {
-      console.warn('[UsersPage] newResponse.data.users is NOT an array. Value:', newResponse.data.users);
+      totalUsers.value = 0;
+      // console.warn('[UsersPage] apiData.pagination or apiData.pagination.total is missing.');
+    }
+    // console.log('[UsersPage] Total users set to:', totalUsers.value);
+
+    if (apiData && Array.isArray(apiData.data)) {
+      // console.log('[UsersPage] apiData.data (formerly users) is an array. Length:', apiData.data.length);
+    } else {
+      // console.warn('[UsersPage] apiData.data (formerly users) is NOT an array or is missing. Value:', apiData ? apiData.data : 'apiData is null/undefined');
     }
 
   } else {
     totalUsers.value = 0;
-    console.log('[UsersPage] Total users set to 0 due to invalid newResponse or missing newResponse.data.');
+    // console.log('[UsersPage] Total users set to 0 due to invalid newResponse or missing newResponse.data.');
   }
-  console.log(`[UsersPage] Pagination state: currentPage=${currentPage.value}, itemsPerPage=${itemsPerPage.value}, totalUsers=${totalUsers.value}`);
+  // console.log(`[UsersPage] Pagination state: currentPage=${currentPage.value}, itemsPerPage=${itemsPerPage.value}, totalUsers=${totalUsers.value}`);
 }, { immediate: true, deep: true });
 
 
 const applyFilters = () => {
-  console.log('[UsersPage] applyFilters called.');
+  // console.log('[UsersPage] applyFilters called.');
   currentPage.value = 1;
   refreshUsers();
 };
 
 // Watch for individual filter changes to trigger applyFilters
 watch([searchQuery, selectedRole, selectedStatus], () => {
-  console.log(`[UsersPage] Filters changed: searchQuery=${searchQuery.value}, selectedRole=${selectedRole.value}, selectedStatus=${selectedStatus.value}`);
+  // console.log(`[UsersPage] Filters changed: searchQuery=${searchQuery.value}, selectedRole=${selectedRole.value}, selectedStatus=${selectedStatus.value}`);
   applyFilters();
 });
 
 
 const changePage = (page) => {
-  console.log(`[UsersPage] changePage called with page: ${page}. Current totalUsers: ${totalUsers.value}`);
+  // console.log(`[UsersPage] changePage called with page: ${page}. Current totalUsers: ${totalUsers.value}`);
   if (page > 0 && (page - 1) * itemsPerPage.value < totalUsers.value) {
     currentPage.value = page;
-    // refreshUsers(); // useAsyncData watcher handles this for currentPage
   }
 };
 

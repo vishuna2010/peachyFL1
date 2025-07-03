@@ -3,37 +3,32 @@
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-semibold text-gray-900">Tax Rates</h1>
       <NuxtLink to="/admin/taxes/rates/new"
-        class="inline-flex items-center justify-center rounded-md border border-transparent bg-brand-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-primary-dark focus:outline-none focus:ring-2 focus:ring-brand-primary-light focus:ring-offset-2 sm:w-auto">
+        class="inline-flex items-center justify-center rounded-md border border-transparent bg-peach-pink px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-blue-deep focus:outline-none focus:ring-2 focus:ring-peach-pink focus:ring-offset-2 sm:w-auto">
         Add New Tax Rate
       </NuxtLink>
     </div>
 
-    <!-- Filter Section -->
+    <!-- Filter Section (Note: Filters may need alignment with backend capabilities) -->
     <div class="mb-6 p-4 border rounded-md bg-gray-50 shadow">
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <div>
-          <label for="filter_is_active" class="block text-sm font-medium text-gray-700">Status</label>
-          <select v-model="filters.is_active" id="filter_is_active"
+          <label for="filter_tax_class_id" class="block text-sm font-medium text-gray-700">Tax Class</label>
+          <select v-model="filters.tax_class_id" id="filter_tax_class_id"
                   class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-brand-primary-light focus:border-brand-primary-light sm:text-sm">
-            <option :value="null">Any Status</option>
-            <option :value="true">Active</option>
-            <option :value="false">Inactive</option>
+            <option :value="null">All Tax Classes</option>
+            <option v-for="tc in availableTaxClassesForFilter" :key="tc.id" :value="tc.id">{{ tc.name }}</option>
           </select>
         </div>
         <div>
-          <label for="filter_tax_type" class="block text-sm font-medium text-gray-700">Tax Type</label>
-          <input type="text" v-model="filters.tax_type" id="filter_tax_type" placeholder="e.g., VAT, Sales Tax"
+          <label for="filter_country" class="block text-sm font-medium text-gray-700">Country Code</label>
+          <input type="text" v-model="filters.country" id="filter_country" placeholder="e.g., US, GB (2 letters)"
                  class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-primary-light focus:border-brand-primary-light sm:text-sm">
         </div>
-        <div>
-          <label for="filter_jurisdiction" class="block text-sm font-medium text-gray-700">Jurisdiction</label>
-          <input type="text" v-model="filters.jurisdiction" id="filter_jurisdiction" placeholder="e.g., CA, EU, Global"
-                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-primary-light focus:border-brand-primary-light sm:text-sm">
-        </div>
+        <!-- Add more relevant filters if needed, e.g., state_province -->
       </div>
       <div class="mt-4 flex space-x-3 justify-end">
-        <button @click="applyFilters"
-                class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-brand-primary hover:bg-brand-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary-light">
+         <button @click="applyFilters"
+                class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-peach-pink hover:bg-sky-blue-deep focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink">
           Apply Filters
         </button>
         <button @click="resetFilters"
@@ -53,7 +48,7 @@
       <p class="text-lg text-red-600">Could not load tax rates.</p>
       <p class="text-sm text-red-500 mt-1">{{ fetchError }}</p>
       <button @click="fetchTaxRates"
-        class="mt-4 py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-brand-primary hover:bg-brand-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary-light">
+        class="mt-4 py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-peach-pink hover:bg-sky-blue-deep focus:outline-none focus:ring-2 focus:ring-peach-pink focus:ring-offset-2">
         Retry
       </button>
     </div>
@@ -72,11 +67,10 @@
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
-            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jurisdiction</th>
-            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
-            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valid From</th>
-            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valid Until</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Class</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Compound</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
           </tr>
@@ -85,17 +79,16 @@
           <tr v-for="rate in taxRates" :key="rate.id">
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ rate.id }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{{ rate.name }}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ formatPercentage(rate.rate_percentage) }}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ rate.tax_type }}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ rate.jurisdiction_name || rate.jurisdiction_code || 'Global' }}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm">
-              <span :class="rate.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ formatPercentage(rate.rate) }}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ formatJurisdiction(rate) }}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ rate.tax_class_name || rate.tax_class_id }}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+              <span :class="rate.is_compound ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
                     class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
-                {{ rate.is_active ? 'Yes' : 'No' }}
+                {{ rate.is_compound ? 'Yes' : 'No' }}
               </span>
             </td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{{ formatDate(rate.valid_from) }}</td>
-            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{{ formatDate(rate.valid_until) }}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ rate.priority }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{{ formatDate(rate.updated_at) }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium">
               <NuxtLink :to="`/admin/taxes/rates/edit/${rate.id}`"
@@ -130,7 +123,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { useNuxtApp, definePageMeta, useHead, useRouter } from '#imports';
 import { useToast } from 'vue-toastification';
 
@@ -138,7 +131,7 @@ definePageMeta({ layout: 'admin' });
 useHead({ title: 'Admin - Tax Rates' });
 
 const { $axios } = useNuxtApp();
-const router = useRouter(); // Kept for consistency, though not used in this specific file yet
+const router = useRouter();
 const toast = useToast();
 
 const taxRates = ref([]);
@@ -147,18 +140,40 @@ const fetchError = ref(null);
 
 const currentPage = ref(1);
 const totalPages = ref(1);
-const limit = ref(15); // Items per page
+const limit = ref(15);
 const totalRates = ref(0);
 
+const availableTaxClassesForFilter = ref([]);
+
 const initialFilters = {
-  is_active: null, // null for 'Any', true for 'Active', false for 'Inactive'
-  tax_type: '',
-  jurisdiction: ''
+  tax_class_id: null,
+  country: ''
 };
 const filters = ref({ ...initialFilters });
 
 const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString() : 'N/A';
-const formatPercentage = (decimalRate) => decimalRate ? (parseFloat(decimalRate) * 100).toFixed(2) + '%' : '0.00%';
+const formatPercentage = (decimalRate) => {
+  if (typeof decimalRate === 'number') {
+    return (decimalRate * 100).toFixed(2) + '%';
+  }
+  return '0.00%';
+};
+const formatJurisdiction = (rate) => {
+  const parts = [rate.country, rate.state_province, rate.postal_code].filter(Boolean); // Filter out null/empty strings
+  return parts.length > 0 ? parts.join(', ') : 'Global';
+};
+
+
+const fetchTaxClassesForFilter = async () => {
+  try {
+    const response = await $axios.get('/admin/tax-classes', { params: { limit: 500 } }); // Fetch a large number for filter
+    availableTaxClassesForFilter.value = response.data.data;
+  } catch (error) {
+    console.error('Error fetching tax classes for filter dropdown:', error);
+    toast.error('Could not load tax classes for filter.');
+  }
+};
+
 
 const fetchTaxRates = async () => {
   isLoading.value = true;
@@ -167,24 +182,30 @@ const fetchTaxRates = async () => {
   const params = {
     page: currentPage.value,
     limit: limit.value,
+    sortBy: 'name', // Default sort, can be changed
+    sortOrder: 'ASC'
   };
 
-  if (filters.value.is_active !== null) {
-    params.is_active = filters.value.is_active;
+  if (filters.value.tax_class_id) {
+    params.tax_class_id = filters.value.tax_class_id;
   }
-  if (filters.value.tax_type.trim()) {
-    params.tax_type = filters.value.tax_type.trim();
+  if (filters.value.country && filters.value.country.trim()) {
+    params.country = filters.value.country.trim().toUpperCase();
   }
-  if (filters.value.jurisdiction.trim()) {
-    params.jurisdiction_code = filters.value.jurisdiction.trim(); // Assuming API filters by jurisdiction_code
-  }
+
+  // Note: The backend route for GET /admin/tax-rates was updated to accept tax_class_id and country.
+  // The old filters (is_active, tax_type, generic jurisdiction) are no longer sent.
 
   try {
     const response = await $axios.get('/admin/tax-rates', { params });
-    taxRates.value = response.data.data;
+    console.log('Tax rates data from API:', response.data.data); // DEBUGGING
+    taxRates.value = response.data.data.map(rate => ({
+      ...rate,
+      rate: typeof rate.rate === 'string' ? parseFloat(rate.rate) : rate.rate // Ensure rate is a number
+    }));
     totalPages.value = response.data.pagination.totalPages || 1;
-    totalRates.value = response.data.pagination.total;
-    currentPage.value = response.data.pagination.page;
+    totalRates.value = response.data.pagination.totalItems || response.data.pagination.total || 0; // Adjusted to match potential variations
+    currentPage.value = response.data.pagination.currentPage || response.data.pagination.page || 1;
   } catch (error) {
     console.error('Error fetching tax rates:', error);
     fetchError.value = error.response?.data?.message || error.message || 'Could not fetch tax rates.';
@@ -215,9 +236,9 @@ const deleteTaxRate = async (rateId, rateName) => {
     await $axios.delete(`/admin/tax-rates/${rateId}`);
     toast.success(`Tax rate "${rateName}" deleted successfully.`);
     if (taxRates.value.length === 1 && currentPage.value > 1) {
-      currentPage.value--;
+      currentPage.value--; // Go to previous page if last item on current page was deleted
     } else {
-      fetchTaxRates();
+      fetchTaxRates(); // Otherwise, just refetch current page
     }
   } catch (error) {
     console.error(`Error deleting tax rate ${rateId}:`, error);
@@ -227,6 +248,7 @@ const deleteTaxRate = async (rateId, rateName) => {
 
 onMounted(() => {
   fetchTaxRates();
+  fetchTaxClassesForFilter();
 });
 
 watch(currentPage, (newPage, oldPage) => {
