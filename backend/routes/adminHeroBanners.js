@@ -51,13 +51,16 @@ router.get(
   }
 );
 
+const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload'); // Import middleware
+
 // Validation middleware for banner data
 const validateBannerData = [
   body('title').trim().notEmpty().withMessage('Title is required.').isLength({ max: 255 }).withMessage('Title cannot exceed 255 characters.'),
   body('subtitle').optional({ checkFalsy: true }).trim().isLength({ max: 500 }).withMessage('Subtitle cannot exceed 500 characters.'),
   body('buttonText').optional({ checkFalsy: true }).trim().isLength({ max: 100 }).withMessage('Button text cannot exceed 100 characters.'),
-  body('buttonLink').optional({ checkFalsy: true }).trim().isURL().withMessage('Button link must be a valid URL.').isLength({ max: 255 }).withMessage('Button link cannot exceed 255 characters.'),
-  body('imageUrl').trim().notEmpty().withMessage('Image URL is required.').isURL().withMessage('Image URL must be a valid URL.').isLength({ max: 255 }).withMessage('Image URL cannot exceed 255 characters.'),
+  body('buttonLink').optional({ checkFalsy: true }).trim().isURL().withMessage('Button link must be a valid URL or a relative path.').isLength({ max: 255 }).withMessage('Button link cannot exceed 255 characters.'),
+  // imageUrl is now optional if uploading a file, required if no file is uploaded and not in edit mode
+  body('imageUrl').optional({ checkFalsy: true }).isURL().withMessage('Image URL must be a valid URL if provided directly.').isLength({ max: 255 }).withMessage('Image URL cannot exceed 255 characters.'),
   body('altText').optional({ checkFalsy: true }).trim().isLength({ max: 255 }).withMessage('Alt text cannot exceed 255 characters.'),
   body('isActive').optional().isBoolean().withMessage('Is active must be a boolean.').toBoolean(),
   body('sortOrder').optional().isInt({ min: 0 }).withMessage('Sort order must be a non-negative integer.').toInt()
@@ -68,6 +71,8 @@ router.post(
   '/',
   isAuthenticated,
   checkPermission('marketing:manage_hero_banners'),
+  productImageUploadMiddleware, // Use middleware for 'bannerImage' field
+  handleMulterError,
   validateBannerData,
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -83,13 +88,14 @@ router.post(
         buttonLink: req.body.buttonLink || null,
         imageUrl: req.body.imageUrl,
         altText: req.body.altText || null,
-        isActive: req.body.isActive === undefined ? true : req.body.isActive, // Default to true if not provided
-        sortOrder: req.body.sortOrder === undefined ? 0 : req.body.sortOrder, // Default to 0 if not provided
+        isActive: req.body.isActive === undefined ? true : req.body.isActive,
+        sortOrder: req.body.sortOrder === undefined ? 0 : req.body.sortOrder,
       };
-      const newBanner = await cmsService.createHeroBanner(bannerData);
+      // Pass req.file to the service layer
+      const newBanner = await cmsService.createHeroBanner(bannerData, req.file);
       res.status(201).json({ data: newBanner });
     } catch (error) {
-      next(error); // Errors from service (AppError) will be handled by global error handler
+      next(error);
     }
   }
 );
@@ -122,6 +128,8 @@ router.put(
   '/:id',
   isAuthenticated,
   checkPermission('marketing:manage_hero_banners'),
+  productImageUploadMiddleware, // Use middleware for 'bannerImage' field
+  handleMulterError,
   [
     param('id').isInt({ gt: 0 }).withMessage('Banner ID must be a positive integer.').toInt(),
     ...validateBannerData // Reuse the same validation rules as for POST
@@ -146,8 +154,9 @@ router.put(
         isActive: req.body.isActive === undefined ? true : req.body.isActive,
         sortOrder: req.body.sortOrder === undefined ? 0 : req.body.sortOrder,
       };
-      const updatedBanner = await cmsService.updateHeroBanner(req.params.id, bannerData);
-      // Service throws NotFoundError if not found, handled by global error handler
+      const removeImageFlag = req.body.remove_image === 'true';
+      // Pass req.file and removeImageFlag to the service layer
+      const updatedBanner = await cmsService.updateHeroBanner(req.params.id, bannerData, req.file, removeImageFlag);
       res.json({ data: updatedBanner });
     } catch (error) {
       next(error);
