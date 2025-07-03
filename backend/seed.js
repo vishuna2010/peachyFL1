@@ -81,10 +81,12 @@ async function createSchema(client) {
     await client.query(`
       CREATE TABLE IF NOT EXISTS categories (
         id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE NOT NULL, description TEXT,
+        slug VARCHAR(255) UNIQUE, -- Added slug column
         parent_category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );`);
-    console.log('Table "categories" checked/created.');
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS slug VARCHAR(255) UNIQUE;`); // Ensure slug column if table already exists
+    console.log('Table "categories" checked/created and slug column ensured.');
 
     // Hero Banners Table
     await client.query(`
@@ -612,31 +614,56 @@ async function seedSuppliers(client, seededDataIds) {
 async function seedCategories(client, seededDataIds) {
   console.log('Seeding categories...');
   seededDataIds.categories = seededDataIds.categories || {};
+
+  const slugify = (text) => text.toString().toLowerCase()
+    .replace(/\s+/g, '-')           // Replace spaces with -
+    .replace(/[^\w-]+/g, '')       // Remove all non-word chars
+    .replace(/--+/g, '-')         // Replace multiple - with single -
+    .replace(/^-+/, '')             // Trim - from start of text
+    .replace(/-+$/, '');            // Trim - from end of text
+
   const categoriesToSeed = [
     { name: 'Electronics', description: 'Gadgets, devices, and accessories.' },
     { name: 'Apparel', description: 'Clothing for men, women, and children.' },
     { name: 'Books', description: 'Various genres of books.' },
     { name: 'Home Goods', description: 'Items for home and kitchen.' },
+    // Adding categories from the console log provided by user
+    { name: 'Accessories', description: 'Fashion accessories.'},
+    { name: 'Beauty', description: 'Beauty and personal care products.'},
+    { name: 'Digital Music', description: 'Digital music albums and tracks.'},
+    { name: 'Footwear', description: 'Shoes, boots, and sandals.'},
+    { name: 'Sports & Outdoors', description: 'Equipment for sports and outdoor activities.'},
+    { name: 'Toys & Games', description: 'Toys and games for all ages.'},
+
   ];
   try {
     for (const cat of categoriesToSeed) {
+      const slug = slugify(cat.name);
       const result = await client.query(
-        `INSERT INTO categories (name, description) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET description=EXCLUDED.description RETURNING id, name;`,
-        [cat.name, cat.description]
+        `INSERT INTO categories (name, slug, description) VALUES ($1, $2, $3)
+         ON CONFLICT (name) DO UPDATE SET slug=EXCLUDED.slug, description=EXCLUDED.description
+         RETURNING id, name, slug;`,
+        [cat.name, slug, cat.description]
       );
       if (result.rows.length > 0) {
-        seededDataIds.categories[result.rows[0].name] = result.rows[0].id;
-        console.log(`Category "${result.rows[0].name}" seeded/updated with ID ${result.rows[0].id}.`);
+        seededDataIds.categories[result.rows[0].name] = {id: result.rows[0].id, slug: result.rows[0].slug};
+        console.log(`Category "${result.rows[0].name}" (slug: ${result.rows[0].slug}) seeded/updated with ID ${result.rows[0].id}.`);
       }
     }
-    if (seededDataIds.categories['Electronics']) {
+    // Example of sub-category
+    const electronicsData = seededDataIds.categories['Electronics'];
+    if (electronicsData && electronicsData.id) {
+        const subCatName = 'Headphones';
+        const subCatSlug = slugify(subCatName);
         const subCatRes = await client.query(
-            `INSERT INTO categories (name, description, parent_category_id) VALUES ($1, $2, $3) ON CONFLICT (name) DO UPDATE SET description=EXCLUDED.description, parent_category_id=EXCLUDED.parent_category_id RETURNING id, name;`,
-            ['Headphones', 'Audio listening devices', seededDataIds.categories['Electronics']]
+            `INSERT INTO categories (name, slug, description, parent_category_id) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (name) DO UPDATE SET slug=EXCLUDED.slug, description=EXCLUDED.description, parent_category_id=EXCLUDED.parent_category_id
+             RETURNING id, name, slug;`,
+            [subCatName, subCatSlug, 'Audio listening devices', electronicsData.id]
         );
         if (subCatRes.rows.length > 0) {
-            seededDataIds.categories[subCatRes.rows[0].name] = subCatRes.rows[0].id;
-            console.log(`Sub-Category "${subCatRes.rows[0].name}" seeded/updated with ID ${subCatRes.rows[0].id}.`);
+            seededDataIds.categories[subCatRes.rows[0].name] = {id: subCatRes.rows[0].id, slug: subCatRes.rows[0].slug};
+            console.log(`Sub-Category "${subCatRes.rows[0].name}" (slug: ${subCatRes.rows[0].slug}) seeded/updated with ID ${subCatRes.rows[0].id}.`);
         }
     }
     console.log('Categories seeding completed.');
@@ -654,29 +681,29 @@ async function seedProducts(client, seededDataIds) {
     {
       name: 'Wireless Bluetooth Headphones', sku: 'HDPHN-WL-BT-001', description: 'High-fidelity wireless headphones with noise cancellation and 20-hour battery life.',
       price: 149.99, cost_price: 75.00, stock_quantity: 0,
-      category_id: seededDataIds.categories?.Headphones,
+      category_id: seededDataIds.categories?.Headphones?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=Headphones', is_active: true,
-      has_variants: false,
+      has_variants: false, // Will be set to true later if options/variants are added
       reorder_threshold: 5,
       product_status: 'active'
     },
     {
       name: 'Men\'s Cotton T-Shirt', sku: 'TSHRT-MEN-COT-005', description: 'Comfortable and durable 100% cotton t-shirt for everyday wear.',
       price: 25.99, cost_price: 10.00, stock_quantity: 0,
-      category_id: seededDataIds.categories?.Apparel,
+      category_id: seededDataIds.categories?.Apparel?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=T-Shirt', is_active: true,
-      has_variants: false,
+      has_variants: false, // Will be set to true later if options/variants are added
       reorder_threshold: 10,
       product_status: 'active'
     },
     {
       name: 'Simple LED Desk Lamp', sku: 'LAMP-DSK-LED-010', description: 'Modern LED desk lamp with adjustable brightness.',
-      price: 39.99, cost_price: 15.00, stock_quantity: 50,
-      category_id: seededDataIds.categories?.['Home Goods'],
+      price: 39.99, cost_price: 15.00, stock_quantity: 50, // Stock_quantity here is for the base product if no variants
+      category_id: seededDataIds.categories?.['Home Goods']?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
       image_url: 'https://via.placeholder.com/300x300.png?text=Desk+Lamp', is_active: true,

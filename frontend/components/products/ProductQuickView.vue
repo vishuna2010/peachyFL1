@@ -42,10 +42,13 @@
 
           <p class="text-2xl font-semibold text-orange-gold mb-3">
             ${{ displayPrice.toFixed(2) }}
-            <span v-if="detailedProduct.original_price && parseFloat(detailedProduct.original_price) > displayPrice" class="text-md text-gray-400 line-through ml-1">
-              ${{ parseFloat(detailedProduct.original_price).toFixed(2) }}
+            <span v-if="isCurrentProductOnSaleQuickView && currentRrpDisplayQuickView" class="text-md text-gray-400 line-through ml-1">
+              ${{ currentRrpDisplayQuickView.toFixed(2) }}
             </span>
           </p>
+          <div v-if="isCurrentProductOnSaleQuickView" class="mb-2">
+            <span class="bg-orange-gold text-white text-xs font-bold px-2 py-0.5 rounded-sm">SALE</span>
+          </div>
 
           <!-- Variant Options -->
           <div v-if="detailedProduct.has_variants && detailedProduct.available_options && detailedProduct.available_options.length > 0" class="space-y-3 mb-4">
@@ -583,6 +586,33 @@ const handleAddToCart = () => {
 const closeModal = () => {
   emit('close');
 };
+
+const isCurrentProductOnSaleQuickView = computed(() => {
+  const currentActualPrice = displayPrice.value;
+  let originalPriceForComparison = null;
+
+  if (currentVariant.value && currentVariant.value.original_final_price !== null && currentVariant.value.original_final_price !== undefined) {
+    originalPriceForComparison = parseFloat(currentVariant.value.original_final_price);
+  } else if (!currentVariant.value && detailedProduct.value && detailedProduct.value.original_price !== null && detailedProduct.value.original_price !== undefined) {
+    originalPriceForComparison = parseFloat(detailedProduct.value.original_price);
+  }
+
+  if (originalPriceForComparison !== null && !isNaN(currentActualPrice) && !isNaN(originalPriceForComparison)) {
+    return originalPriceForComparison > currentActualPrice;
+  }
+  return false;
+});
+
+const currentRrpDisplayQuickView = computed(() => {
+  let rrp = null;
+  if (currentVariant.value && currentVariant.value.original_final_price !== null && currentVariant.value.original_final_price !== undefined) {
+    rrp = parseFloat(currentVariant.value.original_final_price);
+  } else if (!currentVariant.value && detailedProduct.value && detailedProduct.value.original_price !== null && detailedProduct.value.original_price !== undefined) {
+    rrp = parseFloat(detailedProduct.value.original_price);
+  }
+  return !isNaN(rrp) ? rrp : null;
+});
+
 
 // Initial setup if productSummary is provided and modal is already open (e.g. SSR scenario, though less likely for modals)
 onMounted(() => {

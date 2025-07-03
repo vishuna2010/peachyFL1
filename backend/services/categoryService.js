@@ -237,7 +237,36 @@ module.exports = {
   updateCategory,
   deleteCategory,
   getAllPublicCategories, // Added new function
+  getCategoryBySlug, // Added new function
 };
+
+/**
+ * Retrieves a single category by its slug.
+ * @param {string} slug - The slug of the category to retrieve.
+ * @returns {Promise<object|null>} The category object or null if not found.
+ * @throws {AppError} If database operation fails.
+ */
+async function getCategoryBySlug(slug) {
+  try {
+    // Assuming 'slug' column exists and is unique (or handle multiple results if not unique)
+    const query = `
+      SELECT id, name, slug, description, parent_category_id, created_at, updated_at
+      FROM categories
+      WHERE slug = $1;
+    `;
+    const { rows } = await db.query(query, [slug]);
+    if (rows.length > 0) {
+      return rows[0]; // Return the first match if any
+    }
+    return null; // Return null if no category found with that slug
+  } catch (error) {
+    console.error(`[categoryService.getCategoryBySlug] Error fetching category by slug "${slug}":`, error);
+    // It's important not to throw NotFoundError here, as the route handler will do that.
+    // Throw a generic AppError for unexpected DB issues.
+    throw new AppError(`Failed to retrieve category by slug "${slug}".`, 500, 'CATEGORY_FETCH_BY_SLUG_FAILED');
+  }
+}
+
 
 /**
  * Retrieves all categories for public display (typically id and name).
@@ -247,8 +276,14 @@ module.exports = {
  */
 async function getAllPublicCategories() {
   try {
-    const result = await db.query('SELECT id, name FROM categories ORDER BY name ASC');
-    return result.rows;
+    // Assuming a 'slug' column exists in the 'categories' table
+    const result = await db.query('SELECT id, name, slug FROM categories WHERE parent_category_id IS NULL ORDER BY name ASC');
+    return result.rows.map(category => ({
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      // TODO: Potentially fetch children categories if a nested menu is desired
+    }));
   } catch (error) {
     console.error('[categoryService.getAllPublicCategories] Error fetching public categories:', error);
     throw new AppError('Failed to retrieve public categories.', 500, 'PUBLIC_CATEGORIES_FETCH_FAILED');

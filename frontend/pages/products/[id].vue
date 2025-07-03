@@ -97,10 +97,14 @@
 
           <p class="text-3xl font-semibold text-orange-gold mb-5">
             ${{ displayPrice.toFixed(2) }}
-            <span v-if="product.original_price && parseFloat(product.original_price) > displayPrice" class="text-lg text-gray-400 line-through ml-2">
-              ${{ parseFloat(product.original_price).toFixed(2) }}
+            <span v-if="isCurrentProductOnSale && currentRrpDisplay" class="text-lg text-gray-400 line-through ml-2">
+              ${{ currentRrpDisplay.toFixed(2) }}
             </span>
           </p>
+          <!-- Optional: Add a SALE badge here too if desired -->
+          <div v-if="isCurrentProductOnSale" class="mb-3">
+            <span class="bg-orange-gold text-white text-xs font-bold px-3 py-1 rounded-sm">SALE</span>
+          </div>
 
           <div class="space-y-1 mb-4 text-sm">
             <p v-if="product.category_name" class="text-venus-text-secondary">
@@ -923,6 +927,34 @@ async function fetchPublicProductReviews(page = 1) {
     isLoadingPublicReviews.value = false;
   }
 }
+
+// Computed properties for sales display
+const isCurrentProductOnSale = computed(() => {
+  if (currentVariant.value && currentVariant.value.original_final_price !== null && currentVariant.value.final_price !== null) {
+    // Ensure both are numbers before comparison
+    const original = parseFloat(currentVariant.value.original_final_price);
+    const final = parseFloat(currentVariant.value.final_price);
+    return !isNaN(original) && !isNaN(final) && original > final;
+  }
+  if (!currentVariant.value && product.value && product.value.original_price !== null && product.value.price !== null) {
+    // Ensure both are numbers
+    const original = parseFloat(product.value.original_price);
+    const final = parseFloat(product.value.price);
+    return !isNaN(original) && !isNaN(final) && original > final;
+  }
+  return false;
+});
+
+const currentRrpDisplay = computed(() => {
+  // This computed property will hold the value to be displayed as the original price (RRP)
+  let rrp = null;
+  if (currentVariant.value && currentVariant.value.original_final_price !== null) {
+    rrp = parseFloat(currentVariant.value.original_final_price);
+  } else if (!currentVariant.value && product.value && product.value.original_price !== null) {
+    rrp = parseFloat(product.value.original_price);
+  }
+  return !isNaN(rrp) ? rrp : null;
+});
 
 useHead({
   title: computed(() => product.value ? product.value.name : 'Product Details'),
