@@ -35,7 +35,7 @@
         :style="dropdownPositionStyle"
         @mouseenter="clearDropdownTimeout"
         @mouseleave="handleCategoryMouseLeave()"
-        class="absolute" /* Positioning will be dynamic via style prop */
+        class="absolute" <!-- Positioning will be dynamic via style prop -->
       />
 
       <!-- Search and Action Icons -->
