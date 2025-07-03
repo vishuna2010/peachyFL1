@@ -14,7 +14,7 @@
   <div
     v-else-if="currentBanner"
     :style="{ backgroundImage: currentBanner.imageUrl ? `url(${currentBanner.imageUrl})` : '' }"
-    class="bg-peach-pink text-white overflow-hidden min-h-[300px] md:min-h-[400px] flex items-center justify-center bg-cover bg-center"
+    class="relative bg-peach-pink text-white overflow-hidden min-h-[300px] md:min-h-[400px] flex items-center justify-center bg-cover bg-center"
   >
     <!-- Overlay for better text readability if using a background image -->
     <div class="absolute inset-0 bg-black opacity-30" v-if="currentBanner.imageUrl"></div>
