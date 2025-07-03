@@ -167,6 +167,26 @@
               </div>
             </div>
 
+            <!-- Variant Sale Fields -->
+            <div class="p-3 border border-orange-200 rounded-md bg-orange-50/50 my-3 space-y-3">
+              <h4 class="text-sm font-medium text-orange-800">Variant Sale Configuration</h4>
+              <div>
+                <label for="variant_original_price" class="block text-xs font-medium text-gray-600 mb-0.5">Original Price (RRP):</label>
+                <input type="number" step="0.01" id="variant_original_price" v-model.number="newVariantForm.original_price" class="block w-full px-2.5 py-1.5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-xs" placeholder="Variant's RRP" />
+              </div>
+              <div>
+                <label for="variant_sale_price" class="block text-xs font-medium text-gray-600 mb-0.5">Sale Price:</label>
+                <input type="number" step="0.01" id="variant_sale_price" v-model.number="newVariantForm.sale_price" class="block w-full px-2.5 py-1.5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-xs" placeholder="Variant's sale price" />
+              </div>
+              <div class="flex items-center pt-1">
+                <input id="variant_is_on_sale" v-model="newVariantForm.is_on_sale" type="checkbox" class="h-3.5 w-3.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
+                <label for="variant_is_on_sale" class="ml-2 block text-xs font-medium text-gray-700">
+                  This Variant is On Sale
+                </label>
+              </div>
+            </div>
+
+
             <VariantImagePickerModal
               v-if="showImagePickerModal"
               :product-id="propProductId"
@@ -235,7 +255,11 @@ const newVariantForm = reactive({
   price_modifier: 0.00,
   stock_quantity: 0,
   image_url: '',
-  selected_option_values: {} // Object to store { <global_option_id>: <global_value_id> }
+  selected_option_values: {}, // Object to store { <global_option_id>: <global_value_id> }
+  // Variant Sale Fields
+  original_price: null,
+  sale_price: null,
+  is_on_sale: false
 });
 const isSubmittingNewVariant = ref(false); // Used for Add/Edit form submission
 const addVariantFormError = ref(null);
@@ -259,6 +283,10 @@ function openAddVariantModal() {
   newVariantForm.stock_quantity = 0;
   newVariantForm.image_url = '';
   newVariantForm.selected_option_values = {};
+  // Sale fields reset
+  newVariantForm.original_price = null;
+  newVariantForm.sale_price = null;
+  newVariantForm.is_on_sale = false;
   // Ensure selected_option_values are initialized for configured options
   configuredProductOptions.value.forEach(opt => {
     newVariantForm.selected_option_values[opt.option_id] = undefined;
@@ -291,6 +319,11 @@ function openEditVariantModal(variantToEdit) {
                                   ? 0
                                   : parseInt(variantToEdit.stock_quantity);
   newVariantForm.image_url = variantToEdit.image_url || '';
+  // Populate sale fields
+  newVariantForm.original_price = variantToEdit.original_price === undefined ? null : parseFloat(variantToEdit.original_price);
+  newVariantForm.sale_price = variantToEdit.sale_price === undefined ? null : parseFloat(variantToEdit.sale_price);
+  newVariantForm.is_on_sale = variantToEdit.is_on_sale === undefined ? false : variantToEdit.is_on_sale;
+
 
   // Populate selected_option_values
   const newSelectedOptionValues = {};
@@ -349,7 +382,11 @@ async function handleVariantFormSubmit() {
     sku: newVariantForm.sku || null,
     price_modifier: newVariantForm.price_modifier,
     stock_quantity: newVariantForm.stock_quantity,
-    image_url: newVariantForm.image_url || null
+    image_url: newVariantForm.image_url || null,
+    // Add sale fields to payload
+    original_price: newVariantForm.original_price !== null ? parseFloat(newVariantForm.original_price) : null,
+    sale_price: newVariantForm.sale_price !== null ? parseFloat(newVariantForm.sale_price) : null,
+    is_on_sale: newVariantForm.is_on_sale,
     // cost_price and wholesale_price_modifier would be added here if they were part of newVariantForm
   };
 

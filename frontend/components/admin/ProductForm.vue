@@ -21,6 +21,29 @@
       </div>
     </div>
 
+    <!-- Sale Fields -->
+    <div class="p-4 border border-orange-300 rounded-md bg-orange-50 my-4">
+      <h3 class="text-md font-medium text-orange-700 mb-3">Sale Configuration</h3>
+      <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+        <div>
+          <label for="original_price" class="block text-sm font-medium text-gray-700 mb-1">Original Price (RRP):</label>
+          <input type="number" id="original_price" v-model.number="formData.original_price" min="0" step="0.01" placeholder="e.g., 19.99" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" :disabled="!props.canEditPrice && props.isEditMode" />
+        </div>
+        <div>
+          <label for="sale_price" class="block text-sm font-medium text-gray-700 mb-1">Sale Price:</label>
+          <input type="number" id="sale_price" v-model.number="formData.sale_price" min="0" step="0.01" placeholder="e.g., 15.99" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" :disabled="!props.canEditPrice && props.isEditMode" />
+        </div>
+      </div>
+      <div class="mt-4">
+        <div class="flex items-center">
+          <input id="is_on_sale" v-model="formData.is_on_sale" type="checkbox" class="h-4 w-4 text-peach-pink border-gray-300 rounded focus:ring-peach-pink" :disabled="!props.canEditPrice && props.isEditMode" />
+          <label for="is_on_sale" class="ml-2 block text-sm font-medium text-gray-700">
+            Product is On Sale
+          </label>
+        </div>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
       <div>
         <label for="category_id" class="block text-sm font-medium text-gray-700 mb-1">Category:</label>
@@ -145,6 +168,10 @@ const props = defineProps({
       reorder_threshold: null, // Added default
       tags: [],
       image_url: null,
+      // Sale fields defaults
+      original_price: null,
+      sale_price: null,
+      is_on_sale: false,
     })
   },
   categories: {
@@ -207,7 +234,10 @@ const initialFormData = {
   tags: [],
   image_url: null,
   tax_class_id: null,
-  cost_price: null, // Add cost_price
+  cost_price: null,
+  original_price: null,
+  sale_price: null,
+  is_on_sale: false,
   ...props.initialData // Spread initialData to overwrite defaults
 };
 const formData = reactive(initialFormData);
@@ -233,7 +263,12 @@ watch(() => props.initialData, (newData) => {
     formData.image_url = newData.image_url || null;
     formData.tags = newData.tags || []; // Ensure tags is an array
     formData.tax_class_id = newData.tax_class_id === undefined ? null : newData.tax_class_id;
-    formData.cost_price = newData.cost_price === undefined ? null : newData.cost_price; // Update cost_price
+    formData.cost_price = newData.cost_price === undefined ? null : newData.cost_price;
+    // Update sale fields
+    formData.original_price = newData.original_price === undefined ? null : newData.original_price;
+    formData.sale_price = newData.sale_price === undefined ? null : newData.sale_price;
+    formData.is_on_sale = newData.is_on_sale === undefined ? false : newData.is_on_sale;
+
 
     tagsInput.value = newData.tags ? newData.tags.join(', ') : '';
     selectedFile.value = null;
