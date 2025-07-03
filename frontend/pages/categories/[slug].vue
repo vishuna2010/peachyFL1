@@ -11,50 +11,16 @@
     </div>
 
     <div class="lg:grid lg:grid-cols-4 lg:gap-8">
-      <!-- Filters Column (Desktop) -->
-      <aside class="hidden lg:block lg:col-span-1">
-        <ProductFilters
-          :categories="allCategories"
-          :initial-selected-category-id="filters.selectedCategoryId"
-          :initial-search-term="filters.searchTerm"
-          :initial-min-price="filters.minPrice"
-          :initial-max-price="filters.maxPrice"
-          :initial-sort-by="filters.sortBy"
-          :initial-selected-color-value-id="filters.selectedColorValueId"
-          @apply-filters="applyFilters"
-          @reset-filters="resetFiltersAndFetch"
-        />
-      </aside>
+      {-- Filters Column (Desktop) - Removed --}
+      {-- <aside class="hidden lg:block lg:col-span-1"> ... </aside> --}
 
-      <!-- Products Grid Column -->
-      <main class="lg:col-span-3">
-        <!-- Mobile Filter Trigger -->
-        <div class="lg:hidden mb-4">
-          <button
-            @click="showMobileFilters = !showMobileFilters"
-            class="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-venus-text-primary bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink"
-          >
-            <FilterIcon class="w-5 h-5 mr-2 text-venus-text-secondary" />
-            <span>{{ showMobileFilters ? 'Hide' : 'Show' }} Filters</span>
-          </button>
-        </div>
+      <!-- Products Grid Column - Spans full width now -->
+      <main class="lg:col-span-4">
+        {-- Mobile Filter Trigger - Removed --}
+        {-- <div class="lg:hidden mb-4"> ... </div> --}
 
-        <!-- Mobile Filters Panel -->
-        <div v-if="showMobileFilters" class="lg:hidden mb-6 bg-white shadow-lg rounded-lg border border-gray-200">
-          <ProductFilters
-            :categories="allCategories"
-            :initial-selected-category-id="filters.selectedCategoryId"
-            :initial-search-term="filters.searchTerm"
-            :initial-min-price="filters.minPrice"
-            :initial-max-price="filters.maxPrice"
-            :initial-sort-by="filters.sortBy"
-            :initial-selected-color-value-id="filters.selectedColorValueId"
-            @apply-filters="applyFilters"
-            @reset-filters="resetFiltersAndFetch"
-            @close-mobile-filters="showMobileFilters = false"
-            :is-mobile="true"
-          />
-        </div>
+        {-- Mobile Filters Panel - Removed --}
+        {-- <div v-if="showMobileFilters" class="lg:hidden mb-6"> ... </div> --}
 
         <div v-if="productsPending" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
           <ProductCardSkeleton v-for="n in 6" :key="`skeleton-${n}`" />
@@ -108,11 +74,11 @@
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue';
 import { useRoute, useRouter, useNuxtApp, useHead } from '#app';
-import ProductFilters from '~/components/ProductFilters.vue';
+// import ProductFilters from '~/components/ProductFilters.vue'; // Removed
 import ProductCard from '~/components/ProductCard.vue';
 import ProductQuickView from '~/components/products/ProductQuickView.vue';
 import ProductCardSkeleton from '~/components/ProductCardSkeleton.vue';
-import FilterIcon from '~/components/icons/FilterIcon.vue';
+// import FilterIcon from '~/components/icons/FilterIcon.vue'; // Removed
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
@@ -128,10 +94,10 @@ const products = ref([]);
 const productsPending = ref(true);
 const productsError = ref(null);
 
-const allCategories = ref([]); // For the filter dropdown
-const showMobileFilters = ref(false);
+// const allCategories = ref([]); // No longer needed for page-level filters
+// const showMobileFilters = ref(false); // Removed
 
-const filters = reactive({
+const filters = reactive({ // This will now be driven by AppHeader's filter via URL query
   searchTerm: route.query.searchTerm || '',
   // selectedCategoryId will be primarily driven by the page's category context,
   // but we might allow ProductFilters to still show and select other categories.
@@ -197,30 +163,30 @@ async function fetchCategoryDetails() {
   }
 }
 
-async function fetchAllCategoriesForFilter() {
-  try {
-    const response = await $axios.get('/categories');
-    allCategories.value = response.data.categories || response.data || [];
-  } catch (err) {
-    console.error('Error fetching all categories for filter:', err);
-  }
-}
-
 async function fetchProductsForCategory() {
-  if (!category.value && !categoryError.value) { // Don't fetch if category itself had an error or not loaded
-      productsPending.value = false; // Ensure loading state is cleared if category fails
-      if(!categoryPending.value && !category.value) { // If category loading finished and no category found
-          products.value = []; // No products if category doesn't exist
+  // Ensure category is loaded before fetching products
+  if (categoryPending.value) {
+    // If category is still loading, wait for it or handle appropriately.
+    // This might involve the watcher on categorySlug to trigger this fetch once category is loaded.
+    // For now, if category isn't loaded, we might not fetch or show an intermediate state.
+    console.log("Category details pending, deferring product fetch for now.");
+    // productsPending.value = false; // Or keep it true until category loads
+    return;
+  }
+
+  if (!category.value && !categoryError.value) {
+      productsPending.value = false;
+      if(!categoryPending.value && !category.value) {
+          products.value = [];
           productsError.value = { message: "Category not found, cannot load products."};
       }
       return;
   }
-   if (categoryError.value) { // If category fetch resulted in error
+   if (categoryError.value) {
     productsPending.value = false;
     products.value = [];
     return;
   }
-
 
   productsPending.value = true;
   productsError.value = null;
@@ -287,39 +253,7 @@ function updateQueryParameters() {
   router.push({ path: route.path, query }); // path already contains /categories/[slug]
 }
 
-function applyFilters(newFilters) {
-  filters.searchTerm = newFilters.searchTerm;
-  // filters.selectedCategoryId = newFilters.selectedCategoryId; // ProductFilters might change this
-  filters.minPrice = newFilters.minPrice;
-  filters.maxPrice = newFilters.maxPrice;
-  filters.sortBy = newFilters.sortBy;
-  filters.selectedColorValueId = newFilters.selectedColorValueId;
-  // onSaleOnly is not part of ProductFilters emitted object, handle separately if needed in ProductFilters.
-  filters.page = 1;
-
-  updateQueryParameters();
-  fetchProductsForCategory(); // Refetch products with new filters
-  if (showMobileFilters.value) {
-    showMobileFilters.value = false;
-  }
-}
-
-function resetFiltersAndFetch() {
-  filters.searchTerm = '';
-  // filters.selectedCategoryId should remain category.value.id if we want to scope to current category
-  filters.minPrice = null;
-  filters.maxPrice = null;
-  filters.sortBy = 'created_at_desc';
-  filters.selectedColorValueId = null;
-  filters.onSaleOnly = false;
-  filters.page = 1;
-
-  updateQueryParameters();
-  fetchProductsForCategory();
-  if (showMobileFilters.value) {
-    showMobileFilters.value = false;
-  }
-}
+// applyFilters and resetFiltersAndFetch are removed as filters are now global via AppHeader
 
 function changePage(newPage) {
   if (newPage > 0 && newPage <= pagination.totalPages) {
@@ -333,7 +267,7 @@ function changePage(newPage) {
 
 onMounted(async () => {
   await fetchCategoryDetails();
-  await fetchAllCategoriesForFilter(); // For the dropdown in ProductFilters
+  // await fetchAllCategoriesForFilter(); // Removed
   if (category.value) { // Only fetch products if category was found
     await fetchProductsForCategory();
   } else if (!categoryPending.value && !category.value) { // If category loading finished and no category
