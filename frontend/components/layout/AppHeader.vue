@@ -7,17 +7,36 @@
       </NuxtLink>
 
       <!-- Navigation Links -->
-      <nav class="hidden md:flex space-x-6 items-center">
-        <NuxtLink
+      <nav class="hidden md:flex space-x-1 items-center"> {/* Reduced space-x slightly for wrapper divs */}
+        <div
           v-for="category in headerCategories"
           :key="category.id"
-          :to="`/categories/${category.slug}`"
-          class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-medium transition-colors duration-200 ease-in-out"
+          class="relative group"
+          @mouseenter="handleCategoryMouseEnter(category, $event)"
+          @mouseleave="handleCategoryMouseLeave()"
         >
-          {{ category.name }}
-        </NuxtLink>
-        <NuxtLink :to="{ path: '/products', query: { on_sale: 'true' } }" class="text-venus-text-primary py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-bold transition-colors duration-200 ease-in-out">Sale</NuxtLink>
+          <NuxtLink
+            :to="`/categories/${category.slug}`"
+            class="text-venus-text-primary px-3 py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-medium transition-colors duration-200 ease-in-out"
+          >
+            {{ category.name }}
+          </NuxtLink>
+        </div>
+        <NuxtLink :to="{ path: '/products', query: { on_sale: 'true' } }" class="text-venus-text-primary px-3 py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-bold transition-colors duration-200 ease-in-out">Sale</NuxtLink>
       </nav>
+
+      <!-- Conditionally rendered Dropdown -->
+      <CategoryProductPreviewDropdown
+        v-if="hoveredCategoryId && currentHoveredCategory"
+        :products="hoveredCategoryProducts"
+        :category-name="currentHoveredCategory.name"
+        :category-slug="currentHoveredCategory.slug"
+        :is-loading="isDropdownLoading"
+        :style="dropdownPositionStyle"
+        @mouseenter="clearDropdownTimeout"
+        @mouseleave="handleCategoryMouseLeave()"
+        class="absolute" /* Positioning will be dynamic via style prop */
+      />
 
       <!-- Search and Action Icons -->
       <div class="flex items-center space-x-4">
@@ -82,10 +101,11 @@
   </header>
 </template>
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, reactive, computed } from 'vue';
 import { useRouter, useNuxtApp } from '#app';
 import { useAuth } from '~/composables/useAuth';
-import HeaderFilterModal from '~/components/modals/HeaderFilterModal.vue'; // Import the modal
+import HeaderFilterModal from '~/components/modals/HeaderFilterModal.vue';
+import CategoryProductPreviewDropdown from '~/components/categories/CategoryProductPreviewDropdown.vue';
 
 // Added isAuthInitialized to prevent flicker
 const { isAuthenticated, authUser, isAuthInitialized } = useAuth();
@@ -94,7 +114,21 @@ const { $axios } = useNuxtApp();
 
 const headerSearchTerm = ref('');
 const headerCategories = ref([]);
-const isFilterModalOpen = ref(false); // State for filter modal
+const isFilterModalOpen = ref(false);
+
+// State for category hover dropdown
+const hoveredCategoryId = ref(null);
+const hoveredCategoryProducts = ref([]);
+const isDropdownLoading = ref(false);
+const dropdownPositionStyle = reactive({ top: '0px', left: '0px' });
+const activeDropdownTimeoutId = ref(null);
+const productPreviewCache = reactive({}); // Cache for product previews
+
+const PRODUCTS_PREVIEW_LIMIT = 4;
+
+const currentHoveredCategory = computed(() => {
+  return headerCategories.value.find(cat => cat.id === hoveredCategoryId.value);
+});
 
 const fetchHeaderCategories = async () => {
   try {
@@ -164,4 +198,56 @@ const handleResetHeaderFilters = () => {
   closeFilterModal();
 };
 
+// Category Hover Dropdown Logic
+const handleCategoryMouseEnter = async (category, event) => {
+  clearDropdownTimeout();
+  hoveredCategoryId.value = category.id;
+  isDropdownLoading.value = true;
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const smallGap = 4; // 4px gap
+  dropdownPositionStyle.top = `${rect.bottom + window.scrollY + smallGap}px`;
+  dropdownPositionStyle.left = `${rect.left + window.scrollX}px`;
+
+  if (productPreviewCache[category.id]) {
+    hoveredCategoryProducts.value = productPreviewCache[category.id];
+    isDropdownLoading.value = false;
+  } else {
+    try {
+      const response = await $axios.get('/products', {
+        params: {
+          category_id: category.id,
+          limit: PRODUCTS_PREVIEW_LIMIT,
+          sort_by: 'created_at', // Or 'popularity', 'is_featured' if available
+          sort_order: 'desc',
+        }
+      });
+      hoveredCategoryProducts.value = response.data.products || [];
+      productPreviewCache[category.id] = hoveredCategoryProducts.value; // Cache the result
+    } catch (error) {
+      console.error(`Error fetching products for category ${category.name}:`, error);
+      hoveredCategoryProducts.value = []; // Clear products on error
+    } finally {
+      isDropdownLoading.value = false;
+    }
+  }
+};
+
+const handleCategoryMouseLeave = () => {
+  activeDropdownTimeoutId.value = setTimeout(() => {
+    hoveredCategoryId.value = null;
+    hoveredCategoryProducts.value = [];
+    isDropdownLoading.value = false;
+  }, 200); // 200ms delay to allow moving mouse to dropdown
+};
+
+const clearDropdownTimeout = () => {
+  if (activeDropdownTimeoutId.value) {
+    clearTimeout(activeDropdownTimeoutId.value);
+    activeDropdownTimeoutId.value = null;
+  }
+};
+
+// Ensure dropdown also clears timeout on mouse enter and hides on mouse leave
+// These events are on the CategoryProductPreviewDropdown component itself in the template
 </script>
