@@ -36,7 +36,11 @@ router.post(
       }
       return true;
     }).withMessage('Cost price must be a non-negative decimal or null.'),
-    body('wholesale_price_modifier').optional({ nullable: true, checkFalsy: true }).isDecimal({ decimal_digits: '0,2' }).toFloat().withMessage('Wholesale price modifier must be a decimal value or null.')
+    body('wholesale_price_modifier').optional({ nullable: true, checkFalsy: true }).isDecimal({ decimal_digits: '0,2' }).toFloat().withMessage('Wholesale price modifier must be a decimal value or null.'),
+    // New sale fields validation for creating variants
+    body('original_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Original price must be a non-negative number.').toFloat(),
+    body('sale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Sale price must be a non-negative number.').toFloat(),
+    body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean()
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -119,7 +123,11 @@ router.put(
       }
       return true;
     }).withMessage('Cost price must be a non-negative decimal or null.'),
-    body('wholesale_price_modifier').optional({ nullable: true, checkFalsy: true }).isDecimal({ decimal_digits: '0,2' }).toFloat().withMessage('Wholesale price modifier must be a decimal value or null.')
+    body('wholesale_price_modifier').optional({ nullable: true, checkFalsy: true }).isDecimal({ decimal_digits: '0,2' }).toFloat().withMessage('Wholesale price modifier must be a decimal value or null.'),
+    // New sale fields validation for updating variants
+    body('original_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Original price must be a non-negative number.').toFloat(),
+    body('sale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Sale price must be a non-negative number.').toFloat(),
+    body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean()
   ],
   productImageUploadMiddleware, // Added for image uploads
   handleMulterError,            // Added for image uploads

@@ -179,6 +179,10 @@ const validateCreateProductParams = [
   body('specifications').optional({ nullable: true }), // Can be JSON string or object
   body('tags').optional({ nullable: true }).isArray().withMessage('Tags must be an array of strings or null.'),
   body('tags.*').optional().isString().trim(),
+  // New sale fields validation
+  body('original_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Original price must be a non-negative number.').toFloat(),
+  body('sale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Sale price must be a non-negative number.').toFloat(),
+  body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean(),
   // image_url is not typically set directly on creation via this field; image upload is separate.
   // has_variants is determined by whether variants are created, not a direct input here.
 ];
@@ -274,7 +278,11 @@ const validateUpdateProductParams = [
   body('specifications').optional({ nullable: true }), // Validated as JSON string or object in handler
   body('tags').optional({ nullable: true }).isArray().withMessage('Tags must be an array of strings or null.'),
   body('tags.*').optional().isString().trim(),
-  body('image_url').optional({ nullable: true }).isString().trim().withMessage('Image URL must be a string or null to remove.') // For explicit nullification
+  body('image_url').optional({ nullable: true }).isString().trim().withMessage('Image URL must be a string or null to remove.'), // For explicit nullification
+  // New sale fields validation
+  body('original_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Original price must be a non-negative number.').toFloat(),
+  body('sale_price').optional({ nullable: true }).isFloat({ min: 0 }).withMessage('Sale price must be a non-negative number.').toFloat(),
+  body('is_on_sale').optional().isBoolean().withMessage('Is on sale must be a boolean.').toBoolean()
 ];
 
 router.put(

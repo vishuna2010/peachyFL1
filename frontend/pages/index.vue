@@ -75,69 +75,9 @@
         </form>
       </div>
 
-      <!-- Mobile Filters Toggle Button -->
-      <div class="lg:hidden mb-4 text-center">
-        <button
-          @click="toggleMobileFilters"
-          class="inline-flex items-center justify-center px-6 py-3 border border-neutral-dark rounded-md shadow-sm text-base font-medium text-text-primary bg-white hover:bg-neutral-light focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary transition-colors duration-200"
-          aria-label="Show filters"
-          :aria-expanded="isMobileFiltersOpen.toString()"
-        >
-          <FilterIcon class="w-5 h-5 mr-2" />
-          Filters
-        </button>
-      </div>
-
       <div class="lg:grid lg:grid-cols-4 lg:gap-x-6 xl:gap-x-8">
-        <!-- Desktop Filter Sidebar -->
-        <aside class="hidden lg:block lg:col-span-1 lg:sticky lg:top-24 self-start pt-2 h-screen-minus-nav overflow-y-auto">
-          <ProductFilters
-            :categories="categories"
-            :initialSearchTerm="searchTerm"
-            :initialSelectedCategoryId="selectedCategoryId"
-            :initialSelectedColorValueId="selectedColorValueId"
-            :initialMinPrice="minPrice"
-            :initialMaxPrice="maxPrice"
-            :initialSortBy="sortBy"
-            @apply-filters="handleFiltersUpdate"
-            @reset-filters="resetFiltersAndNavigate"
-          />
-        </aside>
-
-        <!-- Mobile Filter Modal/Drawer -->
-        <div v-if="isMobileFiltersOpen" class="fixed inset-0 z-40 flex lg:hidden" role="dialog" aria-modal="true">
-          <div class="fixed inset-0 bg-black bg-opacity-50" @click="isMobileFiltersOpen = false" aria-hidden="true"></div>
-          <div class="relative flex-1 flex flex-col max-w-xs w-full bg-venus-background shadow-2xl transform transition-transform duration-300 ease-in-out"
-               :class="isMobileFiltersOpen ? 'translate-x-0' : '-translate-x-full'">
-            <div class="absolute top-0 right-0 -mr-12 pt-2 z-50">
-              <button
-                type="button"
-                class="ml-1 flex items-center justify-center h-10 w-10 rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-venus-accent-gold/50 text-venus-text-primary hover:text-venus-accent-gold"
-                @click="isMobileFiltersOpen = false"
-                aria-label="Close filter panel"
-              >
-                <CloseIcon class="h-6 w-6" />
-              </button>
-            </div>
-            <div class="flex-1 h-0 pt-2 pb-4 overflow-y-auto">
-              <ProductFilters
-                :categories="categories"
-                :initialSearchTerm="searchTerm"
-                :initialSelectedCategoryId="selectedCategoryId"
-                :initialSelectedColorValueId="selectedColorValueId"
-                :initialMinPrice="minPrice"
-                :initialMaxPrice="maxPrice"
-                :initialSortBy="sortBy"
-                @apply-filters="handleFiltersUpdate"
-                @reset-filters="resetFiltersAndNavigate"
-                :isMobile="true"
-                @close-mobile-filters="isMobileFiltersOpen = false"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="lg:col-span-3">
+        {/* The filter sidebar has been removed. The content below will now span all 4 columns on large screens. */}
+        <div class="lg:col-span-4">
           <div v-if="isLoading" class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4 md:gap-6">
             <ProductCardSkeleton v-for="n in limit" :key="`skeleton-${n}`" />
           </div>
@@ -152,61 +92,12 @@
             <ProductCard v-for="product in products" :key="product.id" :product="product" @open-quick-view="openQuickViewModal" />
           </div>
 
-          <!-- QuickView Modal -->
-          <div v-if="isQuickViewModalVisible && productForQuickView"
-               class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4 transition-opacity duration-300 ease-in-out"
-               :class="isQuickViewModalVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'">
-            <div
-              class="bg-neutral-bg-soft p-5 sm:p-6 rounded-lg shadow-2xl max-w-3xl w-full mx-auto overflow-y-auto max-h-[90vh] transform transition-all duration-300 ease-out"
-              :class="isQuickViewModalVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'"
-              role="dialog" aria-modal="true" :aria-labelledby="`quickview-title-${productForQuickView.id}`"
-            >
-              <div class="flex justify-between items-start mb-4">
-                <h3 :id="`quickview-title-${productForQuickView.id}`" class="text-2xl font-semibold text-peach-pink">{{ productForQuickView.name }}</h3>
-                <button @click="closeQuickViewModal" aria-label="Close quick view" class="p-1 text-venus-text-secondary hover:text-peach-pink transition-colors duration-150 rounded-full hover:bg-neutral-light focus:outline-none focus:ring-2 focus:ring-peach-pink">
-                  <CloseIcon class="w-6 h-6" />
-                </button>
-              </div>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                <div class="border border-neutral-light rounded-md p-2 bg-white shadow-sm">
-                  <img :src="productForQuickView.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'" :alt="productForQuickView.name" class="w-full h-auto object-contain rounded max-h-80 md:max-h-96">
-                </div>
-                <div class="flex flex-col">
-                  <p class="text-venus-text-secondary mb-3 text-sm leading-relaxed line-clamp-4">{{ productForQuickView.description }}</p>
-                  <p class="text-3xl font-bold text-orange-gold my-2">
-                    {{ new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(productForQuickView.price) }}
-                  </p>
-                  <div class="text-xs text-venus-text-secondary space-y-0.5 mb-3">
-                    <p v-if="productForQuickView.sku">SKU: {{ productForQuickView.sku }}</p>
-                    <p v-if="productForQuickView.category_name">Category: <span class="text-sky-blue">{{ productForQuickView.category_name }}</span></p>
-                  </div>
-
-                  <div v-if="productForQuickView.has_variants" class="my-3 p-3 bg-sky-blue/10 border border-sky-blue/30 rounded-md text-sm text-sky-blue">
-                    This product has options (e.g., size, color). View full details to select.
-                  </div>
-
-                  <div class="mt-auto pt-4 space-y-3"> {/* Pushes buttons to bottom */}
-                    <NuxtLink
-                      :to="`/products/${productForQuickView.id}`"
-                      @click="closeQuickViewModal"
-                      class="block w-full bg-peach-pink text-white text-center py-2.5 px-4 rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink transition-all duration-200 font-semibold"
-                    >
-                      View Full Details
-                    </NuxtLink>
-                    {/* Placeholder for a direct Add to Cart if product has NO variants and is in stock */}
-                    <button
-                      v-if="!productForQuickView.has_variants && productForQuickView.stock_quantity > 0"
-                      @click="() => { handleDirectAddToCart(productForQuickView); closeQuickViewModal(); }"
-                      class="block w-full bg-fresh-green text-white text-center py-2.5 px-4 rounded-md hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-fresh-green transition-all duration-200 font-semibold"
-                    >
-                      Add to Cart
-                    </button>
-                     <p v-if="!productForQuickView.has_variants && productForQuickView.stock_quantity <= 0" class="text-sm text-center text-red-500 font-medium">Out of Stock</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- Standardized QuickView Modal -->
+          <ProductQuickView
+            :is-open="isQuickViewModalVisible"
+            :product-summary="productForQuickView"
+            @close="closeQuickViewModal"
+          />
 
           <div class="mt-8 flex justify-center items-center space-x-3" v-if="!isLoading && !fetchError && products.length > 0 && paginationData.totalPages > 1">
             <button
@@ -239,12 +130,13 @@ import { useCart } from '~/composables/useCart';
 import { useNuxtApp, useRoute, useRouter, useRuntimeConfig, useHead } from '#app';
 import ProductCard from '~/components/ProductCard.vue';
 import ProductCardSkeleton from '~/components/ProductCardSkeleton.vue';
-import ProductFilters from '~/components/ProductFilters.vue';
+// import ProductFilters from '~/components/ProductFilters.vue'; // No longer directly used here
+import ProductQuickView from '~/components/products/ProductQuickView.vue'; // Added import
 import HeroBanner from '~/components/HeroBanner.vue';
 import PromotionalBanner from '~/components/PromotionalBanner.vue';
 import CategoryHighlightCard from '~/components/CategoryHighlightCard.vue';
-import FilterIcon from '~/components/icons/FilterIcon.vue';
-import CloseIcon from '~/components/icons/CloseIcon.vue';
+// import FilterIcon from '~/components/icons/FilterIcon.vue'; // No longer used here
+// import CloseIcon from '~/components/icons/CloseIcon.vue'; // No longer needed as ProductQuickView handles its own close
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
@@ -284,10 +176,10 @@ const paginationData = ref({
 const isLoading = ref(true);
 const fetchError = ref(null);
 
-const isMobileFiltersOpen = ref(false);
-const toggleMobileFilters = () => {
-  isMobileFiltersOpen.value = !isMobileFiltersOpen.value;
-};
+// const isMobileFiltersOpen = ref(false); // Removed
+// const toggleMobileFilters = () => { // Removed
+//   isMobileFiltersOpen.value = !isMobileFiltersOpen.value;
+// };
 
 // QuickView Modal State
 const productForQuickView = ref(null);
@@ -304,6 +196,22 @@ const closeQuickViewModal = () => {
   productForQuickView.value = null;
   // Optional: Enable body scroll here
 };
+
+// const handleDirectAddToCart = (product) => { // Removed this function
+//   if (!product) return;
+//   addToCart({
+//     id: product.id, // Ensure this is the product ID, not variant if applicable
+//     product_id: product.id,
+//     variant_id: null, // Assuming no variants for direct add from this simple view
+//     name: product.name,
+//     price: parseFloat(product.price),
+//     sku: product.sku,
+//     image_url: product.image_url,
+//     type: 'product', // Explicitly 'product'
+//     tax_class_id: product.tax_class_id || null,
+//   }, 1); // Add 1 quantity
+//   // toast.success(`${product.name} added to cart!`); // Optional: Show toast
+// };
 
 async function fetchCategories() {
   try {
@@ -375,7 +283,8 @@ function applyFiltersAndNavigate() {
   // Page will be 1, so don't include it unless it's > 1 (which it isn't here)
 
   router.push({ path: '/', query });
-  // Mobile filters are closed by ProductFilters component itself by emitting 'closeMobileFilters'
+  // Mobile filters were previously closed by ProductFilters component itself by emitting 'closeMobileFilters'
+  // This is no longer relevant here as those components are removed from this page.
 }
 
 function resetFiltersAndNavigate() {
@@ -387,7 +296,8 @@ function resetFiltersAndNavigate() {
     sortBy.value = 'created_at_desc';
     currentPage.value = 1;
     router.push({ path: '/', query: {} });
-    // Mobile filters are closed by ProductFilters component itself
+    // Mobile filters were previously closed by ProductFilters component itself.
+    // This is no longer relevant here.
 }
 
 function changePage(newPage) {

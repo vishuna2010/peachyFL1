@@ -119,6 +119,7 @@
     <!-- Filters Modal -->
     <HeaderFilterModal
       :is-open="isFilterModalOpen"
+      :initial-search-term-from-header="headerSearchTerm"
       @close="closeFilterModal"
       @apply-header-filters="handleApplyHeaderFilters"
       @reset-header-filters="handleResetHeaderFilters"
@@ -206,18 +207,49 @@ const closeFilterModal = () => {
 };
 
 const handleApplyHeaderFilters = (appliedFilters) => {
-  const query = { ...appliedFilters };
-  if (headerSearchTerm.value.trim()) query.searchTerm = headerSearchTerm.value.trim();
-  Object.keys(query).forEach((k) => {
-    if (!query[k]) delete query[k];
+  const { path, query: currentQuery } = router.currentRoute.value;
+  const newQuery = { ...appliedFilters };
+
+  // Ensure headerSearchTerm is included if not already part of appliedFilters from ProductFilters component
+  if (headerSearchTerm.value.trim() && !newQuery.searchTerm) {
+    newQuery.searchTerm = headerSearchTerm.value.trim();
+  }
+  // If ProductFilters already provided a searchTerm, it will be used.
+  // If headerSearchTerm exists and ProductFilters had an empty search, headerSearchTerm takes precedence.
+
+  Object.keys(newQuery).forEach((k) => {
+    if (newQuery[k] === null || newQuery[k] === undefined || newQuery[k] === '') delete newQuery[k];
   });
-  router.push({ path: '/products', query });
+
+  const filterablePaths = ['/', '/products'];
+  // Check if current path is a category page
+  const isCategoryPage = /^\/categories\/[^/]+$/.test(path);
+
+  if (filterablePaths.includes(path) || isCategoryPage) {
+    router.push({ path, query: newQuery });
+  } else {
+    router.push({ path: '/products', query: newQuery });
+  }
   closeFilterModal();
 };
 
 const handleResetHeaderFilters = () => {
-  const term = headerSearchTerm.value.trim();
-  router.push({ path: '/products', query: term ? { searchTerm: term } : {} });
+  const { path, query: currentQuery } = router.currentRoute.value;
+  let resetQuery = {};
+  // Preserve header search term if user specifically wants to reset other filters but keep search
+  if (headerSearchTerm.value.trim()) {
+    resetQuery.searchTerm = headerSearchTerm.value.trim();
+  }
+
+  const filterablePaths = ['/', '/products'];
+  const isCategoryPage = /^\/categories\/[^/]+$/.test(path);
+
+  if (filterablePaths.includes(path) || isCategoryPage) {
+    router.push({ path, query: resetQuery });
+  } else {
+    // If on a non-filterable page and resetting, just go to products page with minimal (search term only) query
+    router.push({ path: '/products', query: resetQuery });
+  }
   closeFilterModal();
 };
 

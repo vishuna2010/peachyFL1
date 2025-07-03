@@ -33,6 +33,10 @@ import { useNuxtApp, useRoute } from '#app';
 
 const props = defineProps({
   isOpen: Boolean,
+  initialSearchTermFromHeader: { // Added prop
+    type: String,
+    default: ''
+  }
 });
 const emit = defineEmits(['close', 'apply-header-filters', 'reset-header-filters']);
 
@@ -41,7 +45,7 @@ const route = useRoute();
 
 const categories = ref([]);
 const currentFilters = reactive({
-  searchTerm: '',
+  searchTerm: props.initialSearchTermFromHeader, // Initialize with prop
   selectedCategoryId: null,
   minPrice: null,
   maxPrice: null,
@@ -68,9 +72,16 @@ function updateCurrentFiltersFromRoute() {
   currentFilters.selectedColorValueId = route.query.color || null;
 }
 
+watch(() => props.initialSearchTermFromHeader, (newSearchTerm) => {
+  currentFilters.searchTerm = newSearchTerm;
+});
+
 watch(() => props.isOpen, (newVal) => {
   if (newVal) {
-    updateCurrentFiltersFromRoute();
+    updateCurrentFiltersFromRoute(); // This will also update searchTerm from route if present, potentially overriding header one.
+                                    // We might want to prioritize headerSearchTerm if modal is just opened.
+                                    // Or, ProductFilters itself will sync with its initialSearchTerm prop.
+    currentFilters.searchTerm = props.initialSearchTermFromHeader || route.query.searchTerm || ''; // Prioritize header search term when opening
     if (categories.value.length === 0) { // Fetch categories only if not already fetched
         fetchCategoriesForFilter();
     }

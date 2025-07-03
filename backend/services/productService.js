@@ -58,7 +58,8 @@ function _buildProductBaseQueryParts(options = {}) {
     p.id, p.name, p.description, p.price, p.category_id, p.image_url,
     p.stock_quantity, p.sku, p.supplier_id, p.reorder_threshold,
     p.has_variants, p.average_rating, p.review_count, p.product_status,
-    p.tax_class_id, p.created_at, p.updated_at
+    p.tax_class_id, p.created_at, p.updated_at,
+    p.original_price, p.sale_price, p.is_on_sale -- Added new sale columns
   `;
 
   let selectColumns = `${productColumns},
@@ -281,8 +282,25 @@ async function getAllProducts(options = {}) {
     const countResult = await db.query(countQueryString, countFilterConditions.queryParams);
     const totalProducts = parseInt(countResult.rows[0].total_count);
 
+    const processedProducts = productsResult.rows.map(product => {
+      const p = { ...product };
+      // Adjust price for products on sale (variants are not typically fetched in full detail here)
+      if (p.is_on_sale && p.sale_price !== null) {
+        // If p.original_price is not set from DB, use the current p.price as original
+        if (p.original_price === null || p.original_price === undefined) {
+          p.original_price = p.price;
+        }
+        p.price = p.sale_price;
+      }
+      // Note: Full variant details including their sale prices are not usually fetched in getAllProducts
+      // for performance reasons. If variants need to show sale prices on listing pages,
+      // this would require fetching variant details or a more complex query.
+      // For now, this handles sale price for the base product display on listings.
+      return p;
+    });
+
     return {
-      products: productsResult.rows,
+      products: processedProducts,
       totalProducts: totalProducts,
       page: numPage,
       limit: numLimit,
@@ -298,7 +316,7 @@ async function getProductById(productId) {
   const client = await db.pool.connect();
   try {
     const productQuery = `
-      SELECT p.*,
+      SELECT p.*, -- This will now include original_price, sale_price, is_on_sale
              c.name as category_name,
              s.name as supplier_name,
              tc.name as tax_class_name,
@@ -318,6 +336,23 @@ async function getProductById(productId) {
       throw new NotFoundError(`Product with ID ${productId} not found.`);
     }
     const product = productResult.rows[0];
+
+    // Store the DB price as original_price if not already set (for backward compatibility or if original_price is null)
+    // The DB schema now has original_price, so this line might only be a fallback.
+    // product.original_price = product.original_price !== null ? product.original_price : product.price; (Handled by schema now)
+
+    if (product.is_on_sale && product.sale_price !== null) {
+      // If product.original_price is not already set by the DB, set it to the current product.price before overwriting.
+      if (product.original_price === null || product.original_price === undefined) {
+        product.original_price = product.price;
+      }
+      product.price = product.sale_price; // Set the main price to sale price
+    } else {
+      // Ensure original_price is set if not on sale, typically to its own price, or null if no specific RRP logic beyond current price.
+      // If original_price column exists and is populated, it will be used.
+      // If original_price is null in DB and not on sale, then there's no distinct "original" price to show.
+    }
+
 
     if (!product.has_variants) {
       const baseProductBatchStockQuery = await client.query(
@@ -373,7 +408,9 @@ async function getProductById(productId) {
       product.available_options = availableOptionsResult.rows;
 
       const variantsQuery = `
-        SELECT id, sku, price_modifier, stock_quantity, image_url, cost_price, wholesale_price_modifier
+        SELECT
+          id, sku, price_modifier, stock_quantity, image_url, cost_price, wholesale_price_modifier,
+          original_price, sale_price, is_on_sale -- Added new variant sale fields
         FROM product_variants
         WHERE product_id = $1
         ORDER BY id ASC;
@@ -383,7 +420,31 @@ async function getProductById(productId) {
 
       for (const variant of product.variants) {
         variant.option_value_ids = await getVariantOptionValueIds(variant.id, client);
-        variant.final_price = (parseFloat(product.price) + parseFloat(variant.price_modifier)).toFixed(2);
+
+        // Calculate initial final_price based on base product's current price (which might be sale price)
+        let calculated_final_price = (parseFloat(product.price) + parseFloat(variant.price_modifier)).toFixed(2);
+
+        // If variant has its own original_price from DB, use that as the basis for original_final_price.
+        // Otherwise, calculate it from the product's original_price (if available) + variant modifier.
+        if (variant.original_price !== null && variant.original_price !== undefined) {
+          variant.original_final_price = parseFloat(variant.original_price).toFixed(2);
+        } else if (product.original_price !== null && product.original_price !== undefined) {
+          variant.original_final_price = (parseFloat(product.original_price) + parseFloat(variant.price_modifier)).toFixed(2);
+        } else {
+          // Fallback if no original price context from product or variant itself
+          variant.original_final_price = calculated_final_price;
+        }
+
+        if (variant.is_on_sale && variant.sale_price !== null) {
+          variant.final_price = parseFloat(variant.sale_price).toFixed(2);
+          // Ensure original_final_price reflects the price before this sale, if not already set by variant.original_price
+          if (variant.original_price === null || variant.original_price === undefined) { // only if variant itself didn't define an original_price
+             variant.original_final_price = calculated_final_price; // The price it would have been without this specific variant sale
+          }
+        } else {
+          variant.final_price = calculated_final_price;
+        }
+
         const batchStockQuery = await client.query(
           `SELECT COALESCE(SUM(quantity_remaining), 0) as total_batch_stock
            FROM inventory_batches
@@ -457,7 +518,9 @@ async function createProduct(productData, fileData) {
     reorder_threshold, product_status = 'draft',
     tax_class_id, cost_price, wholesale_price,
     brand_manufacturer, supplier_reference, specifications,
-    tags: tagNames
+    tags: tagNames,
+    // New fields for sale
+    original_price, sale_price, is_on_sale
   } = productData;
 
   const client = await db.pool.connect();
@@ -481,8 +544,14 @@ async function createProduct(productData, fileData) {
         reorder_threshold, product_status, image_url, tax_class_id, cost_price,
         wholesale_price, brand_manufacturer, supplier_reference, specifications,
         has_variants, average_rating, review_count, stock_quantity,
+        original_price, sale_price, is_on_sale, -- Added new columns
         created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, FALSE, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+        FALSE, 0, 0, 0, -- has_variants, average_rating, review_count, stock_quantity
+        $16, $17, $18, -- original_price, sale_price, is_on_sale
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP -- created_at, updated_at
+      )
       RETURNING id;`;
     const values = [
       name, description || null, price, category_id || null, supplier_id || null, sku || null,
@@ -490,6 +559,7 @@ async function createProduct(productData, fileData) {
       tax_class_id || null, cost_price || null, wholesale_price || null,
       brand_manufacturer || null, supplier_reference || null,
       specifications ? (typeof specifications === 'string' ? specifications : JSON.stringify(specifications)) : null,
+      original_price || null, sale_price || null, is_on_sale || false
     ];
     const result = await client.query(insertQuery, values);
     const newProductId = result.rows[0].id;
@@ -542,7 +612,9 @@ async function updateProduct(productId, productData, fileData, removeImage = fal
     name, description, price, category_id, supplier_id, sku,
     stock_quantity, reorder_threshold, product_status, tax_class_id,
     cost_price, wholesale_price, brand_manufacturer, supplier_reference,
-    specifications, tags: tagNames, image_url: imageUrlFromRequest
+    specifications, tags: tagNames, image_url: imageUrlFromRequest,
+    // New fields for sale
+    original_price, sale_price, is_on_sale
   } = productData;
 
   const client = await db.pool.connect();
@@ -597,6 +669,10 @@ async function updateProduct(productId, productData, fileData, removeImage = fal
     addUpdateClause('brand_manufacturer', brand_manufacturer);
     addUpdateClause('supplier_reference', supplier_reference);
     addUpdateClause('specifications', specifications, true);
+    // Add new sale fields
+    addUpdateClause('original_price', original_price === '' ? null : original_price);
+    addUpdateClause('sale_price', sale_price === '' ? null : sale_price);
+    addUpdateClause('is_on_sale', is_on_sale);
 
     let productUpdated = false;
     if (setClauses.length > 0) {
@@ -910,9 +986,14 @@ async function getVariantById(variantId) {
 }
 
 async function createProductVariant(productId, variantData, fileData, requestingUserId = null) {
-  const { sku, price_modifier, stock_quantity, image_url: directImageUrl, option_value_ids, cost_price, wholesale_price_modifier } = variantData;
+  const {
+    sku, price_modifier, stock_quantity, image_url: directImageUrl, option_value_ids,
+    cost_price, wholesale_price_modifier,
+    // New sale fields for variants
+    original_price, sale_price, is_on_sale
+  } = variantData;
   const finalSku = sku && sku.trim() !== '' ? sku.trim() : null;
-  const numPriceModifier = parseFloat(price_modifier);
+  const numPriceModifier = parseFloat(price_modifier); // This might need re-evaluation if we store absolute sale_price
   const numStockQuantity = parseInt(stock_quantity, 10);
   const numCostPrice = (cost_price !== undefined && cost_price !== null && cost_price !== '') ? parseFloat(cost_price) : null;
   const numWholesalePriceModifier = (wholesale_price_modifier !== undefined && wholesale_price_modifier !== null && wholesale_price_modifier !== '') ? parseFloat(wholesale_price_modifier) : null;
@@ -974,9 +1055,16 @@ async function createProductVariant(productId, variantData, fileData, requesting
     }
 
     const variantInsertResult = await client.query(
-      `INSERT INTO product_variants (product_id, sku, price_modifier, stock_quantity, image_url, cost_price, wholesale_price_modifier)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [productId, finalSku, numPriceModifier, numStockQuantity, variantImageUrl, numCostPrice, numWholesalePriceModifier]
+      `INSERT INTO product_variants (
+         product_id, sku, price_modifier, stock_quantity, image_url, cost_price, wholesale_price_modifier,
+         original_price, sale_price, is_on_sale
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [
+        productId, finalSku, numPriceModifier, numStockQuantity, variantImageUrl,
+        numCostPrice, numWholesalePriceModifier,
+        original_price || null, sale_price || null, is_on_sale || false
+      ]
     );
     const newVariant = variantInsertResult.rows[0];
 
@@ -1018,7 +1106,12 @@ async function createProductVariant(productId, variantData, fileData, requesting
 }
 
 async function updateProductVariant(variantId, variantData, fileData, removeImageByFlag = false, requestingUserId = null) {
-  const { sku, price_modifier, stock_quantity, image_url: directImageUrl, option_value_ids, reason, cost_price, wholesale_price_modifier } = variantData;
+  const {
+    sku, price_modifier, stock_quantity, image_url: directImageUrl, option_value_ids, reason,
+    cost_price, wholesale_price_modifier,
+    // New sale fields
+    original_price, sale_price, is_on_sale
+  } = variantData;
   const client = await db.pool.connect();
   let s3NewFileKey = null;
   let s3OldFileKey = null;
@@ -1136,6 +1229,11 @@ async function updateProductVariant(variantId, variantData, fileData, removeImag
     }
     if(variantData.hasOwnProperty('cost_price')) addUpdateField('cost_price', (cost_price !== undefined && cost_price !== null && cost_price !== '') ? parseFloat(cost_price) : null, currentVariant.cost_price);
     if(variantData.hasOwnProperty('wholesale_price_modifier')) addUpdateField('wholesale_price_modifier', (wholesale_price_modifier !== undefined && wholesale_price_modifier !== null && wholesale_price_modifier !== '') ? parseFloat(wholesale_price_modifier) : null, currentVariant.wholesale_price_modifier);
+    // Add new sale fields
+    if(variantData.hasOwnProperty('original_price')) addUpdateField('original_price', (original_price !== undefined && original_price !== null && original_price !== '') ? parseFloat(original_price) : null, currentVariant.original_price);
+    if(variantData.hasOwnProperty('sale_price')) addUpdateField('sale_price', (sale_price !== undefined && sale_price !== null && sale_price !== '') ? parseFloat(sale_price) : null, currentVariant.sale_price);
+    if(variantData.hasOwnProperty('is_on_sale')) addUpdateField('is_on_sale', is_on_sale, currentVariant.is_on_sale);
+
 
     let updatedVariant = currentVariant;
     if (setClauses.length > 0) {
