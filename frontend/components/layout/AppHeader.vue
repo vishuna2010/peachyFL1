@@ -28,7 +28,7 @@
           </NuxtLink>
         </div>
         <NuxtLink
-          :to="{ path: '/products', query: { on_sale: 'true' } }"
+          to="/sale"
           class="text-venus-text-primary px-3 py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-bold transition-colors duration-200 ease-in-out"
         >
           Sale

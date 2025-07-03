@@ -116,8 +116,8 @@ function _buildProductBaseQueryParts(options = {}) {
 function _buildProductFilterConditions(options = {}, startingParamIndex = 1) {
   const {
     searchTerm, categoryId, minPrice, maxPrice, optionValueId,
-    status, stock_status, supplierId, is_admin_request,
-    optionValueFilterAlias = 'pvov_filter' // New: Allow specifying alias for option value join
+    status, stock_status, supplierId, is_admin_request, onSale, // Added onSale
+    optionValueFilterAlias = 'pvov_filter'
   } = options;
 
   const whereClauses = [];
@@ -194,6 +194,14 @@ function _buildProductFilterConditions(options = {}, startingParamIndex = 1) {
     } else if (stock_status === 'low_stock') {
       whereClauses.push(`pes.is_low_stock = TRUE`);
     }
+  }
+
+  if (onSale === true) {
+    // A product is on sale if is_on_sale is true, sale_price is set,
+    // and sale_price is less than the regular price (which is stored in p.price,
+    // or p.original_price if that's the canonical RRP).
+    // Using COALESCE(p.original_price, p.price) to get the RRP for comparison.
+    whereClauses.push(`(p.is_on_sale = TRUE AND p.sale_price IS NOT NULL AND p.sale_price < COALESCE(p.original_price, p.price))`);
   }
 
   const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
