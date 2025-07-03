@@ -36,7 +36,7 @@
         @mouseenter="clearDropdownTimeout"
         @mouseleave="handleCategoryMouseLeave()"
         class="absolute" <!-- Positioning will be dynamic via style prop -->
-      />
+      ></CategoryProductPreviewDropdown>
 
       <!-- Search and Action Icons -->
       <div class="flex items-center space-x-4">
