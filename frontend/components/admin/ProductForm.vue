@@ -21,6 +21,30 @@
       </div>
     </div>
 
+    <!-- Sale Fields -->
+    <div class="p-4 border border-orange-300 rounded-md bg-orange-50 my-4">
+      <h3 class="text-md font-medium text-orange-700 mb-3">Sale Configuration</h3>
+      <p class="text-xs text-gray-600 mb-3">The 'Selling Price' above will be used as the Regular/Original Price if a sale is active.</p>
+      <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+        <div>
+          <label for="sale_percentage" class="block text-sm font-medium text-gray-700 mb-1">Sale Discount Percentage (%):</label>
+          <input type="number" id="sale_percentage" v-model.number="formData.sale_percentage" min="0" max="100" step="0.01" placeholder="e.g., 10 for 10%" @input="calculateSalePriceFromPercentage" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" :disabled="!props.canEditPrice && props.isEditMode" />
+        </div>
+        <div>
+          <label for="sale_price" class="block text-sm font-medium text-gray-700 mb-1">Calculated/Override Sale Price:</label>
+          <input type="number" id="sale_price" v-model.number="formData.sale_price" min="0" step="0.01" placeholder="e.g., 15.99" @input="handleManualSalePriceInput" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" :disabled="!props.canEditPrice && props.isEditMode" />
+        </div>
+      </div>
+      <div class="mt-4">
+        <div class="flex items-center">
+          <input id="is_on_sale" v-model="formData.is_on_sale" type="checkbox" class="h-4 w-4 text-peach-pink border-gray-300 rounded focus:ring-peach-pink" :disabled="!props.canEditPrice && props.isEditMode" />
+          <label for="is_on_sale" class="ml-2 block text-sm font-medium text-gray-700">
+            Product is On Sale
+          </label>
+        </div>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
       <div>
         <label for="category_id" class="block text-sm font-medium text-gray-700 mb-1">Category:</label>
@@ -145,6 +169,10 @@ const props = defineProps({
       reorder_threshold: null, // Added default
       tags: [],
       image_url: null,
+      // Sale fields defaults
+      sale_price: null,
+      is_on_sale: false,
+      sale_percentage: null,
     })
   },
   categories: {
@@ -207,7 +235,11 @@ const initialFormData = {
   tags: [],
   image_url: null,
   tax_class_id: null,
-  cost_price: null, // Add cost_price
+  cost_price: null,
+  // original_price is removed from here as formData.price is RRP base
+  sale_price: null,
+  is_on_sale: false,
+  sale_percentage: null,
   ...props.initialData // Spread initialData to overwrite defaults
 };
 const formData = reactive(initialFormData);
@@ -233,7 +265,13 @@ watch(() => props.initialData, (newData) => {
     formData.image_url = newData.image_url || null;
     formData.tags = newData.tags || []; // Ensure tags is an array
     formData.tax_class_id = newData.tax_class_id === undefined ? null : newData.tax_class_id;
-    formData.cost_price = newData.cost_price === undefined ? null : newData.cost_price; // Update cost_price
+    formData.cost_price = newData.cost_price === undefined ? null : newData.cost_price;
+    // Update sale fields
+    // formData.original_price = newData.original_price === undefined ? null : newData.original_price; // Removed
+    formData.sale_price = newData.sale_price === undefined ? null : newData.sale_price;
+    formData.is_on_sale = newData.is_on_sale === undefined ? false : newData.is_on_sale;
+    formData.sale_percentage = newData.sale_percentage === undefined ? null : newData.sale_percentage;
+
 
     tagsInput.value = newData.tags ? newData.tags.join(', ') : '';
     selectedFile.value = null;
@@ -241,6 +279,82 @@ watch(() => props.initialData, (newData) => {
     imageRemovalFlag.value = false;
   }
 }, { immediate: true, deep: true });
+
+// Helper to update is_on_sale based on current form data
+function updateIsOnSaleStatus() {
+  const rrp = parseFloat(formData.price);
+  const salePrice = parseFloat(formData.sale_price);
+  const percentage = parseFloat(formData.sale_percentage);
+
+  if (!isNaN(rrp)) {
+    if (!isNaN(percentage) && percentage > 0 && percentage <= 100) {
+      // If there's a valid positive percentage, it's on sale
+      formData.is_on_sale = true;
+    } else if (!isNaN(salePrice) && salePrice < rrp && (isNaN(percentage) || percentage === 0 || percentage === null)) {
+      // If there's a valid sale_price less than RRP, and no overriding percentage, it's on sale
+      formData.is_on_sale = true;
+    } else {
+      formData.is_on_sale = false;
+    }
+  } else {
+    formData.is_on_sale = false; // Cannot determine sale if RRP is invalid
+  }
+}
+
+function calculateSalePriceFromPercentage() {
+  const rrp = parseFloat(formData.price);
+  const percentage = parseFloat(formData.sale_percentage);
+
+  if (!isNaN(rrp) && !isNaN(percentage) && percentage >= 0 && percentage <= 100) {
+    const discountAmount = (rrp * percentage) / 100;
+    formData.sale_price = parseFloat((rrp - discountAmount).toFixed(2));
+  } else if (isNaN(percentage) || percentage === null || percentage === '') {
+     // If percentage is cleared, do nothing to sale_price, user might be entering it manually
+  }
+  updateIsOnSaleStatus();
+}
+
+function handleManualSalePriceInput() {
+  const rrp = parseFloat(formData.price);
+  const salePrice = parseFloat(formData.sale_price);
+
+  if (!isNaN(rrp) && !isNaN(salePrice)) {
+    if (salePrice < rrp) {
+      formData.sale_percentage = null; // Manual sale price overrides percentage
+    } else {
+      // If sale_price is not less than RRP, it's not a valid sale discount.
+      // User might be correcting a mistake or RRP changed.
+      // We could clear sale_percentage here too if we want strict manual override.
+      // formData.sale_percentage = null;
+    }
+  } else if (formData.sale_price === null || formData.sale_price === '') {
+      // Sale price cleared, percentage might still apply.
+      // If percentage is also null/0, then is_on_sale will become false.
+  }
+  updateIsOnSaleStatus();
+}
+
+// Watcher for is_on_sale checkbox
+watch(() => formData.is_on_sale, (newVal, oldVal) => {
+  if (!newVal) { // If user unchecks "Is On Sale"
+    formData.sale_price = null;
+    formData.sale_percentage = null;
+  } else {
+    // If user checks "Is On Sale" and there's no valid discount yet,
+    // encourage them to set a percentage or sale price.
+    // For now, this just allows it to be true, calculations will determine actual sale.
+    // updateIsOnSaleStatus will run if price/percentage/sale_price changes.
+  }
+});
+
+// Watcher for RRP (formData.price)
+watch(() => formData.price, (newRrp, oldRrp) => {
+    if (formData.sale_percentage !== null && formData.sale_percentage !== '' && formData.sale_percentage > 0) {
+        calculateSalePriceFromPercentage(); // Recalculate sale_price if percentage exists
+    }
+    updateIsOnSaleStatus(); // Re-evaluate sale status
+});
+
 
 function handleFileChange(event) {
   const file = event.target.files[0];

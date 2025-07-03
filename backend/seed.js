@@ -22,6 +22,39 @@ pool.on('error', (err) => {
 
 // --- START OF HELPER FUNCTION DEFINITIONS ---
 
+async function applySchemaMigrations(client) {
+  console.log('Applying schema migrations for sales functionality...');
+  try {
+    await client.query(`
+      ALTER TABLE products
+      ADD COLUMN IF NOT EXISTS original_price DECIMAL(10, 2) NULL,
+      ADD COLUMN IF NOT EXISTS sale_price DECIMAL(10, 2) NULL,
+      ADD COLUMN IF NOT EXISTS is_on_sale BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS sale_percentage DECIMAL(5, 2) NULL;
+    `);
+    console.log('Sales columns (including percentage) ensured on products table.');
+  } catch (e) {
+    // Catching all errors here as IF NOT EXISTS might not be universally supported for all parts of ADD COLUMN or specific PG versions.
+    // A more robust migration system would handle this better.
+    console.error('Error altering products table (or columns already exist):', e.message);
+  }
+
+  try {
+    await client.query(`
+      ALTER TABLE product_variants
+      ADD COLUMN IF NOT EXISTS original_price DECIMAL(10, 2) NULL,
+      ADD COLUMN IF NOT EXISTS sale_price DECIMAL(10, 2) NULL,
+      ADD COLUMN IF NOT EXISTS is_on_sale BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS sale_percentage DECIMAL(5, 2) NULL;
+    `);
+    console.log('Sales columns (including percentage) ensured on product_variants table.');
+  } catch (e) {
+    console.error('Error altering product_variants table (or columns already exist):', e.message);
+  }
+  console.log('Schema migrations for sales functionality applied (or skipped if existing).');
+}
+
+
 async function createSchema(client) {
   console.log('Starting schema creation...');
   try {
@@ -1141,7 +1174,8 @@ async function seedDatabase() {
   let client;
   try {
     client = await pool.connect();
-    await createSchema(client);
+    await createSchema(client); // Creates tables if they don't exist
+    await applySchemaMigrations(client); // Add new columns if they don't exist
     await client.query('BEGIN');
 
     const seededDataIds = {

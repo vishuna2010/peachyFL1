@@ -167,6 +167,26 @@
               </div>
             </div>
 
+            <!-- Variant Sale Fields -->
+            <div class="p-3 border border-orange-200 rounded-md bg-orange-50/50 my-3 space-y-3">
+              <h4 class="text-sm font-medium text-orange-800">Variant Sale Configuration</h4>
+              <p class="text-2xs text-gray-500 -mt-2 mb-2">The variant's original price is base product price + price modifier.</p>
+              <div>
+                <label for="variant_sale_percentage" class="block text-xs font-medium text-gray-600 mb-0.5">Sale Discount Percentage (%):</label>
+                <input type="number" step="0.01" id="variant_sale_percentage" v-model.number="newVariantForm.sale_percentage" @input="calculateVariantSalePriceFromPercentage" min="0" max="100" class="block w-full px-2.5 py-1.5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-xs" placeholder="e.g., 10 for 10%" />
+              </div>
+              <div>
+                <label for="variant_sale_price" class="block text-xs font-medium text-gray-600 mb-0.5">Calculated/Override Sale Price:</label>
+                <input type="number" step="0.01" id="variant_sale_price" v-model.number="newVariantForm.sale_price" @input="handleManualVariantSalePriceInput" class="block w-full px-2.5 py-1.5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-xs" placeholder="Variant's sale price" />
+              </div>
+              <div class="flex items-center pt-1">
+                <input id="variant_is_on_sale" v-model="newVariantForm.is_on_sale" type="checkbox" class="h-3.5 w-3.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
+                <label for="variant_is_on_sale" class="ml-2 block text-xs font-medium text-gray-700">
+                  This Variant is On Sale
+                </label>
+              </div>
+            </div>
+
             <VariantImagePickerModal
               v-if="showImagePickerModal"
               :product-id="propProductId"
@@ -212,10 +232,14 @@ const props = defineProps({
   productId: {
     type: [String, Number],
     required: true,
+  },
+  baseProductPrice: { // RRP of the base product
+    type: Number,
+    default: 0
   }
 });
 
-const { productId: propProductId } = toRefs(props);
+const { productId: propProductId, baseProductPrice } = toRefs(props);
 
 const configuredProductOptions = ref([]);
 const existingVariants = ref([]);
@@ -235,7 +259,12 @@ const newVariantForm = reactive({
   price_modifier: 0.00,
   stock_quantity: 0,
   image_url: '',
-  selected_option_values: {} // Object to store { <global_option_id>: <global_value_id> }
+  selected_option_values: {}, // Object to store { <global_option_id>: <global_value_id> }
+  // Variant Sale Fields
+  // original_price for variant is now calculated, not stored directly in form
+  sale_price: null,
+  is_on_sale: false,
+  sale_percentage: null
 });
 const isSubmittingNewVariant = ref(false); // Used for Add/Edit form submission
 const addVariantFormError = ref(null);
@@ -248,6 +277,70 @@ function handleGalleryImageSelected(imageUrl) {
   showImagePickerModal.value = false;
 }
 
+function getVariantRRP() {
+  return (baseProductPrice.value || 0) + (newVariantForm.price_modifier || 0);
+}
+
+function updateVariantIsOnSaleStatus() {
+  const rrp = getVariantRRP();
+  const salePrice = parseFloat(newVariantForm.sale_price);
+  const percentage = parseFloat(newVariantForm.sale_percentage);
+
+  if (rrp > 0) {
+    if (!isNaN(percentage) && percentage > 0 && percentage <= 100) {
+      newVariantForm.is_on_sale = true;
+    } else if (!isNaN(salePrice) && salePrice < rrp && (isNaN(percentage) || percentage === 0 || percentage === null)) {
+      newVariantForm.is_on_sale = true;
+    } else {
+      newVariantForm.is_on_sale = false;
+    }
+  } else {
+    newVariantForm.is_on_sale = false;
+  }
+}
+
+function calculateVariantSalePriceFromPercentage() {
+  const rrp = getVariantRRP();
+  const percentage = parseFloat(newVariantForm.sale_percentage);
+
+  if (rrp > 0 && !isNaN(percentage) && percentage >= 0 && percentage <= 100) {
+    const discountAmount = (rrp * percentage) / 100;
+    newVariantForm.sale_price = parseFloat((rrp - discountAmount).toFixed(2));
+  } else if (isNaN(percentage) || percentage === null || percentage === '') {
+    // Percentage cleared
+  }
+  updateVariantIsOnSaleStatus();
+}
+
+function handleManualVariantSalePriceInput() {
+  const rrp = getVariantRRP();
+  const salePrice = parseFloat(newVariantForm.sale_price);
+
+  if (!isNaN(rrp) && !isNaN(salePrice)) {
+    if (salePrice < rrp) {
+      newVariantForm.sale_percentage = null;
+    }
+  }
+  updateVariantIsOnSaleStatus();
+}
+
+// Watcher for variant is_on_sale checkbox
+watch(() => newVariantForm.is_on_sale, (newVal) => {
+  if (!newVal) {
+    newVariantForm.sale_price = null;
+    newVariantForm.sale_percentage = null;
+  }
+});
+
+// Watchers for variant RRP components
+watch([baseProductPrice, () => newVariantForm.price_modifier], () => {
+    if (newVariantForm.sale_percentage !== null && newVariantForm.sale_percentage !== '' && newVariantForm.sale_percentage > 0) {
+        calculateVariantSalePriceFromPercentage();
+    }
+    updateVariantIsOnSaleStatus();
+});
+
+
 // Modal Control Methods
 function openAddVariantModal() {
   isEditingVariant.value = false;
@@ -259,6 +352,11 @@ function openAddVariantModal() {
   newVariantForm.stock_quantity = 0;
   newVariantForm.image_url = '';
   newVariantForm.selected_option_values = {};
+  // Sale fields reset
+  // newVariantForm.original_price = null; // Removed
+  newVariantForm.sale_price = null;
+  newVariantForm.is_on_sale = false;
+  newVariantForm.sale_percentage = null;
   // Ensure selected_option_values are initialized for configured options
   configuredProductOptions.value.forEach(opt => {
     newVariantForm.selected_option_values[opt.option_id] = undefined;
@@ -291,6 +389,14 @@ function openEditVariantModal(variantToEdit) {
                                   ? 0
                                   : parseInt(variantToEdit.stock_quantity);
   newVariantForm.image_url = variantToEdit.image_url || '';
+  // Populate sale fields
+  // newVariantForm.original_price = variantToEdit.original_price === undefined ? null : parseFloat(variantToEdit.original_price); // Removed
+  newVariantForm.sale_price = variantToEdit.sale_price === undefined ? null : parseFloat(variantToEdit.sale_price);
+  newVariantForm.is_on_sale = variantToEdit.is_on_sale === undefined ? false : variantToEdit.is_on_sale;
+  newVariantForm.sale_percentage = variantToEdit.sale_percentage === undefined ? null : parseFloat(variantToEdit.sale_percentage);
+  // If loading existing variant, and only sale_price is set (no percentage), then percentage remains null.
+  // If percentage is set, sale_price should ideally align or be recalculated here if base product price is available.
+  // For now, it just loads what's stored. Calculation logic will be separate.
 
   // Populate selected_option_values
   const newSelectedOptionValues = {};
@@ -349,7 +455,12 @@ async function handleVariantFormSubmit() {
     sku: newVariantForm.sku || null,
     price_modifier: newVariantForm.price_modifier,
     stock_quantity: newVariantForm.stock_quantity,
-    image_url: newVariantForm.image_url || null
+    image_url: newVariantForm.image_url || null,
+    // Add sale fields to payload
+    // original_price: newVariantForm.original_price !== null ? parseFloat(newVariantForm.original_price) : null, // Removed
+    sale_price: newVariantForm.sale_price !== null ? parseFloat(newVariantForm.sale_price) : null,
+    is_on_sale: newVariantForm.is_on_sale,
+    sale_percentage: newVariantForm.sale_percentage !== null ? parseFloat(newVariantForm.sale_percentage) : null,
     // cost_price and wholesale_price_modifier would be added here if they were part of newVariantForm
   };
 

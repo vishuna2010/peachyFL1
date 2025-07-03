@@ -6,50 +6,16 @@
     </div>
 
     <div class="lg:grid lg:grid-cols-4 lg:gap-8">
-      <!-- Filters Column (Desktop) -->
-      <aside class="hidden lg:block lg:col-span-1">
-        <ProductFilters
-          :categories="categories"
-          :initial-selected-category-id="filters.selectedCategoryId"
-          :initial-search-term="filters.searchTerm"
-          :initial-min-price="filters.minPrice"
-          :initial-max-price="filters.maxPrice"
-          :initial-sort-by="filters.sortBy"
-          :initial-selected-color-value-id="filters.selectedColorValueId"
-          @apply-filters="applyFilters"
-          @reset-filters="resetFiltersAndFetch"
-        />
-      </aside>
+      <!-- Filters Column (Desktop) - Removed -->
+      <!-- <aside class="hidden lg:block lg:col-span-1"> ... </aside> -->
 
-      <!-- Products Grid Column -->
-      <main class="lg:col-span-3">
-        <!-- Mobile Filter Trigger -->
-        <div class="lg:hidden mb-4">
-          <button
-            @click="showMobileFilters = !showMobileFilters"
-            class="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-venus-text-primary bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-peach-pink"
-          >
-            <FilterIcon class="w-5 h-5 mr-2 text-venus-text-secondary" />
-            <span>{{ showMobileFilters ? 'Hide' : 'Show' }} Filters</span>
-          </button>
-        </div>
+      <!-- Products Grid Column - Spans full width now -->
+      <main class="lg:col-span-4">
+        <!-- Mobile Filter Trigger - Removed -->
+        <!-- <div class="lg:hidden mb-4"> ... </div> -->
 
-        <!-- Mobile Filters Panel -->
-        <div v-if="showMobileFilters" class="lg:hidden mb-6 bg-white shadow-lg rounded-lg border border-gray-200">
-          <ProductFilters
-            :categories="categories"
-            :initial-selected-category-id="filters.selectedCategoryId"
-            :initial-search-term="filters.searchTerm"
-            :initial-min-price="filters.minPrice"
-            :initial-max-price="filters.maxPrice"
-            :initial-sort-by="filters.sortBy"
-            :initial-selected-color-value-id="filters.selectedColorValueId"
-            @apply-filters="applyFilters"
-            @reset-filters="resetFiltersAndFetch"
-            @close-mobile-filters="showMobileFilters = false"
-            :is-mobile="true"
-          />
-        </div>
+        <!-- Mobile Filters Panel - Removed -->
+        <!-- <div v-if="showMobileFilters" class="lg:hidden mb-6"> ... </div> -->
 
         <div v-if="pending" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
           <ProductCardSkeleton v-for="n in 6" :key="`skeleton-${n}`" />
@@ -104,23 +70,23 @@
 <script setup>
 import { ref, reactive, onMounted, watch } from 'vue';
 import { useRoute, useRouter, useNuxtApp, useHead } from '#app';
-import ProductFilters from '~/components/ProductFilters.vue';
+// import ProductFilters from '~/components/ProductFilters.vue'; // Removed
 import ProductCard from '~/components/ProductCard.vue';
-import ProductQuickView from '~/components/products/ProductQuickView.vue'; // Import the new component
-import ProductCardSkeleton from '~/components/ProductCardSkeleton.vue'; // Assuming this exists
-import FilterIcon from '~/components/icons/FilterIcon.vue'; // Assuming this exists
+import ProductQuickView from '~/components/products/ProductQuickView.vue';
+import ProductCardSkeleton from '~/components/ProductCardSkeleton.vue';
+// import FilterIcon from '~/components/icons/FilterIcon.vue'; // Removed
 
 const { $axios } = useNuxtApp();
 const route = useRoute();
 const router = useRouter();
 
 const products = ref([]);
-const categories = ref([]);
+// const categories = ref([]); // No longer needed for page-level filters
 const pending = ref(true);
 const error = ref(null);
-const showMobileFilters = ref(false);
+// const showMobileFilters = ref(false); // Removed
 
-const filters = reactive({
+const filters = reactive({ // This will now be driven by AppHeader's filter via URL query
   searchTerm: route.query.searchTerm || '',
   selectedCategoryId: route.query.category || null,
   minPrice: route.query.minPrice ? parseFloat(route.query.minPrice) : null,
@@ -198,15 +164,8 @@ async function fetchProducts() {
   }
 }
 
-async function fetchCategories() {
-  try {
-    const response = await $axios.get('/categories');
-    categories.value = response.data.categories || response.data || []; // Adjust based on actual API response
-  } catch (err) {
-    console.error('Error fetching categories:', err);
-    // Handle error, maybe show a toast
-  }
-}
+// fetchCategories is removed as categories are not needed for page-level filters anymore
+// async function fetchCategories() { ... }
 
 function updateQueryParameters() {
   const query = {};
@@ -222,38 +181,7 @@ function updateQueryParameters() {
   router.push({ path: route.path, query });
 }
 
-function applyFilters(newFilters) {
-  filters.searchTerm = newFilters.searchTerm;
-  filters.selectedCategoryId = newFilters.selectedCategoryId;
-  filters.minPrice = newFilters.minPrice;
-  filters.maxPrice = newFilters.maxPrice;
-  filters.sortBy = newFilters.sortBy;
-  filters.selectedColorValueId = newFilters.selectedColorValueId;
-  filters.page = 1; // Reset to first page when filters change
-
-  updateQueryParameters();
-  fetchProducts();
-  if (showMobileFilters.value) {
-    showMobileFilters.value = false;
-  }
-}
-
-function resetFiltersAndFetch() {
-  filters.searchTerm = '';
-  filters.selectedCategoryId = null;
-  filters.minPrice = null;
-  filters.maxPrice = null;
-  filters.sortBy = 'created_at_desc';
-  filters.selectedColorValueId = null;
-  filters.onSaleOnly = false; // Reset sale filter
-  filters.page = 1;
-
-  updateQueryParameters(); // This will clear the query params
-  fetchProducts();
-  if (showMobileFilters.value) {
-    showMobileFilters.value = false;
-  }
-}
+// applyFilters and resetFiltersAndFetch are removed
 
 function changePage(newPage) {
   if (newPage > 0 && newPage <= pagination.totalPages) {
@@ -269,7 +197,7 @@ function changePage(newPage) {
 }
 
 onMounted(() => {
-  fetchCategories();
+  // fetchCategories(); // Removed
   fetchProducts(); // Initial fetch based on query params or defaults
 });
 

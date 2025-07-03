@@ -48,7 +48,7 @@
       <section class="bg-white shadow-md rounded-lg p-6 my-10">
         <h3 class="text-xl font-semibold text-gray-700 mb-5 border-b pb-3">Product Variants</h3>
         <div v-if="productData.has_variants || (productData.options && productData.options.length > 0)">
-          <ProductVariantsManager :product-id="productId" :product-options="productData.options || []" />
+          <ProductVariantsManager :product-id="productId" :base-product-price="parseFloat(productData.price || 0)" :product-options="productData.options || []" />
         </div>
         <div v-else class="p-4 bg-blue-50 border-l-4 border-blue-400 text-blue-700 rounded-md">
           <p class="font-medium">Manage Variants</p>
