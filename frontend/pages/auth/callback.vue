@@ -29,35 +29,34 @@ const router = useRouter();
 const route = useRoute();
 
 onMounted(() => {
-  // console.log('[AuthCallback] Mounted. Initial state:',
-  //   `isAuthInitialized: ${isAuthInitialized.value}`,
-  //   `isAuthenticated: ${isAuthenticated.value}`,
-  //   `isLoadingPermissions: ${isLoadingPermissions.value}`,
-  //   `authUser permissions: ${JSON.stringify(authUser.value?.permissions)}`
-  // );
+  console.log('[AuthCallback] Mounted. Initial state:',
+    `isAuthInitialized: ${isAuthInitialized.value}`,
+    `isAuthenticated: ${isAuthenticated.value}`,
+    `isLoadingPermissions: ${isLoadingPermissions.value}`,
+    `authUser permissions: ${JSON.stringify(authUser.value?.permissions)}`
+  );
 
   let stopWatch = null; // Declare with let, initialized to null
 
   stopWatch = watch( // Assign here
     [isAuthInitialized, isAuthenticated, isLoadingPermissions, () => authUser.value?.permissions], // Watch all relevant states
     ([authInitialized, authenticated, loadingPermissions, permissionsArray]) => {
-      // console.log('[AuthCallback] Watch triggered. State:',
-      //   `isAuthInitialized: ${authInitialized}`,
-      //   `isAuthenticated: ${authenticated}`,
-      //   `isLoadingPermissions: ${loadingPermissions}`,
-      //   `authUser permissions: ${JSON.stringify(permissionsArray)}`
-      // );
+      console.log('[AuthCallback] Watch triggered. State:',
+        `isAuthInitialized: ${authInitialized}`,
+        `isAuthenticated: ${authenticated}`,
+        `isLoadingPermissions: ${loadingPermissions}`,
+        `authUser permissions: ${JSON.stringify(permissionsArray)}`
+      );
 
-      if (authInitialized && authenticated && !loadingPermissions) {
-        // Ensure permissions array itself is also populated if expected
-        // The check for permissionsArray?.length might be too strict if a user legitimately has no permissions.
-        // The main thing is that isLoadingPermissions is false.
-
-        if (stopWatch) { // Check if it has been assigned (it should have been by this point)
-          stopWatch();
-        }
+                      if (authInitialized && authenticated) {
+          console.log('[AuthCallback] All conditions met! Proceeding with redirect...');
+          
+          if (stopWatch) { // Check if it has been assigned (it should have been by this point)
+            stopWatch();
+          }
 
         let intendedRedirect = route.query.redirect || '/'; // Fallback to homepage
+        console.log(`[AuthCallback] Intended redirect: ${intendedRedirect}`);
 
         // Determine final target based on role and permissions, similar to login.vue
         const currentUser = authUser.value; // Re-access fresh state
@@ -66,6 +65,7 @@ onMounted(() => {
         if (intendedRedirect === '/admin' || intendedRedirect.startsWith('/admin/')) { // Only re-evaluate if original target was admin
             if (currentUser && currentUser.role && currentUser.role.toLowerCase().includes('admin')) {
                 if (currentUser.permissions?.includes('admin:access_dashboard')) {
+                    // Preserve the original admin path if it's specific (not just /admin)
                     finalTargetPath = intendedRedirect === '/' || intendedRedirect === '/admin' ? '/admin' : intendedRedirect;
                 } else if (currentUser.permissions?.length > 0) {
                     // If no dashboard access, but has other admin perms, maybe go to a specific page?
@@ -87,7 +87,7 @@ onMounted(() => {
         }
         // If intendedRedirect was specific like /profile, it will be kept.
 
-        // console.log(`[AuthCallback] Conditions met. Redirecting to: ${finalTargetPath} (original intended: ${route.query.redirect})`);
+        console.log(`[AuthCallback] Conditions met. Redirecting to: ${finalTargetPath} (original intended: ${route.query.redirect})`);
         router.replace(finalTargetPath);
       }
     },

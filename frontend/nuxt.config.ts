@@ -11,6 +11,15 @@ export default defineNuxtConfig({
       backendBaseUrl: process.env.NUXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:3000',
     }
   },
+  nitro: {
+    devProxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        prependPath: true,
+      }
+    }
+  },
   css: ['~/assets/css/main.css'],
   modules: [
     // Other modules can be added here if needed

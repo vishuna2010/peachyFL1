@@ -296,11 +296,139 @@ async function createSchema(client) {
         id SERIAL PRIMARY KEY, product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
         user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5), title VARCHAR(255),
-        comment TEXT, is_approved BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        comment TEXT, is_approved BOOLEAN DEFAULT FALSE, status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('Table "product_reviews" checked/created.');
+    
+    // Ensure status column exists (in case table was created without it)
+    try {
+      await client.query('ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT \'pending\' CHECK (status IN (\'pending\', \'approved\', \'rejected\'));');
+      console.log('Column "status" ensured in product_reviews.');
+    } catch (error) {
+      console.log('Column "status" already exists or error (benign):', error.message);
+    }
+
+    // Discounts Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS discounts (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(255) UNIQUE NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        value DECIMAL(10, 2) NOT NULL,
+        description TEXT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        valid_from TIMESTAMPTZ NULL,
+        valid_until TIMESTAMPTZ NULL,
+        usage_limit INTEGER NULL,
+        times_used INTEGER NOT NULL DEFAULT 0,
+        min_order_amount DECIMAL(10, 2) NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "discounts" checked/created.');
+
+    // Orders Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        status VARCHAR(50) DEFAULT 'pending',
+        total_amount DECIMAL(10, 2) NOT NULL,
+        shipping_address_line1 VARCHAR(255) NOT NULL,
+        shipping_address_line2 VARCHAR(255) NULL,
+        shipping_city VARCHAR(100) NOT NULL,
+        shipping_postal_code VARCHAR(20) NOT NULL,
+        shipping_country VARCHAR(50) NOT NULL,
+        billing_address_line1 VARCHAR(255) NULL,
+        billing_address_line2 VARCHAR(255) NULL,
+        billing_city VARCHAR(100) NULL,
+        billing_postal_code VARCHAR(20) NULL,
+        billing_country VARCHAR(50) NULL,
+        discount_id INTEGER NULL REFERENCES discounts(id) ON DELETE SET NULL,
+        discount_code_applied VARCHAR(255) NULL,
+        discount_amount_applied DECIMAL(10, 2) NULL,
+        original_total_amount DECIMAL(10, 2) NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "orders" checked/created.');
+
+    // Order Items Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS order_items (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+        product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL,
+        quantity INTEGER NOT NULL CHECK (quantity > 0),
+        price_at_purchase DECIMAL(10, 2) NOT NULL
+      );
+    `);
+    console.log('Table "order_items" checked/created.');
+
+    // Purchase Orders Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        id SERIAL PRIMARY KEY,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE RESTRICT,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending',
+        order_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        expected_delivery_date DATE NULL,
+        notes TEXT NULL,
+        created_by_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "purchase_orders" checked/created.');
+
+    // Purchase Order Items Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS purchase_order_items (
+        id SERIAL PRIMARY KEY,
+        purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+        quantity_ordered INTEGER NOT NULL CHECK (quantity_ordered > 0),
+        unit_cost_price DECIMAL(10, 2) NOT NULL,
+        quantity_received INTEGER NOT NULL DEFAULT 0 CHECK (quantity_received >= 0 AND quantity_received <= quantity_ordered)
+      );
+    `);
+    console.log('Table "purchase_order_items" checked/created.');
+
+    // Product Variant Option Values Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS product_variant_option_values (
+        id SERIAL PRIMARY KEY,
+        product_variant_id INTEGER NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+        product_option_value_id INTEGER NOT NULL REFERENCES product_option_values(id) ON DELETE CASCADE,
+        CONSTRAINT uk_variant_option_value_combo UNIQUE (product_variant_id, product_option_value_id)
+      );
+    `);
+    console.log('Table "product_variant_option_values" checked/created.');
+    
+    // Ensure product_variant_id column exists (in case table was created without it)
+    try {
+      // First add the column as nullable
+      await client.query('ALTER TABLE product_variant_option_values ADD COLUMN IF NOT EXISTS product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE CASCADE;');
+      console.log('Column "product_variant_id" added as nullable to product_variant_option_values.');
+      
+      // Check if there are any rows with NULL product_variant_id
+      const nullCheck = await client.query('SELECT COUNT(*) FROM product_variant_option_values WHERE product_variant_id IS NULL;');
+      if (nullCheck.rows[0].count > 0) {
+        console.log(`Found ${nullCheck.rows[0].count} rows with NULL product_variant_id. These will remain nullable.`);
+      } else {
+        // If no NULL values, we can make it NOT NULL
+        await client.query('ALTER TABLE product_variant_option_values ALTER COLUMN product_variant_id SET NOT NULL;');
+        console.log('Column "product_variant_id" made NOT NULL in product_variant_option_values.');
+      }
+    } catch (error) {
+      console.log('Column "product_variant_id" already exists or error (benign):', error.message);
+    }
 
     // Inventory Batches Table
     await client.query(`
@@ -327,20 +455,7 @@ async function createSchema(client) {
     `);
     console.log('Table "inventory_batches" checked/created.');
 
-    // Purchase Order Items Table (ensure it exists before inventory_batches references it)
-    // This might need to be moved earlier if not already defined. Assuming it's defined before this point.
-    // For safety, let's add a check here, though ideally it's part of a more structured migration.
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS purchase_order_items (
-        id SERIAL PRIMARY KEY,
-        -- other columns...
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        -- Ensure other necessary columns like purchase_order_id, product_id, etc., are defined elsewhere or add them.
-        -- This is a minimal stub to ensure the FK in inventory_batches can be created if PO items are not fully defined yet.
-      );
-    `);
-    console.log('Table "purchase_order_items" checked/created (minimal stub for FK if not already fully defined).');
+
 
 
     // Stock Movement Logs Table
@@ -389,7 +504,7 @@ async function createSchema(client) {
     `);
     console.log('Function "trigger_set_timestamp" checked/created.');
 
-    const tablesWithTimestampTrigger = ['users', 'roles', 'permissions', 'suppliers', 'categories', 'hero_banners', 'products', 'product_options', 'product_option_values', 'product_variants', 'product_images', 'product_reviews', 'tax_classes', 'tax_rates', 'inventory_batches', 'product_assigned_options', 'product_assigned_option_specific_values', 'product_cost_history'];
+    const tablesWithTimestampTrigger = ['users', 'roles', 'permissions', 'suppliers', 'categories', 'hero_banners', 'products', 'product_options', 'product_option_values', 'product_variants', 'product_images', 'product_reviews', 'discounts', 'orders', 'purchase_orders', 'tax_classes', 'tax_rates', 'inventory_batches', 'product_assigned_options', 'product_assigned_option_specific_values', 'product_cost_history'];
     for (const tableName of tablesWithTimestampTrigger) {
       await client.query(`
         DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trigger_update_${tableName}_updated_at' AND tgrelid = '${tableName}'::regclass) THEN

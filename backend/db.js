@@ -542,61 +542,30 @@ const createTables = async () => {
       );
     `);
     console.log('Table "product_variant_option_values" ensured.');
+    
+    // Ensure product_variant_id column exists (in case table was created without it)
+    try {
+      // First add the column as nullable
+      await client.query('ALTER TABLE product_variant_option_values ADD COLUMN IF NOT EXISTS product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE CASCADE;');
+      console.log('Column "product_variant_id" added as nullable to product_variant_option_values.');
+      
+      // Check if there are any rows with NULL product_variant_id
+      const nullCheck = await client.query('SELECT COUNT(*) FROM product_variant_option_values WHERE product_variant_id IS NULL;');
+      if (nullCheck.rows[0].count > 0) {
+        console.log(`Found ${nullCheck.rows[0].count} rows with NULL product_variant_id. These will remain nullable.`);
+      } else {
+        // If no NULL values, we can make it NOT NULL
+        await client.query('ALTER TABLE product_variant_option_values ALTER COLUMN product_variant_id SET NOT NULL;');
+        console.log('Column "product_variant_id" made NOT NULL in product_variant_option_values.');
+      }
+    } catch (error) {
+      console.log('Column "product_variant_id" already exists or error (benign):', error.message);
+    }
+    
     await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_variant_id ON product_variant_option_values(product_variant_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_option_value_id ON product_variant_option_values(product_option_value_id);');
 
-    // --- Order Items Table --- START DDL BLOCK
-    console.log('>>> [DEBUG] Starting Order Items DDL block.');
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS order_items (
-        id SERIAL PRIMARY KEY,
-        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-        -- product_variant_id will be added next
-        quantity INTEGER NOT NULL CHECK (quantity > 0),
-        price_at_purchase DECIMAL(10, 2) NOT NULL
-      );
-    `);
-    console.log('>>> [DEBUG] Base "order_items" table (without product_variant_id) ensured.');
 
-    // Attempt to add product_variant_id column
-    try {
-      console.log('>>> [DEBUG] Attempting to ADD COLUMN product_variant_id to order_items...');
-      await client.query('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL;');
-      console.log('>>> [DEBUG] ADD COLUMN product_variant_id to order_items statement executed.');
-    } catch (error) {
-      console.error('>>> [DEBUG] ERROR during ALTER TABLE ADD COLUMN product_variant_id:', error.message);
-      // Log more details if available
-      if (error.detail) console.error('>>> [DEBUG] Error Detail:', error.detail);
-      if (error.hint) console.error('>>> [DEBUG] Error Hint:', error.hint);
-      // Do not re-throw immediately, let's see if index creation still fails
-    }
-
-    // Verify column existence with information_schema before creating index
-    try {
-      console.log('>>> [DEBUG] Verifying product_variant_id column existence via information_schema...');
-      const verifyCol = await client.query(`
-          SELECT column_name FROM information_schema.columns
-          WHERE table_name='order_items' AND column_name='product_variant_id' AND table_schema = current_schema();
-      `);
-      if (verifyCol.rows.length > 0) {
-          console.log('>>> [DEBUG] Verified: "product_variant_id" column IS PRESENT in order_items.');
-      } else {
-          console.error('>>> [DEBUG] CRITICAL VERIFICATION FAILURE: "product_variant_id" column IS MISSING in order_items after attempting to add it.');
-      }
-    } catch (verifyError) {
-        console.error('>>> [DEBUG] Error verifying column existence with information_schema:', verifyError.message);
-    }
-
-    console.log('>>> [DEBUG] Ensuring indexes for order_items (order_id, product_id).');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);');
-
-    console.log('>>> [DEBUG] Attempting to CREATE INDEX on order_items(product_variant_id). This is the critical point (line 545).');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_variant_id ON order_items(product_variant_id);');
-    console.log('>>> [DEBUG] Index "idx_order_items_product_variant_id" ensured.');
-    console.log('>>> [DEBUG] Finished Order Items DDL block.');
-    // --- Order Items Table --- END DDL BLOCK
 
 
     // --- Discounts Table ---
@@ -677,60 +646,21 @@ const createTables = async () => {
     await client.query('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);');
 
-
     // --- Order Items Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS order_items (
         id SERIAL PRIMARY KEY,
         order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
         product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-        -- product_variant_id will be added/ensured below
+        product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL,
         quantity INTEGER NOT NULL CHECK (quantity > 0),
         price_at_purchase DECIMAL(10, 2) NOT NULL
       );
     `);
-    console.log('Table "order_items" created or already exists (initially without product_variant_id).');
-
-    // Robustly ensure product_variant_id column exists
-    try {
-      const checkColumnQuery = `
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'order_items'
-          AND column_name = 'product_variant_id';
-      `;
-      const { rows } = await client.query(checkColumnQuery);
-      if (rows.length === 0) {
-        console.log('Column "product_variant_id" does not exist in "order_items". Attempting to add it.');
-        await client.query('ALTER TABLE order_items ADD COLUMN product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL;');
-        console.log('Column "order_items.product_variant_id" added successfully.');
-      } else {
-        console.log('Column "order_items.product_variant_id" already exists.');
-        // Optional: Check if FK constraint exists and add if not, though ADD COLUMN with REFERENCES should handle it.
-      }
-    } catch (error) {
-      console.error('Error during robust check/add of "order_items.product_variant_id":', error.message);
-      // Decide if this is fatal or if we can proceed to index creation cautiously
-      // For now, we'll let it try to create the index, which will then fail if column isn't truly there.
-    }
-
+    console.log('Table "order_items" created or already exists.');
     await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);');
-
-    // Explicitly check again before creating the index on product_variant_id
-    const verifyColumnAgain = await client.query(`
-        SELECT column_name FROM information_schema.columns
-        WHERE table_name='order_items' AND column_name='product_variant_id';
-    `);
-    if (verifyColumnAgain.rows.length > 0) {
-        console.log('Verified: "product_variant_id" column exists before creating index.');
-        await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_variant_id ON order_items(product_variant_id);');
-        console.log('Index "idx_order_items_product_variant_id" ensured.');
-    } else {
-        console.error('CRITICAL: "product_variant_id" column STILL does not exist in "order_items" before attempting index creation. Index skipped.');
-        // This would indicate a deeper problem.
-    }
+    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_variant_id ON order_items(product_variant_id);');
 
     // --- Purchase Orders Table ---
     await client.query(`
@@ -811,8 +741,42 @@ const createTables = async () => {
     console.log('Trigger for "product_reviews.updated_at" ensured.');
     await client.query('CREATE INDEX IF NOT EXISTS idx_review_product_id ON product_reviews(product_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_review_user_id ON product_reviews(user_id);');
+    await client.query('ALTER TABLE product_reviews ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT \'pending\' CHECK (status IN (\'pending\', \'approved\', \'rejected\'));');
     await client.query('CREATE INDEX IF NOT EXISTS idx_review_status ON product_reviews(status);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_review_rating ON product_reviews(rating);');
+
+    // --- Hero Banners Table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hero_banners (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        subtitle TEXT NULL,
+        button_text VARCHAR(100) NULL,
+        button_link VARCHAR(500) NULL,
+        image_url VARCHAR(500) NULL,
+        alt_text VARCHAR(255) NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "hero_banners" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_hero_banners') THEN
+          CREATE TRIGGER set_timestamp_hero_banners
+          BEFORE UPDATE ON hero_banners
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "hero_banners.updated_at" ensured.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_hero_banners_active ON hero_banners(is_active);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_hero_banners_sort_order ON hero_banners(sort_order);');
 
 
     // Final check on users table role default (already present in original file, kept for safety)
