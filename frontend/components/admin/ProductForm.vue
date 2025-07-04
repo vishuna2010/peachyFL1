@@ -64,6 +64,15 @@
           </option>
         </select>
       </div>
+      <div>
+        <label for="product_status" class="block text-sm font-medium text-gray-700 mb-1">Product Status:</label>
+        <select id="product_status" v-model="formData.product_status" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm">
+          <option value="draft">Draft</option>
+          <option value="active">Active</option>
+          <option value="archived">Archived</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
@@ -173,6 +182,7 @@ const props = defineProps({
       sale_price: null,
       is_on_sale: false,
       sale_percentage: null,
+      product_status: 'draft', // Default for new products
     })
   },
   categories: {
@@ -240,6 +250,7 @@ const initialFormData = {
   sale_price: null,
   is_on_sale: false,
   sale_percentage: null,
+  product_status: 'draft',
   ...props.initialData // Spread initialData to overwrite defaults
 };
 const formData = reactive(initialFormData);
@@ -271,6 +282,7 @@ watch(() => props.initialData, (newData) => {
     formData.sale_price = newData.sale_price === undefined ? null : newData.sale_price;
     formData.is_on_sale = newData.is_on_sale === undefined ? false : newData.is_on_sale;
     formData.sale_percentage = newData.sale_percentage === undefined ? null : newData.sale_percentage;
+    formData.product_status = newData.product_status || 'draft';
 
 
     tagsInput.value = newData.tags ? newData.tags.join(', ') : '';
