@@ -545,6 +545,60 @@ const createTables = async () => {
     await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_variant_id ON product_variant_option_values(product_variant_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_pvov_option_value_id ON product_variant_option_values(product_option_value_id);');
 
+    // --- Order Items Table --- START DDL BLOCK
+    console.log('>>> [DEBUG] Starting Order Items DDL block.');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS order_items (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+        -- product_variant_id will be added next
+        quantity INTEGER NOT NULL CHECK (quantity > 0),
+        price_at_purchase DECIMAL(10, 2) NOT NULL
+      );
+    `);
+    console.log('>>> [DEBUG] Base "order_items" table (without product_variant_id) ensured.');
+
+    // Attempt to add product_variant_id column
+    try {
+      console.log('>>> [DEBUG] Attempting to ADD COLUMN product_variant_id to order_items...');
+      await client.query('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL;');
+      console.log('>>> [DEBUG] ADD COLUMN product_variant_id to order_items statement executed.');
+    } catch (error) {
+      console.error('>>> [DEBUG] ERROR during ALTER TABLE ADD COLUMN product_variant_id:', error.message);
+      // Log more details if available
+      if (error.detail) console.error('>>> [DEBUG] Error Detail:', error.detail);
+      if (error.hint) console.error('>>> [DEBUG] Error Hint:', error.hint);
+      // Do not re-throw immediately, let's see if index creation still fails
+    }
+
+    // Verify column existence with information_schema before creating index
+    try {
+      console.log('>>> [DEBUG] Verifying product_variant_id column existence via information_schema...');
+      const verifyCol = await client.query(`
+          SELECT column_name FROM information_schema.columns
+          WHERE table_name='order_items' AND column_name='product_variant_id' AND table_schema = current_schema();
+      `);
+      if (verifyCol.rows.length > 0) {
+          console.log('>>> [DEBUG] Verified: "product_variant_id" column IS PRESENT in order_items.');
+      } else {
+          console.error('>>> [DEBUG] CRITICAL VERIFICATION FAILURE: "product_variant_id" column IS MISSING in order_items after attempting to add it.');
+      }
+    } catch (verifyError) {
+        console.error('>>> [DEBUG] Error verifying column existence with information_schema:', verifyError.message);
+    }
+
+    console.log('>>> [DEBUG] Ensuring indexes for order_items (order_id, product_id).');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);');
+
+    console.log('>>> [DEBUG] Attempting to CREATE INDEX on order_items(product_variant_id). This is the critical point (line 545).');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_variant_id ON order_items(product_variant_id);');
+    console.log('>>> [DEBUG] Index "idx_order_items_product_variant_id" ensured.');
+    console.log('>>> [DEBUG] Finished Order Items DDL block.');
+    // --- Order Items Table --- END DDL BLOCK
+
+
     // --- Discounts Table ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS discounts (
