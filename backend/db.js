@@ -637,6 +637,14 @@ const createTables = async () => {
       );
     `);
     console.log('Table "order_items" created or already exists.');
+    // Ensure product_variant_id column exists before attempting to create an index on it
+    try {
+      await client.query('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL;');
+      console.log('Column "order_items.product_variant_id" ensured.');
+    } catch (alterError) {
+      console.warn('Warning ensuring column "order_items.product_variant_id" (might be benign, e.g., type mismatch if column exists differently):', alterError.message);
+      // If this fails due to a more fundamental issue (e.g. product_variants table not existing yet), that's a bigger problem.
+    }
     await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_variant_id ON order_items(product_variant_id);');
