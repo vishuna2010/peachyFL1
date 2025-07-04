@@ -127,7 +127,16 @@ watch(() => props.initialData, (newData) => {
     selectedFile.value = null;
     imageMarkedForRemoval.value = false;
     if (newData.imageUrl) {
-      previewImageUrl.value = newData.imageUrl.startsWith('http') ? newData.imageUrl : `${backendUrl.value}${newData.imageUrl}`;
+      // If imageUrl is already an absolute URL (starts with http/https), use it directly.
+      // Otherwise, assume it might be a relative path and prepend backend URL.
+      // Given cmsService returns full S3 URLs, it should usually be absolute.
+      if (newData.imageUrl.startsWith('http://') || newData.imageUrl.startsWith('https://')) {
+        previewImageUrl.value = newData.imageUrl;
+      } else if (backendUrl.value) { // Only prepend if backendUrl is available
+        previewImageUrl.value = `${backendUrl.value}${newData.imageUrl}`;
+      } else {
+        previewImageUrl.value = newData.imageUrl; // Fallback or if backendUrl not configured client-side
+      }
     } else {
       previewImageUrl.value = null;
     }
