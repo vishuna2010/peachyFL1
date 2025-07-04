@@ -625,30 +625,58 @@ const createTables = async () => {
 
 
     // --- Order Items Table ---
-    // Note: product_variant_id FK needs product_variants table to exist.
     await client.query(`
       CREATE TABLE IF NOT EXISTS order_items (
         id SERIAL PRIMARY KEY,
         order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
         product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-        product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL,
+        -- product_variant_id will be added/ensured below
         quantity INTEGER NOT NULL CHECK (quantity > 0),
         price_at_purchase DECIMAL(10, 2) NOT NULL
       );
     `);
-    console.log('Table "order_items" created or already exists.');
-    // Ensure product_variant_id column exists before attempting to create an index on it
+    console.log('Table "order_items" created or already exists (initially without product_variant_id).');
+
+    // Robustly ensure product_variant_id column exists
     try {
-      await client.query('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL;');
-      console.log('Column "order_items.product_variant_id" ensured.');
-    } catch (alterError) {
-      console.warn('Warning ensuring column "order_items.product_variant_id" (might be benign, e.g., type mismatch if column exists differently):', alterError.message);
-      // If this fails due to a more fundamental issue (e.g. product_variants table not existing yet), that's a bigger problem.
+      const checkColumnQuery = `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'order_items'
+          AND column_name = 'product_variant_id';
+      `;
+      const { rows } = await client.query(checkColumnQuery);
+      if (rows.length === 0) {
+        console.log('Column "product_variant_id" does not exist in "order_items". Attempting to add it.');
+        await client.query('ALTER TABLE order_items ADD COLUMN product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL;');
+        console.log('Column "order_items.product_variant_id" added successfully.');
+      } else {
+        console.log('Column "order_items.product_variant_id" already exists.');
+        // Optional: Check if FK constraint exists and add if not, though ADD COLUMN with REFERENCES should handle it.
+      }
+    } catch (error) {
+      console.error('Error during robust check/add of "order_items.product_variant_id":', error.message);
+      // Decide if this is fatal or if we can proceed to index creation cautiously
+      // For now, we'll let it try to create the index, which will then fail if column isn't truly there.
     }
+
     await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_variant_id ON order_items(product_variant_id);');
 
+    // Explicitly check again before creating the index on product_variant_id
+    const verifyColumnAgain = await client.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name='order_items' AND column_name='product_variant_id';
+    `);
+    if (verifyColumnAgain.rows.length > 0) {
+        console.log('Verified: "product_variant_id" column exists before creating index.');
+        await client.query('CREATE INDEX IF NOT EXISTS idx_order_items_product_variant_id ON order_items(product_variant_id);');
+        console.log('Index "idx_order_items_product_variant_id" ensured.');
+    } else {
+        console.error('CRITICAL: "product_variant_id" column STILL does not exist in "order_items" before attempting index creation. Index skipped.');
+        // This would indicate a deeper problem.
+    }
 
     // --- Purchase Orders Table ---
     await client.query(`
