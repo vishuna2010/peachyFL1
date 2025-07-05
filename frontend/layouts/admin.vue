@@ -19,10 +19,10 @@
             <MenuIcon class="w-6 h-6" />
           </button>
 
-          <!-- Page Title (can be dynamic using $route.meta.title) -->
+          <!-- Page Title (can be dynamic using route.meta.title) -->
           <div class="flex-1 min-w-0">
              <h2 class="text-lg font-semibold text-gray-700 truncate pl-2 lg:pl-0">
-               {{ $route.meta.title || ($route.name === 'admin' || $route.name === 'admin-dashboard' ? 'Admin Dashboard' : 'Admin Page') }}
+               {{ pageTitle }}
              </h2>
           </div>
 
@@ -96,7 +96,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useAuth } from '~/composables/useAuth';
-import { useRouter } from '#app'; // Or 'vue-router'
+import { useRouter, useRoute } from '#app';
 import AdminSidebar from '~/components/admin/AdminSidebar.vue';
 import Breadcrumbs from '~/components/admin/Breadcrumbs.vue';
 import LogoutIcon from '~/components/icons/LogoutIcon.vue';
@@ -104,9 +104,15 @@ import MenuIcon from '~/components/icons/MenuIcon.vue';
 
 const { authToken, authUser, logout } = useAuth();
 const router = useRouter();
+const route = useRoute();
 
 const isAuthenticated = computed(() => !!authToken.value);
 const user = computed(() => authUser.value);
+
+const pageTitle = computed(() => {
+  const currentRoute = route.value;
+  return currentRoute?.meta?.title || (currentRoute?.name === 'admin' || currentRoute?.name === 'admin-dashboard' ? 'Admin Dashboard' : 'Admin Page');
+});
 
 const isMobileSidebarOpen = ref(false);
 const toggleMobileSidebar = () => {

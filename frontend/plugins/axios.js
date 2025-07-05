@@ -21,12 +21,18 @@ export default defineNuxtPlugin((nuxtApp) => {
     (config) => {
       // Use authTokenState from the outer scope
       const token = authTokenState.value;
+      
+      // Also check localStorage as fallback for SSR/client mismatch
+      let finalToken = token;
+      if (process.client && !finalToken) {
+        finalToken = localStorage.getItem('authToken');
+      }
 
-      console.log('[Axios Interceptor] Current Token:', token ? 'Token Present' : 'Token Missing/Null');
+      console.log('[Axios Interceptor] Current Token:', finalToken ? 'Token Present' : 'Token Missing/Null');
       console.log('[Axios Interceptor] Request URL:', config.url);
 
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+      if (finalToken) {
+        config.headers.Authorization = `Bearer ${finalToken}`;
         console.log('[Axios Interceptor] Authorization header SET');
       } else {
         console.log('[Axios Interceptor] Authorization header NOT SET (no token)');
@@ -93,6 +99,4 @@ export default defineNuxtPlugin((nuxtApp) => {
 
   // Make it available throughout your app
   nuxtApp.provide('axios', instance);
-  // Also make it available via $axios (legacy) or directly if needed
-  // nuxtApp.$axios = instance; // For options API or if you prefer $axios
 });

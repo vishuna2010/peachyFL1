@@ -15,7 +15,7 @@ const auditLogService = require('./auditLogService'); // Assuming path
  *    - appliedRates: An array of objects detailing each applied tax rate
  *      (e.g., { name, rate, amount }). Note: 'rate' here is the decimal representation.
  */
-async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, dbClientOptional) {
+async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, addressForTaxCalculation, dbClientOptional) {
   const queryRunner = dbClientOptional || db;
   const originalBasePrice = (basePrice === null || basePrice === undefined) ? null : parseFloat(basePrice);
 
@@ -33,18 +33,20 @@ async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, dbClientOpt
   let taxRatesDbResult = [];
   try {
     const sql = `
-      SELECT tr.id, tr.name, tr.rate, tr.is_compound -- Changed rate_percentage to rate, tax_type removed as it's not in DB schema
+      SELECT tr.id, tr.name, tr.rate, tr.is_compound
       FROM tax_rates tr
-      -- Assuming direct link or join table if tax_rates are directly associated with tax_classes.
-      -- The original query used tax_class_rates, which is not defined in the provided seed schema for tax_rates.
-      -- For now, assuming tax_rates has a direct tax_class_id or is joined through a common mechanism.
-      -- The provided seed has tax_rates.tax_class_id.
-      WHERE tr.tax_class_id = $1 -- AND tr.is_active = TRUE (is_active not in tax_rates schema from seed)
+      WHERE tr.tax_class_id = $1 
+        AND (tr.country = $2 OR tr.country IS NULL)
+        AND (tr.state_province = $3 OR tr.state_province IS NULL)
+        AND (tr.postal_code = $4 OR tr.postal_code IS NULL)
       ORDER BY tr.priority ASC, tr.id ASC;
     `;
-    // If tax_rates are not directly linked via tax_class_id and is_active, this query needs adjustment.
-    // For now, proceeding with the assumption tax_rates has tax_class_id based on seed.
-    const result = await queryRunner.query(sql, [taxClassId]);
+    const result = await queryRunner.query(sql, [
+      taxClassId, 
+      addressForTaxCalculation?.country || null,
+      addressForTaxCalculation?.state_province || null,
+      addressForTaxCalculation?.postalCode || null
+    ]);
     taxRatesDbResult = result.rows;
   } catch (error) {
     console.error('Error fetching tax rates:', error);
@@ -140,7 +142,7 @@ async function calculateTaxForCartItems(cartItems, userId, addressForTaxCalculat
     let itemTaxDetails;
 
     if (productTaxClassId) {
-      const singleItemTaxCalc = await calculatePriceWithAppliedTaxes(basePriceForItem, productTaxClassId, queryRunner);
+      const singleItemTaxCalc = await calculatePriceWithAppliedTaxes(basePriceForItem, productTaxClassId, addressForTaxCalculation, queryRunner);
       itemTaxDetails = {
         calculated_exclusive_unit_price: parseFloat(singleItemTaxCalc.basePrice).toFixed(2),
         line_item_tax_amount: parseFloat(singleItemTaxCalc.taxAmount) * item.quantity,

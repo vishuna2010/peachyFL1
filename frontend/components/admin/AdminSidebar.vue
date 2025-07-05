@@ -24,16 +24,15 @@
             <svg class="w-4 h-4 ml-auto transform transition-transform duration-150 text-neutral-300 group-hover:text-white" :class="{'rotate-90': isSubmenuOpen(item)}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
           </button>
           <div v-if="isSubmenuOpen(item) && item.children && Array.isArray(item.children)" class="mt-1 space-y-1 pl-4 border-l border-sky-blue/50 ml-3">
-            <NuxtLink
+            <button
               v-for="child in getFilteredChildren(item)"
               :key="child.name"
-              :to="child.href"
               @click="handleChildClick(child)"
-              class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
+              class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150 block w-full text-left"
               :class="isActive(child.href) ? 'bg-peach-pink text-white shadow-sm' : 'text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75'"
             >
               {{ child.name }}
-            </NuxtLink>
+            </button>
           </div>
         </div>
         <NuxtLink
@@ -138,7 +137,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'; // Added onMounted and watch
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import CloseIcon from '~/components/icons/CloseIcon.vue';
 import { usePermissions } from '~/composables/usePermissions';
 import { useAuth } from '~/composables/useAuth';
@@ -153,6 +152,7 @@ const props = defineProps({
 const emit = defineEmits(['toggleMobileSidebar']);
 
 const route = useRoute();
+const router = useRouter();
 const { can, fetchUserPermissions, isLoadingPermissions } = usePermissions();
 const { isAuthenticated } = useAuth();
 
@@ -201,7 +201,9 @@ const navigationItems = ref([
     permission: 'marketing:send_emails',
     children: [
       { name: 'Hero Banners', href: '/admin/marketing/hero-banners', permission: 'marketing:manage_hero_banners' },
-      { name: 'Email Promotions', href: '/admin/marketing', permission: 'marketing:send_emails' }
+      { name: 'Email Promotions', href: '/admin/marketing', permission: 'marketing:send_emails' },
+      { name: 'Email Campaigns', href: '/admin/email-campaigns', permission: 'marketing:view_campaigns' },
+      { name: 'Unsubscribes', href: '/admin/email-unsubscribes', permission: 'marketing:view_unsubscribes' }
     ]
   },
   { name: 'Product Options', href: '/admin/options', iconSvg: null, permission: 'products:edit' },
@@ -278,7 +280,17 @@ const toggleTaxSubmenu = () => {
 // Function to handle child menu item clicks
 const handleChildClick = (child) => {
   console.log('Child menu item clicked:', child.name, 'href:', child.href);
+  console.log('Current route before navigation:', route.path);
   closeMobileSidebarIfNeeded();
+  
+  // Perform navigation
+  if (child.href) {
+    console.log('Attempting to navigate to:', child.href);
+    // Use router.push for programmatic navigation
+    router.push(child.href).catch(err => {
+      console.error('Navigation error:', err);
+    });
+  }
 };
 
 // Function to filter children based on permissions

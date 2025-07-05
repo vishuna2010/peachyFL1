@@ -52,7 +52,7 @@
         <h3>Update Status</h3>
         <div class="status-update-form">
           <select v-model="selectedStatus" :disabled="isUpdatingStatus || isFinalStatus(purchaseOrder.status)" class="status-select">
-            <option v-for="s in ALLOWED_PO_STATUSES" :key="s" :value="s">{{ s.charAt(0).toUpperCase() + s.slice(1) }}</option>
+            <option v-for="s in ALLOWED_PO_STATUSES_FOR_STATUS_UPDATE" :key="s" :value="s">{{ s.charAt(0).toUpperCase() + s.slice(1) }}</option>
           </select>
           <button
             @click="handleUpdateStatus"

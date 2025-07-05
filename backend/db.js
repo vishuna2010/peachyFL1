@@ -778,6 +778,145 @@ const createTables = async () => {
     await client.query('CREATE INDEX IF NOT EXISTS idx_hero_banners_active ON hero_banners(is_active);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_hero_banners_sort_order ON hero_banners(sort_order);');
 
+    // --- Email Campaigns Table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_campaigns (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        subject VARCHAR(255) NOT NULL,
+        template_name VARCHAR(255) NOT NULL,
+        status VARCHAR(50) DEFAULT 'draft', -- draft, scheduled, sent, paused
+        scheduled_at TIMESTAMP NULL,
+        sent_at TIMESTAMP NULL,
+        total_recipients INTEGER DEFAULT 0,
+        total_sent INTEGER DEFAULT 0,
+        total_opens INTEGER DEFAULT 0,
+        total_clicks INTEGER DEFAULT 0,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "email_campaigns" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_email_campaigns') THEN
+          CREATE TRIGGER set_timestamp_email_campaigns
+          BEFORE UPDATE ON email_campaigns
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "email_campaigns.updated_at" ensured.');
+
+    // --- Email Tracking Table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_tracking (
+        id SERIAL PRIMARY KEY,
+        campaign_id INTEGER REFERENCES email_campaigns(id) ON DELETE CASCADE,
+        recipient_email VARCHAR(255) NOT NULL,
+        recipient_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        message_id VARCHAR(255) NOT NULL,
+        tracking_token VARCHAR(255) UNIQUE NOT NULL,
+        email_type VARCHAR(50) NOT NULL, -- marketing, welcome, order_confirmation, etc.
+        subject VARCHAR(255) NOT NULL,
+        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        opened_at TIMESTAMP NULL,
+        opened_count INTEGER DEFAULT 0,
+        clicked_at TIMESTAMP NULL,
+        clicked_count INTEGER DEFAULT 0,
+        last_clicked_url TEXT NULL,
+        user_agent TEXT NULL,
+        ip_address INET NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "email_tracking" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_email_tracking') THEN
+          CREATE TRIGGER set_timestamp_email_tracking
+          BEFORE UPDATE ON email_tracking
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "email_tracking.updated_at" ensured.');
+
+    // --- Email Click Tracking Table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_click_tracking (
+        id SERIAL PRIMARY KEY,
+        tracking_id INTEGER REFERENCES email_tracking(id) ON DELETE CASCADE,
+        original_url TEXT NOT NULL,
+        clicked_url TEXT NOT NULL,
+        clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        user_agent TEXT NULL,
+        ip_address INET NULL
+      );
+    `);
+    console.log('Table "email_click_tracking" created or already exists.');
+
+    // --- Email Unsubscribe Table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_unsubscribes (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        unsubscribe_token VARCHAR(255) UNIQUE NOT NULL,
+        email_type VARCHAR(50) NOT NULL, -- marketing, all, specific_campaign
+        campaign_id INTEGER REFERENCES email_campaigns(id) ON DELETE CASCADE NULL,
+        reason TEXT NULL,
+        unsubscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "email_unsubscribes" created or already exists.');
+
+    // --- Email Preferences Table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_preferences (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        email VARCHAR(255) NOT NULL,
+        marketing_emails BOOLEAN DEFAULT TRUE,
+        order_emails BOOLEAN DEFAULT TRUE,
+        promotional_emails BOOLEAN DEFAULT TRUE,
+        newsletter_emails BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, email)
+      );
+    `);
+    console.log('Table "email_preferences" created or already exists.');
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_email_preferences') THEN
+          CREATE TRIGGER set_timestamp_email_preferences
+          BEFORE UPDATE ON email_preferences
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "email_preferences.updated_at" ensured.');
+
+    // Create indexes for email tracking tables
+    await client.query('CREATE INDEX IF NOT EXISTS idx_email_tracking_token ON email_tracking(tracking_token);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_email_tracking_email ON email_tracking(recipient_email);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_email_tracking_type ON email_tracking(email_type);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_email_unsubscribes_token ON email_unsubscribes(unsubscribe_token);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_email_unsubscribes_email ON email_unsubscribes(email);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_email_preferences_user ON email_preferences(user_id);');
 
     // Final check on users table role default (already present in original file, kept for safety)
     try {

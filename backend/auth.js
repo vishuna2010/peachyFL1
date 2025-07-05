@@ -135,39 +135,97 @@ function generateJwt(user) {
   );
 }
 
-// Conceptual Password Recovery
+// Real Password Recovery Implementation
 async function requestPasswordReset(email) {
-  // In a real system:
-  // 1. Generate a unique, secure token.
-  // 2. Store the token with an expiry and user ID in a new table (e.g., password_resets).
-  // 3. Send an email to the user with a link containing the token.
-  console.log(`Password reset requested for email: ${email}. Token generation and email sending would happen here.`);
-  // For this example, we'll simulate finding a user to acknowledge the request.
-  const result = await db.query('SELECT id FROM users WHERE email = $1', [email]);
-  if (result.rows.length > 0) {
-    return { success: true, message: `Password reset instructions would be sent to ${email} if it's a registered account.` };
+  try {
+    // Check if user exists
+    const userResult = await db.query('SELECT id, email FROM users WHERE email = $1', [email]);
+    if (userResult.rows.length === 0) {
+      // Don't reveal if email exists or not for security
+      return { success: true, message: 'If an account with that email exists, password reset instructions have been sent.' };
+    }
+
+    const user = userResult.rows[0];
+    
+    // Generate a secure random token
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    
+    // Set expiry to 1 hour from now
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    
+    // Store the token in the database
+    await db.query(
+      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+      [user.id, token, expiresAt]
+    );
+    
+    // Send password reset email
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+    
+    emailService.sendPasswordResetEmail(user.email, user.email.split('@')[0], resetLink)
+      .then(emailRes => {
+        if (emailRes.success) {
+          console.log(`Password reset email sent to ${user.email}`);
+        } else {
+          console.error(`Failed to send password reset email to ${user.email}: ${emailRes.error}`);
+        }
+      })
+      .catch(err => {
+        console.error(`Error sending password reset email to ${user.email}:`, err);
+      });
+    
+    return { success: true, message: 'If an account with that email exists, password reset instructions have been sent.' };
+  } catch (error) {
+    console.error('Error requesting password reset:', error);
+    return { success: false, message: 'Error processing password reset request.' };
   }
-  // Even if email not found, show a generic message to prevent user enumeration
-  return { success: true, message: `Password reset instructions would be sent to ${email} if it's a registered account.` };
 }
 
 async function resetPassword(token, newPassword) {
-  // In a real system:
-  // 1. Validate the token (check if it exists in password_resets table, is not expired, etc.).
-  // 2. If valid, retrieve the user ID associated with the token.
-  // 3. Hash the newPassword.
-  // 4. Update the user's password in the 'users' table.
-  // 5. Invalidate/delete the token from password_resets table.
-  console.log(`Password reset attempt with token: ${token} and new password.`);
-  // For this example, we just log.
-  // A conceptual check could be:
-  // if (isValidToken(token)) {
-  //   const userId = getUserIdFromToken(token);
-  //   const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-  //   await db.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, userId]);
-  //   return { success: true, message: 'Password has been reset successfully.' };
-  // }
-  return { success: true, message: 'If the token was valid, the password would have been reset.' };
+  try {
+    // Validate password
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, message: 'Password must be at least 6 characters long.' };
+    }
+    
+    // Find the token and check if it's valid and not expired
+    const tokenResult = await db.query(
+      `SELECT prt.user_id, prt.used_at, u.email 
+       FROM password_reset_tokens prt 
+       JOIN users u ON prt.user_id = u.id 
+       WHERE prt.token = $1 AND prt.expires_at > NOW()`,
+      [token]
+    );
+    
+    if (tokenResult.rows.length === 0) {
+      return { success: false, message: 'Invalid or expired reset token.' };
+    }
+    
+    const resetToken = tokenResult.rows[0];
+    
+    // Check if token has already been used
+    if (resetToken.used_at) {
+      return { success: false, message: 'This reset token has already been used.' };
+    }
+    
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+    
+    // Update the user's password
+    await db.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, resetToken.user_id]);
+    
+    // Mark the token as used
+    await db.query('UPDATE password_reset_tokens SET used_at = NOW() WHERE token = $1', [token]);
+    
+    // Clean up expired tokens for this user
+    await db.query('DELETE FROM password_reset_tokens WHERE user_id = $1 AND expires_at < NOW()', [resetToken.user_id]);
+    
+    return { success: true, message: 'Password has been reset successfully. You can now log in with your new password.' };
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    return { success: false, message: 'Error resetting password. Please try again.' };
+  }
 }
 
 async function changeUserPassword(userId, currentPassword, newPassword) {

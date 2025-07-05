@@ -119,7 +119,7 @@ async function fetchSaleProducts() {
       sort_by: filters.sortBy.split('_')[0],
       sort_order: filters.sortBy.split('_')[1],
       color_value_id: filters.selectedColorValueId,
-      on_sale: true, // Always true for this page
+      on_sale: 'true', // Send as string 'true' instead of boolean true
     };
 
     Object.keys(params).forEach(key => {

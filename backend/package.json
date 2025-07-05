@@ -21,6 +21,7 @@
   "homepage": "https://github.com/vishuna2010/peachyFL1#readme",
   "dependencies": {
     "aws-sdk": "^2.1589.0",
+    "axios": "^1.10.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
@@ -39,6 +40,7 @@
     "pino-http": "^10.5.0",
     "pino-pretty": "^13.0.0",
     "puppeteer": "^22.0.0",
-    "qrcode": "^1.5.3"
+    "qrcode": "^1.5.3",
+    "speakeasy": "^2.0.0"
   }
 }

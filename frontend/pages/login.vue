@@ -23,9 +23,16 @@
             </div>
 
             <div>
-              <label for="password" class="block text-sm font-medium text-gray-700">
-                Password
-              </label>
+              <div class="flex items-center justify-between">
+                <label for="password" class="block text-sm font-medium text-gray-700">
+                  Password
+                </label>
+                <div class="text-sm">
+                  <NuxtLink to="/forgot-password" class="font-medium text-peach-pink hover:text-opacity-80 hover:underline">
+                    Forgot your password?
+                  </NuxtLink>
+                </div>
+              </div>
               <div class="mt-1">
                 <input id="password" v-model="password" name="password" type="password" autocomplete="current-password" required
                        :disabled="isLoading"
@@ -201,7 +208,7 @@ const handleTwoFactorVerify = async () => {
     }
   } catch (error) {
     console.error('2FA verification error:', error);
-    errorMessage.value = error.response?.data?.message || 'Failed to verify 2FA code.';
+    errorMessage.value = error.response?.data?.message || 'Failed to verify 2FA code. An unexpected error occurred.';
   } finally {
     isLoading.value = false;
   }
@@ -212,10 +219,10 @@ const cancelTwoFactor = () => {
   userIdFor2FA.value = null;
   twoFactorToken.value = '';
   errorMessage.value = '';
-  password.value = '';
 };
 
+// Set page title
 useHead({
-  title: 'Login',
+  title: 'Login - PeachyFL'
 });
 </script>

@@ -307,10 +307,13 @@ module.exports = {
   getRefundConfirmationText,
   sendWelcomeEmail,
   sendEmailVerificationCode,
+  sendPasswordResetEmail, // Added for password reset emails
   sendOrderDispatchedEmail,
   sendOrderDeliveredEmail,
   sendInvoiceEmail, // Added new function
+  sendRefundEmailWithAttachment, // Added for refund emails with PDF
   sendMarketingPromoEmail, // Added for marketing emails
+  sendMarketingPromoEmailWithTracking, // Added for marketing emails with tracking
   // For testing/debugging if needed:
   // getTestTransporter,
 };
@@ -386,6 +389,122 @@ ${companyAddress}
   } catch (error) {
     console.error(`Error preparing or sending marketing promo email to ${toEmail}:`, error);
     return { success: false, error: `Failed to send marketing promo email: ${error.message}` };
+  }
+}
+
+// --- Marketing Promo Email with Tracking Function ---
+/**
+ * Sends a marketing promotional email with tracking to a user.
+ * @param {string} toEmail - The recipient's email address.
+ * @param {string} userName - The name of the user.
+ * @param {object} promoDetails - Details for the promotion.
+ * @param {string} promoDetails.subject - The subject of the email.
+ * @param {string} [promoDetails.promoTitle] - Optional title for the promo content.
+ * @param {string} promoDetails.promoMessageBody - The main HTML body of the promo.
+ * @param {string} promoDetails.ctaLink - The URL for the call-to-action button.
+ * @param {string} promoDetails.ctaText - The text for the call-to-action button.
+ * @param {object} trackingData - Tracking data for the email.
+ * @param {number} [trackingData.campaignId] - Optional campaign ID.
+ * @param {number} [trackingData.userId] - Optional user ID.
+ * @param {string} [trackingData.messageId] - Optional message ID.
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendMarketingPromoEmailWithTracking(toEmail, userName, promoDetails, trackingData = {}) {
+  try {
+    const emailTrackingService = require('./emailTrackingService');
+    
+    // Check if user is unsubscribed
+    const isUnsubscribed = await emailTrackingService.isUnsubscribed(
+      toEmail, 
+      'marketing', 
+      trackingData.campaignId
+    );
+    
+    if (isUnsubscribed) {
+      console.log(`Skipping marketing email to ${toEmail} - user is unsubscribed`);
+      return { success: false, error: 'User is unsubscribed from marketing emails' };
+    }
+
+    const {
+      subject,
+      promoTitle,
+      promoMessageBody,
+      ctaLink,
+      ctaText
+    } = promoDetails;
+
+    const siteName = config.company.name || 'Our Platform';
+    const supportEmail = config.email.supportAddress || config.email.fromAddress;
+    const companyAddress = config.company.address || '';
+
+    const templatePath = path.join(__dirname, '..', 'email_templates', 'marketing', 'basic_promo_1.ejs');
+    const templateContent = fs.readFileSync(templatePath, 'utf-8');
+    
+    // Generate initial HTML content
+    let htmlContent = ejs.render(templateContent, {
+      subject,
+      userName: userName || 'Valued Customer',
+      promoTitle,
+      promoMessageBody,
+      ctaLink,
+      ctaText,
+      siteName,
+      supportEmail,
+      companyAddress,
+    });
+
+    // Create tracking record
+    const trackingRecord = await emailTrackingService.createTrackingRecord({
+      campaignId: trackingData.campaignId,
+      recipientEmail: toEmail,
+      recipientUserId: trackingData.userId,
+      messageId: trackingData.messageId || `marketing_${Date.now()}`,
+      emailType: 'marketing',
+      subject: subject
+    });
+
+    // Process email content to add tracking
+    htmlContent = await emailTrackingService.processEmailContent(
+      htmlContent,
+      trackingRecord.tracking_token,
+      'marketing',
+      trackingData.campaignId
+    );
+
+    // Replace placeholder with actual email
+    htmlContent = htmlContent.replace(/{{RECIPIENT_EMAIL}}/g, toEmail);
+
+    // Basic plain text version
+    const textContent = `
+Hi ${userName || 'Valued Customer'},
+
+${promoTitle ? promoTitle + '\n\n' : ''}
+${promoMessageBody.replace(/<[^>]*>?/gm, '')}
+
+${ctaText}: ${ctaLink}
+
+If you have any questions, contact our support team at ${supportEmail}.
+
+Best regards,
+The ${siteName} Team
+---
+&copy; ${new Date().getFullYear()} ${siteName}. All rights reserved.
+${companyAddress}
+    `.trim();
+
+    // Send the email
+    const emailResult = await sendEmail({
+      to: toEmail,
+      subject: subject,
+      text: textContent,
+      html: htmlContent,
+    });
+
+    return emailResult;
+
+  } catch (error) {
+    console.error(`Error preparing or sending marketing promo email with tracking to ${toEmail}:`, error);
+    return { success: false, error: `Failed to send marketing promo email with tracking: ${error.message}` };
   }
 }
 
@@ -521,6 +640,45 @@ ${companyAddress}
   } catch (error) {
     console.error(`Error preparing or sending invoice email to ${toEmail} for order #${orderId}:`, error);
     return { success: false, error: `Failed to send invoice email: ${error.message}` };
+  }
+}
+
+// --- Refund Email with PDF Attachment Function ---
+/**
+ * Sends a refund confirmation email with PDF attachment to a user.
+ * @param {object} refundData - Object containing refund details
+ * @param {object} refundData.order - Order details { id }
+ * @param {object} refundData.user - User details { name, email }
+ * @param {object} refundData.refund - Refund details { type, reason, amount_this_transaction, items_processed }
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendRefundEmailWithAttachment(refundData) {
+  try {
+    const { generateRefundInvoicePdf } = require('./pdfService');
+    
+    // Generate PDF refund invoice
+    const pdfBuffer = await generateRefundInvoicePdf(refundData);
+    
+    const html = await getRefundConfirmationHtml(refundData);
+    const text = getRefundConfirmationText(refundData);
+    
+    // Send email with PDF attachment
+    const result = await sendEmail({
+      to: refundData.user.email,
+      subject: `Refund Processed for Order #${refundData.order.id}`,
+      text: text,
+      html: html,
+      attachments: [{
+        filename: `refund_invoice_order_${refundData.order.id}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }]
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('Error sending refund email with attachment:', error);
+    return { success: false, error: `Failed to send refund email with attachment: ${error.message}` };
   }
 }
 
@@ -797,5 +955,95 @@ ${companyAddress}
     console.error(`Error preparing or sending welcome email to ${toEmail}:`, error);
     // Return a similar structure as sendEmail for consistency in error handling by caller
     return { success: false, error: `Failed to send welcome email: ${error.message}` };
+  }
+}
+
+
+// --- Password Reset Email Function ---
+/**
+ * Sends a password reset email to a user.
+ * @param {string} toEmail - The recipient's email address.
+ * @param {string} userName - The name of the user.
+ * @param {string} resetLink - The password reset link.
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, previewUrl?: string}>}
+ */
+async function sendPasswordResetEmail(toEmail, userName, resetLink) {
+  try {
+    const siteName = config.company.name || 'Our Platform';
+    const companyAddress = config.company.address || '';
+
+    const templatePath = path.join(__dirname, '..', 'email_templates', 'password_reset.ejs');
+    let htmlContent;
+    
+    try {
+      // Try to use the template if it exists
+      const templateContent = fs.readFileSync(templatePath, 'utf-8');
+      htmlContent = ejs.render(templateContent, {
+        siteName,
+        userName,
+        resetLink,
+        companyAddress,
+      });
+    } catch (templateError) {
+      // Fallback to inline HTML if template doesn't exist
+      htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #333; margin-bottom: 10px;">Password Reset Request</h1>
+            <p style="color: #666; font-size: 16px;">Hello ${userName}, we received a request to reset your password.</p>
+          </div>
+          
+          <div style="background-color: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center; margin-bottom: 30px;">
+            <p style="color: #333; margin-bottom: 20px; font-size: 16px;">Click the button below to reset your password:</p>
+            <a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Reset Password</a>
+            <p style="color: #666; margin-top: 20px; font-size: 14px;">This link will expire in 1 hour for security reasons.</p>
+          </div>
+          
+          <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <p style="color: #856404; margin: 0; font-size: 14px;">
+              <strong>Security Notice:</strong> If you didn't request this password reset, please ignore this email. Your password will remain unchanged.
+            </p>
+          </div>
+          
+          <div style="text-align: center; color: #666; font-size: 14px;">
+            <p>If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; color: #007bff;">${resetLink}</p>
+          </div>
+        </div>
+      `;
+    }
+
+    const textContent = `
+Hi ${userName},
+
+We received a request to reset your password for ${siteName}.
+
+Click the link below to reset your password:
+${resetLink}
+
+This link will expire in 1 hour for security reasons.
+
+Security Notice: If you didn't request this password reset, please ignore this email. Your password will remain unchanged.
+
+If the link doesn't work, copy and paste it into your browser.
+
+Best regards,
+The ${siteName} Team
+
+---
+&copy; ${new Date().getFullYear()} ${siteName}. All rights reserved.
+${companyAddress}
+    `.trim();
+
+    return sendEmail({
+      to: toEmail,
+      subject: `Reset Your ${siteName} Password`,
+      text: textContent,
+      html: htmlContent,
+    });
+
+  } catch (error) {
+    console.error(`Error preparing or sending password reset email to ${toEmail}:`, error);
+    return { success: false, error: `Failed to send password reset email: ${error.message}` };
   }
 }

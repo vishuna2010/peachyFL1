@@ -290,9 +290,31 @@ async function getAllProducts(options = {}) {
     const countResult = await db.query(countQueryString, countFilterConditions.queryParams);
     const totalProducts = parseInt(countResult.rows[0].total_count);
 
+    // Fetch primary images for all products to ensure we have the most up-to-date primary image
+    const productIds = productsResult.rows.map(p => p.id);
+    let primaryImagesMap = {};
+    
+    if (productIds.length > 0) {
+      const primaryImagesQuery = `
+        SELECT product_id, image_url
+        FROM product_images
+        WHERE product_id = ANY($1) AND is_primary = TRUE
+      `;
+      const primaryImagesResult = await db.query(primaryImagesQuery, [productIds]);
+      primaryImagesMap = primaryImagesResult.rows.reduce((map, row) => {
+        map[row.product_id] = row.image_url;
+        return map;
+      }, {});
+    }
+
     const processedProducts = productsResult.rows.map(product => {
       const p = { ...product };
       const rrp_base = p.original_price !== null && p.original_price !== undefined ? p.original_price : p.price;
+
+      // Update image_url with primary image from gallery if available
+      if (primaryImagesMap[p.id]) {
+        p.image_url = primaryImagesMap[p.id];
+      }
 
       if (p.is_on_sale && p.sale_price !== null) {
         p.original_price = rrp_base; // Ensure original_price in response is the RRP
@@ -358,12 +380,35 @@ async function getBestSellingProducts(limit = 8, orderStatusFilters = ['complete
 
   try {
     const { rows } = await db.query(bestSellersQuery, queryParams);
+    
+    // Fetch primary images for all products to ensure we have the most up-to-date primary image
+    const productIds = rows.map(p => p.id);
+    let primaryImagesMap = {};
+    
+    if (productIds.length > 0) {
+      const primaryImagesQuery = `
+        SELECT product_id, image_url
+        FROM product_images
+        WHERE product_id = ANY($1) AND is_primary = TRUE
+      `;
+      const primaryImagesResult = await db.query(primaryImagesQuery, [productIds]);
+      primaryImagesMap = primaryImagesResult.rows.reduce((map, row) => {
+        map[row.product_id] = row.image_url;
+        return map;
+      }, {});
+    }
+    
     // Apply the same price adjustment logic as in getProductById / getAllProducts
     return rows.map(p => {
       const product = { ...p };
       const rrpBase = product.db_original_price !== null && product.db_original_price !== undefined
                       ? product.db_original_price
                       : product.rrp;
+
+      // Update image_url with primary image from gallery if available
+      if (primaryImagesMap[product.id]) {
+        product.image_url = primaryImagesMap[product.id];
+      }
 
       if (product.is_on_sale && product.db_sale_price !== null) {
         product.original_price = parseFloat(rrpBase).toFixed(2); // What's shown crossed out

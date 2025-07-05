@@ -31,6 +31,7 @@
         <thead class="bg-gray-50">
           <tr>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
@@ -40,6 +41,14 @@
         <tbody class="bg-white divide-y divide-gray-200">
           <tr v-for="tc in categories" :key="tc.id" class="hover:bg-gray-50">
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{{ tc.id }}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              <div v-if="tc.image_url" class="w-12 h-12 rounded-md overflow-hidden border border-gray-200">
+                <img :src="tc.image_url" :alt="tc.name" class="w-full h-full object-cover" />
+              </div>
+              <div v-else class="w-12 h-12 rounded-md bg-gray-100 flex items-center justify-center">
+                <span class="text-xs text-gray-400">No image</span>
+              </div>
+            </td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{{ tc.name }}</td>
             <td class="px-4 py-3 whitespace-normal text-sm text-gray-600 max-w-sm truncate">{{ tc.description || 'N/A' }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{{ formatTimestamp(tc.updated_at) }}</td>

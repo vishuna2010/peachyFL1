@@ -34,4 +34,21 @@ router.get('/slug/:slug', async (req, res, next) => {
   }
 });
 
+// GET /api/categories/:id - Fetch a single category by its ID
+router.get('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const categoryId = parseInt(id);
+    
+    if (isNaN(categoryId) || categoryId <= 0) {
+      return res.status(400).json({ message: 'Category ID must be a positive integer.' });
+    }
+    
+    const category = await categoryService.getCategoryById(categoryId);
+    res.status(200).json(category);
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

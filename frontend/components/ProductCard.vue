@@ -3,7 +3,7 @@
     <div class="relative">
       <NuxtLink :to="`/products/${product.id}`" class="block">
         <img
-          :src="product.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'"
+          :src="product.image_url || '/images/placeholder-product.svg'"
           :alt="`Image of ${sanitizeAttributeValue(product.name)}`"
           class="w-full h-56 object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
         />

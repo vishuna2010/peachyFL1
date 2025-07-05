@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authService = require('../auth'); // Renamed original auth.js to authService for clarity
 const auditLogService = require('../services/auditLogService');
+const emailService = require('../services/emailService'); // Import emailService
 const db = require('../db'); // For 2FA direct DB check
 const { authenticator } = require('otplib');
 const rateLimit = require('express-rate-limit');

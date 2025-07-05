@@ -26,13 +26,12 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useNuxtApp } from '#app';
-import { useToast } from 'vue-toastification';
+
 import Breadcrumbs from '~/components/admin/Breadcrumbs.vue';
 import HeroBannerForm from '~/components/admin/HeroBannerForm.vue';
 
 definePageMeta({
   layout: 'admin',
-  middleware: ['admin-auth', 'rbac'],
   permission: 'marketing:manage_hero_banners'
 });
 
@@ -48,9 +47,8 @@ const breadcrumbs = computed(() => [
   { text: `Edit Banner #${bannerId.value}` }
 ]);
 
-const { $axios } = useNuxtApp();
+const { $axios, $toast } = useNuxtApp();
 const router = useRouter();
-const toast = useToast();
 
 const bannerData = ref(null);
 const isLoading = ref(true);
@@ -71,7 +69,9 @@ async function fetchBannerData() {
   } catch (err) {
     console.error('Error fetching hero banner for edit:', err.response?.data || err.message);
     fetchError.value = err.response?.data?.message || err.message || 'Failed to load banner data.';
-    toast.error(fetchError.value);
+    if (typeof $toast !== 'undefined' && $toast.error) {
+      $toast.error(fetchError.value);
+    }
   } finally {
     isLoading.value = false;
   }
@@ -86,7 +86,9 @@ async function handleUpdateBanner(formData) {
         'Content-Type': 'multipart/form-data', // Important for file uploads
       },
     });
-    toast.success('Hero banner updated successfully!');
+    if (typeof $toast !== 'undefined' && $toast.success) {
+      $toast.success('Hero banner updated successfully!');
+    }
     router.push('/admin/marketing/hero-banners');
   } catch (err) {
     console.error('Error updating hero banner:', err.response?.data || err.message);
@@ -95,7 +97,9 @@ async function handleUpdateBanner(formData) {
       const validationErrors = err.response.data.errors.map(e => `${e.field || e.param}: ${e.msg}`).join('; ');
       apiError.value = `Validation failed: ${validationErrors}`;
     }
-    toast.error(apiError.value);
+    if (typeof $toast !== 'undefined' && $toast.error) {
+      $toast.error(apiError.value);
+    }
   } finally {
     isSubmitting.value = false;
   }

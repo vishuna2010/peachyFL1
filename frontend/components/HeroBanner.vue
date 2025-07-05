@@ -1,26 +1,26 @@
 <template>
   <div
     v-if="isLoading"
-    class="bg-gray-200 text-gray-500 overflow-hidden min-h-[300px] md:min-h-[400px] flex items-center justify-center"
+    class="bg-gray-200 text-gray-500 overflow-hidden min-h-[400px] md:min-h-[600px] flex items-center justify-center"
   >
     Loading promotions...
   </div>
   <div
     v-else-if="error"
-    class="bg-red-100 text-red-700 overflow-hidden min-h-[300px] md:min-h-[400px] flex items-center justify-center p-4"
+    class="bg-red-100 text-red-700 overflow-hidden min-h-[400px] md:min-h-[600px] flex items-center justify-center p-4"
   >
     <p>Error: {{ error }}</p>
   </div>
   <div
     v-else-if="currentBanner"
     :style="{ backgroundImage: currentBanner.imageUrl ? `url(${currentBanner.imageUrl})` : '' }"
-    class="relative bg-peach-pink text-white overflow-hidden min-h-[300px] md:min-h-[400px] flex items-center justify-center bg-cover bg-center"
+    class="relative bg-peach-pink text-white overflow-hidden min-h-[400px] md:min-h-[600px] flex items-center justify-center bg-cover bg-center"
   >
     <!-- Overlay for better text readability if using a background image -->
     <div class="absolute inset-0 bg-black opacity-30" v-if="currentBanner.imageUrl"></div>
 
     <!-- Content -->
-    <div class="relative text-center p-6 md:p-8 z-10"> {/* Added z-10 here */}
+    <div class="relative text-center p-6 md:p-8 z-10">
       <h1
         ref="titleRef"
         class="text-4xl sm:text-5xl md:text-6xl font-bold font-serif mb-4 leading-tight opacity-0 translate-y-5 transition-all duration-1000 ease-in-out"
@@ -44,17 +44,71 @@
         {{ currentBanner.buttonText }}
       </NuxtLink>
     </div>
+
+    <!-- Navigation Arrows (only show if multiple banners) -->
+    <div v-if="banners.length > 1" class="absolute inset-x-0 top-1/2 transform -translate-y-1/2 flex justify-between items-center px-4 z-20">
+      <button
+        @click="prevBanner"
+        class="bg-black bg-opacity-50 hover:bg-opacity-75 text-white p-2 rounded-full transition-all duration-300 transform hover:scale-110"
+        aria-label="Previous banner"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+        </svg>
+      </button>
+      <button
+        @click="nextBanner"
+        class="bg-black bg-opacity-50 hover:bg-opacity-75 text-white p-2 rounded-full transition-all duration-300 transform hover:scale-110"
+        aria-label="Next banner"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Indicators (only show if multiple banners) -->
+    <div v-if="banners.length > 1" class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2 z-20">
+      <button
+        v-for="(banner, index) in banners"
+        :key="index"
+        @click="goToBanner(index)"
+        :class="[
+          'w-3 h-3 rounded-full transition-all duration-300',
+          currentBannerIndex === index 
+            ? 'bg-white scale-125' 
+            : 'bg-white bg-opacity-50 hover:bg-opacity-75'
+        ]"
+        :aria-label="`Go to banner ${index + 1}`"
+      ></button>
+    </div>
+
+    <!-- Pause/Play Button (only show if multiple banners) -->
+    <div v-if="banners.length > 1" class="absolute top-4 right-4 z-20">
+      <button
+        @click="toggleAutoPlay"
+        class="bg-black bg-opacity-50 hover:bg-opacity-75 text-white p-2 rounded-full transition-all duration-300"
+        :aria-label="isAutoPlaying ? 'Pause slideshow' : 'Play slideshow'"
+      >
+        <svg v-if="isAutoPlaying" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6"></path>
+        </svg>
+        <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+      </button>
+    </div>
   </div>
   <div
     v-else
-    class="bg-gray-100 text-gray-600 overflow-hidden min-h-[300px] md:min-h-[400px] flex items-center justify-center p-4"
+    class="bg-gray-100 text-gray-600 overflow-hidden min-h-[400px] md:min-h-[600px] flex items-center justify-center p-4"
   >
     No current promotions. Check back soon!
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, computed } from 'vue';
+import { ref, onMounted, nextTick, computed, onUnmounted, watch } from 'vue';
 import { useNuxtApp } from '#app';
 
 const { $axios } = useNuxtApp();
@@ -63,6 +117,8 @@ const banners = ref([]);
 const currentBannerIndex = ref(0);
 const isLoading = ref(true);
 const error = ref(null);
+const isAutoPlaying = ref(true);
+const autoPlayInterval = ref(null);
 
 // Refs for animation targets
 const titleRef = ref(null);
@@ -86,16 +142,15 @@ const fetchBanners = async () => {
       banners.value = response.data.banners;
       if (banners.value.length === 0) {
         console.log('HeroBanner: No active banners fetched from API.');
-        // Optional: set a specific message or let the template handle empty state
       }
     } else {
       console.warn('HeroBanner: Unexpected API response structure or no banners array.', response.data);
-      banners.value = []; // Ensure banners is an array
+      banners.value = [];
     }
   } catch (err) {
     console.error('HeroBanner: Error fetching banners:', err);
     error.value = 'Failed to load promotional content. Please try again later.';
-    banners.value = []; // Ensure banners is an array on error
+    banners.value = [];
   } finally {
     isLoading.value = false;
   }
@@ -111,9 +166,6 @@ const applyAnimations = () => {
       subtitleRef.value.classList.remove('opacity-0', 'translate-y-5');
       subtitleRef.value.classList.add('opacity-100', 'translate-y-0');
     }
-    // For NuxtLink, $el might not be immediately available if it's a component wrapper.
-    // Accessing the actual DOM element might require a more robust approach if issues arise.
-    // For now, assuming buttonRef.value is the direct DOM element or $el is reliable.
     const buttonElement = buttonRef.value?.$el || buttonRef.value;
     if (buttonElement) {
         buttonElement.classList.remove('opacity-0', 'translate-y-5');
@@ -122,23 +174,81 @@ const applyAnimations = () => {
   });
 };
 
+const nextBanner = () => {
+  if (banners.value.length > 1) {
+    currentBannerIndex.value = (currentBannerIndex.value + 1) % banners.value.length;
+    applyAnimations();
+  }
+};
+
+const prevBanner = () => {
+  if (banners.value.length > 1) {
+    currentBannerIndex.value = currentBannerIndex.value === 0 
+      ? banners.value.length - 1 
+      : currentBannerIndex.value - 1;
+    applyAnimations();
+  }
+};
+
+const goToBanner = (index) => {
+  if (index >= 0 && index < banners.value.length) {
+    currentBannerIndex.value = index;
+    applyAnimations();
+  }
+};
+
+const toggleAutoPlay = () => {
+  isAutoPlaying.value = !isAutoPlaying.value;
+  if (isAutoPlaying.value) {
+    startAutoPlay();
+  } else {
+    stopAutoPlay();
+  }
+};
+
+const startAutoPlay = () => {
+  if (banners.value.length > 1) {
+    stopAutoPlay(); // Clear any existing interval
+    autoPlayInterval.value = setInterval(() => {
+      nextBanner();
+    }, 5000); // Change banner every 5 seconds
+  }
+};
+
+const stopAutoPlay = () => {
+  if (autoPlayInterval.value) {
+    clearInterval(autoPlayInterval.value);
+    autoPlayInterval.value = null;
+  }
+};
+
+// Watch for banner changes to restart autoplay if needed
+watch(() => banners.value.length, (newLength) => {
+  if (newLength > 1 && isAutoPlaying.value) {
+    startAutoPlay();
+  } else {
+    stopAutoPlay();
+  }
+});
 
 onMounted(async () => {
   await fetchBanners();
   if (currentBanner.value) {
-    console.log('HeroBanner: Current Banner Data for Link:', JSON.parse(JSON.stringify(currentBanner.value))); // Log the banner data
-    // Apply animations once the first banner is loaded
-    // A watcher on currentBanner might be more robust if we implement a carousel
+    console.log('HeroBanner: Current Banner Data for Link:', JSON.parse(JSON.stringify(currentBanner.value)));
     applyAnimations();
+    
+    // Start autoplay if multiple banners
+    if (banners.value.length > 1) {
+      startAutoPlay();
+    }
   } else {
     console.log('HeroBanner: No current banner to display after fetch.');
   }
 });
 
-// TODO: Implement carousel logic if multiple banners (nextBanner, prevBanner functions)
-// For now, it will just show the first banner.
-// If implementing carousel, call applyAnimations() whenever currentBanner changes.
-
+onUnmounted(() => {
+  stopAutoPlay();
+});
 </script>
 
 <style scoped>

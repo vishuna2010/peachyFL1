@@ -40,7 +40,11 @@ const commonCategoryValidationRules = [
         }
       }
       return true;
-    })
+    }),
+  body('image_url')
+    .optional({ nullable: true, checkFalsy: true })
+    .isURL().withMessage('Image URL must be a valid URL if provided.')
+    .trim()
 ];
 
 const validateCreateCategory = [
@@ -70,17 +74,17 @@ router.post('/', isAuthenticated, checkPermission('categories:manage'), validate
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { name, description, parent_category_id } = req.body;
+  const { name, description, parent_category_id, image_url } = req.body;
 
   try {
-    const newCategory = await categoryService.createCategory(name, description, parent_category_id);
+    const newCategory = await categoryService.createCategory(name, description, parent_category_id, image_url);
     // newCategory is guaranteed to be populated if createCategory doesn't throw
 
     auditLogService.recordAuditEvent(
       'CATEGORY_CREATE_SUCCESS',
       { userId: req.user.userId, userEmail: req.user.email },
       { resourceType: 'CATEGORY', resourceId: newCategory.id },
-      { createdData: { name: newCategory.name, description: newCategory.description, parent_category_id: newCategory.parent_category_id } },
+      { createdData: { name: newCategory.name, description: newCategory.description, parent_category_id: newCategory.parent_category_id, image_url: newCategory.image_url } },
       req
     ).catch(err => console.error('Audit log failed for CATEGORY_CREATE_SUCCESS:', err));
 

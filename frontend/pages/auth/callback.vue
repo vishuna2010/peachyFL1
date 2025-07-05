@@ -12,12 +12,12 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, watch } from 'vue'; // Added onUnmounted
+import { onMounted, onUnmounted, watch } from 'vue';
 import { useAuth } from '~/composables/useAuth';
 import { useRouter, useRoute } from '#app';
 
 definePageMeta({
-  layout: false, // Use no layout for this simple callback page
+  layout: false,
 });
 
 useHead({
@@ -33,82 +33,95 @@ onMounted(() => {
     `isAuthInitialized: ${isAuthInitialized.value}`,
     `isAuthenticated: ${isAuthenticated.value}`,
     `isLoadingPermissions: ${isLoadingPermissions.value}`,
-    `authUser permissions: ${JSON.stringify(authUser.value?.permissions)}`
+    `authUser: ${JSON.stringify(authUser.value)}`
   );
 
-  let stopWatch = null; // Declare with let, initialized to null
+  let stopWatch = null;
 
-  stopWatch = watch( // Assign here
-    [isAuthInitialized, isAuthenticated, isLoadingPermissions, () => authUser.value?.permissions], // Watch all relevant states
+  stopWatch = watch(
+    [isAuthInitialized, isAuthenticated, isLoadingPermissions, () => authUser.value?.permissions],
     ([authInitialized, authenticated, loadingPermissions, permissionsArray]) => {
       console.log('[AuthCallback] Watch triggered. State:',
         `isAuthInitialized: ${authInitialized}`,
         `isAuthenticated: ${authenticated}`,
         `isLoadingPermissions: ${loadingPermissions}`,
-        `authUser permissions: ${JSON.stringify(permissionsArray)}`
+        `authUser: ${JSON.stringify(authUser.value)}`,
+        `permissions: ${JSON.stringify(permissionsArray)}`
       );
 
-                      if (authInitialized && authenticated) {
-          console.log('[AuthCallback] All conditions met! Proceeding with redirect...');
-          
-          if (stopWatch) { // Check if it has been assigned (it should have been by this point)
-            stopWatch();
-          }
+      if (authInitialized && authenticated && !loadingPermissions) {
+        console.log('[AuthCallback] All conditions met! Proceeding with redirect...');
+        
+        if (stopWatch) {
+          stopWatch();
+        }
 
-        let intendedRedirect = route.query.redirect || '/'; // Fallback to homepage
+        let intendedRedirect = route.query.redirect?.toString() || '';
         console.log(`[AuthCallback] Intended redirect: ${intendedRedirect}`);
 
-        // Determine final target based on role and permissions, similar to login.vue
-        const currentUser = authUser.value; // Re-access fresh state
+        const currentUser = authUser.value;
         let finalTargetPath = intendedRedirect;
 
-        if (intendedRedirect === '/admin' || intendedRedirect.startsWith('/admin/')) { // Only re-evaluate if original target was admin
-            if (currentUser && currentUser.role && currentUser.role.toLowerCase().includes('admin')) {
-                if (currentUser.permissions?.includes('admin:access_dashboard')) {
-                    // Preserve the original admin path if it's specific (not just /admin)
-                    finalTargetPath = intendedRedirect === '/' || intendedRedirect === '/admin' ? '/admin' : intendedRedirect;
-                } else if (currentUser.permissions?.length > 0) {
-                    // If no dashboard access, but has other admin perms, maybe go to a specific page?
-                    // For now, if original redirect was /admin and no dashboard access, they'll be stuck.
-                    // This logic could be refined. If original redirect was specific like /admin/products, keep it.
-                    finalTargetPath = (intendedRedirect === '/admin' || intendedRedirect === '/admin/') ? '/admin/unauthorized' : intendedRedirect;
-                } else {
-                     finalTargetPath = '/admin/unauthorized'; // No admin dashboard and no other permissions visible
-                }
-            } else { // Not an admin role, but tried to go to admin path
-                finalTargetPath = '/';
-            }
-        } else if (intendedRedirect === '/') { // If default redirect was to home
-             if (currentUser && currentUser.role && currentUser.role.toLowerCase().includes('admin') && currentUser.permissions?.includes('admin:access_dashboard')) {
-                finalTargetPath = '/admin';
+        // If no specific redirect or redirect is to home, determine based on user role
+        if (!intendedRedirect || intendedRedirect === '/' || intendedRedirect === '') {
+          if (currentUser && currentUser.role && currentUser.role.toLowerCase().includes('admin')) {
+            // Admin users should go to admin dashboard by default
+            finalTargetPath = '/admin';
+            console.log('[AuthCallback] Admin user detected, redirecting to /admin');
+          } else {
+            // Non-admin users go to profile
+            finalTargetPath = '/profile';
+            console.log('[AuthCallback] Non-admin user detected, redirecting to /profile');
+          }
+        } else if (intendedRedirect.startsWith('/admin')) {
+          // If trying to access admin area, verify permissions
+          if (currentUser && currentUser.role && currentUser.role.toLowerCase().includes('admin')) {
+            if (currentUser.permissions?.includes('admin:access_dashboard')) {
+              finalTargetPath = intendedRedirect;
             } else {
-                finalTargetPath = '/profile'; // Default for non-admin or if no specific redirect
+              finalTargetPath = '/admin/unauthorized';
             }
+          } else {
+            finalTargetPath = '/';
+          }
         }
-        // If intendedRedirect was specific like /profile, it will be kept.
 
-        console.log(`[AuthCallback] Conditions met. Redirecting to: ${finalTargetPath} (original intended: ${route.query.redirect})`);
+        console.log(`[AuthCallback] Final redirect target: ${finalTargetPath}`);
         router.replace(finalTargetPath);
+      } else {
+        console.log('[AuthCallback] Conditions not met yet:', {
+          authInitialized,
+          authenticated,
+          loadingPermissions,
+          userExists: !!currentUser,
+          userRole: currentUser?.role
+        });
       }
     },
-    { immediate: true, deep: true } // immediate: true to check current state on mount
+    { immediate: true, deep: true }
   );
 
-  // Safety timeout in case the watch condition is never met (e.g., an error in auth flow)
+  // Safety timeout
   const safetyTimeout = setTimeout(() => {
     if (stopWatch) {
-      stopWatch(); // Clean up watcher
+      stopWatch();
     }
-    if (router.currentRoute.value.path === '/auth/callback') { // Check if still on callback page
-        console.warn('[AuthCallback] Timeout reached. User may not be fully authenticated or permissions not loaded. Redirecting to homepage.');
-        router.replace('/');
+    if (router.currentRoute.value.path === '/auth/callback') {
+      console.warn('[AuthCallback] Timeout reached. Current state:', {
+        isAuthInitialized: isAuthInitialized.value,
+        isAuthenticated: isAuthenticated.value,
+        isLoadingPermissions: isLoadingPermissions.value,
+        authUser: authUser.value
+      });
+      console.warn('[AuthCallback] Redirecting to homepage due to timeout.');
+      router.replace('/');
     }
-  }, 5000); // 5 seconds timeout
+  }, 10000); // Increased timeout to 10 seconds
 
   onUnmounted(() => {
     clearTimeout(safetyTimeout);
     if (stopWatch) {
-      stopWatch(); // Ensure watcher is cleaned up if component unmounts for any other reason
+      stopWatch();
     }
   });
 });

@@ -69,6 +69,13 @@ export const useAuth = () => {
       const storedToken = localStorage.getItem('authToken');
       const storedUser = localStorage.getItem('authUser');
 
+      console.log('useAuth: Stored data from localStorage:', {
+        hasToken: !!storedToken,
+        hasUser: !!storedUser,
+        tokenLength: storedToken?.length,
+        userData: storedUser ? JSON.parse(storedUser) : null
+      });
+
       if (storedToken) {
         authToken.value = storedToken;
         $axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
@@ -173,15 +180,31 @@ export const useAuth = () => {
   const register = async (email, password) => {
     try {
       const response = await $axios.post('/auth/register', { email, password });
-      // Assuming registration returns the user object (excluding password)
-      if (response.data.user && response.data.message === 'User registered successfully.') {
-         // Do not automatically log in the user, let them log in separately
-        return { success: true, message: response.data.message };
+      
+      // Check if registration was successful
+      if (response.status === 201 && response.data.message) {
+        return { 
+          success: true, 
+          message: response.data.message || 'Registration successful! Please check your email to verify your account.' 
+        };
       }
+      
       return { success: false, message: response.data.message || 'Registration failed.' };
     } catch (error) {
-      console.error('Registration error:', error.response?.data?.message || error.message);
-      return { success: false, message: error.response?.data?.message || 'Registration failed.' };
+      console.error('Registration error:', error);
+      
+      // Handle different types of errors
+      if (error.response) {
+        // Server responded with error status
+        const errorMessage = error.response.data?.message || 'Registration failed.';
+        return { success: false, message: errorMessage };
+      } else if (error.request) {
+        // Network error
+        return { success: false, message: 'Network error. Please check your connection and try again.' };
+      } else {
+        // Other error
+        return { success: false, message: 'An unexpected error occurred. Please try again.' };
+      }
     }
   };
 

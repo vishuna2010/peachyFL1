@@ -91,7 +91,7 @@ router.post(
       if (shippingAddress && shippingAddress.country) {
         addressForTaxCalculation = {
           country: shippingAddress.country,
-          state_province_region: shippingAddress.state_province_region || null,
+          state_province: shippingAddress.state_province || null,
         };
       } else if (!addressForTaxCalculation.country && !userId) {
         // No userId to fetch default address, and no shippingAddress provided

@@ -51,6 +51,20 @@ async function applySchemaMigrations(client) {
   } catch (e) {
     console.error('Error altering product_variants table (or columns already exist):', e.message);
   }
+
+  // Add missing columns to order_items table
+  try {
+    await client.query('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_name_at_purchase VARCHAR(255);');
+    await client.query('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_sku_at_purchase VARCHAR(100);');
+    await client.query('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS tax_class_id_at_purchase INTEGER REFERENCES tax_classes(id) ON DELETE SET NULL;');
+    await client.query('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS line_item_tax_amount DECIMAL(10, 2) DEFAULT 0.00;');
+    await client.query('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;');
+    await client.query('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;');
+    console.log('✅ Added missing columns to order_items table');
+  } catch (error) {
+    console.log('Migration error for order_items (may be benign):', error.message);
+  }
+
   console.log('Schema migrations for sales functionality applied (or skipped if existing).');
 }
 
@@ -115,11 +129,13 @@ async function createSchema(client) {
       CREATE TABLE IF NOT EXISTS categories (
         id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE NOT NULL, description TEXT,
         slug VARCHAR(255) UNIQUE, -- Added slug column
+        image_url VARCHAR(255), -- Added image_url column for category images
         parent_category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );`);
     await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS slug VARCHAR(255) UNIQUE;`); // Ensure slug column if table already exists
-    console.log('Table "categories" checked/created and slug column ensured.');
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS image_url VARCHAR(255);`); // Ensure image_url column if table already exists
+    console.log('Table "categories" checked/created and slug/image_url columns ensured.');
 
     // Hero Banners Table
     await client.query(`
@@ -366,7 +382,13 @@ async function createSchema(client) {
         product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
         product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL,
         quantity INTEGER NOT NULL CHECK (quantity > 0),
-        price_at_purchase DECIMAL(10, 2) NOT NULL
+        price_at_purchase DECIMAL(10, 2) NOT NULL,
+        product_name_at_purchase VARCHAR(255) NULL,
+        product_sku_at_purchase VARCHAR(100) NULL,
+        tax_class_id_at_purchase INTEGER NULL REFERENCES tax_classes(id) ON DELETE SET NULL,
+        line_item_tax_amount DECIMAL(10, 2) DEFAULT 0.00,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('Table "order_items" checked/created.');
@@ -523,10 +545,10 @@ async function seedHeroBanners(client, seededDataIds) {
   console.log('Seeding hero banners...');
   seededDataIds.heroBanners = seededDataIds.heroBanners || {};
   const bannersToSeed = [
-    { title: 'Summer Collection Arrived!', subtitle: 'Discover the latest trends for the sunny season.', button_text: 'Explore Summer', button_link: '/collections/summer', image_url: 'https://via.placeholder.com/1200x400.png?text=Summer+Banner+Active', alt_text: 'Bright summer fashion display', is_active: true, sort_order: 1 },
-    { title: 'Flash Sale: 24 Hours Only!', subtitle: 'Get 30% off on all accessories. Use code FLASH30.', button_text: 'Shop Accessories', button_link: '/categories/accessories?promo=flash30', image_url: 'https://via.placeholder.com/1200x400.png?text=Flash+Sale+Active', alt_text: 'Exciting flash sale announcement', is_active: true, sort_order: 0 },
-    { title: 'New Arrivals: Electronics (Inactive)', subtitle: 'Check out the latest gadgets and tech.', button_text: 'View New Tech', button_link: '/categories/electronics?filter=new', image_url: 'https://via.placeholder.com/1200x400.png?text=Tech+Banner+Inactive', alt_text: 'Sleek display of new electronic gadgets', is_active: false, sort_order: 2 },
-    { title: 'Winter Clearance (Active High Prio)', subtitle: 'Up to 70% off last season winter wear.', button_text: 'Shop Clearance', button_link: '/sale/winter-clearance', image_url: 'https://via.placeholder.com/1200x400.png?text=Winter+Clearance+Active', alt_text: 'Winter clothes on sale', is_active: true, sort_order: 0 }
+    { title: 'Summer Collection Arrived!', subtitle: 'Discover the latest trends for the sunny season.', button_text: 'Explore Summer', button_link: '/collections/summer', image_url: 'https://picsum.photos/1200/600?random=1', alt_text: 'Bright summer fashion display', is_active: true, sort_order: 1 },
+    { title: 'Flash Sale: 24 Hours Only!', subtitle: 'Get 30% off on all accessories. Use code FLASH30.', button_text: 'Shop Accessories', button_link: '/categories/accessories?promo=flash30', image_url: 'https://picsum.photos/1200/600?random=2', alt_text: 'Exciting flash sale announcement', is_active: true, sort_order: 0 },
+    { title: 'New Arrivals: Electronics (Inactive)', subtitle: 'Check out the latest gadgets and tech.', button_text: 'View New Tech', button_link: '/categories/electronics?filter=new', image_url: 'https://picsum.photos/1200/600?random=3', alt_text: 'Sleek display of new electronic gadgets', is_active: false, sort_order: 2 },
+    { title: 'Winter Clearance (Active High Prio)', subtitle: 'Up to 70% off last season winter wear.', button_text: 'Shop Clearance', button_link: '/sale/winter-clearance', image_url: 'https://picsum.photos/1200/600?random=4', alt_text: 'Winter clothes on sale', is_active: true, sort_order: 0 }
   ];
   try {
     for (const banner of bannersToSeed) {
@@ -1247,6 +1269,8 @@ async function seedRbac(client, seededDataIds) {
     { name: 'auditlogs:view', description: 'Can view system audit logs.', group_name: 'System' },
     { name: 'marketing:send_emails', description: 'Allows sending of marketing emails to user segments.', group_name: 'Marketing' },
     { name: 'marketing:manage_hero_banners', description: 'Can create, read, update, and delete hero banners.', group_name: 'Marketing' },
+    { name: 'marketing:view_campaigns', description: 'Can view email campaigns and their tracking data.', group_name: 'Marketing' },
+    { name: 'marketing:view_unsubscribes', description: 'Can view unsubscribe lists and manage email preferences.', group_name: 'Marketing' },
     { name: 'products:view_stock', description: 'Can view product stock levels and inventory batches.', group_name: 'Products' } // Added new permission
   ];
   try {

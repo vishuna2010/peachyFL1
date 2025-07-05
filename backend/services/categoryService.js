@@ -7,15 +7,16 @@ const { AppError, BadRequestError, NotFoundError, ConflictError } = require('../
  * @param {string} name - The name of the category.
  * @param {string} [description] - Optional description for the category.
  * @param {number} [parent_category_id] - Optional ID of the parent category.
+ * @param {string} [image_url] - Optional image URL for the category.
  * @returns {Promise<object>} The newly created category object.
  * @throws {ConflictError} If a category with the same name already exists.
  * @throws {AppError} If database operation fails.
  */
-async function createCategory(name, description, parent_category_id) {
+async function createCategory(name, description, parent_category_id, image_url) {
   try {
     const result = await db.query(
-      'INSERT INTO categories (name, description, parent_category_id) VALUES ($1, $2, $3) RETURNING *',
-      [name, description, parent_category_id]
+      'INSERT INTO categories (name, description, parent_category_id, image_url) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, description, parent_category_id, image_url]
     );
     if (result.rows.length > 0) {
       return result.rows[0];
@@ -46,10 +47,10 @@ async function getAllCategories(page, limit) {
   const offset = (page - 1) * limit;
   try {
     const categoriesQuery = `
-      SELECT c.id, c.name, c.description, c.parent_category_id, c.updated_at, COUNT(p.id) AS product_count
+      SELECT c.id, c.name, c.description, c.parent_category_id, c.image_url, c.updated_at, COUNT(p.id) AS product_count
       FROM categories c
       LEFT JOIN products p ON c.id = p.category_id
-      GROUP BY c.id, c.name, c.description, c.parent_category_id, c.updated_at
+      GROUP BY c.id, c.name, c.description, c.parent_category_id, c.image_url, c.updated_at
       ORDER BY c.name ASC
       LIMIT $1 OFFSET $2;
     `;
@@ -82,11 +83,11 @@ async function getAllCategories(page, limit) {
 async function getCategoryById(categoryId) {
   try {
     const categoryQuery = `
-      SELECT c.id, c.name, c.description, c.parent_category_id, COUNT(p.id) AS product_count
+      SELECT c.id, c.name, c.description, c.parent_category_id, c.image_url, COUNT(p.id) AS product_count
       FROM categories c
       LEFT JOIN products p ON c.id = p.category_id
       WHERE c.id = $1
-      GROUP BY c.id, c.name, c.description, c.parent_category_id;
+      GROUP BY c.id, c.name, c.description, c.parent_category_id, c.image_url;
     `;
     const result = await db.query(categoryQuery, [categoryId]);
 
@@ -116,7 +117,7 @@ async function getCategoryById(categoryId) {
  * @throws {AppError} If database operation fails.
  */
 async function updateCategory(categoryId, updateData) {
-  const { name, description, parent_category_id } = updateData;
+  const { name, description, parent_category_id, image_url } = updateData;
 
   const setClauses = [];
   const values = [];
@@ -136,6 +137,10 @@ async function updateCategory(categoryId, updateData) {
     }
     setClauses.push(`parent_category_id = $${paramIndex++}`);
     values.push(parent_category_id);
+  }
+  if (updateData.hasOwnProperty('image_url')) { // Allows setting image_url to null
+    setClauses.push(`image_url = $${paramIndex++}`);
+    values.push(image_url);
   }
 
   if (setClauses.length === 0) {
@@ -168,7 +173,6 @@ async function updateCategory(categoryId, updateData) {
     throw new AppError(`Failed to update category ID ${categoryId} due to a server error.`, 500, 'CATEGORY_UPDATE_FAILED');
   }
 }
-
 
 /**
  * Deletes a category by its ID.
@@ -206,7 +210,6 @@ async function deleteCategory(categoryId) {
         throw new BadRequestError(`Category has ${childCount} sub-categories. Please delete or reassign them first.`);
     }
 
-
     const result = await client.query('DELETE FROM categories WHERE id = $1 RETURNING id', [categoryId]);
 
     // This check is somewhat redundant if categoryCheck above is done,
@@ -230,16 +233,6 @@ async function deleteCategory(categoryId) {
   }
 }
 
-module.exports = {
-  createCategory,
-  getAllCategories,
-  getCategoryById,
-  updateCategory,
-  deleteCategory,
-  getAllPublicCategories, // Added new function
-  getCategoryBySlug, // Added new function
-};
-
 /**
  * Retrieves a single category by its slug.
  * @param {string} slug - The slug of the category to retrieve.
@@ -250,7 +243,7 @@ async function getCategoryBySlug(slug) {
   try {
     // Assuming 'slug' column exists and is unique (or handle multiple results if not unique)
     const query = `
-      SELECT id, name, slug, description, parent_category_id, created_at, updated_at
+      SELECT id, name, slug, description, parent_category_id, image_url, created_at, updated_at
       FROM categories
       WHERE slug = $1;
     `;
@@ -267,21 +260,21 @@ async function getCategoryBySlug(slug) {
   }
 }
 
-
 /**
  * Retrieves all categories for public display (typically id and name).
  * @returns {Promise<Array<object>>} A promise that resolves to an array of category objects,
- *          each containing { id, name }, ordered by name.
+ *          each containing { id, name, slug, image_url }, ordered by name.
  * @throws {AppError} If the database operation fails.
  */
 async function getAllPublicCategories() {
   try {
     // Assuming a 'slug' column exists in the 'categories' table
-    const result = await db.query('SELECT id, name, slug FROM categories WHERE parent_category_id IS NULL ORDER BY name ASC');
+    const result = await db.query('SELECT id, name, slug, image_url FROM categories WHERE parent_category_id IS NULL ORDER BY name ASC');
     return result.rows.map(category => ({
       id: category.id,
       name: category.name,
       slug: category.slug,
+      image_url: category.image_url,
       // TODO: Potentially fetch children categories if a nested menu is desired
     }));
   } catch (error) {
@@ -289,3 +282,13 @@ async function getAllPublicCategories() {
     throw new AppError('Failed to retrieve public categories.', 500, 'PUBLIC_CATEGORIES_FETCH_FAILED');
   }
 }
+
+module.exports = {
+  createCategory,
+  getAllCategories,
+  getCategoryById,
+  updateCategory,
+  deleteCategory,
+  getAllPublicCategories,
+  getCategoryBySlug,
+};

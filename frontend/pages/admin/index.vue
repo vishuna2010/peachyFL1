@@ -146,7 +146,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useHead, useNuxtApp, useRouter } from '#app'; // Added useRouter
+import { useHead, useNuxtApp, useRouter } from '#app';
+import { useAuth } from '~/composables/useAuth';
 import StatCard from '~/components/admin/StatCard.vue';
 
 definePageMeta({
@@ -160,6 +161,17 @@ useHead({
 
 const { $axios } = useNuxtApp();
 const router = useRouter();
+const { authToken, authUser, isAuthenticated, isAuthInitialized } = useAuth();
+
+// Debug authentication state
+console.log('[Admin Dashboard] Mounted. Auth state:', {
+  token: !!authToken.value,
+  user: !!authUser.value,
+  isAuthenticated: isAuthenticated.value,
+  isAuthInitialized: isAuthInitialized.value,
+  userRole: authUser.value?.role,
+  userPermissions: authUser.value?.permissions
+});
 
 const isLoadingStats = ref(true);
 const statsError = ref(null);

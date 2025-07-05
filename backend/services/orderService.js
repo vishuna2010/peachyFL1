@@ -1,6 +1,8 @@
 // backend/services/orderService.js
 const db = require('../db');
+const bcrypt = require('bcrypt');
 const { NotFoundError, AppError, BadRequestError, ConflictError } = require('../utils/AppError');
+const taxService = require('./taxService');
 
 /**
  * Retrieves a paginated list of all orders for the admin view.
@@ -416,7 +418,11 @@ async function processOrderRefund(orderId, refundInput, adminUserId) {
   try {
     await client.query('BEGIN');
 
-    const orderResult = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [orderId]);
+    const orderResult = await client.query(`
+      SELECT o.*, u.email as user_email, u.name as user_name 
+      FROM orders o 
+      JOIN users u ON o.user_id = u.id 
+      WHERE o.id = $1 FOR UPDATE`, [orderId]);
     if (orderResult.rows.length === 0) {
       throw new NotFoundError(`Order with ID ${orderId} not found.`);
     }
@@ -671,6 +677,7 @@ module.exports = {
   getUserOrderDetails, // Added for user's specific order details
   confirmOrderDelivery, // Added for QR code delivery confirmation
   getOrderDetailsForShippingLabel, // Added for shipping label generation
+  getUserOrderStats
 };
 
 /**
@@ -774,8 +781,6 @@ async function getOrderDetailsForShippingLabel(orderId) {
 
 
 const { generateDeliveryConfirmationToken, validateDeliveryConfirmationToken } = require('../utils/securityUtils'); // For QR Code (validateDeliveryConfirmationToken was already imported)
-const bcrypt = require('bcrypt');
-const taxService = require('./taxService'); // Assuming it's in the same directory
 // const { BadRequestError, ConflictError } = require('../utils/AppError'); // REMOVED - Consolidated at top
 
 /**
@@ -916,21 +921,21 @@ async function createPublicOrder(orderRequestData, authenticatedUser) {
 
         // Batch deduction for variant
         const batches = await client.query(
-          `SELECT id, current_quantity FROM inventory_batches
-           WHERE product_id = $1 AND variant_id = $2 AND current_quantity > 0
+          `SELECT id, quantity_remaining FROM inventory_batches
+           WHERE product_id = $1 AND variant_id = $2 AND quantity_remaining > 0
            ORDER BY expiry_date ASC NULLS LAST, received_date ASC, id ASC FOR UPDATE`,
           [item.productId, item.productVariantId]
         );
-        let totalBatchStock = batches.rows.reduce((sum, batch) => sum + batch.current_quantity, 0);
+        let totalBatchStock = batches.rows.reduce((sum, batch) => sum + batch.quantity_remaining, 0);
         if (totalBatchStock < item.quantity) {
           throw new BadRequestError(`Insufficient batch stock for variant "${productNameForDisplay}". Available: ${totalBatchStock}, Requested: ${item.quantity}.`);
         }
         let qtyToFulfill = item.quantity;
         for (const batch of batches.rows) {
           if (qtyToFulfill === 0) break;
-          const qtyFromThisBatch = Math.min(qtyToFulfill, batch.current_quantity);
+          const qtyFromThisBatch = Math.min(qtyToFulfill, batch.quantity_remaining);
           await client.query(
-            'UPDATE inventory_batches SET current_quantity = current_quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            'UPDATE inventory_batches SET quantity_remaining = quantity_remaining - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             [qtyFromThisBatch, batch.id]
           );
           qtyToFulfill -= qtyFromThisBatch;
@@ -952,21 +957,21 @@ async function createPublicOrder(orderRequestData, authenticatedUser) {
 
         // Batch deduction for base product
         const batches = await client.query(
-          `SELECT id, current_quantity FROM inventory_batches
-           WHERE product_id = $1 AND variant_id IS NULL AND current_quantity > 0
+          `SELECT id, quantity_remaining FROM inventory_batches
+           WHERE product_id = $1 AND variant_id IS NULL AND quantity_remaining > 0
            ORDER BY expiry_date ASC NULLS LAST, received_date ASC, id ASC FOR UPDATE`,
           [item.productId]
         );
-        let totalBatchStock = batches.rows.reduce((sum, batch) => sum + batch.current_quantity, 0);
+        let totalBatchStock = batches.rows.reduce((sum, batch) => sum + batch.quantity_remaining, 0);
         if (totalBatchStock < item.quantity) {
           throw new BadRequestError(`Insufficient batch stock for product "${productNameForDisplay}". Available: ${totalBatchStock}, Requested: ${item.quantity}.`);
         }
         let qtyToFulfill = item.quantity;
         for (const batch of batches.rows) {
           if (qtyToFulfill === 0) break;
-          const qtyFromThisBatch = Math.min(qtyToFulfill, batch.current_quantity);
+          const qtyFromThisBatch = Math.min(qtyToFulfill, batch.quantity_remaining);
           await client.query(
-            'UPDATE inventory_batches SET current_quantity = current_quantity - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            'UPDATE inventory_batches SET quantity_remaining = quantity_remaining - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             [qtyFromThisBatch, batch.id]
           );
           qtyToFulfill -= qtyFromThisBatch;
@@ -1094,6 +1099,33 @@ async function createPublicOrder(orderRequestData, authenticatedUser) {
     // Fetch full order details for response (similar to getAdminOrderById)
     const finalCreatedOrder = await this.getAdminOrderById(newOrder.id); // Assuming 'this' context or direct call if standalone
 
+    // Send order confirmation email
+    try {
+      const orderForEmail = {
+        ...finalCreatedOrder,
+        items: finalCreatedOrder.items.map(item => ({
+          product_name: item.product_name_at_purchase || item.product_name,
+          quantity: item.quantity,
+          priceAtPurchase: item.price_at_purchase
+        }))
+      };
+      
+      const orderHtml = await emailService.getOrderConfirmationHtml(orderForEmail, userEmailForOrder);
+      const orderText = emailService.getOrderConfirmationText(orderForEmail, userEmailForOrder);
+      
+      await emailService.sendEmail({
+        to: userEmailForOrder,
+        subject: `Order Confirmation - Order #${finalCreatedOrder.id}`,
+        html: orderHtml,
+        text: orderText
+      });
+      
+      console.log(`Order confirmation email sent to ${userEmailForOrder} for order #${finalCreatedOrder.id}`);
+    } catch (emailError) {
+      console.error(`Failed to send order confirmation email for order #${finalCreatedOrder.id}:`, emailError);
+      // Don't fail the order creation if email fails
+    }
+
     return finalCreatedOrder;
 
   } catch (error) {
@@ -1112,29 +1144,42 @@ async function createPublicOrder(orderRequestData, authenticatedUser) {
 /**
  * Retrieves a paginated list of orders for a specific user.
  * @param {number} userId - The ID of the user.
- * @param {object} paginationOptions - Contains page and limit.
+ * @param {object} paginationOptions - Contains page, limit, and optional status filter.
  * @returns {Promise<object>} Paginated list of orders.
  */
 async function getUserOrderHistory(userId, paginationOptions = {}) {
   const page = parseInt(paginationOptions.page) || 1;
   let limit = parseInt(paginationOptions.limit) || 10;
+  const status = paginationOptions.status;
   if (limit > 100) limit = 100; // Max limit safeguard
 
   const offset = (page - 1) * limit;
 
   try {
-    const ordersQuery = `
+    let ordersQuery = `
       SELECT o.id, o.created_at as order_date, o.total_amount, o.status,
              (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.id) as item_count
       FROM orders o
       WHERE o.user_id = $1
-      ORDER BY o.created_at DESC
-      LIMIT $2 OFFSET $3;
     `;
-    const ordersResult = await db.query(ordersQuery, [userId, limit, offset]);
+    
+    let totalCountQuery = 'SELECT COUNT(*) FROM orders WHERE user_id = $1';
+    const queryParams = [userId];
+    let paramIndex = 2;
 
-    const totalCountQuery = 'SELECT COUNT(*) FROM orders WHERE user_id = $1;';
-    const totalCountResult = await db.query(totalCountQuery, [userId]);
+    // Add status filter if provided
+    if (status && status.trim()) {
+      ordersQuery += ` AND o.status = $${paramIndex}`;
+      totalCountQuery += ` AND status = $${paramIndex}`;
+      queryParams.push(status.trim().toLowerCase());
+      paramIndex++;
+    }
+
+    ordersQuery += ` ORDER BY o.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    queryParams.push(limit, offset);
+
+    const ordersResult = await db.query(ordersQuery, queryParams);
+    const totalCountResult = await db.query(totalCountQuery, queryParams.slice(0, -2)); // Remove limit and offset
     const totalOrders = parseInt(totalCountResult.rows[0].count);
     const totalPages = Math.ceil(totalOrders / limit);
 
@@ -1258,5 +1303,43 @@ async function getUserOrderDetails(userId, orderId) {
     }
     console.error(`[orderService.getUserOrderDetails] Error for order ID ${orderId}, user ID ${userId}:`, error);
     throw new AppError('Failed to retrieve user order details.', 500, 'USER_ORDER_DETAILS_FETCH_FAILED');
+  }
+}
+
+/**
+ * Retrieves order statistics for a specific user.
+ * @param {number} userId - The ID of the user.
+ * @returns {Promise<object>} Order statistics object.
+ */
+async function getUserOrderStats(userId) {
+  try {
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total_orders,
+        COUNT(CASE WHEN status = 'delivered' THEN 1 END) as completed_orders,
+        COUNT(CASE WHEN status = 'pending' OR status = 'processing' THEN 1 END) as active_orders,
+        COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_orders,
+        COALESCE(SUM(CASE WHEN status = 'delivered' THEN total_amount ELSE 0 END), 0) as total_spent,
+        COALESCE(AVG(CASE WHEN status = 'delivered' THEN total_amount END), 0) as average_order_value,
+        MAX(created_at) as last_order_date
+      FROM orders 
+      WHERE user_id = $1;
+    `;
+    
+    const statsResult = await db.query(statsQuery, [userId]);
+    const stats = statsResult.rows[0];
+    
+    return {
+      total_orders: parseInt(stats.total_orders),
+      completed_orders: parseInt(stats.completed_orders),
+      active_orders: parseInt(stats.active_orders),
+      cancelled_orders: parseInt(stats.cancelled_orders),
+      total_spent: parseFloat(stats.total_spent),
+      average_order_value: parseFloat(stats.average_order_value),
+      last_order_date: stats.last_order_date
+    };
+  } catch (error) {
+    console.error(`[orderService.getUserOrderStats] Error for user ID ${userId}:`, error);
+    throw new AppError('Failed to retrieve user order statistics.', 500, 'USER_ORDER_STATS_FETCH_FAILED');
   }
 }

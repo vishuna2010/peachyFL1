@@ -3,7 +3,8 @@ const router = express.Router();
 const db = require('../db');
 const { isAuthenticated, isAdmin } = require('../auth');
 const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload');
-const { uploadFileToS3, deleteFileFromS3, isS3Configured, getS3KeyFromUrl } = require('../services/s3Service'); // Assuming getS3KeyFromUrl might be useful later
+const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../services/s3Service');
+const { getS3KeyFromUrl } = require('../utils/productHelpers');
 const { param, body, validationResult } = require('express-validator');
 
 router.use(isAuthenticated, isAdmin); // Apply to all routes in this file

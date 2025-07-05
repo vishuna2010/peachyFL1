@@ -7,7 +7,7 @@ const { param, query, body, validationResult } = require('express-validator');
 const { NotFoundError, BadRequestError, AppError } = require('../utils/AppError'); // Added AppError
 const crypto = require('crypto'); // Still needed for QR code token in one route, could move to service
 const auditLogService = require('../services/auditLogService');
-const { sendEmail, getRefundConfirmationHtml, getRefundConfirmationText } = require('../services/emailService');
+const { sendEmail, getRefundConfirmationHtml, getRefundConfirmationText, sendRefundEmailWithAttachment } = require('../services/emailService');
 const orderService = require('../services/orderService'); // Import the new service
 
 // Apply auth middleware to all routes in this router
@@ -350,7 +350,7 @@ router.post(
         order: updatedOrder
       });
 
-      // Send refund confirmation email
+      // Send refund confirmation email with PDF attachment
       if (originalOrderDataForEmail.user_email) {
         const emailRefundData = {
           order: { id: originalOrderDataForEmail.id },
@@ -362,22 +362,14 @@ router.post(
             items_processed: refundedItemsSummary // Already has name, sku, refunded_qty, price_at_purchase
           }
         };
-        // Fire and forget email sending
+        // Fire and forget email sending with PDF attachment
         (async () => {
             try {
-                const html = await getRefundConfirmationHtml(emailRefundData);
-                const text = getRefundConfirmationText(emailRefundData);
-                sendEmail({
-                    to: originalOrderDataForEmail.user_email,
-                    subject: `Refund Processed for Order #${originalOrderDataForEmail.id}`,
-                    text: text,
-                    html: html,
-                }).then(emailRes => {
-                    if(emailRes.success) console.log(`Refund confirmation email sent for order ${originalOrderDataForEmail.id}. Preview: ${emailRes.previewUrl || 'N/A'}`);
-                    else console.error(`Failed to send refund email for order ${originalOrderDataForEmail.id}: ${emailRes.error}`);
-                }).catch(emailSendError => console.error(`Error in sendEmail promise for refund email (Order ${originalOrderDataForEmail.id}):`, emailSendError));
-            } catch (templateError) {
-                console.error(`Error generating refund email template for order ${originalOrderDataForEmail.id}:`, templateError);
+                const emailRes = await sendRefundEmailWithAttachment(emailRefundData);
+                if(emailRes.success) console.log(`Refund confirmation email with PDF attachment sent for order ${originalOrderDataForEmail.id}. Preview: ${emailRes.previewUrl || 'N/A'}`);
+                else console.error(`Failed to send refund email with PDF for order ${originalOrderDataForEmail.id}: ${emailRes.error}`);
+            } catch (emailError) {
+                console.error(`Error sending refund email with PDF for order ${originalOrderDataForEmail.id}:`, emailError);
             }
         })();
       } else {

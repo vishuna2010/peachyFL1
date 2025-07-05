@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-// const db = require('../db'); // No longer directly used by this route file
+const db = require('../db'); // Re-enabled for user lookup in email sending
 const { isAuthenticated, tryAuthenticate } = require('../auth'); // Using tryAuthenticate for POST /
 const { sendEmail, getOrderConfirmationHtml, getOrderConfirmationText, sendInvoiceEmail } = require('../services/emailService'); // Added sendInvoiceEmail
 const orderService = require('../services/orderService'); // Import orderService

@@ -466,9 +466,9 @@ router.get(
     query('sort_by').optional().isIn([
       'received_date_desc', 'received_date_asc',
       'expiry_date_asc', 'expiry_date_desc',
-      'current_quantity_asc', 'current_quantity_desc'
+      'quantity_remaining_asc', 'quantity_remaining_desc'
     ])
-      .withMessage('Invalid sort_by value. Allowed values: received_date_desc, received_date_asc, expiry_date_asc, expiry_date_desc, current_quantity_asc, current_quantity_desc')
+      .withMessage('Invalid sort_by value. Allowed values: received_date_desc, received_date_asc, expiry_date_asc, expiry_date_desc, quantity_remaining_asc, quantity_remaining_desc')
       .default('received_date_desc')
   ],
   async (req, res, next) => {

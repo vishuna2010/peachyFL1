@@ -66,9 +66,8 @@ const mapBannerToCamelCase = (banner) => {
 };
 
 
-/**
- * Creates a new hero banner.
-const { uploadFileToS3, deleteFileFromS3, isS3Configured, getS3KeyFromUrl } = require('../services/s3Service'); // Ensure getS3KeyFromUrl is imported
+const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../services/s3Service');
+const { getS3KeyFromUrl } = require('../utils/productHelpers');
 
 /**
  * Creates a new hero banner.
@@ -82,16 +81,20 @@ async function createHeroBanner(bannerData, fileData) {
 
   if (fileData) {
     if (!isS3Configured()) {
-      throw new AppError("Image upload service (S3) is not configured.", 500, "S3_NOT_CONFIGURED");
-    }
-    const uniqueFileName = `hero-banners/${Date.now()}-${fileData.originalname.replace(/\s+/g, '_')}`;
-    try {
-      const s3Data = await uploadFileToS3(fileData.buffer, uniqueFileName, fileData.mimetype);
-      imageUrl = s3Data.Location; // Override imageUrl with S3 URL
-      s3FileKey = s3Data.Key; // Store key for potential future operations (though not stored in DB for banners currently)
-    } catch (s3Error) {
-      console.error("S3 Upload Error on banner creation:", s3Error);
-      throw new AppError("Failed to upload banner image to S3.", 500, "S3_UPLOAD_FAILED");
+      console.warn("S3 not configured, skipping image upload. Banner will be created without image.");
+      // For development, we could store the image data in a different way
+      // For now, we'll just skip the image upload and continue
+      imageUrl = null;
+    } else {
+      const uniqueFileName = `hero-banners/${Date.now()}-${fileData.originalname.replace(/\s+/g, '_')}`;
+      try {
+        const s3Data = await uploadFileToS3(fileData.buffer, uniqueFileName, fileData.mimetype);
+        imageUrl = s3Data.Location; // Override imageUrl with S3 URL
+        s3FileKey = s3Data.Key; // Store key for potential future operations (though not stored in DB for banners currently)
+      } catch (s3Error) {
+        console.error("S3 Upload Error on banner creation:", s3Error);
+        throw new AppError("Failed to upload banner image to S3.", 500, "S3_UPLOAD_FAILED");
+      }
     }
   } else if (!imageUrl) {
     // If no file and no imageUrl provided, it's an error based on previous validation
@@ -157,17 +160,22 @@ async function updateHeroBanner(bannerId, updateData, fileData, removeImageFlag 
   let s3OldFileKey = null;
 
   if (fileData) {
-    if (!isS3Configured()) throw new AppError("S3 service not configured.", 500, "S3_NOT_CONFIGURED");
-    if (currentBanner.imageUrl) s3OldFileKey = getS3KeyFromUrl(currentBanner.imageUrl);
+    if (!isS3Configured()) {
+      console.warn("S3 not configured, skipping image upload. Banner will be updated without new image.");
+      // Keep the existing image URL
+      finalImageUrl = currentBanner.imageUrl;
+    } else {
+      if (currentBanner.imageUrl) s3OldFileKey = getS3KeyFromUrl(currentBanner.imageUrl);
 
-    const uniqueFileName = `hero-banners/${bannerId}-${Date.now()}-${fileData.originalname.replace(/\s+/g, '_')}`;
-    try {
-      const s3Data = await uploadFileToS3(fileData.buffer, uniqueFileName, fileData.mimetype);
-      finalImageUrl = s3Data.Location;
-      s3NewFileKey = s3Data.Key;
-    } catch (s3Error) {
-      console.error("S3 Upload Error on banner update:", s3Error);
-      throw new AppError("Failed to upload new banner image to S3.", 500, "S3_UPLOAD_FAILED");
+      const uniqueFileName = `hero-banners/${bannerId}-${Date.now()}-${fileData.originalname.replace(/\s+/g, '_')}`;
+      try {
+        const s3Data = await uploadFileToS3(fileData.buffer, uniqueFileName, fileData.mimetype);
+        finalImageUrl = s3Data.Location;
+        s3NewFileKey = s3Data.Key;
+      } catch (s3Error) {
+        console.error("S3 Upload Error on banner update:", s3Error);
+        throw new AppError("Failed to upload new banner image to S3.", 500, "S3_UPLOAD_FAILED");
+      }
     }
   } else if (removeImageFlag) {
     if (currentBanner.imageUrl && isS3Configured()) s3OldFileKey = getS3KeyFromUrl(currentBanner.imageUrl);
@@ -227,16 +235,37 @@ async function updateHeroBanner(bannerId, updateData, fileData, removeImageFlag 
  * @returns {Promise<object|null>} The deleted hero banner object or null if not found.
  */
 async function deleteHeroBanner(bannerId) {
+  // Fetch the banner first to get the image URL
+  let banner = null;
+  try {
+    banner = await getHeroBannerById(bannerId);
+  } catch (error) {
+    if (error instanceof NotFoundError) throw error;
+    console.error(`Error fetching hero banner for S3 cleanup:`, error);
+    throw new AppError(`Failed to fetch hero banner for deletion.`, 500, 'BANNER_FETCH_FOR_DELETE_FAILED');
+  }
+
+  // Remove S3 image if present and S3 is configured
+  if (banner && banner.imageUrl && isS3Configured()) {
+    try {
+      const s3Key = getS3KeyFromUrl(banner.imageUrl);
+      if (s3Key) {
+        await deleteFileFromS3(s3Key);
+      }
+    } catch (s3Error) {
+      console.error(`Failed to delete S3 image for banner ${bannerId}:`, s3Error);
+      // Not critical, continue with DB deletion
+    }
+  }
+
+  // Now delete the DB row
   const query = 'DELETE FROM hero_banners WHERE id = $1 RETURNING *;';
   try {
     const { rows } = await db.query(query, [bannerId]);
     if (rows.length === 0) {
-      // This means the banner was already deleted or never existed.
-      // Depending on desired behavior, could throw NotFoundError or return null silently.
-      // For admin operations, throwing NotFoundError is often clearer.
       throw new NotFoundError(`Hero banner with ID ${bannerId} not found, cannot delete.`);
     }
-    return mapBannerToCamelCase(rows[0]); // Return the data of the deleted banner
+    return mapBannerToCamelCase(rows[0]);
   } catch (error) {
     if (error instanceof NotFoundError) throw error;
     console.error(`Error deleting hero banner with ID ${bannerId}:`, error);

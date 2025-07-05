@@ -1,5 +1,5 @@
 <template>
-  <div class="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
+  <div class="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
     <h2 class="text-2xl font-semibold text-gray-800 mb-6">Edit Role: {{ form.name || '...' }}</h2>
 
     <div v-if="isLoadingInitialData" class="text-center py-10">
@@ -53,11 +53,11 @@
          <div v-else-if="permissionFetchError" class="text-red-500 py-4">
             <p>Error loading permissions: {{ permissionFetchError }}</p>
         </div>
-        <div v-else v-for="(group, groupName) in groupedPermissions" :key="groupName" class="border border-gray-200 p-4 rounded-md">
-          <h4 class="text-md font-semibold text-gray-700 mb-3">{{ groupName }}</h4>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div v-for="permission in group.permissions" :key="permission.id" class="relative flex items-start">
-              <div class="flex items-center h-5">
+        <div v-else v-for="(group, groupName) in groupedPermissions" :key="groupName" class="border border-gray-200 p-4 rounded-md mb-4">
+          <h4 class="text-md font-semibold text-gray-700 mb-4 border-b border-gray-100 pb-2">{{ groupName }}</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div v-for="permission in group.permissions" :key="permission.id" class="flex items-start p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+              <div class="flex items-center h-5 mt-0.5">
                 <input
                   :id="`permission-${permission.id}`"
                   :value="permission.id"
@@ -66,9 +66,13 @@
                   class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded"
                 />
               </div>
-              <div class="ml-3 text-sm">
-                <label :for="`permission-${permission.id}`" class="font-medium text-gray-700">{{ permission.name }}</label>
-                <p v-if="permission.description" class="text-gray-500 text-xs">{{ permission.description }}</p>
+              <div class="ml-3 flex-1 min-w-0">
+                <label :for="`permission-${permission.id}`" class="block text-sm font-medium text-gray-700 cursor-pointer hover:text-indigo-600 transition-colors">
+                  {{ permission.name }}
+                </label>
+                <p v-if="permission.description" class="text-gray-500 text-xs mt-1 leading-relaxed">
+                  {{ permission.description }}
+                </p>
               </div>
             </div>
           </div>

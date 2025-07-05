@@ -175,6 +175,7 @@ module.exports = {
   generatePackingSlipPdf, // Added new function
   getShippingLabelHtml, // Added for shipping label
   generateShippingLabelPdf, // Added for shipping label
+  generateRefundInvoicePdf, // Added for refund invoices
 };
 
 // Helper function to generate HTML for a shipping label
@@ -733,6 +734,191 @@ async function generatePackingSlipPdf(packingSlipData) {
     return pdfBuffer;
   } catch (error) {
     console.error('Error generating packing slip PDF with Puppeteer:', error);
+    throw error;
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
+// --- Refund Invoice Generation ---
+
+function getRefundInvoiceHtml(refundData) {
+  const companyName = refundData.company_name || config.company.name;
+  const companyAddress = refundData.company_address || config.company.address;
+  const companyLogoUrl = refundData.company_logo_url || config.company.logoUrl;
+  const companyPhone = refundData.company_phone || config.company.phone;
+  const companyEmail = refundData.company_email || config.company.email;
+  
+  const refundDate = new Date().toLocaleDateString();
+  const refundType = refundData.refund.type === 'full' ? 'FULL REFUND' : 'PARTIAL REFUND';
+  const refundAmount = parseFloat(refundData.refund.amount_this_transaction).toFixed(2);
+
+  const formatAddress = (addr, type) => {
+    if (!addr) return `<p>No ${type} address provided.</p>`;
+    return `
+      <p>
+        ${addr.line1 || ''}<br>
+        ${addr.line2 || ''}${addr.line2 ? '<br>' : ''}
+        ${addr.city || ''}, ${addr.state_province_region || ''} ${addr.postal_code || ''}<br>
+        ${addr.country || ''}
+      </p>
+    `;
+  };
+
+  let refundedItemsHtml = '';
+  if (refundData.refund.items_processed && refundData.refund.items_processed.length > 0) {
+    refundData.refund.items_processed.forEach(item => {
+      const itemTotal = (parseFloat(item.price_at_purchase) * item.refunded_qty).toFixed(2);
+      refundedItemsHtml += `
+        <tr>
+          <td>${item.sku || 'N/A'}</td>
+          <td>${item.name}</td>
+          <td>${item.refunded_qty}</td>
+          <td>$${parseFloat(item.price_at_purchase).toFixed(2)}</td>
+          <td>$${itemTotal}</td>
+        </tr>
+      `;
+    });
+  }
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Refund Invoice - Order #${refundData.order.id}</title>
+      <style>
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #333; line-height: 1.4; }
+        .container { width: 90%; margin: 0 auto; padding: 20px; }
+        header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+        header img.logo { max-height: 80px; max-width: 200px; margin-bottom: 15px; }
+        header h1 { margin: 0; font-size: 28px; color: #d32f2f; }
+        header .refund-type { font-size: 18px; color: #d32f2f; font-weight: bold; margin-top: 5px; }
+        .invoice-details { margin-bottom: 30px; overflow: hidden; }
+        .invoice-details .invoice-id { float: left; font-size: 20px; font-weight: bold; }
+        .invoice-details .invoice-date { float: right; text-align: right; }
+        .customer-info { margin-bottom: 30px; }
+        .customer-info h3 { margin-top: 0; margin-bottom: 10px; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .refund-summary { margin-bottom: 30px; background-color: #fff3e0; padding: 15px; border-left: 4px solid #ff9800; }
+        .refund-summary h3 { margin-top: 0; color: #e65100; }
+        .refund-amount { font-size: 24px; font-weight: bold; color: #d32f2f; }
+        table.refund-items { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        table.refund-items th, table.refund-items td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        table.refund-items th { background-color: #f5f5f5; font-weight: bold; }
+        table.refund-items .total-row { background-color: #f9f9f9; font-weight: bold; }
+        .refund-reason { margin-bottom: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px; }
+        .refund-reason h4 { margin-top: 0; color: #495057; }
+        footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 10px; color: #777; }
+        .company-info { text-align: center; margin-bottom: 20px; }
+        .clear { clear: both; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <header>
+          ${companyLogoUrl ? `<img src="${companyLogoUrl}" alt="${companyName} Logo" class="logo"><br>` : ''}
+          <h1>REFUND INVOICE</h1>
+          <div class="refund-type">${refundType}</div>
+        </header>
+
+        <section class="invoice-details">
+          <div class="invoice-id">Order #${refundData.order.id}</div>
+          <div class="invoice-date">
+            <p><strong>Refund Date:</strong> ${refundDate}</p>
+            <p><strong>Refund Type:</strong> ${refundType}</p>
+          </div>
+          <div class="clear"></div>
+        </section>
+
+        <section class="customer-info">
+          <h3>Customer Information:</h3>
+          <p><strong>Name:</strong> ${refundData.user.name}</p>
+          <p><strong>Email:</strong> ${refundData.user.email}</p>
+          ${refundData.order.shipping_address ? `
+            <h4>Shipping Address:</h4>
+            ${formatAddress(refundData.order.shipping_address, 'Shipping')}
+          ` : ''}
+        </section>
+
+        <section class="refund-summary">
+          <h3>Refund Summary</h3>
+          <p><strong>Total Refund Amount:</strong> <span class="refund-amount">$${refundAmount}</span></p>
+          <p><strong>Refund Date:</strong> ${refundDate}</p>
+          <p><strong>Refund Type:</strong> ${refundType}</p>
+        </section>
+
+        ${refundData.refund.reason ? `
+          <section class="refund-reason">
+            <h4>Refund Reason:</h4>
+            <p>${refundData.refund.reason}</p>
+          </section>
+        ` : ''}
+
+        <h3>Refunded Items:</h3>
+        <table class="refund-items">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Product Name</th>
+              <th>Quantity Refunded</th>
+              <th>Unit Price</th>
+              <th>Total Refunded</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${refundedItemsHtml}
+            <tr class="total-row">
+              <td colspan="4" style="text-align: right;"><strong>Total Refund Amount:</strong></td>
+              <td><strong>$${refundAmount}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="company-info">
+          <p><strong>${companyName}</strong></p>
+          ${companyAddress ? `<p>${companyAddress}</p>` : ''}
+          ${companyPhone ? `<p>Phone: ${companyPhone}</p>` : ''}
+          ${companyEmail ? `<p>Email: ${companyEmail}</p>` : ''}
+        </div>
+
+        <footer>
+          <p>This refund has been processed and will be reflected in your account within 3-5 business days.</p>
+          <p>Thank you for your business!</p>
+          <p>${companyName} - ${new Date().getFullYear()}</p>
+        </footer>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+async function generateRefundInvoicePdf(refundData) {
+  let browser = null;
+  try {
+    const htmlContent = getRefundInvoiceHtml(refundData);
+
+    browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '0.75in',
+        right: '0.5in',
+        bottom: '0.75in',
+        left: '0.5in',
+      }
+    });
+    return pdfBuffer;
+  } catch (error) {
+    console.error('Error generating refund invoice PDF with Puppeteer:', error);
     throw error;
   } finally {
     if (browser) {

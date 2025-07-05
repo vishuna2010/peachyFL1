@@ -287,21 +287,8 @@ async function updatePurchaseOrderHeader(purchaseOrderId, headerData, adminUserI
 
     await client.query('COMMIT');
 
-    // To return full PO with items and supplier name, call getPurchaseOrderById
-    // For now, just returning the updated header from RETURNING *
-    // Add supplier_name for consistency with GET routes if possible without another full fetch unless necessary
-    const updatedPOHeader = result.rows[0];
-    if (updatedPOHeader.supplier_id) {
-        const sup = await db.query('SELECT name FROM suppliers WHERE id = $1', [updatedPOHeader.supplier_id]);
-        if (sup.rows.length > 0) updatedPOHeader.supplier_name = sup.rows[0].name;
-    }
-    if (updatedPOHeader.created_by_user_id) {
-        const usr = await db.query('SELECT email FROM users WHERE id = $1', [updatedPOHeader.created_by_user_id]);
-        if (usr.rows.length > 0) updatedPOHeader.created_by_user_email = usr.rows[0].email;
-    }
-
-
-    return updatedPOHeader;
+    // Return the complete purchase order with items for consistency
+    return await getPurchaseOrderById(purchaseOrderId);
 
   } catch (error) {
     await client.query('ROLLBACK');
@@ -617,7 +604,7 @@ async function receiveStockForPurchaseOrderItem(poItemId, receiveData, adminUser
     }
     const batchInsertQuery = `
       INSERT INTO inventory_batches
-        (product_id, variant_id, batch_number, expiry_date, initial_quantity, current_quantity,
+        (product_id, variant_id, batch_number, expiry_date, quantity_received, quantity_remaining,
          cost_price_at_receipt, currency_code_at_receipt, base_currency_cost_price_at_receipt,
          exchange_rate_used, purchase_order_item_id, received_date)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)

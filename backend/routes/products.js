@@ -19,7 +19,8 @@ router.get('/', [
     query('sort_by').optional().isString().trim(),
     query('optionValueId').optional().isInt({ gt: 0 }).toInt(), // New validator
     query('page').optional().isInt({ min: 1 }).toInt().default(1),
-    query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10)
+    query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10),
+    query('on_sale').optional().isIn(['true', 'false']).toBoolean()
   ],
   async (req, res, next) => {
     console.log('[DEBUG] /api/products route received query:', JSON.stringify(req.query)); // Log received query
@@ -58,7 +59,8 @@ router.get('/', [
       page: parsedPage,
       limit: parsedLimit,
       is_admin_request: false, // Ensure public access rules are applied
-      stock_status: 'in_stock' // Add this line
+      stock_status: 'in_stock', // Add this line
+      onSale: on_sale === 'true' // Add on_sale parameter
     });
 
     // Transform the response

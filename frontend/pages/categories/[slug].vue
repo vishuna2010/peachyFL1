@@ -206,7 +206,7 @@ async function fetchProductsForCategory() {
       sort_by: filters.sortBy.split('_')[0],
       sort_order: filters.sortBy.split('_')[1],
       color_value_id: filters.selectedColorValueId,
-      on_sale: filters.onSaleOnly ? true : undefined,
+      on_sale: filters.onSaleOnly ? 'true' : undefined,
     };
 
     Object.keys(params).forEach(key => {

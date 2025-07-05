@@ -132,7 +132,7 @@ async function fetchProducts() {
       sort_by: filters.sortBy.split('_')[0], // e.g. price
       sort_order: filters.sortBy.split('_')[1], // e.g. asc
       color_value_id: filters.selectedColorValueId,
-      on_sale: filters.onSaleOnly ? true : undefined, // Add on_sale to API params
+      on_sale: filters.onSaleOnly ? 'true' : undefined, // Send as string 'true' instead of boolean true
     };
 
     // Remove null/undefined params

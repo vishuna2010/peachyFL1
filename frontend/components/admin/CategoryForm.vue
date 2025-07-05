@@ -23,6 +23,44 @@
       ></textarea>
     </FormField>
 
+    <FormField id="categoryImage" label="Category Image (Optional)">
+      <div class="space-y-3">
+        <input
+          type="url"
+          id="categoryImage"
+          v-model="editableImageUrl"
+          :disabled="isSubmitting"
+          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:opacity-50 disabled:bg-gray-100"
+          placeholder="https://example.com/image.jpg"
+        />
+        <p class="text-sm text-gray-500">
+          Enter a URL for the category image. Recommended size: 400x300 pixels.
+        </p>
+        
+        <!-- Image Preview -->
+        <div v-if="editableImageUrl && isValidImageUrl" class="mt-3">
+          <p class="text-sm font-medium text-gray-700 mb-2">Preview:</p>
+          <div class="relative w-32 h-24 border border-gray-300 rounded-md overflow-hidden">
+            <img 
+              :src="editableImageUrl" 
+              :alt="`Preview of ${editableName || 'category'} image`"
+              class="w-full h-full object-cover"
+              @error="handleImageError"
+              @load="handleImageLoad"
+            />
+            <div v-if="imageLoading" class="absolute inset-0 bg-gray-200 flex items-center justify-center">
+              <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-peach-pink"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Image Error State -->
+        <div v-if="editableImageUrl && !isValidImageUrl && !imageLoading" class="mt-3 p-2 bg-red-50 border border-red-200 rounded-md">
+          <p class="text-sm text-red-600">Invalid image URL or image failed to load.</p>
+        </div>
+      </div>
+    </FormField>
+
      <div v-if="apiError" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4" role="alert">
       <span class="block sm:inline">{{ apiError }}</span>
     </div>
@@ -87,16 +125,24 @@ const emit = defineEmits(['submit']);
 
 const editableName = ref('');
 const editableDescription = ref('');
+const editableImageUrl = ref('');
+const imageLoading = ref(false);
+const isValidImageUrl = ref(false);
 
 watch(() => props.initialData, (newData) => {
   editableName.value = newData?.name || '';
   editableDescription.value = newData?.description || '';
+  editableImageUrl.value = newData?.image_url || '';
+  if (newData?.image_url) {
+    validateImageUrl(newData.image_url);
+  }
 }, { immediate: true, deep: true });
 
 const isChanged = computed(() => {
   if (!props.isEditMode) return true; // Always enabled for new categories if fields are filled
   return (editableName.value.trim() !== (props.initialData?.name || '').trim() ||
-          editableDescription.value.trim() !== (props.initialData?.description || '').trim());
+          editableDescription.value.trim() !== (props.initialData?.description || '').trim() ||
+          editableImageUrl.value.trim() !== (props.initialData?.image_url || '').trim());
 });
 
 const submitButtonText = computed(() => {
@@ -104,6 +150,44 @@ const submitButtonText = computed(() => {
     return props.isEditMode ? 'Updating...' : 'Creating...';
   }
   return props.isEditMode ? 'Update Category' : 'Create Category';
+});
+
+// Image validation and handling
+const validateImageUrl = (url) => {
+  if (!url) {
+    isValidImageUrl.value = false;
+    return;
+  }
+  
+  // Basic URL validation
+  try {
+    new URL(url);
+    imageLoading.value = true;
+    isValidImageUrl.value = false;
+  } catch {
+    isValidImageUrl.value = false;
+    imageLoading.value = false;
+  }
+};
+
+const handleImageError = () => {
+  imageLoading.value = false;
+  isValidImageUrl.value = false;
+};
+
+const handleImageLoad = () => {
+  imageLoading.value = false;
+  isValidImageUrl.value = true;
+};
+
+// Watch for image URL changes
+watch(editableImageUrl, (newUrl) => {
+  if (newUrl) {
+    validateImageUrl(newUrl);
+  } else {
+    imageLoading.value = false;
+    isValidImageUrl.value = false;
+  }
 });
 
 const handleSubmit = () => {
@@ -120,6 +204,7 @@ const handleSubmit = () => {
   emit('submit', {
     name: editableName.value.trim(),
     description: editableDescription.value.trim() || null, // Send null if description is empty
+    image_url: editableImageUrl.value.trim() || null, // Send null if image URL is empty
   });
 };
 </script>

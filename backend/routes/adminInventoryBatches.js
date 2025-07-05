@@ -13,8 +13,8 @@ const validateCreateBatchParams = [
   body('product_id').isInt({ gt: 0 }).toInt().withMessage('Product ID must be a positive integer.'),
   body('variant_id').optional({ nullable: true }).isInt({ gt: 0 }).toInt().withMessage('Variant ID must be a positive integer if provided.'),
   body('batch_number').optional({ nullable: true }).isString().trim().isLength({ min: 1, max: 100 }).withMessage('Batch number must be between 1 and 100 characters if provided.'),
-  body('initial_quantity').isInt({ gt: 0 }).toInt().withMessage('Initial quantity must be a positive integer.'),
-  body('current_quantity').optional().isInt({ min: 0 }).toInt().withMessage('Current quantity must be a non-negative integer. Defaults to initial_quantity if not provided.'),
+  body('quantity_received').isInt({ gt: 0 }).toInt().withMessage('Quantity received must be a positive integer.'),
+  body('quantity_remaining').optional().isInt({ min: 0 }).toInt().withMessage('Quantity remaining must be a non-negative integer. Defaults to quantity_received if not provided.'),
   body('expiry_date').optional({ nullable: true }).isDate().withMessage('Expiry date must be a valid date (YYYY-MM-DD) or null.'),
   body('cost_price_at_receipt').isDecimal({ decimal_digits: '0,2' }).toFloat().withMessage('Cost price at receipt must be a decimal value.'),
   body('currency_code_at_receipt').isString().trim().isLength({ min: 3, max: 3 }).toUpperCase().withMessage('Currency code must be a 3-letter string.'),
@@ -30,18 +30,18 @@ router.post('/', validateCreateBatchParams, async (req, res, next) => {
   }
 
   const {
-    product_id, variant_id, batch_number, initial_quantity,
+    product_id, variant_id, batch_number, quantity_received,
     expiry_date, cost_price_at_receipt, currency_code_at_receipt,
     purchase_order_item_id
   } = req.body;
 
-  // current_quantity defaults to initial_quantity if not provided or if less than 0 (though validator ensures >=0)
-  const current_quantity = (req.body.current_quantity !== undefined && req.body.current_quantity >= 0)
-                           ? parseInt(req.body.current_quantity)
-                           : initial_quantity;
+  // quantity_remaining defaults to quantity_received if not provided or if less than 0 (though validator ensures >=0)
+  const quantity_remaining = (req.body.quantity_remaining !== undefined && req.body.quantity_remaining >= 0)
+                           ? parseInt(req.body.quantity_remaining)
+                           : quantity_received;
 
-  if (current_quantity > initial_quantity) {
-    return next(new BadRequestError('Current quantity cannot exceed initial quantity for a new batch.'));
+  if (quantity_remaining > quantity_received) {
+    return next(new BadRequestError('Quantity remaining cannot exceed quantity received for a new batch.'));
   }
 
   const finalBatchNumber = batch_number ? batch_number.trim() : `MANUAL-${Date.now()}`;
@@ -91,7 +91,7 @@ router.post('/', validateCreateBatchParams, async (req, res, next) => {
 
     const insertQuery = `
       INSERT INTO inventory_batches
-        (product_id, variant_id, batch_number, expiry_date, initial_quantity, current_quantity,
+        (product_id, variant_id, batch_number, expiry_date, quantity_received, quantity_remaining,
          cost_price_at_receipt, currency_code_at_receipt, base_currency_cost_price_at_receipt, exchange_rate_used,
          purchase_order_item_id, received_date, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -100,7 +100,7 @@ router.post('/', validateCreateBatchParams, async (req, res, next) => {
     // For manual creation, base_currency_cost_price and exchange_rate might be same as cost_price_at_receipt and 1 if currency is base, or need input.
     // Assuming cost_price_at_receipt IS in base currency for manual entry simplicity for now.
     const newBatchResult = await client.query(insertQuery, [
-      product_id, variant_id || null, finalBatchNumber, finalExpiryDate, initial_quantity, current_quantity,
+      product_id, variant_id || null, finalBatchNumber, finalExpiryDate, quantity_received, quantity_remaining,
       cost_price_at_receipt, currency_code_at_receipt, cost_price_at_receipt, 1.0, // Assuming cost is in base currency
       purchase_order_item_id || null
     ]);
@@ -113,14 +113,14 @@ router.post('/', validateCreateBatchParams, async (req, res, next) => {
       old_aggregate_stock = vr.rows[0].stock_quantity;
       await client.query(
         'UPDATE product_variants SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [newBatch.current_quantity, variant_id]
+        [newBatch.quantity_remaining, variant_id]
       );
     } else {
       const pr = await client.query('SELECT stock_quantity FROM products WHERE id=$1', [product_id]);
       old_aggregate_stock = pr.rows[0].stock_quantity;
       await client.query(
         'UPDATE products SET stock_quantity = stock_quantity + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [newBatch.current_quantity, product_id]
+        [newBatch.quantity_remaining, product_id]
       );
     }
 
@@ -132,7 +132,7 @@ router.post('/', validateCreateBatchParams, async (req, res, next) => {
     `;
     await client.query(logMovementQuery, [
       newBatch.product_id, newBatch.variant_id, userId, 'manual_batch_creation',
-      newBatch.current_quantity, old_aggregate_stock + newBatch.current_quantity,
+      newBatch.quantity_remaining, old_aggregate_stock + newBatch.quantity_remaining,
       `Manual batch entry: ${finalBatchNumber}`, `batch_id:${newBatch.id}`
     ]);
 
@@ -160,7 +160,7 @@ const validateGetBatchesParams = [
   query('batch_number').optional().isString().trim().escape(),
   query('has_expired').optional().isBoolean().toBoolean(),
   query('expires_soon_days').optional().isInt({ min: 1 }).toInt().withMessage('Expires soon days must be a positive integer.'),
-  query('sort_by').optional().isIn(['expiry_date', 'received_date', 'product_id', 'batch_number', 'current_quantity']).withMessage("Invalid sort_by value."),
+  query('sort_by').optional().isIn(['expiry_date', 'received_date', 'product_id', 'batch_number', 'quantity_remaining']).withMessage("Invalid sort_by value."),
   query('sort_order').optional().isIn(['ASC', 'DESC']).withMessage("Invalid sort_order value. Allowed: 'ASC', 'DESC'.")
 ];
 
@@ -224,7 +224,7 @@ router.get('/', validateGetBatchesParams, async (req, res, next) => {
 
   // Sanitize sort_by to prevent SQL injection, though isIn validation already helps.
   // The fields are known and validated.
-  const validSortColumns = ['expiry_date', 'received_date', 'product_id', 'batch_number', 'current_quantity'];
+  const validSortColumns = ['expiry_date', 'received_date', 'product_id', 'batch_number', 'quantity_remaining'];
   const safeSortBy = validSortColumns.includes(sort_by) ? sort_by : 'expiry_date'; // Default to expiry_date if invalid
   const safeSortOrder = sort_order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'; // Default to ASC
 
@@ -276,7 +276,7 @@ router.put(
   '/:batchId',
   [
     param('batchId').isInt({ gt: 0 }).toInt(),
-    body('current_quantity').optional().isInt({ min: 0 }).toInt().withMessage('Current quantity must be a non-negative integer.'),
+    body('quantity_remaining').optional().isInt({ min: 0 }).toInt().withMessage('Quantity remaining must be a non-negative integer.'),
     body('expiry_date').optional({ nullable: true })
       .isISO8601().withMessage('Expiry date must be a valid date (YYYY-MM-DD) or null.')
       .toDate(), // Convert to Date object if valid
@@ -292,13 +292,13 @@ router.put(
     }
 
     const { batchId } = req.params;
-    const { current_quantity, expiry_date, batch_number, reason_for_change } = req.body;
+    const { quantity_remaining, expiry_date, batch_number, reason_for_change } = req.body;
     const adminUserId = req.user.userId;
 
     // Construct the updateData object for the service
     const updateData = { reason_for_change };
-    if (current_quantity !== undefined) {
-      updateData.current_quantity = current_quantity;
+    if (quantity_remaining !== undefined) {
+      updateData.quantity_remaining = quantity_remaining;
     }
     if (expiry_date !== undefined) {
       updateData.expiry_date = expiry_date;
@@ -309,8 +309,8 @@ router.put(
 
     // An initial check if any updatable field (other than reason) is provided.
     // The service will do a more thorough check against current values.
-    if (current_quantity === undefined && expiry_date === undefined && batch_number === undefined) {
-        return next(new BadRequestError('At least one field (current_quantity, expiry_date, or batch_number) must be provided for update along with reason_for_change.'));
+    if (quantity_remaining === undefined && expiry_date === undefined && batch_number === undefined) {
+        return next(new BadRequestError('At least one field (quantity_remaining, expiry_date, or batch_number) must be provided for update along with reason_for_change.'));
     }
 
     try {

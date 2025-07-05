@@ -38,6 +38,9 @@ const config = {
   // Frontend URL (for things like password reset links, invoice QR codes etc.)
   frontendUrlBase: process.env.FRONTEND_URL_BASE || 'http://localhost:3001',
   frontendInvoiceViewUrlBase: process.env.FRONTEND_INVOICE_VIEW_URL_BASE || 'http://localhost:3001/invoices', // Example for QR codes
+  
+  // Backend URL (for email tracking, API calls, etc.)
+  backendUrlBase: process.env.BACKEND_URL_BASE || 'http://localhost:3000',
 
   // Company Details (for invoices, emails, etc.)
   company: {

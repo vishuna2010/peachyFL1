@@ -343,7 +343,7 @@ const executeOrderPlacement = async () => {
   mockPaymentError.value = ''; // Clear previous errors specific to this modal step
 
   let orderPayload = {
-    cart: cartItems.value.map(item => ({
+    cartItems: cartItems.value.map(item => ({
       productId: item.productId,
       productVariantId: item.variantId || null,
       quantity: item.quantity,

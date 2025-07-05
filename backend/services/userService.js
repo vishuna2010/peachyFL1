@@ -2,6 +2,7 @@
 const db = require('../db');
 const bcrypt = require('bcrypt');
 const { ConflictError, NotFoundError, BadRequestError, AppError } = require('../utils/AppError');
+const addressService = require('./addressService');
 
 const SALT_ROUNDS = 10; // Define salt rounds for bcrypt
 
@@ -459,11 +460,11 @@ async function getUserTaxContext(userId, dbClientOptional) {
     // For now, let's assume userId is always provided if this function is called.
     throw new BadRequestError('User ID is required to get tax context.');
   }
-  const queryRunner = dbClientOptional || db; // Use provided client or default pool
 
   try {
-    const userResult = await queryRunner.query(
-      'SELECT is_tax_exempt, country, state_province_region, postal_code FROM users WHERE id = $1',
+    // First, get user's tax exemption status
+    const userResult = await db.query(
+      'SELECT is_tax_exempt FROM users WHERE id = $1',
       [userId]
     );
 
@@ -472,13 +473,18 @@ async function getUserTaxContext(userId, dbClientOptional) {
     }
 
     const userData = userResult.rows[0];
+    const userIsTaxExempt = userData.is_tax_exempt || false;
+
+    // Get the user's default shipping address
+    const defaultAddress = await addressService.getDefaultShippingAddress(userId);
+
     return {
-      userIsTaxExempt: userData.is_tax_exempt || false,
-      defaultAddress: { // Structure for tax service or route to use
-        country: userData.country || null,
-        state_province_region: userData.state_province_region || null,
-        // postal_code: userData.postal_code || null // Include if tax service might use it
-      }
+      userIsTaxExempt,
+      defaultAddress: defaultAddress ? {
+        country: defaultAddress.country,
+        state_province: defaultAddress.state_province,
+        postal_code: defaultAddress.postal_code
+      } : null
     };
   } catch (error) {
     console.error(`[userService.getUserTaxContext] Error for user ID ${userId}:`, error);

@@ -15,9 +15,20 @@
               Email address
             </label>
             <div class="mt-1">
-              <input id="email" v-model="email" name="email" type="email" autocomplete="email" required
-                     :disabled="isLoading"
-                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:opacity-70" />
+              <input 
+                id="email" 
+                v-model="email" 
+                name="email" 
+                type="email" 
+                autocomplete="email" 
+                required
+                :disabled="isLoading"
+                :class="[
+                  'appearance-none block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm disabled:opacity-70',
+                  errorMessage && errorMessage.includes('email') ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-peach-pink focus:border-peach-pink'
+                ]"
+                @input="errorMessage = ''"
+              />
             </div>
           </div>
 
@@ -26,10 +37,22 @@
               Password
             </label>
             <div class="mt-1">
-              <input id="password" v-model="password" name="password" type="password" autocomplete="new-password" required
-                     :disabled="isLoading"
-                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:opacity-70" />
+              <input 
+                id="password" 
+                v-model="password" 
+                name="password" 
+                type="password" 
+                autocomplete="new-password" 
+                required
+                :disabled="isLoading"
+                :class="[
+                  'appearance-none block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm disabled:opacity-70',
+                  errorMessage && errorMessage.includes('password') ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-peach-pink focus:border-peach-pink'
+                ]"
+                @input="errorMessage = ''"
+              />
             </div>
+            <p class="mt-1 text-xs text-gray-500">Password must be at least 6 characters long</p>
           </div>
 
           <div>
@@ -37,9 +60,20 @@
               Confirm Password
             </label>
             <div class="mt-1">
-              <input id="confirmPassword" v-model="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required
-                     :disabled="isLoading"
-                     class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm disabled:opacity-70" />
+              <input 
+                id="confirmPassword" 
+                v-model="confirmPassword" 
+                name="confirmPassword" 
+                type="password" 
+                autocomplete="new-password" 
+                required
+                :disabled="isLoading"
+                :class="[
+                  'appearance-none block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm disabled:opacity-70',
+                  errorMessage && errorMessage.includes('match') ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-peach-pink focus:border-peach-pink'
+                ]"
+                @input="errorMessage = ''"
+              />
             </div>
           </div>
 
@@ -85,25 +119,56 @@ const { register } = useAuth();
 const router = useRouter();
 
 const handleRegister = async () => {
+  // Clear previous messages
+  errorMessage.value = '';
+  successMessage.value = '';
+
+  // Client-side validation
+  if (!email.value || !email.value.trim()) {
+    errorMessage.value = 'Email is required.';
+    return;
+  }
+
+  if (!password.value || password.value.length < 6) {
+    errorMessage.value = 'Password must be at least 6 characters long.';
+    return;
+  }
+
   if (password.value !== confirmPassword.value) {
     errorMessage.value = 'Passwords do not match.';
     return;
   }
+
+  // Email format validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email.value)) {
+    errorMessage.value = 'Please enter a valid email address.';
+    return;
+  }
+
   isLoading.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
 
-  const result = await register(email.value, password.value);
-  isLoading.value = false;
-
-  if (result.success) {
-    successMessage.value = result.message || 'Registration successful! Please login.';
-    // Optionally redirect to login page after a short delay
-    setTimeout(() => {
-      router.push('/login');
-    }, 2000);
-  } else {
-    errorMessage.value = result.message || 'Failed to register. Please try again.';
+  try {
+    const result = await register(email.value, password.value);
+    
+    if (result.success) {
+      successMessage.value = result.message || 'Registration successful! Please check your email to verify your account.';
+      // Clear form
+      email.value = '';
+      password.value = '';
+      confirmPassword.value = '';
+      // Redirect to login page after a short delay
+      setTimeout(() => {
+        router.push('/login');
+      }, 3000);
+    } else {
+      errorMessage.value = result.message || 'Failed to register. Please try again.';
+    }
+  } catch (error) {
+    console.error('Registration error:', error);
+    errorMessage.value = 'An unexpected error occurred. Please try again.';
+  } finally {
+    isLoading.value = false;
   }
 };
 

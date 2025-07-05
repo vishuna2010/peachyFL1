@@ -1,275 +1,428 @@
 <template>
-  <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 min-h-[calc(100vh-theme(spacing.16))]">
-    <h1 class="text-3xl sm:text-4xl font-bold text-text-primary mb-10 text-center">My Profile</h1>
+  <div class="min-h-screen bg-venus-background">
+    <!-- Header -->
+    <div class="bg-white shadow-md border-b border-neutral-medium">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="py-8">
+          <h1 class="text-3xl font-serif font-bold text-venus-text-primary">My Profile</h1>
+          <p class="mt-2 text-venus-text-secondary">Manage your account, view orders, and update your information</p>
+        </div>
+      </div>
+    </div>
 
-    <!-- Updated v-if to use isAuthLoading -->
-    <div v-if="isAuthLoading" class="text-center py-10 text-lg text-text-secondary font-medium">Loading profile...</div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Loading State -->
+      <div v-if="loading" class="flex justify-center items-center py-12">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-peach-pink"></div>
+      </div>
 
-    <!-- Display content if authentication is initialized and user exists -->
-    <div v-else-if="isAuthenticated && user" class="user-profile-content space-y-8"> <!-- Added space-y-8 to parent -->
-      <div class="user-info bg-white p-6 sm:p-8 rounded-lg shadow-md border border-neutral-medium">
-        <h2 class="text-2xl font-semibold text-text-primary mb-6">User Profile</h2>
-        <p class="mb-3 text-text-secondary"><strong class="font-medium text-text-primary">Email:</strong> {{ user.email }}</p>
-        <p v-if="user.id" class="mb-3 text-text-secondary"><strong class="font-medium text-text-primary">User ID (from token):</strong> {{ user.id }}</p>
-        <p class="mb-6 text-text-secondary italic">This is a protected page. Only authenticated users can see this.</p>
+      <!-- Dashboard Content -->
+      <div v-else-if="dashboard" class="space-y-8">
+        <!-- Profile Section -->
+        <div class="bg-white rounded-lg shadow-md border border-neutral-medium">
+          <div class="px-6 py-4 border-b border-neutral-medium">
+            <h2 class="text-xl font-serif font-semibold text-venus-text-primary">Profile Information</h2>
+          </div>
+          <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label class="block text-sm font-medium text-venus-text-secondary mb-2">Name</label>
+                <input
+                  v-model="profileForm.name"
+                  type="text"
+                  class="w-full px-3 py-2 border border-neutral-medium rounded-md focus:outline-none focus:ring-2 focus:ring-peach-pink focus:border-peach-pink transition-colors"
+                  placeholder="Your name"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-venus-text-secondary mb-2">Email</label>
+                <input
+                  :value="dashboard.user.email"
+                  type="email"
+                  disabled
+                  class="w-full px-3 py-2 border border-neutral-medium rounded-md bg-neutral-light text-venus-text-secondary"
+                />
+              </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+              <button
+                @click="updateProfile"
+                :disabled="updating"
+                class="px-6 py-2 bg-peach-pink text-white rounded-md hover:bg-peach-pink/90 disabled:opacity-50 transition-colors font-medium"
+              >
+                {{ updating ? 'Updating...' : 'Update Profile' }}
+              </button>
+            </div>
+          </div>
+        </div>
 
-        <div v-if="authToken" class="token-info mt-6 pt-6 border-t border-neutral-medium">
-          <h3 class="text-lg font-semibold text-text-primary mb-2">Your Access Token (for demo purposes):</h3>
-          <p class="token-display p-3 bg-neutral-light text-xs text-text-secondary rounded-md overflow-x-auto whitespace-pre-wrap break-all font-mono">
-            {{ authToken }}
-          </p>
+        <!-- Statistics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div class="bg-white rounded-lg shadow-md border border-neutral-medium p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-peach-pink/20 rounded-full flex items-center justify-center">
+                  <svg class="w-6 h-6 text-peach-pink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-venus-text-secondary">Total Orders</p>
+                <p class="text-2xl font-bold text-venus-text-primary">{{ dashboard.order_statistics.total_orders }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-lg shadow-md border border-neutral-medium p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-fresh-green/20 rounded-full flex items-center justify-center">
+                  <svg class="w-6 h-6 text-fresh-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-venus-text-secondary">Completed</p>
+                <p class="text-2xl font-bold text-venus-text-primary">{{ dashboard.order_statistics.completed_orders }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-lg shadow-md border border-neutral-medium p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-orange-gold/20 rounded-full flex items-center justify-center">
+                  <svg class="w-6 h-6 text-orange-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-venus-text-secondary">Active Orders</p>
+                <p class="text-2xl font-bold text-venus-text-primary">{{ dashboard.order_statistics.active_orders }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-lg shadow-md border border-neutral-medium p-6 hover:shadow-lg transition-shadow">
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-sky-blue/20 rounded-full flex items-center justify-center">
+                  <svg class="w-6 h-6 text-sky-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-venus-text-secondary">Total Spent</p>
+                <p class="text-2xl font-bold text-venus-text-primary">${{ dashboard.order_statistics.total_spent.toFixed(2) }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-white rounded-lg shadow-md border border-neutral-medium">
+          <div class="px-6 py-4 border-b border-neutral-medium">
+            <h2 class="text-xl font-serif font-semibold text-venus-text-primary">Quick Actions</h2>
+          </div>
+          <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <NuxtLink
+                to="/profile/orders"
+                class="flex items-center p-4 border border-neutral-medium rounded-lg hover:border-peach-pink hover:shadow-md transition-all group"
+              >
+                <div class="w-10 h-10 bg-peach-pink/20 rounded-full flex items-center justify-center mr-4 group-hover:bg-peach-pink/30 transition-colors">
+                  <svg class="w-6 h-6 text-peach-pink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="font-medium text-venus-text-primary group-hover:text-peach-pink transition-colors">View All Orders</h3>
+                  <p class="text-sm text-venus-text-secondary">Check your complete order history</p>
+                </div>
+              </NuxtLink>
+
+              <NuxtLink
+                to="/profile/addresses"
+                class="flex items-center p-4 border border-neutral-medium rounded-lg hover:border-peach-pink hover:shadow-md transition-all group"
+              >
+                <div class="w-10 h-10 bg-sky-blue/20 rounded-full flex items-center justify-center mr-4 group-hover:bg-sky-blue/30 transition-colors">
+                  <svg class="w-6 h-6 text-sky-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="font-medium text-venus-text-primary group-hover:text-peach-pink transition-colors">Manage Addresses</h3>
+                  <p class="text-sm text-venus-text-secondary">Update your shipping addresses</p>
+                </div>
+              </NuxtLink>
+
+              <NuxtLink
+                to="/profile/2fa-setup"
+                class="flex items-center p-4 border border-neutral-medium rounded-lg hover:border-peach-pink hover:shadow-md transition-all group"
+              >
+                <div class="w-10 h-10 bg-orange-gold/20 rounded-full flex items-center justify-center mr-4 group-hover:bg-orange-gold/30 transition-colors">
+                  <svg class="w-6 h-6 text-orange-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="font-medium text-venus-text-primary group-hover:text-peach-pink transition-colors">Setup 2FA</h3>
+                  <p class="text-sm text-venus-text-secondary">Enable two-factor authentication</p>
+                </div>
+              </NuxtLink>
+
+              <NuxtLink
+                to="/products"
+                class="flex items-center p-4 border border-neutral-medium rounded-lg hover:border-peach-pink hover:shadow-md transition-all group"
+              >
+                <div class="w-10 h-10 bg-fresh-green/20 rounded-full flex items-center justify-center mr-4 group-hover:bg-fresh-green/30 transition-colors">
+                  <svg class="w-6 h-6 text-fresh-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="font-medium text-venus-text-primary group-hover:text-peach-pink transition-colors">Continue Shopping</h3>
+                  <p class="text-sm text-venus-text-secondary">Browse our latest products</p>
+                </div>
+              </NuxtLink>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Orders -->
+        <div class="bg-white rounded-lg shadow-md border border-neutral-medium">
+          <div class="px-6 py-4 border-b border-neutral-medium flex justify-between items-center">
+            <h2 class="text-xl font-serif font-semibold text-venus-text-primary">Recent Orders</h2>
+            <NuxtLink
+              to="/profile/orders"
+              class="text-sm text-peach-pink hover:text-peach-pink/80 font-medium transition-colors"
+            >
+              View All
+            </NuxtLink>
+          </div>
+          <div class="p-6">
+            <div v-if="dashboard.recent_orders.length === 0" class="text-center py-8">
+              <svg class="mx-auto h-12 w-12 text-neutral-medium" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+              </svg>
+              <h3 class="mt-2 text-sm font-medium text-venus-text-primary">No orders yet</h3>
+              <p class="mt-1 text-sm text-venus-text-secondary">Start shopping to see your orders here.</p>
+              <div class="mt-6">
+                <NuxtLink
+                  to="/products"
+                  class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-peach-pink hover:bg-peach-pink/90 transition-colors"
+                >
+                  Start Shopping
+                </NuxtLink>
+              </div>
+            </div>
+            <div v-else class="space-y-4">
+              <div
+                v-for="order in dashboard.recent_orders"
+                :key="order.id"
+                class="border border-neutral-medium rounded-lg p-4 hover:border-peach-pink hover:shadow-md transition-all"
+              >
+                <div class="flex justify-between items-start">
+                  <div>
+                    <p class="text-sm font-medium text-venus-text-primary">Order #{{ order.id }}</p>
+                    <p class="text-sm text-venus-text-secondary">{{ formatDate(order.order_date) }}</p>
+                    <p class="text-sm text-venus-text-secondary">{{ order.item_count }} items</p>
+                  </div>
+                  <div class="text-right">
+                    <p class="text-sm font-medium text-venus-text-primary">${{ parseFloat(order.total_amount).toFixed(2) }}</p>
+                    <span
+                      :class="getStatusClass(order.status)"
+                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                    >
+                      {{ formatStatus(order.status) }}
+                    </span>
+                  </div>
+                </div>
+                <div class="mt-3 flex justify-end">
+                  <NuxtLink
+                    :to="`/profile/orders/${order.id}`"
+                    class="text-sm text-peach-pink hover:text-peach-pink/80 font-medium transition-colors"
+                  >
+                    View Details
+                  </NuxtLink>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Security Settings -->
+        <div class="bg-white rounded-lg shadow-md border border-neutral-medium">
+          <div class="px-6 py-4 border-b border-neutral-medium">
+            <h2 class="text-xl font-serif font-semibold text-venus-text-primary">Security Settings</h2>
+          </div>
+          <div class="p-6">
+            <div class="space-y-4">
+              <div class="flex justify-between items-center">
+                <div class="flex items-center">
+                  <div class="w-10 h-10 bg-orange-gold/20 rounded-full flex items-center justify-center mr-4">
+                    <svg class="w-6 h-6 text-orange-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 class="font-medium text-venus-text-primary">Two-Factor Authentication</h3>
+                    <p class="text-sm text-venus-text-secondary">
+                      {{ dashboard.user.two_factor_enabled ? 'Enabled' : 'Not enabled' }}
+                    </p>
+                  </div>
+                </div>
+                <NuxtLink
+                  to="/profile/2fa-setup"
+                  class="text-sm text-peach-pink hover:text-peach-pink/80 font-medium transition-colors"
+                >
+                  {{ dashboard.user.two_factor_enabled ? 'Manage' : 'Setup' }}
+                </NuxtLink>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Default Shipping Address -->
+        <div v-if="dashboard.default_shipping_address" class="bg-white rounded-lg shadow-md border border-neutral-medium">
+          <div class="px-6 py-4 border-b border-neutral-medium">
+            <h2 class="text-xl font-serif font-semibold text-venus-text-primary">Default Shipping Address</h2>
+          </div>
+          <div class="p-6">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-sm font-medium text-venus-text-primary">{{ dashboard.default_shipping_address.name }}</p>
+                <p class="text-sm text-venus-text-secondary">{{ dashboard.default_shipping_address.line1 }}</p>
+                <p v-if="dashboard.default_shipping_address.line2" class="text-sm text-venus-text-secondary">{{ dashboard.default_shipping_address.line2 }}</p>
+                <p class="text-sm text-venus-text-secondary">
+                  {{ dashboard.default_shipping_address.city }}, {{ dashboard.default_shipping_address.state_province }} {{ dashboard.default_shipping_address.postal_code }}
+                </p>
+                <p class="text-sm text-venus-text-secondary">{{ dashboard.default_shipping_address.country }}</p>
+              </div>
+              <NuxtLink
+                to="/profile/addresses"
+                class="text-sm text-peach-pink hover:text-peach-pink/80 font-medium transition-colors"
+              >
+                Edit
+              </NuxtLink>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Update Profile Details Section -->
-      <div class="bg-white shadow-md rounded-lg p-6 sm:p-8 border border-neutral-medium">
-        <h2 class="text-xl font-semibold text-text-primary mb-6">Update Profile Details</h2>
-        <form @submit.prevent="handleUpdateProfile" class="space-y-4">
-          <div>
-            <label for="profileName" class="block text-sm font-medium text-text-primary mb-1">Name</label>
-            <input type="text" id="profileName" v-model="profileName" required
-                   class="w-full px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary placeholder:text-neutral-dark" />
-            <!-- Basic client-side validation message example (optional, toasts are primary) -->
-            <p v-if="profileName.length > 0 && profileName.length < 2" class="text-xs text-red-500 mt-1">Name is too short.</p>
-          </div>
-          <button
-            type="submit"
-            :disabled="isUpdatingProfile"
-            class="w-full sm:w-auto mt-2 px-6 py-2.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-brand-primary hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary disabled:opacity-60 transition-colors"
-          >
-            {{ isUpdatingProfile ? 'Updating...' : 'Update Profile' }}
-          </button>
-        </form>
-      </div>
-
-      <!-- Change Password Section -->
-      <div class="bg-white shadow-md rounded-lg p-6 sm:p-8 border border-neutral-medium">
-        <h2 class="text-xl font-semibold text-text-primary mb-6">Change Password</h2>
-        <form @submit.prevent="handleChangePassword" class="space-y-4">
-          <div>
-            <label for="currentPassword" class="block text-sm font-medium text-text-primary mb-1">Current Password</label>
-            <input type="password" id="currentPassword" v-model="currentPassword" required
-                   class="w-full px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary placeholder:text-neutral-dark" />
-          </div>
-          <div>
-            <label for="newPassword" class="block text-sm font-medium text-text-primary mb-1">New Password</label>
-            <input type="password" id="newPassword" v-model="newPassword" required
-                   class="w-full px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary placeholder:text-neutral-dark" />
-          </div>
-          <div>
-            <label for="confirmNewPassword" class="block text-sm font-medium text-text-primary mb-1">Confirm New Password</label>
-            <input type="password" id="confirmNewPassword" v-model="confirmNewPassword" required
-                   class="w-full px-3 py-2 border border-neutral-dark rounded-md text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-primary focus:border-brand-primary placeholder:text-neutral-dark" />
-          </div>
-
-          <!-- Error/Success messages removed, will use toasts -->
-
-          <button
-            type="submit"
-            :disabled="isChangingPassword"
-            class="w-full sm:w-auto mt-2 px-6 py-2.5 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-brand-primary hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary disabled:opacity-60 transition-colors"
-          >
-            {{ isChangingPassword ? 'Changing...' : 'Change Password' }}
-          </button>
-        </form>
-      </div>
-
-      <!-- Action Links/Buttons -->
-      <div class="pt-6 border-t border-neutral-medium space-y-3 sm:space-y-0 sm:flex sm:space-x-4">
-        <NuxtLink
-          to="/profile/2fa-setup"
-          class="block w-full sm:w-auto text-center px-5 py-2.5 border border-neutral-dark text-text-primary bg-white hover:bg-neutral-light rounded-md shadow-sm text-sm font-medium transition-colors duration-150"
+      <!-- Error State -->
+      <div v-else-if="error" class="text-center py-12">
+        <div class="text-red-600 mb-4">
+          <svg class="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+          </svg>
+        </div>
+        <h3 class="text-lg font-medium text-venus-text-primary mb-2">Error Loading Profile</h3>
+        <p class="text-venus-text-secondary mb-4">{{ error }}</p>
+        <button
+          @click="loadDashboard"
+          class="px-4 py-2 bg-peach-pink text-white rounded-md hover:bg-peach-pink/90 transition-colors"
         >
-          Manage 2FA
-        </NuxtLink>
-        <NuxtLink
-          to="/profile/orders"
-          class="block w-full sm:w-auto text-center px-5 py-2.5 border border-neutral-dark text-text-primary bg-white hover:bg-neutral-light rounded-md shadow-sm text-sm font-medium transition-colors duration-150"
-        >
-          View Order History
-        </NuxtLink>
-        <!--
-          Future button/link for changing password:
-          <button
-            type="button"
-            class="block w-full sm:w-auto text-center px-5 py-2.5 border border-neutral-dark text-text-primary bg-white hover:bg-neutral-light rounded-md shadow-sm text-sm font-medium transition-colors duration-150"
-          >
-            Change Password
-          </button>
-        -->
+          Try Again
+        </button>
       </div>
     </div>
-
-    <!-- Display message if authentication is initialized but user is not logged in -->
-    <div v-else-if="!isAuthenticated && !isAuthLoading" class="my-6 p-8 bg-white text-text-secondary rounded-lg shadow-md text-center border border-neutral-medium">
-      <p class="text-lg mb-4">You are not logged in. Please log in to view your profile.</p>
-      <NuxtLink to="/login" class="mt-4 inline-block px-6 py-3 bg-brand-primary text-white font-medium rounded-md hover:bg-opacity-80 transition-colors">Login</NuxtLink>
-    </div>
-    <!-- Implicitly, if isAuthLoading is false, and isAuthenticated is false, the above block renders.
-         If isAuthLoading is false, and isAuthenticated is true BUT user is null (edge case),
-         the main content block might not render correctly if it solely relies on `user`.
-         The `v-else-if="isAuthenticated && user"` handles this.
-         A final v-else could catch unexpected states, but might be overkill. -->
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, watchEffect } from 'vue'; // Added watch, watchEffect
-import { useAuth } from '~/composables/useAuth';
-// useRouter not currently used
-import { useToast } from 'vue-toastification';
-import { useNuxtApp } from '#app'; // To get $axios
+import { ref, onMounted } from 'vue'
+import { useToast } from 'vue-toastification'
 
-// isAuthInitialized is crucial for knowing when auth status is definitively known.
-// isAuthenticated is true if both token and user are present.
-const { authUser, authToken, setUser, isAuthInitialized, isAuthenticated } = useAuth();
-const toast = useToast();
-const { $axios } = useNuxtApp();
+const toast = useToast()
 
-const user = computed(() => authUser.value);
+// Reactive data
+const loading = ref(true)
+const updating = ref(false)
+const dashboard = ref(null)
+const error = ref(null)
+const profileForm = ref({
+  name: ''
+})
 
-// isLoading is true UNTIL isAuthInitialized is true.
-const isAuthLoading = computed(() => !isAuthInitialized.value);
-
-// For Profile Update
-const profileName = ref('');
-const isUpdatingProfile = ref(false);
-
-// For Change Password
-const currentPassword = ref('');
-const newPassword = ref('');
-const confirmNewPassword = ref('');
-const isChangingPassword = ref(false);
-// changePasswordError and changePasswordSuccess refs removed
-
-const handleChangePassword = async () => {
-  isChangingPassword.value = true;
-  // Clear previous messages if they were local state; toasts clear themselves.
-
-  if (newPassword.value !== confirmNewPassword.value) {
-    toast.error("New passwords do not match.");
-    isChangingPassword.value = false;
-    return;
-  }
-  if (newPassword.value.length < 8) {
-    toast.error("New password must be at least 8 characters.");
-    isChangingPassword.value = false;
-    return;
-  }
-
-  console.log('Attempting to change password with current password (hidden) and new password (hidden)');
-
+// Load dashboard data
+const loadDashboard = async () => {
   try {
-    const response = await $axios.post('/auth/change-password', {
-      currentPassword: currentPassword.value,
-      newPassword: newPassword.value,
-    });
-
-    // Axios typically considers 2xx as success, others will throw error
-    if (response.status === 200 && response.data.message) {
-      toast.success(response.data.message);
-      currentPassword.value = '';
-      newPassword.value = '';
-      confirmNewPassword.value = '';
-    } else {
-      // Fallback, though usually errors are caught in catch block
-      toast.error(response.data.message || 'Failed to change password. Please try again.');
-    }
-  } catch (error) {
-    console.error('Change password error:', error);
-    if (error.response && error.response.data && error.response.data.message) {
-      toast.error(error.response.data.message);
-    } else if (error.message) {
-      toast.error(error.message);
-    } else {
-      toast.error('An unexpected error occurred while changing password.');
-    }
+    loading.value = true
+    error.value = null
+    
+    const { $axios } = useNuxtApp()
+    const response = await $axios.get('/users/me/dashboard')
+    dashboard.value = response.data.dashboard
+    profileForm.value.name = dashboard.value.user.name || ''
+  } catch (err) {
+    console.error('Error loading dashboard:', err)
+    error.value = err.response?.data?.message || 'Failed to load profile data'
   } finally {
-    isChangingPassword.value = false;
+    loading.value = false
   }
-};
+}
 
-const handleUpdateProfile = async () => {
-  if (!profileName.value.trim()) {
-    toast.error('Name cannot be empty.');
-    return;
-  }
-  if (profileName.value.length < 2 || profileName.value.length > 255) {
-    toast.error('Name must be between 2 and 255 characters.');
-    return;
-  }
-
-  isUpdatingProfile.value = true;
+// Update profile
+const updateProfile = async () => {
   try {
-    const response = await $axios.put('/users/me/profile', {
-      name: profileName.value,
-    });
-
-    if (response.status === 200 && response.data.user) {
-      setUser(response.data.user); // Update the user state in useAuth
-      toast.success(response.data.message || 'Profile updated successfully!');
-      // profileName.value will be updated via the watchEffect or if user re-navigates
-      // or directly: profileName.value = response.data.user.name; (already done by setUser)
-    } else {
-      toast.error(response.data.message || 'Failed to update profile.');
-    }
-  } catch (error) {
-    console.error('Profile update error:', error);
-    if (error.response?.data?.message) {
-      toast.error(error.response.data.message);
-    } else if (error.response?.data?.errors) { // Handle express-validator errors
-      toast.error(error.response.data.errors.map(e => e.msg).join(', '));
-    } else {
-      toast.error('An unexpected error occurred while updating profile.');
-    }
+    updating.value = true
+    
+    const { $axios } = useNuxtApp()
+    const response = await $axios.put('/users/me/profile', profileForm.value)
+    
+    toast.success('Profile updated successfully')
+    await loadDashboard() // Reload to get updated data
+  } catch (err) {
+    console.error('Error updating profile:', err)
+    toast.error(err.response?.data?.message || 'Failed to update profile')
   } finally {
-    isUpdatingProfile.value = false;
+    updating.value = false
   }
-};
+}
 
-// watchEffect to react to changes in isAuthInitialized and authUser
-watchEffect(() => {
-  // This effect runs initially and whenever its dependencies change.
-  console.log(`ProfilePage: watchEffect triggered. isAuthInitialized: ${isAuthInitialized.value}, authUser: ${authUser.value ? authUser.value.email : null}`);
-  if (isAuthInitialized.value) {
-    if (authUser.value) {
-      profileName.value = authUser.value.name || '';
-      console.log(`ProfilePage: Auth initialized and user present. Profile name set to: '${profileName.value}'`);
-    } else {
-      // Auth is initialized, but there's no user (e.g., not logged in)
-      profileName.value = '';
-      console.log("ProfilePage: Auth initialized but no user. Profile name cleared.");
-    }
-  } else {
-    // Auth is not yet initialized, profileName remains empty or its initial state.
-    console.log("ProfilePage: Auth not yet initialized.");
+// Format date
+const formatDate = (dateString) => {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
+}
+
+// Format status
+const formatStatus = (status) => {
+  const statusMap = {
+    'pending': 'Pending',
+    'processing': 'Processing',
+    'shipped': 'Shipped',
+    'delivered': 'Delivered',
+    'cancelled': 'Cancelled',
+    'refunded': 'Refunded'
   }
-});
+  return statusMap[status] || status
+}
 
-// The previous onMounted and direct watch on authUser for profileName are now covered by the watchEffect.
-// The watch on authUser can be kept if specific logic for *only* authUser changes (post-init) is needed,
-// but for initializing profileName, watchEffect handles the isAuthInitialized dependency better.
-// For simplicity, we'll rely on the watchEffect above. If profileName needs to react *only*
-// when authUser changes *after* initialization, a separate watch could be added:
-/*
-watch(authUser, (newUser) => {
-  if (isAuthInitialized.value) { // Ensure this runs only after init
-    if (newUser) {
-      profileName.value = newUser.name || '';
-    } else {
-      profileName.value = '';
-    }
+// Get status class
+const getStatusClass = (status) => {
+  const classMap = {
+    'pending': 'bg-orange-gold/20 text-orange-gold',
+    'processing': 'bg-sky-blue/20 text-sky-blue',
+    'shipped': 'bg-purple-500/20 text-purple-600',
+    'delivered': 'bg-fresh-green/20 text-fresh-green',
+    'cancelled': 'bg-red-500/20 text-red-600',
+    'refunded': 'bg-neutral-medium/20 text-neutral-medium'
   }
-}, { deep: true }); // deep: true if authUser could have nested changes affecting name
-*/
-// The { immediate: true } on the old watch(authUser, ...) is effectively handled by watchEffect.
+  return classMap[status] || 'bg-neutral-medium/20 text-neutral-medium'
+}
 
-useHead({
-  title: 'My Profile',
-});
-
-useHead({
-  title: 'My Profile',
-});
+// Load data on mount
+onMounted(() => {
+  loadDashboard()
+})
 </script>
-<!-- No style changes, structure is similar to Change Password -->

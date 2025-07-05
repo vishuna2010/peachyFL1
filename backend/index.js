@@ -35,6 +35,7 @@ const adminTaxClassesRoutes = require('./routes/adminTaxClasses');
 const adminTaxRatesRoutes = require('./routes/adminTaxRates'); // New import
 const adminMarketingRoutes = require('./routes/adminMarketing'); // Import admin marketing routes
 const adminHeroBannerRoutes = require('./routes/adminHeroBanners'); // Import admin hero banner routes
+const adminEmailCampaignRoutes = require('./routes/adminEmailCampaigns'); // Import admin email campaign routes
 // Duplicate imports for adminOptionManagementRoutes and adminProductSpecificOptionsRoutes were removed by only keeping the first ones.
 const reviewRoutes = require('./routes/reviews'); // Import review routes
 const userRoutes = require('./routes/users'); // Import user profile routes
@@ -42,6 +43,8 @@ const orderRoutes = require('./routes/orders'); // Import order routes
 const categoryRoutes = require('./routes/categories'); // Import category routes
 const cartRoutes = require('./routes/cart'); // Import cart routes
 const optionsRoutes = require('./routes/options'); // Import public options routes
+const trackingRoutes = require('./routes/tracking'); // Import email tracking routes
+const addressRoutes = require('./routes/addresses'); // Import address routes
 const path = require('path'); // Import path module
 const globalErrorHandler = require('./middleware/errorHandler'); // Import global error handler
 
@@ -52,12 +55,19 @@ const port = config.port; // Use port from config
 const corsOptions = {
   origin: ['http://localhost:3001', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 };
 app.use(cors(corsOptions));
 app.use(express.json()); // Middleware to parse JSON bodies
-app.use(helmet()); // Use Helmet for security headers
+
+// Configure Helmet to not interfere with CORS
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false // Disable CSP for development
+}));
 
 // Add pino-http request logger middleware
 // This should be one of the first middleware
@@ -168,6 +178,7 @@ app.use('/api/admin/tax-classes', adminTaxClassesRoutes);
 app.use('/api/admin/tax-rates', adminTaxRatesRoutes); // New mount
 app.use('/api/admin/marketing', adminMarketingRoutes); // Mount admin marketing routes
 app.use('/api/admin/hero-banners', adminHeroBannerRoutes); // Mount admin hero banner routes
+app.use('/api/admin', adminEmailCampaignRoutes); // Mount admin email campaign routes
 
 
 // --- User Profile Routes ---
@@ -179,6 +190,9 @@ app.use('/api/categories', categoryRoutes);
 // --- Public Cart Routes (e.g. for discount validation) ---
 app.use('/api/cart', cartRoutes);
 
+// --- Address Routes ---
+app.use('/api/addresses', addressRoutes);
+
 // --- CMS Routes (e.g., for Hero Banners) ---
 const cmsRoutes = require('./routes/cmsRoutes');
 app.use('/api/cms', cmsRoutes);
@@ -188,6 +202,9 @@ app.use('/api/orders', orderRoutes);
 
 // --- Public Options Routes (e.g., for product filters) ---
 app.use('/api/options', optionsRoutes);
+
+// --- Email Tracking Routes ---
+app.use('/api/track', trackingRoutes);
 
 // --- Other Public Utility Routes (e.g., delivery confirmation) ---
 const publicUtilityRoutes = require('./routes/public');

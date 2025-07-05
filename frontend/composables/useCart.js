@@ -146,8 +146,8 @@ export const useCart = () => {
       // The backend requires a country for tax calculation for guests.
       if (!currentUserId) {
         payload.shippingAddress = shippingAddressForTax || {
-          country: 'US', // Default placeholder country
-          // state_province_region: null, // Optional based on backend needs
+          country: 'BS', // Default to Bahamas for tax calculation
+          state_province: 'NP', // Bahamas state
           // postalCode: null // Optional
         };
         console.log('Guest user detected for tax calculation. Shipping address being used:', JSON.stringify(payload.shippingAddress));

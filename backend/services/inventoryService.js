@@ -279,7 +279,7 @@ module.exports = {
  * Updates an existing inventory batch and handles related stock adjustments.
  * @param {number} batchId - The ID of the inventory batch to update.
  * @param {object} updateData - An object containing the data to update.
- * @param {number} [updateData.current_quantity] - The new current quantity.
+ * @param {number} [updateData.quantity_remaining] - The new quantity remaining.
  * @param {string} [updateData.expiry_date] - The new expiry date (YYYY-MM-DD or null).
  * @param {string} [updateData.batch_number] - The new batch number.
  * @param {string} updateData.reason_for_change - The reason for the update.
@@ -291,7 +291,7 @@ module.exports = {
  * @throws {AppError} For other internal errors.
  */
 async function updateInventoryBatch(batchId, updateData, adminUserId) {
-  const { current_quantity, expiry_date, batch_number, reason_for_change } = updateData;
+  const { quantity_remaining, expiry_date, batch_number, reason_for_change } = updateData;
 
   // reason_for_change is validated at route level for existence.
   // Here, we ensure it's not accidentally empty if passed.
@@ -308,29 +308,29 @@ async function updateInventoryBatch(batchId, updateData, adminUserId) {
       throw new NotFoundError(`Inventory batch with ID ${batchId} not found.`);
     }
     const currentBatch = batchResult.rows[0];
-    const old_current_quantity_for_this_batch = currentBatch.current_quantity;
+    const old_quantity_remaining_for_this_batch = currentBatch.quantity_remaining;
 
     const setClauses = [];
     const values = [];
     let paramIndex = 1;
 
-    let new_current_quantity_value_for_this_batch = current_quantity; // For logging logic later
+    let new_quantity_remaining_value_for_this_batch = quantity_remaining; // For logging logic later
 
-    if (current_quantity !== undefined) {
-      const num_current_quantity = parseInt(current_quantity, 10);
-      if (isNaN(num_current_quantity) || num_current_quantity < 0) {
-        throw new BadRequestError('Current quantity must be a non-negative integer.');
+    if (quantity_remaining !== undefined) {
+      const num_quantity_remaining = parseInt(quantity_remaining, 10);
+      if (isNaN(num_quantity_remaining) || num_quantity_remaining < 0) {
+        throw new BadRequestError('Quantity remaining must be a non-negative integer.');
       }
-      if (num_current_quantity > currentBatch.initial_quantity) {
-        throw new BadRequestError(`New current quantity (${num_current_quantity}) cannot exceed initial quantity (${currentBatch.initial_quantity}).`);
+      if (num_quantity_remaining > currentBatch.quantity_received) {
+        throw new BadRequestError(`New quantity remaining (${num_quantity_remaining}) cannot exceed received quantity (${currentBatch.quantity_received}).`);
       }
-      if (num_current_quantity !== old_current_quantity_for_this_batch) { // Only add to setClauses if it's different
-        setClauses.push(`current_quantity = $${paramIndex++}`);
-        values.push(num_current_quantity);
+      if (num_quantity_remaining !== old_quantity_remaining_for_this_batch) { // Only add to setClauses if it's different
+        setClauses.push(`quantity_remaining = $${paramIndex++}`);
+        values.push(num_quantity_remaining);
       }
-      new_current_quantity_value_for_this_batch = num_current_quantity; // Use the validated numeric value
+      new_quantity_remaining_value_for_this_batch = num_quantity_remaining; // Use the validated numeric value
     } else {
-      new_current_quantity_value_for_this_batch = old_current_quantity_for_this_batch; // No change intended for quantity
+      new_quantity_remaining_value_for_this_batch = old_quantity_remaining_for_this_batch; // No change intended for quantity
     }
 
     if (expiry_date !== undefined) {
@@ -382,7 +382,7 @@ async function updateInventoryBatch(batchId, updateData, adminUserId) {
     // After batch update, recalculate and update aggregate stock on product/variant
     // This uses the product_id and variant_id from the potentially updated batch (updatedBatchEntity)
     const sumBatchStockQuery = await client.query(
-      `SELECT COALESCE(SUM(current_quantity), 0) AS total_stock
+      `SELECT COALESCE(SUM(quantity_remaining), 0) AS total_stock
        FROM inventory_batches
        WHERE product_id = $1 AND ${updatedBatchEntity.variant_id ? `variant_id = $2` : 'variant_id IS NULL'}`,
       updatedBatchEntity.variant_id ? [updatedBatchEntity.product_id, updatedBatchEntity.variant_id] : [updatedBatchEntity.product_id]
@@ -403,10 +403,10 @@ async function updateInventoryBatch(batchId, updateData, adminUserId) {
 
     // Log quantity change if it actually happened for this specific batch
     // Compare the final quantity in the updated batch with its original quantity
-    if (updatedBatchEntity.current_quantity !== old_current_quantity_for_this_batch) {
-      const quantity_difference_for_this_batch = updatedBatchEntity.current_quantity - old_current_quantity_for_this_batch;
+    if (updatedBatchEntity.quantity_remaining !== old_quantity_remaining_for_this_batch) {
+      const quantity_difference_for_this_batch = updatedBatchEntity.quantity_remaining - old_quantity_remaining_for_this_batch;
       // quantity_difference_for_this_batch will be non-zero because setClauses.length > 0 check passed
-      // and current_quantity was part of setClauses only if it was different.
+      // and quantity_remaining was part of setClauses only if it was different.
 
       const logMovementQuery = `
         INSERT INTO stock_movement_logs
