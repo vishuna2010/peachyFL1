@@ -165,7 +165,6 @@ const handleRegister = async () => {
       errorMessage.value = result.message || 'Failed to register. Please try again.';
     }
   } catch (error) {
-    console.error('Registration error:', error);
     errorMessage.value = 'An unexpected error occurred. Please try again.';
   } finally {
     isLoading.value = false;

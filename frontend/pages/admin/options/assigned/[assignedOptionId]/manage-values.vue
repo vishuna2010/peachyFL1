@@ -113,7 +113,6 @@ const fetchData = async () => {
       throw new Error('Invalid data structure received from API.');
     }
   } catch (err) {
-    console.error('Error fetching assigned option values:', err);
     error.value = err.response?.data?.message || err.message || 'Failed to load option values.';
     toast.error(error.value);
   } finally {
@@ -152,7 +151,6 @@ const handleSave = async () => {
       router.push('/admin/products'); // Or router.back();
     }
   } catch (err) {
-    console.error('Error saving assigned option values:', err);
     error.value = err.response?.data?.message || (err.response?.data?.errors ? err.response.data.errors.map(e=>e.msg).join(', ') : 'Failed to save changes.');
     toast.error(error.value);
   } finally {
@@ -170,20 +168,12 @@ const getBackLink = () => {
 };
 
 onMounted(() => {
-  console.log('[manage-values.vue onMounted] Route params:', route.params);
-  console.log('[manage-values.vue onMounted] Initial assignedOptionId.value from route.params:', route.params.assignedOptionId);
-  // The ref assignedOptionId is defined as: const assignedOptionId = ref(route.params.assignedOptionId);
-  // So, logging it directly after its definition or here should be fine.
-  console.log('[manage-values.vue onMounted] Component assignedOptionId.value:', assignedOptionId.value);
-
   if (!assignedOptionId.value) {
     error.value = "Assigned Option ID is missing from the route.";
     isLoading.value = false;
     toast.error(error.value);
-    console.error('[manage-values.vue onMounted] Error: Assigned Option ID is missing. Not calling fetchData.');
     return;
   }
-  console.log('[manage-values.vue onMounted] Assigned Option ID found. Calling fetchData...');
   fetchData();
 });
 </script>

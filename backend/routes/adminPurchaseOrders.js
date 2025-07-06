@@ -17,6 +17,7 @@ const validatePOCreate = [
   body('notes').optional({nullable: true}).isString().trim(),
   body('items').isArray({ min: 1 }).withMessage('Purchase order must contain at least one item.'),
   body('items.*.product_id').isInt({ gt: 0 }).withMessage('Each item must have a valid product_id.').toInt(),
+  body('items.*.product_variant_id').optional({nullable: true}).isInt({ gt: 0 }).withMessage('If provided, product_variant_id must be a valid positive integer.').toInt(),
   body('items.*.quantity_ordered').isInt({ gt: 0 }).withMessage('Item quantity_ordered must be a positive integer.').toInt(),
   body('items.*.unit_cost_price').isFloat({ gt: -1 }).withMessage('Item unit_cost_price must be a non-negative number.').toFloat(),
   body('items.*.currency_code').optional({nullable:true}).isString().isLength({min:3, max:3}).toUpperCase().withMessage('Item currency_code must be 3 letters if provided.')
@@ -50,6 +51,24 @@ const validateUpdatePOHeader = [
     body('shipping_carrier').optional({nullable: true}).isString().trim().isLength({max: 100}),
     body('tracking_number').optional({nullable: true}).isString().trim().isLength({max: 100}),
     body('delivery_status').optional({nullable: true}).isString().trim().isLength({max: 50})
+];
+
+const validateAddPOItem = [
+    validatePOId,
+    body('product_id').isInt({ gt: 0 }).withMessage('Valid product_id is required.').toInt(),
+    body('product_variant_id').optional({nullable: true}).isInt({ gt: 0 }).withMessage('If provided, product_variant_id must be a valid positive integer.').toInt(),
+    body('quantity_ordered').isInt({ gt: 0 }).withMessage('Item quantity_ordered must be a positive integer.').toInt(),
+    body('unit_cost_price').isFloat({ gt: -1 }).withMessage('Item unit_cost_price must be a non-negative number.').toFloat(),
+    body('currency_code').optional({nullable:true}).isString().isLength({min:3, max:3}).toUpperCase().withMessage('Item currency_code must be 3 letters if provided.')
+];
+
+const validateUpdatePOItem = [
+    validatePOId,
+    validatePOItemId,
+    body('quantity_ordered').optional().isInt({ gt: 0 }).withMessage('Item quantity_ordered must be a positive integer.').toInt(),
+    body('unit_cost_price').optional().isFloat({ gt: -1 }).withMessage('Item unit_cost_price must be a non-negative number.').toFloat(),
+    body('currency_code').optional({nullable:true}).isString().isLength({min:3, max:3}).toUpperCase().withMessage('Item currency_code must be 3 letters if provided.'),
+    body('product_variant_id').optional({nullable: true}).isInt({ gt: 0 }).withMessage('If provided, product_variant_id must be a valid positive integer.').toInt()
 ];
 
 
@@ -186,6 +205,98 @@ router.put('/:id',
       auditLogService.recordAuditEvent('PURCHASE_ORDER_UPDATE', { userId: adminUserId, userEmail: req.user.email }, { resourceType: 'PURCHASE_ORDER', resourceId: id }, { updated_fields: Object.keys(headerData) }, req)
         .catch(err => console.error('Audit log failed for PURCHASE_ORDER_UPDATE:', err));
       res.status(200).json(updatedPO);
+    } catch (error) {
+      next(error);
+    }
+});
+
+// POST /api/admin/purchase-orders/:id/items - Add item to PO
+router.post('/:id/items',
+  isAuthenticated,
+  checkPermission('purchase_orders:manage'),
+  validateAddPOItem,
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { id } = req.params;
+    const itemData = req.body;
+    const adminUserId = req.user.userId;
+
+    try {
+      const newItem = await purchaseOrderService.addPurchaseOrderItem(id, itemData, adminUserId);
+      auditLogService.recordAuditEvent('PO_ITEM_ADD', { userId: adminUserId, userEmail: req.user.email }, { resourceType: 'PURCHASE_ORDER_ITEM', resourceId: newItem.id }, { purchase_order_id: id, item_data: itemData }, req)
+        .catch(err => console.error('Audit log failed for PO_ITEM_ADD:', err));
+      res.status(201).json(newItem);
+    } catch (error) {
+      next(error);
+    }
+});
+
+// PUT /api/admin/purchase-orders/:id/items/:poItemId - Update PO item
+router.put('/:id/items/:poItemId',
+  isAuthenticated,
+  checkPermission('purchase_orders:manage'),
+  validateUpdatePOItem,
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { id, poItemId } = req.params;
+    const itemData = req.body;
+    const adminUserId = req.user.userId;
+
+    try {
+      const updatedItem = await purchaseOrderService.updatePurchaseOrderItem(poItemId, itemData, adminUserId);
+      auditLogService.recordAuditEvent('PO_ITEM_UPDATE', { userId: adminUserId, userEmail: req.user.email }, { resourceType: 'PURCHASE_ORDER_ITEM', resourceId: poItemId }, { purchase_order_id: id, updated_fields: Object.keys(itemData) }, req)
+        .catch(err => console.error('Audit log failed for PO_ITEM_UPDATE:', err));
+      res.status(200).json(updatedItem);
+    } catch (error) {
+      next(error);
+    }
+});
+
+// DELETE /api/admin/purchase-orders/:id/items/:poItemId - Remove PO item
+router.delete('/:id/items/:poItemId',
+  isAuthenticated,
+  checkPermission('purchase_orders:manage'),
+  validatePOId,
+  validatePOItemId,
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { id, poItemId } = req.params;
+    const adminUserId = req.user.userId;
+
+    try {
+      const deletedItem = await purchaseOrderService.removePurchaseOrderItem(poItemId, adminUserId);
+      auditLogService.recordAuditEvent('PO_ITEM_DELETE', { userId: adminUserId, userEmail: req.user.email }, { resourceType: 'PURCHASE_ORDER_ITEM', resourceId: poItemId }, { purchase_order_id: id, deleted_item: deletedItem }, req)
+        .catch(err => console.error('Audit log failed for PO_ITEM_DELETE:', err));
+      res.status(200).json({ message: 'Item removed successfully', deletedItem });
+    } catch (error) {
+      next(error);
+    }
+});
+
+// GET /api/admin/purchase-orders/product/:productId/variants - Get variants for a product
+router.get('/product/:productId/variants',
+  isAuthenticated,
+  checkPermission('purchase_orders:manage'),
+  param('productId').isInt({ gt: 0 }).withMessage('Valid product_id is required.').toInt(),
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { productId } = req.params;
+
+    try {
+      const variants = await purchaseOrderService.getProductVariants(productId);
+      res.status(200).json(variants);
     } catch (error) {
       next(error);
     }

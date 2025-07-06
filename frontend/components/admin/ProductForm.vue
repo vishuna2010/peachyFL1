@@ -394,7 +394,6 @@ function removeCurrentImage() {
 
 const handleSubmit = () => {
   if (!formData.name.trim()) {
-    alert('Product name is required.'); // Consider replacing alert with a more integrated error display
     return;
   }
 

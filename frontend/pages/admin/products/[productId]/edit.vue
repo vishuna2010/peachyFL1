@@ -103,7 +103,6 @@ async function fetchTaxClasses() {
       return response.data || []; // Fallback
     }
   } catch (err) {
-    console.error('Error fetching tax classes:', err);
     taxClassesError.value = 'Failed to load tax classes. Please try again.';
     // For Promise.allSettled, it's better to throw error or return a specific error indicator
     // so that the calling function can see it was rejected.
@@ -119,7 +118,6 @@ async function fetchProductForEditing() {
     const response = await $axios.get(`/admin/products/${productId.value}`);
     return response.data.data || response.data;
   } catch (error) {
-    console.error(`Error fetching product ${productId.value} for editing:`, error);
     if (error.response?.status === 404) throw new Error(`Product ID ${productId.value} not found.`);
     throw new Error(error.response?.data?.message || 'Failed to load product data.');
   }
@@ -128,14 +126,14 @@ async function fetchCategories() {
   try {
     const response = await $axios.get('/categories?limit=1000');
     return response.data.data || response.data;
-  } catch (error) { console.error('Error fetching categories:', error); throw new Error('Failed to load categories.'); }
+  } catch (error) { throw new Error('Failed to load categories.'); }
 }
 async function fetchSuppliers() {
   try {
     // Changed limit from 1000 to 100 to match backend validation max limit
     const response = await $axios.get('/admin/suppliers?limit=100');
     return response.data.data || response.data;
-  } catch (error) { console.error('Error fetching suppliers:', error); throw new Error('Failed to load suppliers.'); }
+  } catch (error) { throw new Error('Failed to load suppliers.'); }
 }
 async function loadAllInitialData() {
   isLoadingInitialData.value = true; fetchError.value = ''; productData.value = null;
@@ -153,21 +151,24 @@ async function loadAllInitialData() {
     productData.value = results[0].value;
 
     categories.value = results[1].status === 'fulfilled' ? results[1].value : [];
-    if (results[1].status === 'rejected') console.warn("Failed to load categories during initial data load.");
+    if (results[1].status === 'rejected') {
+      // Failed to load categories during initial data load
+    }
 
     suppliers.value = results[2].status === 'fulfilled' ? results[2].value : [];
-    if (results[2].status === 'rejected') console.warn("Failed to load suppliers during initial data load.");
+    if (results[2].status === 'rejected') {
+      // Failed to load suppliers during initial data load
+    }
 
     availableTaxClasses.value = results[3].status === 'fulfilled' ? results[3].value : [];
     if (results[3].status === 'rejected') {
-      console.warn("Failed to load tax classes during initial data load.");
+      // Failed to load tax classes during initial data load
       // taxClassesError.value is already set within fetchTaxClasses if it fails
       // but we might want to set a general fetchError if this is critical path
       // For now, individual error state taxClassesError is used.
     }
 
   } catch (error) {
-    console.error('Initial data load error (critical product data failed):', error);
     fetchError.value = error.message;
   }
   finally { isLoadingInitialData.value = false; }
@@ -195,9 +196,8 @@ async function handleUpdateProduct(formData) {
     // we might need to explicitly set productData.value.tax_class_id from what was sent.
     // However, a good API PUT response returns the updated resource.
 
-    alert('Product updated!'); // Consider using toast
+    // Product updated successfully - consider using toast notification
   } catch (error) {
-    console.error('Error updating product:', error);
     // Attempt to parse a more specific error message if the response is a Blob (e.g., validation error from backend)
     if (error.response && error.response.data instanceof Blob && error.response.data.type === 'application/json') {
         try {
@@ -205,7 +205,6 @@ async function handleUpdateProduct(formData) {
             const errorJson = JSON.parse(errorText);
             productFormApiError.value = errorJson.message || (errorJson.errors ? errorJson.errors.map(e => e.msg).join(', ') : 'Update error.');
         } catch (parseError) {
-            console.error('Failed to parse error response blob:', parseError);
             productFormApiError.value = 'Update error. Could not parse error details.';
         }
     } else {

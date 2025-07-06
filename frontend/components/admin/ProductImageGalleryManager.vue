@@ -172,7 +172,6 @@ async function fetchImages() {
     const response = await $axios.get(`/admin/products/${props.productId}/images`);
     images.value = response.data;
   } catch (err) {
-    console.error('Error fetching product images:', err);
     error.value = err.response?.data?.message || 'Could not load images.';
     toast.error(error.value);
   } finally {
@@ -220,7 +219,6 @@ async function submitNewImage() {
     await fetchImages(); // Refresh gallery
     closeImageUploadModal();
   } catch (err) {
-    console.error('Error uploading image:', err.response?.data || err);
     uploadError.value = err.response?.data?.message || 'Image upload failed.';
     toast.error(uploadError.value);
   } finally {
@@ -256,7 +254,6 @@ async function submitEditImageDetails() {
     await fetchImages(); // Refresh gallery
     closeEditModal();
   } catch (err) {
-    console.error('Error updating image details:', err.response?.data || err);
     editError.value = err.response?.data?.message || 'Failed to update image details.';
     toast.error(editError.value);
   } finally {
@@ -272,7 +269,6 @@ async function handleSetAsPrimary(imageId) {
     toast.success('Image set as primary.');
     await fetchImages(); // Refresh to show updated primary status and potentially main product image
   } catch (err) {
-    console.error('Error setting image as primary:', err.response?.data || err);
     toast.error(err.response?.data?.message || 'Failed to set primary image.');
   } finally {
     actionLoading.value = { type: null, id: null };
@@ -288,7 +284,6 @@ async function handleDeleteImage(imageId) {
     toast.success('Image deleted successfully.');
     await fetchImages(); // Refresh gallery
   } catch (err) {
-    console.error('Error deleting image:', err.response?.data || err);
     toast.error(err.response?.data?.message || 'Failed to delete image.');
   } finally {
     actionLoading.value = { type: null, id: null };

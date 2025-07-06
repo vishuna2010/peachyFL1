@@ -16,7 +16,6 @@ export default defineNuxtConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
-        prependPath: true,
       }
     }
   },

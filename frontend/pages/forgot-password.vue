@@ -113,7 +113,6 @@ const handleRequestReset = async () => {
       errorMessage.value = response.data.message || 'Failed to send reset instructions. Please try again.';
     }
   } catch (error) {
-    console.error('Password reset request error:', error);
     if (error.response) {
       errorMessage.value = error.response.data?.message || 'Failed to send reset instructions. Please try again.';
     } else {

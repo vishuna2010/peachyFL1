@@ -447,4 +447,122 @@ router.get('/email-unsubscribes',
   }
 );
 
+// GET /admin/email-unsubscribes/user/:userId - Get user unsubscribe details
+router.get('/email-unsubscribes/user/:userId',
+  isAuthenticated,
+  checkPermission('marketing:view_unsubscribes'),
+  [
+    param('userId').isInt({ gt: 0 }).withMessage('Invalid user ID')
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { userId } = req.params;
+
+      // Get user details
+      const userQuery = 'SELECT id, email, name, created_at FROM users WHERE id = $1';
+      const userResult = await db.query(userQuery, [userId]);
+      
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const user = userResult.rows[0];
+
+      // Get user's unsubscribe preferences
+      const preferencesQuery = `
+        SELECT 
+          email_type,
+          subscribed,
+          unsubscribed_at,
+          resubscribed_at
+        FROM email_unsubscribes 
+        WHERE user_id = $1
+        ORDER BY email_type
+      `;
+      const preferencesResult = await db.query(preferencesQuery, [userId]);
+
+      res.json({
+        user,
+        preferences: preferencesResult.rows
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /admin/email-unsubscribes/export - Export unsubscribes to CSV
+router.post('/email-unsubscribes/export',
+  isAuthenticated,
+  checkPermission('marketing:view_unsubscribes'),
+  async (req, res, next) => {
+    try {
+      const { filters = {} } = req.body;
+      const { email_type, status, search } = filters;
+
+      let query = `
+        SELECT 
+          eu.*,
+          u.name as user_name,
+          u.email as user_email
+        FROM email_unsubscribes eu
+        LEFT JOIN users u ON eu.user_id = u.id
+        WHERE 1=1
+      `;
+      
+      let params = [];
+      let paramCount = 0;
+
+      if (email_type) {
+        paramCount++;
+        query += ` AND eu.email_type = $${paramCount}`;
+        params.push(email_type);
+      }
+
+      if (status) {
+        paramCount++;
+        query += ` AND eu.subscribed = $${paramCount}`;
+        params.push(status === 'subscribed');
+      }
+
+      if (search) {
+        paramCount++;
+        query += ` AND (u.email ILIKE $${paramCount} OR u.name ILIKE $${paramCount})`;
+        params.push(`%${search}%`);
+      }
+
+      query += ' ORDER BY eu.unsubscribed_at DESC';
+
+      const result = await db.query(query, params);
+      const unsubscribes = result.rows;
+
+      // Generate CSV
+      const csvHeaders = ['Email', 'Name', 'Email Type', 'Status', 'Unsubscribed Date', 'Resubscribed Date'];
+      const csvRows = unsubscribes.map(u => [
+        u.user_email || u.email,
+        u.user_name || 'N/A',
+        u.email_type,
+        u.subscribed ? 'Subscribed' : 'Unsubscribed',
+        u.unsubscribed_at ? new Date(u.unsubscribed_at).toISOString() : 'N/A',
+        u.resubscribed_at ? new Date(u.resubscribed_at).toISOString() : 'N/A'
+      ]);
+
+      const csvContent = [csvHeaders, ...csvRows]
+        .map(row => row.map(cell => `"${cell}"`).join(','))
+        .join('\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="unsubscribes-${new Date().toISOString().split('T')[0]}.csv"`);
+      res.send(csvContent);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 module.exports = router; 

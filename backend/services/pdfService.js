@@ -700,6 +700,16 @@ function getPackingSlipHtml(packingSlipData) {
 
         <footer>
           <p>Thank you for your order!</p>
+          ${packingSlipData.fulfillment_validation_code ? `
+          <div style="text-align: center; margin-top: 20px; padding: 15px; border: 2px dashed #ccc; border-radius: 8px;">
+            <h4 style="margin: 0 0 10px 0; color: #333;">📦 Fulfillment Validation</h4>
+            <p style="margin: 5px 0; font-size: 12px;">Scan this QR code to validate fulfillment:</p>
+            <div style="text-align: center;">
+              <img src="${packingSlipData.fulfillment_qr_code}" alt="Fulfillment QR Code" style="width: 100px; height: 100px;">
+            </div>
+            <p style="margin: 5px 0; font-family: monospace; font-size: 14px; font-weight: bold;">${packingSlipData.fulfillment_validation_code}</p>
+          </div>
+          ` : ''}
         </footer>
       </div>
     </body>

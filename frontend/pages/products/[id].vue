@@ -961,10 +961,4 @@ useHead({
 });
 </script>
 
-[end of frontend/pages/products/[id].vue]
 
-[end of frontend/pages/products/[id].vue]
-
-[end of frontend/pages/products/[id].vue]
-
-[end of frontend/pages/products/[id].vue]

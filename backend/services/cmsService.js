@@ -79,6 +79,17 @@ async function createHeroBanner(bannerData, fileData) {
   let { title, subtitle, buttonText, buttonLink, imageUrl, altText, isActive, sortOrder } = bannerData;
   let s3FileKey = null;
 
+  // Auto-assign sort order if not provided
+  if (sortOrder === undefined || sortOrder === null) {
+    try {
+      const maxSortResult = await db.query('SELECT COALESCE(MAX(sort_order), -1) as max_sort FROM hero_banners');
+      sortOrder = maxSortResult.rows[0].max_sort + 1;
+    } catch (error) {
+      console.error('Error getting max sort order:', error);
+      sortOrder = 0; // Fallback to 0
+    }
+  }
+
   if (fileData) {
     if (!isS3Configured()) {
       console.warn("S3 not configured, skipping image upload. Banner will be created without image.");
@@ -158,6 +169,11 @@ async function updateHeroBanner(bannerId, updateData, fileData, removeImageFlag 
   let finalImageUrl = currentBanner.imageUrl; // Start with existing image URL (camelCased from currentBanner)
   let s3NewFileKey = null;
   let s3OldFileKey = null;
+
+  // Keep existing sort order if not provided in update
+  if (sortOrder === undefined || sortOrder === null) {
+    sortOrder = currentBanner.sortOrder;
+  }
 
   if (fileData) {
     if (!isS3Configured()) {

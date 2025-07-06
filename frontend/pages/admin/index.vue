@@ -163,15 +163,7 @@ const { $axios } = useNuxtApp();
 const router = useRouter();
 const { authToken, authUser, isAuthenticated, isAuthInitialized } = useAuth();
 
-// Debug authentication state
-console.log('[Admin Dashboard] Mounted. Auth state:', {
-  token: !!authToken.value,
-  user: !!authUser.value,
-  isAuthenticated: isAuthenticated.value,
-  isAuthInitialized: isAuthInitialized.value,
-  userRole: authUser.value?.role,
-  userPermissions: authUser.value?.permissions
-});
+// Authentication state initialized
 
 const isLoadingStats = ref(true);
 const statsError = ref(null);
@@ -240,30 +232,42 @@ async function fetchDashboardStats() {
 
     // Update Total Revenue
     const revenueCard = statCardsData.value.find(card => card.title === "Total Revenue");
-    if (revenueCard && revenueRes.data.total_revenue !== undefined) {
-      revenueCard.value = revenueRes.data.total_revenue.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+    if (revenueCard && revenueRes.data.total_revenue !== undefined && revenueRes.data.total_revenue !== null) {
+      const revenue = parseFloat(revenueRes.data.total_revenue);
+      if (!isNaN(revenue)) {
+        revenueCard.value = revenue.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+      } else {
+        revenueCard.value = '$0.00';
+      }
+    } else {
+      revenueCard.value = '$0.00';
     }
 
     // Update Total Users
     const usersCard = statCardsData.value.find(card => card.title === "Total Users");
-    if (usersCard && usersRes.data.count !== undefined) {
+    if (usersCard && usersRes.data.count !== undefined && usersRes.data.count !== null) {
       usersCard.value = usersRes.data.count.toString();
+    } else {
+      usersCard.value = '0';
     }
 
     // Update Total Orders
     const ordersCard = statCardsData.value.find(card => card.title === "Total Orders");
-    if (ordersCard && ordersRes.data.count !== undefined) {
+    if (ordersCard && ordersRes.data.count !== undefined && ordersRes.data.count !== null) {
       ordersCard.value = ordersRes.data.count.toString();
+    } else {
+      ordersCard.value = '0';
     }
 
     // Update Total Products
     const productsCard = statCardsData.value.find(card => card.title === "Total Products");
-    if (productsCard && productsRes.data.count !== undefined) {
+    if (productsCard && productsRes.data.count !== undefined && productsRes.data.count !== null) {
       productsCard.value = productsRes.data.count.toString();
+    } else {
+      productsCard.value = '0';
     }
 
   } catch (error) {
-    console.error("Error fetching dashboard stats:", error);
     statsError.value = error.response?.data || error;
     // Optionally set card values to 'Error' or keep '...'
     statCardsData.value.forEach(card => card.value = "Error");
@@ -316,7 +320,6 @@ async function fetchRecentOrders() {
     });
     recentOrders.value = response.data.data;
   } catch (error) {
-    console.error("Error fetching recent orders:", error);
     recentOrdersError.value = error.response?.data?.message || error.message || 'Could not load recent orders.';
   } finally {
     isLoadingRecentOrders.value = false;
@@ -374,7 +377,6 @@ async function fetchRecentActivity() {
     });
     recentActivity.value = response.data.data;
   } catch (error) {
-    console.error("Error fetching recent stock activity:", error);
     recentActivityError.value = error.response?.data?.message || error.message || 'Could not load recent stock activity.';
   } finally {
     isLoadingRecentActivity.value = false;

@@ -5,6 +5,8 @@ const { isAuthenticated, checkPermission } = require('../auth'); // Replaced isA
 const auditLogService = require('../services/auditLogService');
 const { AppError, BadRequestError, NotFoundError, ConflictError } = require('../utils/AppError');
 const { body, param, query, validationResult } = require('express-validator');
+const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload');
+const s3Service = require('../services/s3Service');
 
 // Apply auth middleware to all routes in this router
 // router.use(isAuthenticated, isAdmin); // REMOVED - will apply per route
@@ -44,7 +46,14 @@ const commonCategoryValidationRules = [
   body('image_url')
     .optional({ nullable: true, checkFalsy: true })
     .isURL().withMessage('Image URL must be a valid URL if provided.')
-    .trim()
+    .trim(),
+  body('show_in_menu')
+    .optional()
+    .isBoolean().withMessage('Show in menu must be a boolean value.'),
+  body('menu_order')
+    .optional()
+    .isInt({ min: 0 }).withMessage('Menu order must be a non-negative integer.')
+    .toInt()
 ];
 
 const validateCreateCategory = [
@@ -74,10 +83,10 @@ router.post('/', isAuthenticated, checkPermission('categories:manage'), validate
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { name, description, parent_category_id, image_url } = req.body;
+  const { name, description, parent_category_id, image_url, show_in_menu, menu_order } = req.body;
 
   try {
-    const newCategory = await categoryService.createCategory(name, description, parent_category_id, image_url);
+    const newCategory = await categoryService.createCategory(name, description, parent_category_id, image_url, show_in_menu, menu_order);
     // newCategory is guaranteed to be populated if createCategory doesn't throw
 
     auditLogService.recordAuditEvent(
@@ -164,6 +173,9 @@ router.put('/:id', isAuthenticated, checkPermission('categories:manage'), valida
     if (updateData.hasOwnProperty('name')) categoryToUpdate.name = updateData.name;
     if (updateData.hasOwnProperty('description')) categoryToUpdate.description = updateData.description;
     if (updateData.hasOwnProperty('parent_category_id')) categoryToUpdate.parent_category_id = updateData.parent_category_id;
+    if (updateData.hasOwnProperty('image_url')) categoryToUpdate.image_url = updateData.image_url;
+    if (updateData.hasOwnProperty('show_in_menu')) categoryToUpdate.show_in_menu = updateData.show_in_menu;
+    if (updateData.hasOwnProperty('menu_order')) categoryToUpdate.menu_order = updateData.menu_order;
 
     if (Object.keys(categoryToUpdate).length === 0) {
         return next(new BadRequestError('No valid fields provided for update.'));
@@ -210,6 +222,42 @@ router.delete('/:id', isAuthenticated, checkPermission('categories:manage'), val
     res.status(204).send();
   } catch (error) {
     // Errors from service (NotFoundError, BadRequestError, AppError) passed to global handler.
+    return next(error);
+  }
+});
+
+// POST /upload-image - Upload category image to S3
+router.post('/upload-image', isAuthenticated, checkPermission('categories:manage'), productImageUploadMiddleware, handleMulterError, async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image file provided' });
+    }
+
+    // Generate unique filename
+    const timestamp = Date.now();
+    const originalName = req.file.originalname;
+    const extension = originalName.split('.').pop();
+    const filename = `category-images/${timestamp}-${Math.random().toString(36).substring(2)}.${extension}`;
+
+    // Upload to S3
+    const s3Url = await s3Service.uploadFile(req.file.buffer, filename, req.file.mimetype);
+
+    res.status(200).json({ 
+      image_url: s3Url,
+      message: 'Category image uploaded successfully' 
+    });
+  } catch (error) {
+    console.error('Error uploading category image:', error);
+    return next(new AppError('Failed to upload category image', 500));
+  }
+});
+
+// GET /menu - Get categories for menu bar (public route)
+router.get('/menu', async (req, res, next) => {
+  try {
+    const menuCategories = await categoryService.getMenuCategories();
+    res.status(200).json(menuCategories);
+  } catch (error) {
     return next(error);
   }
 });

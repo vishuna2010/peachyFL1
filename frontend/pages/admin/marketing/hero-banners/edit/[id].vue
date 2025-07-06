@@ -1,6 +1,5 @@
 <template>
   <div>
-    <Breadcrumbs :items="breadcrumbs" />
     <h1 class="text-2xl font-bold mb-4">Edit Hero Banner #{{ bannerId }}</h1>
     <div v-if="isLoading" class="text-center py-10">
       <p>Loading banner data...</p>
@@ -27,7 +26,6 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useNuxtApp } from '#app';
 
-import Breadcrumbs from '~/components/admin/Breadcrumbs.vue';
 import HeroBannerForm from '~/components/admin/HeroBannerForm.vue';
 
 definePageMeta({
@@ -40,12 +38,7 @@ const bannerId = computed(() => route.params.id);
 
 useHead({ title: `Edit Hero Banner ${bannerId.value}` });
 
-const breadcrumbs = computed(() => [
-  { text: 'Admin', href: '/admin' },
-  { text: 'Marketing', href: '/admin/marketing' },
-  { text: 'Hero Banners', href: '/admin/marketing/hero-banners' },
-  { text: `Edit Banner #${bannerId.value}` }
-]);
+
 
 const { $axios, $toast } = useNuxtApp();
 const router = useRouter();
@@ -62,7 +55,7 @@ async function fetchBannerData() {
   apiError.value = '';
   try {
     const response = await $axios.get(`/admin/hero-banners/${bannerId.value}`);
-    bannerData.value = response.data; // Assuming API returns the banner object directly
+    bannerData.value = response.data.data; // API returns { data: banner }
     // The HeroBannerForm expects camelCase props, but cmsService maps to camelCase on fetch.
     // If API returns snake_case, HeroBannerForm's watch on initialData should handle it,
     // or we map here if needed. cmsService already maps to camelCase.
@@ -80,6 +73,15 @@ async function fetchBannerData() {
 async function handleUpdateBanner(formData) {
   isSubmitting.value = true;
   apiError.value = '';
+  
+  // Debug: Log what's being sent
+  if (process.dev) {
+    console.log('Sending update request for banner:', bannerId.value);
+    for (let [key, value] of formData.entries()) {
+      console.log(`${key}:`, value);
+    }
+  }
+  
   try {
     await $axios.put(`/admin/hero-banners/${bannerId.value}`, formData, {
       headers: {
@@ -92,11 +94,17 @@ async function handleUpdateBanner(formData) {
     router.push('/admin/marketing/hero-banners');
   } catch (err) {
     console.error('Error updating hero banner:', err.response?.data || err.message);
-    apiError.value = err.response?.data?.message || err.message || 'Failed to update hero banner.';
-     if (err.response?.data?.errors) {
-      const validationErrors = err.response.data.errors.map(e => `${e.field || e.param}: ${e.msg}`).join('; ');
+    
+    // Log detailed validation errors
+    if (err.response?.data?.errors) {
+      console.log('Validation errors:', err.response.data.errors);
+      console.log('Full error response:', err.response.data);
+      const validationErrors = err.response.data.errors.map(e => `${e.path || e.field || e.param}: ${e.msg}`).join('; ');
       apiError.value = `Validation failed: ${validationErrors}`;
+    } else {
+      apiError.value = err.response?.data?.message || err.message || 'Failed to update hero banner.';
     }
+    
     if (typeof $toast !== 'undefined' && $toast.error) {
       $toast.error(apiError.value);
     }

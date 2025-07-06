@@ -157,7 +157,6 @@ const handleSubmitReview = async () => {
     currentHoverRating.value = 0;
 
   } catch (error) {
-    console.error('Error submitting review:', error);
     if (error.response && error.response.data) {
         if (error.response.data.message) {
              apiError.value = error.response.data.message;

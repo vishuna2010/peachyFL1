@@ -12,11 +12,11 @@ const { AppError, BadRequestError, NotFoundError, ConflictError } = require('../
  * @throws {ConflictError} If a category with the same name already exists.
  * @throws {AppError} If database operation fails.
  */
-async function createCategory(name, description, parent_category_id, image_url) {
+async function createCategory(name, description, parent_category_id, image_url, show_in_menu = false, menu_order = 0) {
   try {
     const result = await db.query(
-      'INSERT INTO categories (name, description, parent_category_id, image_url) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, description, parent_category_id, image_url]
+      'INSERT INTO categories (name, description, parent_category_id, image_url, show_in_menu, menu_order) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [name, description, parent_category_id, image_url, show_in_menu, menu_order]
     );
     if (result.rows.length > 0) {
       return result.rows[0];
@@ -47,10 +47,10 @@ async function getAllCategories(page, limit) {
   const offset = (page - 1) * limit;
   try {
     const categoriesQuery = `
-      SELECT c.id, c.name, c.description, c.parent_category_id, c.image_url, c.updated_at, COUNT(p.id) AS product_count
+      SELECT c.id, c.name, c.description, c.parent_category_id, c.image_url, c.show_in_menu, c.menu_order, c.updated_at, COUNT(p.id) AS product_count
       FROM categories c
       LEFT JOIN products p ON c.id = p.category_id
-      GROUP BY c.id, c.name, c.description, c.parent_category_id, c.image_url, c.updated_at
+      GROUP BY c.id, c.name, c.description, c.parent_category_id, c.image_url, c.show_in_menu, c.menu_order, c.updated_at
       ORDER BY c.name ASC
       LIMIT $1 OFFSET $2;
     `;
@@ -83,11 +83,11 @@ async function getAllCategories(page, limit) {
 async function getCategoryById(categoryId) {
   try {
     const categoryQuery = `
-      SELECT c.id, c.name, c.description, c.parent_category_id, c.image_url, COUNT(p.id) AS product_count
+      SELECT c.id, c.name, c.description, c.parent_category_id, c.image_url, c.show_in_menu, c.menu_order, COUNT(p.id) AS product_count
       FROM categories c
       LEFT JOIN products p ON c.id = p.category_id
       WHERE c.id = $1
-      GROUP BY c.id, c.name, c.description, c.parent_category_id, c.image_url;
+      GROUP BY c.id, c.name, c.description, c.parent_category_id, c.image_url, c.show_in_menu, c.menu_order;
     `;
     const result = await db.query(categoryQuery, [categoryId]);
 
@@ -117,7 +117,7 @@ async function getCategoryById(categoryId) {
  * @throws {AppError} If database operation fails.
  */
 async function updateCategory(categoryId, updateData) {
-  const { name, description, parent_category_id, image_url } = updateData;
+  const { name, description, parent_category_id, image_url, show_in_menu, menu_order } = updateData;
 
   const setClauses = [];
   const values = [];
@@ -141,6 +141,14 @@ async function updateCategory(categoryId, updateData) {
   if (updateData.hasOwnProperty('image_url')) { // Allows setting image_url to null
     setClauses.push(`image_url = $${paramIndex++}`);
     values.push(image_url);
+  }
+  if (updateData.hasOwnProperty('show_in_menu')) {
+    setClauses.push(`show_in_menu = $${paramIndex++}`);
+    values.push(show_in_menu);
+  }
+  if (updateData.hasOwnProperty('menu_order')) {
+    setClauses.push(`menu_order = $${paramIndex++}`);
+    values.push(menu_order);
   }
 
   if (setClauses.length === 0) {
@@ -243,7 +251,7 @@ async function getCategoryBySlug(slug) {
   try {
     // Assuming 'slug' column exists and is unique (or handle multiple results if not unique)
     const query = `
-      SELECT id, name, slug, description, parent_category_id, image_url, created_at, updated_at
+      SELECT id, name, slug, description, parent_category_id, image_url, show_in_menu, menu_order, created_at, updated_at
       FROM categories
       WHERE slug = $1;
     `;
@@ -269,17 +277,42 @@ async function getCategoryBySlug(slug) {
 async function getAllPublicCategories() {
   try {
     // Assuming a 'slug' column exists in the 'categories' table
-    const result = await db.query('SELECT id, name, slug, image_url FROM categories WHERE parent_category_id IS NULL ORDER BY name ASC');
+    const result = await db.query('SELECT id, name, slug, image_url, show_in_menu, menu_order FROM categories WHERE parent_category_id IS NULL ORDER BY name ASC');
     return result.rows.map(category => ({
       id: category.id,
       name: category.name,
       slug: category.slug,
       image_url: category.image_url,
+      show_in_menu: category.show_in_menu,
+      menu_order: category.menu_order,
       // TODO: Potentially fetch children categories if a nested menu is desired
     }));
   } catch (error) {
     console.error('[categoryService.getAllPublicCategories] Error fetching public categories:', error);
     throw new AppError('Failed to retrieve public categories.', 500, 'PUBLIC_CATEGORIES_FETCH_FAILED');
+  }
+}
+
+/**
+ * Retrieves categories that should be displayed in the menu bar.
+ * @returns {Promise<Array<object>>} A promise that resolves to an array of category objects,
+ *          each containing { id, name, slug, image_url }, ordered by menu_order.
+ * @throws {AppError} If the database operation fails.
+ */
+async function getMenuCategories() {
+  try {
+    const result = await db.query(
+      'SELECT id, name, slug, image_url FROM categories WHERE show_in_menu = true ORDER BY menu_order ASC, name ASC'
+    );
+    return result.rows.map(category => ({
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      image_url: category.image_url,
+    }));
+  } catch (error) {
+    console.error('[categoryService.getMenuCategories] Error fetching menu categories:', error);
+    throw new AppError('Failed to retrieve menu categories.', 500, 'MENU_CATEGORIES_FETCH_FAILED');
   }
 }
 
@@ -291,4 +324,5 @@ module.exports = {
   deleteCategory,
   getAllPublicCategories,
   getCategoryBySlug,
+  getMenuCategories,
 };

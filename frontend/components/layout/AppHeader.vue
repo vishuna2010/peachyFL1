@@ -4,9 +4,17 @@
       <!-- Logo -->
       <NuxtLink to="/" aria-label="Homepage">
         <img
+          v-if="siteSettings.site_logo?.value"
+          :src="siteSettings.site_logo.value"
+          :alt="siteSettings.site_name?.value || 'Site Logo'"
+          class="h-16 w-auto object-contain"
+          @error="(e) => (e.target.src = '/Logo.svg')"
+        />
+        <img
+          v-else
           src="/Logo.svg"
           alt="Site Logo"
-          class="h-10 w-auto"
+          class="h-16 w-auto"
           @error="(e) => (e.target.src = '/fallback-logo.svg')"
         />
       </NuxtLink>
@@ -32,6 +40,12 @@
           class="text-venus-text-primary px-3 py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-bold transition-colors duration-200 ease-in-out"
         >
           Sale
+        </NuxtLink>
+        <NuxtLink
+          to="/new-arrivals"
+          class="text-venus-text-primary px-3 py-2 border-b-2 border-transparent hover:border-peach-pink hover:text-peach-pink font-bold transition-colors duration-200 ease-in-out"
+        >
+          New Arrivals
         </NuxtLink>
       </nav>
 
@@ -148,11 +162,15 @@
 import { ref, onMounted, reactive, computed } from 'vue';
 import { useRouter, useNuxtApp } from '#app';
 import { useAuth } from '~/composables/useAuth';
+import { useSiteSettings } from '~/composables/useSiteSettings';
 import HeaderFilterModal from '~/components/modals/HeaderFilterModal.vue';
 import CategoryProductPreviewDropdown from '~/components/categories/CategoryProductPreviewDropdown.vue';
 
 // ---- Auth composable ----
 const { isAuthenticated, isAuthInitialized } = useAuth();
+
+// ---- Site Settings composable ----
+const { settings: siteSettings } = useSiteSettings();
 
 // ---- Nuxt & Router ----
 const router = useRouter();
@@ -179,10 +197,12 @@ const currentHoveredCategory = computed(() => {
 // ---- Fetch categories ----
 const fetchHeaderCategories = async () => {
   try {
+    // First try to get menu categories, fallback to all categories
     const { data } = await $axios.get('/categories');
-    headerCategories.value = data || [];
+    // Filter to only show categories that should be in the menu
+    headerCategories.value = data.filter(cat => cat.show_in_menu).sort((a, b) => (a.menu_order || 0) - (b.menu_order || 0)) || [];
   } catch (error) {
-    console.error('Error fetching categories for header:', error);
+    console.error('Error fetching menu categories:', error);
     headerCategories.value = [];
   }
 };
@@ -281,7 +301,6 @@ const handleCategoryMouseEnter = async (category, event) => {
     hoveredCategoryProducts.value = data.products || [];
     productPreviewCache[category.id] = hoveredCategoryProducts.value;
   } catch (error) {
-    console.error(`[AppHeader] Error fetching products for category ${category.name}:`, error);
     hoveredCategoryProducts.value = [];
   } finally {
     isDropdownLoading.value = false;

@@ -230,13 +230,11 @@ async function fetchGlobalOptionsAndColorValues() {
       // Ensure values are structured correctly, mapping value_id to id and value_name to value for template compatibility
       colorOptionValues.value = (foundColorOption.values || []).map(v => ({ id: v.value_id, value: v.value_name }));
     } else {
-      console.warn('Public "Color" option type not found in /api/options/public-filters response.');
       colorOption.value = null;
       colorOptionValues.value = [];
     }
 
   } catch (err) {
-    console.error('Error fetching public filter options from /api/options/public-filters:', err);
     optionsFetchError.value = err.response?.data?.message || err.message || 'Failed to load filter options.';
     toast.error(optionsFetchError.value || 'Could not load filter options.');
     colorOption.value = null;

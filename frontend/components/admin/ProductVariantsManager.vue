@@ -16,7 +16,7 @@
         <div v-if="configuredProductOptions.length === 0" class="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-md">
           No options configured for this product to create variants from. Please assign options and their allowed values first.
         </div>
-        <!-- Debug <pre> tag removed. The configured options are used by the 'Add New Variant' modal. -->
+        <!-- The configured options are used by the 'Add New Variant' modal. -->
         <div v-else class="text-sm text-gray-700 p-3 border border-dashed border-gray-300 bg-gray-50 rounded-md">
           <p><strong class="font-medium">Ready to create variants.</strong> This product has the following option types configured with specific values:</p>
           <ul class="list-disc list-inside ml-4 mt-1">
@@ -372,7 +372,6 @@ function closeAddOrEditVariantModal() {
 
 function openEditVariantModal(variantToEdit) {
   if (!variantToEdit) {
-    console.error("openEditVariantModal: variantToEdit is undefined");
     toast.error("Could not open edit modal: variant data missing.");
     return;
   }
@@ -501,7 +500,6 @@ async function handleVariantFormSubmit() {
         toast.error(addVariantFormError.value);
       }
     } catch (error) {
-      console.error("Error updating variant:", error.response || error);
       if (error.response && error.response.data && error.response.data.message) {
         addVariantFormError.value = error.response.data.message;
         toast.error(error.response.data.message);
@@ -529,7 +527,6 @@ async function handleVariantFormSubmit() {
         toast.error(addVariantFormError.value);
       }
     } catch (error) {
-      console.error("Error adding variant:", error.response || error);
       if (error.response && error.response.data && error.response.data.message) {
         addVariantFormError.value = error.response.data.message;
         toast.error(error.response.data.message);
@@ -560,7 +557,6 @@ async function handleDeleteVariant(variantId) {
     toast.success('Variant deleted successfully!');
     fetchProductVariants(); // Refresh the list
   } catch (error) {
-    console.error("Error deleting variant:", error.response || error);
     if (error.response && error.response.data && error.response.data.message) {
       toast.error(error.response.data.message);
     } else {
@@ -573,21 +569,16 @@ async function handleDeleteVariant(variantId) {
 
 async function fetchConfiguredProductOptions() {
   if (!propProductId.value) {
-    console.log('[ProductVariantsManager] fetchConfiguredProductOptions: propProductId is missing. Skipping fetch.');
     configuredProductOptions.value = []; // Ensure it's empty
     isLoadingConfiguredOptions.value = false;
     return;
   }
   isLoadingConfiguredOptions.value = true;
-  console.log(`[ProductVariantsManager] fetchConfiguredProductOptions: Attempting to fetch for product ID: ${propProductId.value}`);
   try {
     // This endpoint now returns assigned options with their specifically selected/allowed values
     const assignedOptionsResponse = await $axios.get(`/admin/products/${propProductId.value}/assigned-options`);
 
-    console.log('[ProductVariantsManager] Raw assignedOptionsResponse.data:', JSON.stringify(assignedOptionsResponse.data, null, 2)); // Log raw response
-
     if (!assignedOptionsResponse || !Array.isArray(assignedOptionsResponse.data)) { // Check if it's an array
-      console.error('[ProductVariantsManager] API response.data is not an array or is undefined for assigned-options:', assignedOptionsResponse.data);
       toast.error('Failed to retrieve valid option configuration data (not an array) from the server.');
       configuredProductOptions.value = [];
       fetchError.value = fetchError.value ? fetchError.value + ' Invalid options data structure.' : 'Invalid options data structure.';
@@ -595,12 +586,9 @@ async function fetchConfiguredProductOptions() {
       return;
     }
 
-    console.log('[ProductVariantsManager] Data before .map():', JSON.stringify(assignedOptionsResponse.data, null, 2));
-
     const fetchedConfiguredOptions = assignedOptionsResponse.data.map((assignedOpt, index) => {
       // assignedOpt is expected to have: id (assigned_option_id), option_id (global_option_id), option_name (global_option_name), selected_values
       if (assignedOpt.option_id === null || assignedOpt.option_id === undefined || !assignedOpt.option_name) {
-        console.error(`[ProductVariantsManager] MAP ITEM ${index} (assigned_option_id: ${assignedOpt.id}) has invalid/missing option_id or option_name:`, JSON.stringify(assignedOpt));
         toast.error(`Configuration error: An assigned option (ID: ${assignedOpt.id || 'N/A'}) is missing critical details (option type ID or name). Please check product option configuration in admin.`);
         return null; // Skip this invalid option configuration
       }
@@ -636,7 +624,6 @@ async function fetchConfiguredProductOptions() {
     }
 
   } catch (err) {
-    console.error(`Error fetching configured options for product ${propProductId.value}:`, err);
     if (!fetchError.value) fetchError.value = err.response?.data?.message || err.message || `Failed to load configured options.`;
     throw err;
   } finally {
@@ -651,7 +638,6 @@ async function fetchProductVariants() {
     const response = await $axios.get(`/admin/products/${propProductId.value}/variants`);
     existingVariants.value = response.data;
   } catch (err) {
-    console.error(`Error fetching variants for product ${propProductId.value}:`, err);
     throw err;
   } finally {
     isLoadingVariants.value = false;
@@ -670,11 +656,9 @@ async function loadAllData() {
 
   let combinedErrorMessages = [];
   if (results[0].status === 'rejected') {
-    console.error("loadAllData: Failed to load configured options:", results[0].reason);
     combinedErrorMessages.push(results[0].reason?.response?.data?.message || results[0].reason?.message || 'Failed to load configured options.');
   }
   if (results[1].status === 'rejected') {
-     console.error("loadAllData: Failed to load existing variants:", results[1].reason);
     combinedErrorMessages.push(results[1].reason?.response?.data?.message || results[1].reason?.message || 'Failed to load existing variants.');
   }
 

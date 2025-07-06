@@ -210,13 +210,10 @@ const fetchAvailableRoles = async () => {
     // The GET /api/admin/roles route returns an array of role objects directly
     if (response.data && Array.isArray(response.data)) {
       availableRoles.value = response.data; // The response itself is the array of roles
-      console.log('[UsersPage] Fetched available roles:', availableRoles.value);
     } else {
-      console.warn('[UsersPage] Unexpected response structure for roles, using fallback. Response:', response.data);
       availableRoles.value = [{id: 1, name: 'Admin (Fallback)'}, {id: 2, name: 'User (Fallback)'}];
     }
   } catch (err) {
-    console.error('[UsersPage] Error fetching roles:', err);
     // Fallback or default roles if API fails
     availableRoles.value = [{id: 1, name: 'Admin (Fallback)'}, {id: 2, name: 'User (Fallback)'}];
   }
@@ -370,7 +367,6 @@ const deleteUser = async () => {
     // Add notification for success (e.g., using a toast library)
     await refreshUsers(); // Refresh the list
   } catch (err) {
-    console.error('Error deleting user:', err);
     // Add notification for error
     showDeleteModal.value = false; // Still close modal on error, or handle differently
   }

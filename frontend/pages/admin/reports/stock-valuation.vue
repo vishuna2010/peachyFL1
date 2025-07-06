@@ -122,17 +122,7 @@ const pagination = reactive({
   totalItems: 0,
 });
 
-const grandTotalValuation = computed(() => {
-  // This might be provided by the API directly, or calculated client-side if only one page of data.
-  // For multi-page data, the API should provide the grand total across all pages with current filters.
-  // For now, let's assume the API provides a grandTotal in its response or we calculate from current page.
-  return reportData.value.reduce((sum, item) => sum + (parseFloat(item.total_value) || 0), 0);
-});
-
-const formatCurrency = (value) => {
-  if (value === null || value === undefined) return 'N/A';
-  return parseFloat(value).toLocaleString('en-US', { style: 'currency', currency: 'USD' }); // Assuming USD
-};
+const grandTotalValuation = ref(0);
 
 const fetchReportData = async (page = pagination.currentPage) => {
   isLoading.value = true;
@@ -150,37 +140,16 @@ const fetchReportData = async (page = pagination.currentPage) => {
       }
     }
 
-    // SIMULATED API RESPONSE - REPLACE WITH ACTUAL API CALL
-    // const response = await $axios.get('/admin/reports/stock-valuation', { params });
-    // reportData.value = response.data.data;
-    // pagination.currentPage = response.data.pagination.currentPage;
-    // pagination.totalPages = response.data.pagination.totalPages;
-    // pagination.totalItems = response.data.pagination.totalItems;
-    // if (response.data.grandTotalValuation) grandTotalValuation.value = response.data.grandTotalValuation; // if API provides it
-
-    // Simulated data for now:
-    await new Promise(resolve => setTimeout(resolve, 700)); // Simulate network delay
-    if (page > 1 && filters.categoryId === 'error') { // Simulate error for testing
-        throw new Error("Simulated API error on page " + page);
-    }
-    const sampleData = [
-        { id: 'prod1_varA', product_name: 'Laptop Pro', sku: 'LP-PRO-16-512', stock_quantity: 10, cost_price: '800.00', total_value: '8000.00' },
-        { id: 'prod1_varB', product_name: 'Laptop Pro', sku: 'LP-PRO-16-1TB', stock_quantity: 5, cost_price: '1000.00', total_value: '5000.00' },
-        { id: 'prod2', product_name: 'Wireless Mouse', sku: 'WM-001', stock_quantity: 50, cost_price: '15.00', total_value: '750.00' },
-        { id: 'prod3_varX', product_name: 'Mechanical Keyboard', sku: 'MK-RGB-BLUE', stock_quantity: 20, cost_price: '65.00', total_value: '1300.00' },
-        { id: 'prod4', product_name: 'USB-C Hub', sku: 'HUB-USBC-8P', stock_quantity: 30, cost_price: '25.50', total_value: '765.00' },
-    ];
-    reportData.value = page === 1 ? sampleData : sampleData.slice(0,2).map(d => ({...d, id: d.id + '_p' + page})); // Simulate pagination
-    pagination.currentPage = page;
-    pagination.totalPages = filters.categoryId === 'empty' ? 0 : 3; // Simulate total pages
-    pagination.totalItems = filters.categoryId === 'empty' ? 0 : sampleData.length * 3 - 1; // Simulate total items
-    if (filters.categoryId === 'empty') reportData.value = [];
-
+    const response = await $axios.get('/admin/reports/stock-valuation', { params });
+    reportData.value = response.data.data;
+    pagination.currentPage = response.data.pagination.currentPage;
+    pagination.totalPages = response.data.pagination.totalPages;
+    pagination.totalItems = response.data.pagination.totalItems;
+    grandTotalValuation.value = parseFloat(response.data.grandTotalValuation || 0);
 
     if (Object.keys(params).length > 0) {
       router.replace({ query: { ...route.query, ...params } });
     }
-    toast.info("Simulated data loaded for Stock Valuation Report. Backend integration needed.");
 
   } catch (error) {
     console.error('Error fetching stock valuation report:', error);
@@ -191,6 +160,13 @@ const fetchReportData = async (page = pagination.currentPage) => {
     isLoading.value = false;
   }
 };
+
+const formatCurrency = (value) => {
+  if (value === null || value === undefined) return 'N/A';
+  return parseFloat(value).toLocaleString('en-US', { style: 'currency', currency: 'USD' }); // Assuming USD
+};
+
+
 
 let debounceTimer;
 const debouncedFetchReportData = () => {

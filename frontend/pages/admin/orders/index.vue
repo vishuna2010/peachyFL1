@@ -134,7 +134,6 @@ async function fetchOrders(page = currentPage.value, pageSize = limit.value) {
     totalPages.value = response.data.pagination.totalPages;
     currentPage.value = response.data.pagination.page;
   } catch (err) {
-    console.error('Failed to fetch orders:', err);
     fetchError.value = err.response?.data || err;
   } finally {
     isLoading.value = false;

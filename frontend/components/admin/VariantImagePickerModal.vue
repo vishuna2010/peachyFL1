@@ -80,7 +80,6 @@ async function fetchGalleryImages() {
     const response = await $axios.get(`/admin/products/${productId.value}/images`);
     galleryImages.value = response.data;
   } catch (err) {
-    console.error('Error fetching gallery images for picker:', err);
     error.value = err.response?.data?.message || 'Could not load gallery images.';
     toast.error(error.value);
     galleryImages.value = []; // Clear on error

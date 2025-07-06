@@ -361,7 +361,6 @@ const loadDashboard = async () => {
     dashboard.value = response.data.dashboard
     profileForm.value.name = dashboard.value.user.name || ''
   } catch (err) {
-    console.error('Error loading dashboard:', err)
     error.value = err.response?.data?.message || 'Failed to load profile data'
   } finally {
     loading.value = false
@@ -379,7 +378,6 @@ const updateProfile = async () => {
     toast.success('Profile updated successfully')
     await loadDashboard() // Reload to get updated data
   } catch (err) {
-    console.error('Error updating profile:', err)
     toast.error(err.response?.data?.message || 'Failed to update profile')
   } finally {
     updating.value = false

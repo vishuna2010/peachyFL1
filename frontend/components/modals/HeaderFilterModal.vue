@@ -58,7 +58,6 @@ async function fetchCategoriesForFilter() {
     const response = await $axios.get('/categories'); // Endpoint returns { id, name, slug }
     categories.value = response.data || [];
   } catch (err) {
-    console.error('Error fetching categories for filter modal:', err);
     categories.value = [];
   }
 }

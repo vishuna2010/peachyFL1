@@ -9,7 +9,7 @@
       <div v-for="product in displayedProducts" :key="product.id" class="group">
         <NuxtLink :to="`/products/${product.id}`" class="block">
           <img
-            :src="product.image_url || 'https://via.placeholder.com/150x150.png?text=No+Image'"
+            :src="product.image_url || 'https://picsum.photos/150/150?random=999'"
             :alt="product.name"
             class="w-full h-24 object-cover rounded-md mb-2 group-hover:opacity-80 transition-opacity"
           />

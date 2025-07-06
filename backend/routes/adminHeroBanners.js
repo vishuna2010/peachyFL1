@@ -58,12 +58,41 @@ const validateBannerData = [
   body('title').trim().notEmpty().withMessage('Title is required.').isLength({ max: 255 }).withMessage('Title cannot exceed 255 characters.'),
   body('subtitle').optional({ checkFalsy: true }).trim().isLength({ max: 500 }).withMessage('Subtitle cannot exceed 500 characters.'),
   body('buttonText').optional({ checkFalsy: true }).trim().isLength({ max: 100 }).withMessage('Button text cannot exceed 100 characters.'),
-  body('buttonLink').optional({ checkFalsy: true }).trim().isURL().withMessage('Button link must be a valid URL or a relative path.').isLength({ max: 255 }).withMessage('Button link cannot exceed 255 characters.'),
+  body('buttonLink').optional({ checkFalsy: true }).trim().custom((value) => {
+    if (!value) return true; // Allow empty values
+    // Allow relative paths (starting with /) or absolute URLs
+    if (value.startsWith('/') || value.startsWith('http://') || value.startsWith('https://')) {
+      return true;
+    }
+    throw new Error('Button link must be a valid relative path (e.g., /products) or absolute URL (e.g., https://example.com).');
+  }).isLength({ max: 255 }).withMessage('Button link cannot exceed 255 characters.'),
   // imageUrl is now optional if uploading a file, required if no file is uploaded and not in edit mode
-  body('imageUrl').optional({ checkFalsy: true }).isURL().withMessage('Image URL must be a valid URL if provided directly.').isLength({ max: 255 }).withMessage('Image URL cannot exceed 255 characters.'),
+  body('imageUrl').optional({ checkFalsy: true }).custom((value) => {
+    if (!value || value === '') return true; // Allow empty values and empty strings
+    // If a value is provided, it should be a valid URL
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return true;
+    }
+    throw new Error('Image URL must be a valid URL if provided directly.');
+  }).isLength({ max: 255 }).withMessage('Image URL cannot exceed 255 characters.'),
   body('altText').optional({ checkFalsy: true }).trim().isLength({ max: 255 }).withMessage('Alt text cannot exceed 255 characters.'),
-  body('isActive').optional().isBoolean().withMessage('Is active must be a boolean.').toBoolean(),
-  body('sortOrder').optional().isInt({ min: 0 }).withMessage('Sort order must be a non-negative integer.').toInt()
+  body('isActive').optional().custom((value) => {
+    if (value === undefined || value === null || value === '') return true;
+    if (value === 'true' || value === 'false' || value === true || value === false) return true;
+    throw new Error('Is active must be a boolean value.');
+  }).customSanitizer((value) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
+  }),
+  body('sortOrder').optional().custom((value) => {
+    if (value === undefined || value === null || value === '') return true;
+    const num = parseInt(value);
+    if (isNaN(num) || num < 0) {
+      throw new Error('Sort order must be a non-negative integer.');
+    }
+    return true;
+  }).toInt()
 ];
 
 // POST /api/admin/hero-banners - Create new hero banner
@@ -135,8 +164,11 @@ router.put(
     ...validateBannerData // Reuse the same validation rules as for POST
   ],
   async (req, res, next) => {
+    console.log('PUT /admin/hero-banners/:id - Request body:', req.body);
+    console.log('PUT /admin/hero-banners/:id - Request file:', req.file);
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('PUT /admin/hero-banners/:id - Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
     try {

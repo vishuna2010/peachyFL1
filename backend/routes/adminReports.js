@@ -203,4 +203,36 @@ router.get('/sales', validateSalesReportParams, async (req, res, next) => {
 
 // Removed the duplicate /tax-returns placeholder route.
 
+// Validation for Stock Valuation Report
+const validateStockValuationParams = [
+  query('page').optional().isInt({ min: 1 }).toInt().default(1),
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(20),
+  query('categoryId').optional().isInt({ gt: 0 }).toInt(),
+  query('supplierId').optional().isInt({ gt: 0 }).toInt(),
+  query('sortBy').optional().isString().trim().isIn(['product_name', 'sku', 'stock_quantity', 'cost_price', 'total_value']).default('product_name'),
+  query('sortOrder').optional().isString().trim().toUpperCase().isIn(['ASC', 'DESC']).default('ASC')
+];
+
+// GET /api/admin/reports/stock-valuation
+router.get('/stock-valuation', validateStockValuationParams, async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  try {
+    const options = {
+      page: req.query.page,
+      limit: req.query.limit,
+      categoryId: req.query.categoryId,
+      supplierId: req.query.supplierId,
+      sortBy: req.query.sortBy,
+      sortOrder: req.query.sortOrder
+    };
+    const reportData = await reportService.generateStockValuationReport(options);
+    res.status(200).json(reportData);
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

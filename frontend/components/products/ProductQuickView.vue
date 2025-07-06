@@ -477,7 +477,6 @@ async function fetchProductDetails(id) {
       error.value = { message: 'Product not found or data incomplete.' };
     }
   } catch (err) {
-    console.error(`Failed to fetch product ${id} for quick view:`, err);
     detailedProduct.value = null;
     error.value = { message: err.response?.data?.message || err.message || 'Could not load product details.' };
   } finally {

@@ -106,9 +106,82 @@
           </p>
         </div>
 
+        <!-- Shipping Method Selection -->
+        <div class="shipping-section py-4 border-b border-gray-200">
+          <h4 class="text-sm font-medium text-venus-text-primary mb-3">Shipping Method</h4>
+          
+          <!-- Loading State -->
+          <div v-if="loadingShippingMethods" class="flex justify-center items-center py-4">
+            <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-peach-pink"></div>
+            <span class="ml-2 text-sm text-venus-text-secondary">Loading shipping options...</span>
+          </div>
+
+          <!-- Error State -->
+          <div v-else-if="shippingError" class="bg-red-50 border border-red-200 rounded-md p-3 mb-3">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-4 w-4 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <div class="ml-2">
+                <p class="text-xs text-red-800">{{ shippingError }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Shipping Methods -->
+          <div v-else-if="shippingMethods.length === 0" class="text-center py-4">
+            <p class="text-sm text-gray-500">No shipping methods available</p>
+          </div>
+
+          <div v-else class="space-y-2">
+            <div
+              v-for="method in shippingMethods"
+              :key="method.id"
+              class="relative border border-gray-200 rounded-md p-3 cursor-pointer transition-all duration-200 hover:border-peach-pink"
+              :class="{
+                'border-peach-pink bg-peach-pink/5': selectedShippingMethod?.id === method.id,
+                'border-gray-200': selectedShippingMethod?.id !== method.id
+              }"
+              @click="selectShippingMethod(method)"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                  <input
+                    type="radio"
+                    :id="`cart-shipping-${method.id}`"
+                    :name="'cart-shipping-method'"
+                    :value="method.id"
+                    :checked="selectedShippingMethod?.id === method.id"
+                    class="h-3 w-3 text-peach-pink border-gray-300 focus:ring-peach-pink"
+                    @change="selectShippingMethod(method)"
+                  />
+                  <div class="ml-2">
+                    <label :for="`cart-shipping-${method.id}`" class="text-sm font-medium text-venus-text-primary cursor-pointer">
+                      {{ method.name }}
+                    </label>
+                    <div class="flex items-center mt-1">
+                      <span v-if="method.courier_name" class="text-xs text-venus-text-secondary mr-2">
+                        {{ method.courier_name }}
+                      </span>
+                      <span v-if="method.description" class="text-xs text-venus-text-secondary">
+                        {{ method.description }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="text-sm font-bold text-orange-gold">${{ parseFloat(method.price).toFixed(2) }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <p class="flex justify-between text-xl font-bold text-orange-gold my-3 pt-3 border-t-2 border-peach-pink"> <!-- Themed grand total and border -->
           <span>Grand Total:</span>
-          <span>${{ cartFinalTotalPrice.toFixed(2) }}</span>
+          <span>${{ cartFinalTotalPriceWithShipping.toFixed(2) }}</span>
         </p>
         <div class="cart-actions mt-6 space-y-3">
           <NuxtLink
@@ -133,7 +206,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useCart } from '~/composables/useCart';
-import { useHead } from '#app';
+import { useHead, useNuxtApp } from '#app';
 import { sanitizeAttributeValue } from '~/utils/sanitize'; // Import the sanitizer
 
 // CloseIcon import can be removed if SVG is directly in template for remove button
@@ -164,6 +237,19 @@ const {
 const discountCodeInput = ref('');
 const applyingDiscount = ref(false);
 
+// Shipping method variables
+const loadingShippingMethods = ref(false);
+const shippingError = ref('');
+const shippingMethods = ref([]);
+const selectedShippingMethod = ref(null);
+
+// Calculate total with shipping
+const cartFinalTotalPriceWithShipping = computed(() => {
+  const baseTotal = cartFinalTotalPrice.value;
+  const shippingCost = selectedShippingMethod.value ? parseFloat(selectedShippingMethod.value.price) : 0;
+  return baseTotal + shippingCost;
+});
+
 // Helper function to find tax details for a specific cart item
 const getLineItemTax = (cartItem) => {
   if (!cartLineItemsWithTaxDetails.value || cartLineItemsWithTaxDetails.value.length === 0) {
@@ -178,6 +264,27 @@ const getLineItemTax = (cartItem) => {
   return taxDetail ? parseFloat(taxDetail.line_item_tax_amount).toFixed(2) : null;
 };
 
+const fetchShippingMethods = async () => {
+  loadingShippingMethods.value = true;
+  shippingError.value = '';
+  try {
+    const { $axios } = useNuxtApp();
+    const response = await $axios.get('/shipping/options');
+    shippingMethods.value = response.data.options || [];
+    if (shippingMethods.value.length > 0 && !selectedShippingMethod.value) {
+      selectedShippingMethod.value = shippingMethods.value[0];
+    }
+  } catch (error) {
+    shippingError.value = error.response?.data?.message || error.message || 'Failed to load shipping methods';
+    console.error('Error fetching shipping methods:', error);
+  } finally {
+    loadingShippingMethods.value = false;
+  }
+};
+
+const selectShippingMethod = (method) => {
+  selectedShippingMethod.value = method;
+};
 
 onMounted(() => {
   // Ensure cart initialization logic is run when cart page is mounted,
@@ -185,6 +292,7 @@ onMounted(() => {
   // doesn't cover all scenarios or if there's a reactivity lag.
   // initCart() has an internal guard so it only runs fully once.
   initCart();
+  fetchShippingMethods();
 });
 
 const updateItemQuantity = (cartItemId, quantity) => {
@@ -219,7 +327,7 @@ const handleRemoveDiscount = () => { // Added back
 const checkCartEmptyBeforeCheckout = (event) => {
   if (cartItems.value.length === 0) {
     event.preventDefault();
-    alert("Your cart is empty. Please add items before proceeding to checkout.");
+    // Handle empty cart silently or show toast notification
   }
 };
 

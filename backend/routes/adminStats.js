@@ -45,10 +45,11 @@ router.get('/products-count', async (req, res, next) => {
 // GET /api/admin/stats/total-revenue - Total Revenue
 router.get('/total-revenue', async (req, res, next) => {
   try {
-    // Assuming 'Completed', 'Shipped', 'Delivered' are statuses that contribute to revenue.
-    // Adjust statuses if your application uses different ones.
+    // Use the same billable order statuses as defined in orderService
+    // These are the statuses that contribute to revenue: 'shipped', 'completed', 'delivered'
+    const BILLABLE_ORDER_STATUSES = ['shipped', 'completed', 'delivered'];
     const result = await db.query(
-      "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE status IN ('Completed', 'Shipped', 'Delivered');"
+      "SELECT SUM(CAST(total_amount AS DECIMAL(10,2))) AS total_revenue FROM orders WHERE status IN ('shipped', 'completed', 'delivered') AND total_amount IS NOT NULL AND total_amount != 'NaN';"
     );
     let totalRevenue = 0;
     if (result.rows.length > 0 && result.rows[0].total_revenue !== null) {

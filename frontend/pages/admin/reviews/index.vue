@@ -183,7 +183,6 @@ const fetchReviews = async () => {
     totalPages.value = response.data.pagination?.totalPages || 1;
     currentPage.value = response.data.pagination?.currentPage || 1;
   } catch (err) {
-    console.error('Error fetching reviews:', err);
     error.value = err.response?.data?.message || err.message || 'Failed to load reviews.';
   } finally {
     isLoading.value = false;
@@ -202,9 +201,7 @@ const updateReviewStatus = async (reviewId, newStatus) => {
       fetchReviews(); // Fallback to re-fetch all if not found (should not happen)
     }
   } catch (err) {
-    console.error('Error updating review status:', err);
     error.value = err.response?.data?.message || err.message || 'Failed to update status.';
-    alert(`Error: ${error.value}`);
     // Optionally, revert the status in UI or re-fetch to ensure consistency
     fetchReviews();
   }
@@ -222,9 +219,7 @@ const deleteReview = async (reviewId) => {
     // alert('Review deleted successfully.'); // Or use a toast
     fetchReviews(); // Refresh the list
   } catch (err) {
-    console.error('Error deleting review:', err);
     error.value = err.response?.data?.message || err.message || 'Failed to delete review.';
-    alert(`Error: ${error.value}`);
   }
 };
 

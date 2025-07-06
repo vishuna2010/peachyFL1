@@ -141,7 +141,6 @@ async function fetchSaleProducts() {
       pagination.totalItems = products.value.length;
     }
   } catch (err) {
-    console.error('Error fetching sale products:', err);
     error.value = err.response?.data || err;
     products.value = [];
   } finally {

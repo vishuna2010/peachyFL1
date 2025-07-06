@@ -147,11 +147,9 @@ async function loadInitialData() {
 
   let combinedErrorMessages = [];
   if (results[0].status === 'rejected') {
-    console.error("Failed to load global options:", results[0].reason);
     combinedErrorMessages.push(results[0].reason.response?.data?.message || results[0].reason.message || 'Failed to load global options.');
   }
   if (results[1].status === 'rejected') {
-     console.error("Failed to load assigned options:", results[1].reason);
     combinedErrorMessages.push(results[1].reason.response?.data?.message || results[1].reason.message || 'Failed to load assigned options.');
   }
 
@@ -191,7 +189,6 @@ async function handleAssignOptionToProduct() {
     await fetchAssignedProductOptionsInternal();
     selectedGlobalOptionIdToAssign.value = null;
   } catch (error) {
-    console.error('Error assigning option to product:', error);
     toast.error(error.response?.data?.message || 'Failed to assign option.');
   } finally {
     actionLoading.value = { type: null, id: null };
@@ -208,7 +205,6 @@ async function handleRemoveAssignedOption(assignedOptionId) {
     toast.success('Option assignment removed successfully.');
     await fetchAssignedProductOptionsInternal();
   } catch (error) {
-    console.error(`Error removing assigned option ${assignedOptionId}:`, error);
     toast.error(error.response?.data?.message || 'Failed to remove option assignment.');
   } finally {
     actionLoading.value = { type: null, id: null };

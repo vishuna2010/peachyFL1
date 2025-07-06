@@ -151,7 +151,6 @@ async function fetchParentOptionName() {
     const response = await $axios.get(`/api/admin/options/${optionId.value}`);
     optionName.value = response.data.name;
   } catch (err) {
-    console.error('Error fetching parent option name:', err);
     toast.error(err.response?.data?.message || `Failed to fetch option type (ID: ${optionId.value}).`);
     // Optionally navigate back if parent option doesn't exist
     // router.push('/admin/options');
@@ -167,7 +166,6 @@ async function fetchOptionValues() {
     const response = await $axios.get(`/api/admin/options/${optionId.value}/values`);
     optionValues.value = response.data;
   } catch (err) {
-    console.error('Error fetching option values:', err);
     fetchError.value = err.response?.data?.message || err.message || 'Could not load option values.';
     toast.error(fetchError.value);
   } finally {
@@ -223,7 +221,6 @@ const handleSubmitValue = async () => {
     fetchOptionValues(); // Refresh the list
     closeModal();
   } catch (error) {
-    console.error('Error submitting option value:', error);
     toast.error(error.response?.data?.message || 'An unexpected error occurred.');
   } finally {
     isSubmitting.value = false;
@@ -240,7 +237,6 @@ const handleDeleteValue = async (valueId) => {
     toast.success('Option value deleted successfully!');
     fetchOptionValues(); // Refresh the list
   } catch (error) {
-    console.error('Error deleting option value:', error);
     toast.error(error.response?.data?.message || 'Failed to delete option value.');
   } finally {
     isDeleting.value = null;

@@ -257,7 +257,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRoute, useNuxtApp } from 'vue-router'
+import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const orderId = route.params.id
@@ -273,11 +273,9 @@ const loadOrder = async () => {
     loading.value = true
     error.value = null
     
-    const { $axios } = useNuxtApp()
-    const response = await $axios.get(`/users/me/orders/${orderId}`)
-    order.value = response.data.order
+    const response = await $fetch(`/api/users/me/orders/${orderId}`)
+    order.value = response.order
   } catch (err) {
-    console.error('Error loading order:', err)
     error.value = err.response?.data?.message || 'Failed to load order details'
   } finally {
     loading.value = false

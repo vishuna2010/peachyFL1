@@ -103,7 +103,6 @@ watch(() => props.initialData, (newData) => {
 
 const handleSubmit = () => {
   if (!formData.name.trim()) {
-    alert('Supplier name is required.');
     return;
   }
   // Create a payload with only non-empty or specifically defined values

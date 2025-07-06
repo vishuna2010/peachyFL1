@@ -36,6 +36,7 @@ const adminTaxRatesRoutes = require('./routes/adminTaxRates'); // New import
 const adminMarketingRoutes = require('./routes/adminMarketing'); // Import admin marketing routes
 const adminHeroBannerRoutes = require('./routes/adminHeroBanners'); // Import admin hero banner routes
 const adminEmailCampaignRoutes = require('./routes/adminEmailCampaigns'); // Import admin email campaign routes
+const adminSettingsRoutes = require('./routes/adminSettings'); // Import admin settings routes
 // Duplicate imports for adminOptionManagementRoutes and adminProductSpecificOptionsRoutes were removed by only keeping the first ones.
 const reviewRoutes = require('./routes/reviews'); // Import review routes
 const userRoutes = require('./routes/users'); // Import user profile routes
@@ -45,8 +46,11 @@ const cartRoutes = require('./routes/cart'); // Import cart routes
 const optionsRoutes = require('./routes/options'); // Import public options routes
 const trackingRoutes = require('./routes/tracking'); // Import email tracking routes
 const addressRoutes = require('./routes/addresses'); // Import address routes
+const fulfillmentValidationRoutes = require('./routes/fulfillmentValidation'); // Import fulfillment validation routes
+const paymentRoutes = require('./routes/payments'); // Import payment routes
 const path = require('path'); // Import path module
 const globalErrorHandler = require('./middleware/errorHandler'); // Import global error handler
+const shippingRoutes = require('./routes/shipping');
 
 const app = express();
 const port = config.port; // Use port from config
@@ -179,6 +183,7 @@ app.use('/api/admin/tax-rates', adminTaxRatesRoutes); // New mount
 app.use('/api/admin/marketing', adminMarketingRoutes); // Mount admin marketing routes
 app.use('/api/admin/hero-banners', adminHeroBannerRoutes); // Mount admin hero banner routes
 app.use('/api/admin', adminEmailCampaignRoutes); // Mount admin email campaign routes
+app.use('/api/admin/settings', adminSettingsRoutes); // Mount admin settings routes
 
 
 // --- User Profile Routes ---
@@ -186,6 +191,42 @@ app.use('/api/users', userRoutes); // Mount user profile routes under /api/users
 
 // --- Public Category Routes ---
 app.use('/api/categories', categoryRoutes);
+
+// --- Public Settings Routes ---
+app.get('/api/settings/public', async (req, res) => {
+  try {
+    const db = require('./db');
+    const result = await db.query(`
+      SELECT 
+        setting_key,
+        setting_value,
+        setting_type
+      FROM site_settings 
+      WHERE is_public = true
+      ORDER BY setting_key
+    `);
+    
+    // Convert to key-value object for easier frontend consumption
+    const settings = {};
+    result.rows.forEach(row => {
+      settings[row.setting_key] = {
+        value: row.setting_value,
+        type: row.setting_type
+      };
+    });
+    
+    res.status(200).json({
+      success: true,
+      settings
+    });
+  } catch (error) {
+    console.error('Error fetching public site settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch settings'
+    });
+  }
+});
 
 // --- Public Cart Routes (e.g. for discount validation) ---
 app.use('/api/cart', cartRoutes);
@@ -210,12 +251,20 @@ app.use('/api/track', trackingRoutes);
 const publicUtilityRoutes = require('./routes/public');
 app.use('/api/public', publicUtilityRoutes);
 
+// --- Fulfillment Validation Routes ---
+app.use('/api/fulfillment', fulfillmentValidationRoutes);
+
 // --- Admin RBAC Management Routes ---
 const adminPermissionsRoutes = require('./routes/adminPermissions');
 const adminRolesRoutes = require('./routes/adminRoles');
 app.use('/api/admin/permissions', adminPermissionsRoutes);
 app.use('/api/admin/roles', adminRolesRoutes);
 
+// --- Shipping Routes ---
+app.use('/api/shipping', shippingRoutes);
+
+// --- Payment Routes ---
+app.use('/api/payments', paymentRoutes); // Mount payment routes under /api/payments
 
 // Ensure DB connection is attempted and tables are created when server starts
 // The db.js file already tries to connect and create tables upon import.

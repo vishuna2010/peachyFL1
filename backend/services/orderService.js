@@ -3,6 +3,7 @@ const db = require('../db');
 const bcrypt = require('bcrypt');
 const { NotFoundError, AppError, BadRequestError, ConflictError } = require('../utils/AppError');
 const taxService = require('./taxService');
+const paymentService = require('./paymentService');
 
 /**
  * Retrieves a paginated list of all orders for the admin view.
@@ -65,9 +66,14 @@ async function getAdminOrderById(orderId) {
       SELECT
         o.*,
         u.email as user_email,
-        u.role as user_role
+        u.role as user_role,
+        sm.name as shipping_method_name,
+        sm.description as shipping_method_description,
+        c.name as courier_name
       FROM orders o
       JOIN users u ON o.user_id = u.id
+      LEFT JOIN shipping_methods sm ON o.shipping_method_id = sm.id
+      LEFT JOIN couriers c ON sm.courier_id = c.id
       WHERE o.id = $1;
     `;
     const orderResult = await db.query(orderQuery, [orderId]);
@@ -266,6 +272,7 @@ async function updateOrderStatus(orderId, data, adminUserId /* for potential fut
 
 
 const config = require('../config'); // For company details, QR code base URL
+const { generateQrCodeDataURL } = require('./pdfService');
 
 /**
  * Retrieves and formats order details suitable for PDF generation (invoice or packing slip).
@@ -283,9 +290,7 @@ async function getOrderDetailsForPdf(orderId, type) {
       SELECT
         o.*,
         u.email as user_email,
-        u.name as user_name,
-        u.first_name as user_first_name,
-        u.last_name as user_last_name
+        u.name as user_name
       FROM orders o
       LEFT JOIN users u ON o.user_id = u.id
       WHERE o.id = $1;
@@ -347,9 +352,14 @@ async function getOrderDetailsForPdf(orderId, type) {
     orderData.company_email = config.company.email;
     orderData.company_website = config.company.website;
 
-    orderData.customer_name_for_slip = (orderData.user_first_name || orderData.user_last_name)
-        ? `${orderData.user_first_name || ''} ${orderData.user_last_name || ''}`.trim()
-        : orderData.user_name;
+    // Add fulfillment validation data for packing slips
+    if (type === 'packing-slip' && orderData.fulfillment_validation_code) {
+      const fulfillmentValidationService = require('./fulfillmentValidationService');
+      const qrUrl = fulfillmentValidationService.generateFulfillmentValidationQRUrl(orderData.fulfillment_validation_code);
+      orderData.fulfillment_qr_code = await generateQrCodeDataURL(qrUrl);
+    }
+
+    orderData.customer_name_for_slip = orderData.user_name || 'Customer';
 
     // Generate and add delivery confirmation QR URL if type is 'invoice'
     // This token is for the QR code that the delivery person would scan.
@@ -554,6 +564,103 @@ async function processOrderRefund(orderId, refundInput, adminUserId) {
 }
 
 /**
+ * Process a refund using the payment service.
+ * This is a simplified version that integrates with the payment service.
+ * @param {number} orderId - The ID of the order to refund.
+ * @param {object} refundInput - Refund details.
+ * @param {number} refundInput.amount - The amount to refund.
+ * @param {string} refundInput.reason - The reason for the refund.
+ * @param {Array} refundInput.items - Optional array of specific items to refund.
+ * @param {number} refundInput.processedBy - ID of the user processing the refund.
+ * @returns {Promise<object>} The refund result.
+ */
+async function processRefund(orderId, refundInput) {
+  const { amount, reason, items, processedBy } = refundInput;
+
+  // Get order details
+  const order = await getAdminOrderById(orderId);
+  if (!order) {
+    throw new NotFoundError(`Order with ID ${orderId} not found.`);
+  }
+
+  // Check if order can be refunded
+  if (!['paid', 'partially_refunded'].includes(order.payment_status)) {
+    throw new BadRequestError(`Order cannot be refunded. Current payment status: ${order.payment_status}`);
+  }
+
+  // Verify refund amount
+  if (amount > order.total_amount) {
+    throw new BadRequestError('Refund amount cannot exceed order total');
+  }
+
+  // Process refund through payment service if payment method supports it
+  let refundResult = null;
+  if (order.payment_method && order.transaction_id && ['stripe', 'paypal', 'plugnpay'].includes(order.payment_method)) {
+    try {
+      refundResult = await paymentService.processRefund({
+        transactionId: order.transaction_id,
+        amount,
+        currency: 'USD', // Assuming USD for now
+        method: order.payment_method,
+        reason
+      });
+    } catch (error) {
+      console.error('Payment service refund failed:', error);
+      // Continue with manual refund if payment service fails
+      refundResult = {
+        success: true,
+        refundId: `MANUAL-${Date.now()}`,
+        status: 'pending',
+        amount,
+        method: order.payment_method,
+        requiresManualProcessing: true,
+        reason: 'Payment service refund failed, manual processing required'
+      };
+    }
+  } else {
+    // Manual refund for COD, bank transfer, or other methods
+    refundResult = {
+      success: true,
+      refundId: `MANUAL-${Date.now()}`,
+      status: 'pending',
+      amount,
+      method: order.payment_method || 'manual',
+      requiresManualProcessing: true,
+      reason
+    };
+  }
+
+  // Update order status
+  const isFullRefund = amount >= order.total_amount;
+  const newOrderStatus = isFullRefund ? 'refunded' : 'partially_refunded';
+  const newPaymentStatus = isFullRefund ? 'refunded' : 'partially_refunded';
+
+  await updateOrderStatus(orderId, {
+    status: newOrderStatus,
+    payment_status: newPaymentStatus
+  }, processedBy);
+
+  // Log refund
+  console.log(`Refund processed for order ${orderId}: ${amount} - ${reason}`, {
+    orderId,
+    amount,
+    reason,
+    refundResult,
+    processedBy
+  });
+
+  return {
+    success: true,
+    refund: refundResult,
+    order: {
+      id: orderId,
+      status: newOrderStatus,
+      paymentStatus: newPaymentStatus
+    }
+  };
+}
+
+/**
  * Confirms the delivery of an order via QR code scan.
  * Validates the token, checks order status, and updates it to 'delivered'.
  * @param {string|number} orderId - The ID of the order to confirm.
@@ -672,6 +779,7 @@ module.exports = {
   updateOrderStatus,
   getOrderDetailsForPdf,
   processOrderRefund,
+  processRefund, // Added payment service integration
   createPublicOrder, // Added new function
   getUserOrderHistory, // Added for user's order history
   getUserOrderDetails, // Added for user's specific order details
@@ -696,8 +804,6 @@ async function getOrderDetailsForShippingLabel(orderId) {
         o.shipping_phone, -- Assuming this column might exist or be added
         o.tracking_number, o.shipping_carrier,
         u.name as user_full_name, -- User's full name if available
-        u.first_name as user_first_name,
-        u.last_name as user_last_name,
         o.created_at
       FROM orders o
       LEFT JOIN users u ON o.user_id = u.id
@@ -719,8 +825,6 @@ async function getOrderDetailsForShippingLabel(orderId) {
     let recipientName = 'N/A';
     if (orderData.shipping_address_full_name) { // Ideal if orders table stores this directly
         recipientName = orderData.shipping_address_full_name;
-    } else if (orderData.user_first_name || orderData.user_last_name) {
-        recipientName = `${orderData.user_first_name || ''} ${orderData.user_last_name || ''}`.trim();
     } else if (orderData.user_full_name) {
         recipientName = orderData.user_full_name;
     }
@@ -1043,15 +1147,17 @@ async function createPublicOrder(orderRequestData, authenticatedUser) {
           total_tax_amount, tax_summary_details,
           shipping_address_line1, shipping_address_line2, shipping_city, shipping_postal_code, shipping_country,
           billing_address_line1, billing_address_line2, billing_city, billing_postal_code, billing_country,
+          payment_method, shipping_cost, shipping_method_id,
           created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING *`,
       [
         userId, initialOrderStatus, initialPaymentStatus, grandTotal, subtotalExclusiveForDiscount,
         appliedDiscountId, appliedDiscountCode, appliedDiscountAmount,
         orderTotalTaxAmount, orderTaxSummaryDetails ? JSON.stringify(orderTaxSummaryDetails) : null,
         shippingAddress.line1, shippingAddress.line2 || null, shippingAddress.city, shippingAddress.postalCode, shippingAddress.country,
-        finalBillingAddress.line1, finalBillingAddress.line2 || null, finalBillingAddress.city, finalBillingAddress.postalCode, finalBillingAddress.country
+        finalBillingAddress.line1, finalBillingAddress.line2 || null, finalBillingAddress.city, finalBillingAddress.postalCode, finalBillingAddress.country,
+        orderRequestData.payment_method || null, orderRequestData.shipping_cost || 0.00, orderRequestData.shipping_method_id || null
       ]
     );
     const newOrder = orderInsertResult.rows[0];
@@ -1093,6 +1199,15 @@ async function createPublicOrder(orderRequestData, authenticatedUser) {
 
     // 11. (Optional) Clear User's Cart - This logic would depend on how carts are stored (e.g., DB table, session)
     // For now, assume this is handled by the frontend or a separate cart service call after order success.
+
+    // 12. Assign fulfillment validation code
+    const fulfillmentValidationService = require('./fulfillmentValidationService');
+    try {
+      await fulfillmentValidationService.assignFulfillmentValidationCode(newOrder.id);
+    } catch (fulfillmentError) {
+      // Log the error but don't fail the order creation
+      console.error(`Failed to assign fulfillment validation code for order ${newOrder.id}:`, fulfillmentError);
+    }
 
     await client.query('COMMIT');
 
@@ -1213,7 +1328,18 @@ async function getUserOrderDetails(userId, orderId) {
   const numOrderId = parseInt(orderId);
 
   try {
-    const orderQuery = 'SELECT *, created_at as order_date FROM orders WHERE id = $1 AND user_id = $2;';
+    const orderQuery = `
+      SELECT 
+        o.*, 
+        o.created_at as order_date,
+        sm.name as shipping_method_name,
+        sm.description as shipping_method_description,
+        c.name as courier_name
+      FROM orders o
+      LEFT JOIN shipping_methods sm ON o.shipping_method_id = sm.id
+      LEFT JOIN couriers c ON sm.courier_id = c.id
+      WHERE o.id = $1 AND o.user_id = $2;
+    `;
     const orderResult = await db.query(orderQuery, [numOrderId, userId]);
 
     if (orderResult.rows.length === 0) {
@@ -1280,6 +1406,12 @@ async function getUserOrderDetails(userId, orderId) {
       discount_applied: orderData.discount_id ? {
         code: orderData.discount_code_applied,
         amount_deducted: parseFloat(orderData.discount_amount_applied),
+      } : null,
+      shipping_method: orderData.shipping_method_name ? {
+        name: orderData.shipping_method_name,
+        description: orderData.shipping_method_description,
+        courier_name: orderData.courier_name,
+        cost: parseFloat(orderData.shipping_cost || 0)
       } : null,
       // Additional fields from the 'orders' table if needed by frontend can be added here directly from orderData
       invoice_number: orderData.invoice_number,

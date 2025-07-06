@@ -130,11 +130,15 @@ async function createSchema(client) {
         id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE NOT NULL, description TEXT,
         slug VARCHAR(255) UNIQUE, -- Added slug column
         image_url VARCHAR(255), -- Added image_url column for category images
+        show_in_menu BOOLEAN DEFAULT FALSE, -- Added flag to control menu bar visibility
+        menu_order INTEGER DEFAULT 0, -- Added order for menu bar display
         parent_category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );`);
     await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS slug VARCHAR(255) UNIQUE;`); // Ensure slug column if table already exists
     await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS image_url VARCHAR(255);`); // Ensure image_url column if table already exists
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS show_in_menu BOOLEAN DEFAULT FALSE;`); // Ensure show_in_menu column if table already exists
+    await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS menu_order INTEGER DEFAULT 0;`); // Ensure menu_order column if table already exists
     console.log('Table "categories" checked/created and slug/image_url columns ensured.');
 
     // Hero Banners Table
@@ -368,11 +372,35 @@ async function createSchema(client) {
         discount_code_applied VARCHAR(255) NULL,
         discount_amount_applied DECIMAL(10, 2) NULL,
         original_total_amount DECIMAL(10, 2) NULL,
+        total_tax_amount DECIMAL(10, 2) DEFAULT 0.00,
+        tax_summary_details JSONB NULL,
+        payment_status VARCHAR(50) DEFAULT 'pending',
+        payment_method VARCHAR(100) NULL,
+        shipping_cost DECIMAL(10, 2) DEFAULT 0.00,
+        fulfillment_validation_code VARCHAR(50) NULL,
+        fulfillment_validated_at TIMESTAMPTZ NULL,
+        fulfillment_validated_by_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('Table "orders" checked/created.');
+
+    // Fulfillment Validation Logs Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS fulfillment_validation_logs (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        validation_code VARCHAR(50) NOT NULL,
+        validated_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        validation_method VARCHAR(50) NOT NULL DEFAULT 'qr_scan',
+        validation_status VARCHAR(50) NOT NULL DEFAULT 'success',
+        validation_notes TEXT NULL,
+        scanned_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "fulfillment_validation_logs" checked/created.');
 
     // Order Items Table
     await client.query(`
@@ -387,6 +415,7 @@ async function createSchema(client) {
         product_sku_at_purchase VARCHAR(100) NULL,
         tax_class_id_at_purchase INTEGER NULL REFERENCES tax_classes(id) ON DELETE SET NULL,
         line_item_tax_amount DECIMAL(10, 2) DEFAULT 0.00,
+        applied_tax_rate_percentage DECIMAL(5, 2) NULL,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
@@ -415,6 +444,7 @@ async function createSchema(client) {
         id SERIAL PRIMARY KEY,
         purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
         product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+        product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE SET NULL,
         quantity_ordered INTEGER NOT NULL CHECK (quantity_ordered > 0),
         unit_cost_price DECIMAL(10, 2) NOT NULL,
         quantity_received INTEGER NOT NULL DEFAULT 0 CHECK (quantity_received >= 0 AND quantity_received <= quantity_ordered)
@@ -514,6 +544,27 @@ async function createSchema(client) {
     `);
     console.log('Table "product_cost_history" checked/created.');
 
+    // Shipping Tables
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS couriers (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        contact_info TEXT
+      );
+    `);
+    console.log('Table "couriers" checked/created.');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS shipping_methods (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        price DECIMAL(10,2) NOT NULL,
+        courier_id INTEGER REFERENCES couriers(id) ON DELETE SET NULL,
+        description TEXT
+      );
+    `);
+    console.log('Table "shipping_methods" checked/created.');
+
     // Trigger function for updated_at timestamps
     await client.query(`
       CREATE OR REPLACE FUNCTION trigger_set_timestamp()
@@ -526,7 +577,7 @@ async function createSchema(client) {
     `);
     console.log('Function "trigger_set_timestamp" checked/created.');
 
-    const tablesWithTimestampTrigger = ['users', 'roles', 'permissions', 'suppliers', 'categories', 'hero_banners', 'products', 'product_options', 'product_option_values', 'product_variants', 'product_images', 'product_reviews', 'discounts', 'orders', 'purchase_orders', 'tax_classes', 'tax_rates', 'inventory_batches', 'product_assigned_options', 'product_assigned_option_specific_values', 'product_cost_history'];
+    const tablesWithTimestampTrigger = ['users', 'roles', 'permissions', 'suppliers', 'categories', 'hero_banners', 'products', 'product_options', 'product_option_values', 'product_variants', 'product_images', 'product_reviews', 'discounts', 'orders', 'fulfillment_validation_logs', 'purchase_orders', 'tax_classes', 'tax_rates', 'inventory_batches', 'product_assigned_options', 'product_assigned_option_specific_values', 'product_cost_history', 'couriers', 'shipping_methods'];
     for (const tableName of tablesWithTimestampTrigger) {
       await client.query(`
         DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trigger_update_${tableName}_updated_at' AND tgrelid = '${tableName}'::regclass) THEN
@@ -534,6 +585,103 @@ async function createSchema(client) {
       `);
       console.log(`Trigger for "${tableName}.updated_at" ensured.`);
     }
+
+    // Site Settings Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS site_settings (
+        id SERIAL PRIMARY KEY,
+        setting_key VARCHAR(100) UNIQUE NOT NULL,
+        setting_value TEXT NOT NULL,
+        setting_type VARCHAR(20) NOT NULL DEFAULT 'string' CHECK (setting_type IN ('string', 'boolean', 'number', 'json')),
+        setting_description TEXT,
+        is_public BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "site_settings" checked/created.');
+
+    // Add trigger for site_settings updated_at
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_site_settings') THEN
+          CREATE TRIGGER set_timestamp_site_settings
+          BEFORE UPDATE ON site_settings
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "site_settings.updated_at" ensured.');
+
+    // Email Campaigns Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_campaigns (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        subject VARCHAR(255) NOT NULL,
+        template_name VARCHAR(255) NOT NULL,
+        status VARCHAR(50) DEFAULT 'draft' CHECK (status IN ('draft', 'scheduled', 'sent', 'paused')),
+        scheduled_at TIMESTAMPTZ,
+        sent_at TIMESTAMPTZ,
+        total_sent INTEGER DEFAULT 0,
+        total_opens INTEGER DEFAULT 0,
+        total_clicks INTEGER DEFAULT 0,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "email_campaigns" checked/created.');
+
+    // Add trigger for email_campaigns updated_at
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_email_campaigns') THEN
+          CREATE TRIGGER set_timestamp_email_campaigns
+          BEFORE UPDATE ON email_campaigns
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "email_campaigns.updated_at" ensured.');
+
+    // Email Unsubscribes Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_unsubscribes (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        campaign_id INTEGER REFERENCES email_campaigns(id) ON DELETE CASCADE,
+        email_type VARCHAR(100) NOT NULL,
+        reason TEXT,
+        unsubscribed_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "email_unsubscribes" checked/created.');
+
+    // Add trigger for email_unsubscribes updated_at
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'set_timestamp_email_unsubscribes') THEN
+          CREATE TRIGGER set_timestamp_email_unsubscribes
+          BEFORE UPDATE ON email_unsubscribes
+          FOR EACH ROW
+          EXECUTE FUNCTION trigger_set_timestamp();
+        END IF;
+      END
+      $$;
+    `);
+    console.log('Trigger for "email_unsubscribes.updated_at" ensured.');
+
     console.log('Schema creation process completed.');
   } catch (error) {
     console.error('Error creating schema:', error);
@@ -854,7 +1002,7 @@ async function seedProducts(client, seededDataIds) {
       category_id: seededDataIds.categories?.Headphones?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
-      image_url: 'https://via.placeholder.com/300x300.png?text=Headphones', is_active: true,
+      image_url: 'https://picsum.photos/300/300?random=10', is_active: true,
       has_variants: false, // Will be set to true later if options/variants are added
       reorder_threshold: 5,
       product_status: 'active'
@@ -865,7 +1013,7 @@ async function seedProducts(client, seededDataIds) {
       category_id: seededDataIds.categories?.Apparel?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
-      image_url: 'https://via.placeholder.com/300x300.png?text=T-Shirt', is_active: true,
+      image_url: 'https://picsum.photos/300/300?random=11', is_active: true,
       has_variants: false, // Will be set to true later if options/variants are added
       reorder_threshold: 10,
       product_status: 'active'
@@ -876,7 +1024,7 @@ async function seedProducts(client, seededDataIds) {
       category_id: seededDataIds.categories?.['Home Goods']?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
-      image_url: 'https://via.placeholder.com/300x300.png?text=Desk+Lamp', is_active: true,
+      image_url: 'https://picsum.photos/300/300?random=12', is_active: true,
       has_variants: false,
       reorder_threshold: 5,
       product_status: 'draft'
@@ -1271,7 +1419,13 @@ async function seedRbac(client, seededDataIds) {
     { name: 'marketing:manage_hero_banners', description: 'Can create, read, update, and delete hero banners.', group_name: 'Marketing' },
     { name: 'marketing:view_campaigns', description: 'Can view email campaigns and their tracking data.', group_name: 'Marketing' },
     { name: 'marketing:view_unsubscribes', description: 'Can view unsubscribe lists and manage email preferences.', group_name: 'Marketing' },
-    { name: 'products:view_stock', description: 'Can view product stock levels and inventory batches.', group_name: 'Products' } // Added new permission
+    { name: 'products:view_stock', description: 'Can view product stock levels and inventory batches.', group_name: 'Products' },
+    { name: 'orders:validate_fulfillment', description: 'Can validate order fulfillment using QR codes or manual entry.', group_name: 'Orders' },
+    { name: 'orders:manage_fulfillment', description: 'Can assign and manage fulfillment validation codes for orders.', group_name: 'Orders' },
+    { name: 'orders:print_shipping_label', description: 'Can generate shipping labels for orders.', group_name: 'Orders' },
+    { name: 'shipping:manage_couriers', description: 'Can create, edit, and delete shipping couriers.', group_name: 'Shipping' },
+    { name: 'shipping:manage_methods', description: 'Can create, edit, and delete shipping methods.', group_name: 'Shipping' },
+    { name: 'shipping:view_options', description: 'Can view available shipping options for checkout.', group_name: 'Shipping' }
   ];
   try {
     for (const role of rolesToSeed) {
@@ -1285,7 +1439,7 @@ async function seedRbac(client, seededDataIds) {
     const rolePermissionsToAssign = {
       'super_admin': Object.keys(seededDataIds.permissions),
       'admin': Object.keys(seededDataIds.permissions),
-      'product_manager': [ 'admin:access_dashboard', 'products:view', 'products:create', 'products:edit', 'products:delete', 'categories:manage', 'tags:manage', 'options:manage_global', 'reviews:manage', 'products:view_stock' ], // Added products:view_stock
+      'product_manager': [ 'admin:access_dashboard', 'products:view', 'products:create', 'products:edit', 'products:delete', 'categories:manage', 'tags:manage', 'options:manage_global', 'reviews:manage', 'products:view_stock', 'shipping:view_options' ], // Added products:view_stock and shipping:view_options
       'customer': ['products:view', 'orders:view_details']
     };
     for (const roleNameKey in rolePermissionsToAssign) {
@@ -1306,6 +1460,241 @@ async function seedRbac(client, seededDataIds) {
   }
 }
 
+async function seedOrders(client, seededDataIds) {
+  console.log('Seeding orders...');
+  seededDataIds.orders = seededDataIds.orders || {};
+
+  // Use seeded users and products
+  const userIds = Object.values(seededDataIds.users);
+  const productList = Object.values(seededDataIds.products);
+  if (userIds.length === 0 || productList.length === 0) {
+    console.warn('No users or products found for order seeding. Skipping.');
+    return;
+  }
+
+  // Create a sample order for each user
+  for (let i = 0; i < userIds.length; i++) {
+    const userId = userIds[i];
+    const product = productList[i % productList.length];
+    const shippingCost = 7.99 + i; // Just for variety
+    const paymentMethod = i % 2 === 0 ? 'credit_card' : 'paypal';
+    const basePrice = parseFloat(product.price) || 0;
+    const totalAmount = basePrice + shippingCost;
+    // Create variety in order statuses for testing
+    const statuses = ['pending', 'completed', 'delivered', 'cancelled'];
+    const orderStatus = statuses[i % statuses.length];
+    const orderRes = await client.query(
+      `INSERT INTO orders (
+        user_id, status, total_amount, original_total_amount, discount_amount_applied, payment_status,
+        shipping_address_line1, shipping_city, shipping_postal_code, shipping_country,
+        billing_address_line1, billing_city, billing_postal_code, billing_country,
+        total_tax_amount, payment_method, shipping_cost
+      ) VALUES (
+        $1, $2, $3, $4, $5, 'paid',
+        $6, $7, $8, $9,
+        $10, $11, $12, $13,
+        $14, $15, $16
+      ) RETURNING id;`,
+      [
+        userId, orderStatus, totalAmount, basePrice, 0,
+        '123 Main St', 'Test City', '12345', 'USA',
+        '123 Main St', 'Test City', '12345', 'USA',
+        0, paymentMethod, shippingCost
+      ]
+    );
+    const orderId = orderRes.rows[0].id;
+    seededDataIds.orders[orderId] = { id: orderId, user_id: userId };
+    // Insert order item
+    const productPrice = parseFloat(product.price) || 0;
+    await client.query(
+      `INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase)
+       VALUES ($1, $2, $3, $4)`,
+      [orderId, product.id, 1, productPrice]
+    );
+    console.log(`Seeded order ${orderId} for user ${userId} and product ${product.sku}`);
+  }
+  console.log('Orders seeding completed.');
+}
+
+async function seedSiteSettings(client) {
+  console.log('Seeding site settings...');
+  
+  const defaultSettings = [
+    // General Settings
+    { setting_key: 'site_name', setting_value: 'PeachyFL' },
+    { setting_key: 'site_description', setting_value: 'Your premium online store for quality products' },
+    { setting_key: 'contact_email', setting_value: 'contact@peachyfl.com' },
+    { setting_key: 'contact_phone', setting_value: '+1 (555) 123-4567' },
+    { setting_key: 'address', setting_value: '123 Business Street, Suite 100, City, State 12345' },
+    { setting_key: 'site_logo', setting_value: '' },
+    
+    // Locale & Currency Settings
+    { setting_key: 'default_locale', setting_value: 'en-US' },
+    { setting_key: 'default_currency', setting_value: 'USD' },
+    { setting_key: 'currency_symbol', setting_value: '$' },
+    { setting_key: 'timezone', setting_value: 'America/New_York' },
+    
+    // Geographic Service Locations
+    { setting_key: 'service_locations', setting_value: 'US,CA,GB,DE,FR,IT,ES,NL,JP,KR,CN,AU,SG,IN' },
+    
+    // Social Media Settings
+    { setting_key: 'social_facebook', setting_value: '' },
+    { setting_key: 'social_instagram', setting_value: '' },
+    { setting_key: 'social_twitter', setting_value: '' },
+    
+    // Feature Toggles
+    { setting_key: 'shipping_calculator_enabled', setting_value: 'true' },
+    { setting_key: 'tax_calculator_enabled', setting_value: 'true' },
+    { setting_key: 'guest_checkout_enabled', setting_value: 'true' },
+    { setting_key: 'reviews_enabled', setting_value: 'true' },
+    { setting_key: 'wishlist_enabled', setting_value: 'true' },
+    { setting_key: 'new_arrivals_days', setting_value: '30' },
+    
+    // Maintenance Settings
+    { setting_key: 'maintenance_mode_enabled', setting_value: 'false' },
+    { setting_key: 'maintenance_message', setting_value: '' },
+    
+    // Email Settings
+    { setting_key: 'order_confirmation_email_template', setting_value: '' },
+    { setting_key: 'email_from_name', setting_value: 'PeachyFL Store' },
+    { setting_key: 'email_from_address', setting_value: 'noreply@peachyfl.com' },
+    
+    // SEO Settings
+    { setting_key: 'meta_title', setting_value: 'PeachyFL - Premium Online Store' },
+    { setting_key: 'meta_description', setting_value: 'Discover quality products at PeachyFL. Shop with confidence for the best deals and premium service.' },
+    { setting_key: 'meta_keywords', setting_value: 'online store, shopping, quality products, premium service' },
+    
+    // Analytics Settings
+    { setting_key: 'google_analytics_id', setting_value: '' },
+    { setting_key: 'facebook_pixel_id', setting_value: '' },
+    
+    // Security Settings
+    { setting_key: 'max_login_attempts', setting_value: '5' },
+    { setting_key: 'session_timeout_minutes', setting_value: '60' },
+    { setting_key: 'require_email_verification', setting_value: 'true' },
+    
+    // Performance Settings
+    { setting_key: 'cache_enabled', setting_value: 'true' },
+    { setting_key: 'image_optimization_enabled', setting_value: 'true' },
+    { setting_key: 'cdn_enabled', setting_value: 'false' },
+    
+    // Notification Settings
+    { setting_key: 'low_stock_threshold', setting_value: '10' },
+    { setting_key: 'out_of_stock_notifications', setting_value: 'true' },
+    { setting_key: 'order_notifications', setting_value: 'true' },
+    { setting_key: 'review_notifications', setting_value: 'true' },
+    
+    // Shipping Settings
+    { setting_key: 'free_shipping_threshold', setting_value: '50.00' },
+    { setting_key: 'default_shipping_cost', setting_value: '5.99' },
+    { setting_key: 'shipping_zones_enabled', setting_value: 'false' },
+    
+    // Tax Settings
+    { setting_key: 'tax_included_in_price', setting_value: 'false' },
+    { setting_key: 'tax_display_type', setting_value: 'exclusive' }, // exclusive or inclusive
+    { setting_key: 'tax_rounding', setting_value: 'nearest' },
+    
+    // Inventory Settings
+    { setting_key: 'allow_backorders', setting_value: 'false' },
+    { setting_key: 'track_inventory', setting_value: 'true' },
+    { setting_key: 'reserve_stock_on_cart', setting_value: 'true' },
+    { setting_key: 'reserve_stock_duration_minutes', setting_value: '30' },
+    
+    // Customer Settings
+    { setting_key: 'customer_registration_enabled', setting_value: 'true' },
+    { setting_key: 'customer_approval_required', setting_value: 'false' },
+    { setting_key: 'customer_groups_enabled', setting_value: 'false' },
+    { setting_key: 'customer_points_enabled', setting_value: 'false' },
+    
+    // Product Settings
+    { setting_key: 'product_reviews_require_approval', setting_value: 'true' },
+    { setting_key: 'product_ratings_enabled', setting_value: 'true' },
+    { setting_key: 'product_comparison_enabled', setting_value: 'true' },
+    { setting_key: 'product_wishlist_enabled', setting_value: 'true' },
+    { setting_key: 'product_share_enabled', setting_value: 'true' },
+    
+    // Order Settings
+    { setting_key: 'order_number_prefix', setting_value: 'ORD' },
+    { setting_key: 'order_number_suffix', setting_value: '' },
+    { setting_key: 'order_auto_cancel_hours', setting_value: '24' },
+    { setting_key: 'order_auto_complete_days', setting_value: '7' },
+    { setting_key: 'order_notes_enabled', setting_value: 'true' },
+    
+    // Discount Settings
+    { setting_key: 'coupon_codes_enabled', setting_value: 'true' },
+    { setting_key: 'automatic_discounts_enabled', setting_value: 'true' },
+    { setting_key: 'bulk_discounts_enabled', setting_value: 'true' },
+    
+    // Return/Refund Settings
+    { setting_key: 'returns_enabled', setting_value: 'true' },
+    { setting_key: 'return_window_days', setting_value: '30' },
+    { setting_key: 'refund_method', setting_value: 'original_payment' }, // original_payment, store_credit, bank_transfer
+    
+    // Integration Settings
+    { setting_key: 'google_shopping_enabled', setting_value: 'false' },
+    { setting_key: 'facebook_catalog_enabled', setting_value: 'false' },
+    { setting_key: 'instagram_shopping_enabled', setting_value: 'false' },
+    
+    // API Settings
+    { setting_key: 'api_enabled', setting_value: 'false' },
+    { setting_key: 'api_rate_limit', setting_value: '1000' },
+    { setting_key: 'webhook_enabled', setting_value: 'false' },
+    
+    // Backup Settings
+    { setting_key: 'auto_backup_enabled', setting_value: 'false' },
+    { setting_key: 'backup_frequency_days', setting_value: '7' },
+    { setting_key: 'backup_retention_days', setting_value: '30' },
+    { setting_key: 'mock_gateway_enabled', setting_value: 'true' },
+  ];
+
+  for (const setting of defaultSettings) {
+    try {
+      await client.query(
+        `INSERT INTO site_settings (setting_key, setting_value) 
+         VALUES ($1, $2) 
+         ON CONFLICT (setting_key) DO UPDATE SET 
+         setting_value = EXCLUDED.setting_value,
+         updated_at = CURRENT_TIMESTAMP`,
+        [setting.setting_key, setting.setting_value]
+      );
+    } catch (error) {
+      console.error(`Error seeding setting ${setting.setting_key}:`, error.message);
+    }
+  }
+  
+  console.log('Site settings seeded successfully.');
+}
+
+async function seedCouriersAndShippingMethods(client, seededDataIds) {
+  console.log('Seeding couriers and shipping methods...');
+  // Seed couriers
+  const couriers = [
+    { name: 'FastExpress', contact_info: 'support@fastexpress.com' },
+    { name: 'EcoShip', contact_info: 'info@ecoship.com' },
+  ];
+  const courierIds = [];
+  for (const c of couriers) {
+    const res = await client.query(
+      `INSERT INTO couriers (name, contact_info) VALUES ($1, $2) RETURNING id`,
+      [c.name, c.contact_info]
+    );
+    courierIds.push(res.rows[0].id);
+  }
+  // Seed shipping methods
+  const methods = [
+    { name: 'Standard Shipping', price: 5.99, courier_id: courierIds[0], description: '3-5 business days' },
+    { name: 'Express Shipping', price: 12.99, courier_id: courierIds[0], description: '1-2 business days' },
+    { name: 'Eco Saver', price: 3.99, courier_id: courierIds[1], description: '5-8 business days' },
+  ];
+  for (const m of methods) {
+    await client.query(
+      `INSERT INTO shipping_methods (name, price, courier_id, description) VALUES ($1, $2, $3, $4)`,
+      [m.name, m.price, m.courier_id, m.description]
+    );
+  }
+  console.log('Couriers and shipping methods seeded.');
+}
+
 // --- END OF HELPER SEED FUNCTION DEFINITIONS ---
 
 async function seedDatabase() {
@@ -1317,10 +1706,14 @@ async function seedDatabase() {
     await applySchemaMigrations(client); // Add new columns if they don't exist
     await client.query('BEGIN');
 
+    // Seed site settings before other seeders
+    await seedSiteSettings(client);
+
     const seededDataIds = {
         users: {}, options: {}, optionValues: {}, products: {},
         taxClasses: {}, taxRates: {}, roles: {}, permissions: {},
-        heroBanners: {}, categories: {}, suppliers: {}, variants: {}
+        heroBanners: {}, categories: {}, suppliers: {}, variants: {},
+        orders: {}
     };
 
     await seedRbac(client, seededDataIds);
@@ -1357,6 +1750,8 @@ async function seedDatabase() {
     await seedSuppliers(client, seededDataIds);
     await seedSpecificGlobalOptionsAndValues(client, seededDataIds);
     await seedProducts(client, seededDataIds);
+    await seedCouriersAndShippingMethods(client, seededDataIds);
+    await seedOrders(client, seededDataIds);
 
     const productSkusToConfigure = ['TSHRT-MEN-COT-005', 'HDPHN-WL-BT-001'];
     console.log('Checking conditions for product option/variant seeding:');

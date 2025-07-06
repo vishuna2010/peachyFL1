@@ -59,11 +59,24 @@
                         <span class="font-medium text-orange-gold/80">${{ cartTotalTax }}</span> <!-- Themed: Price -->
                     </p>
                 </div>
+                <!-- Shipping Cost -->
+                <div v-if="selectedShippingMethod" class="text-venus-text-secondary">
+                  <p class="flex justify-between">
+                    <span>Shipping ({{ selectedShippingMethod.name }}):</span>
+                    <span class="font-medium text-orange-gold">${{ parseFloat(selectedShippingMethod.price).toFixed(2) }}</span>
+                  </p>
+                </div>
+                <div v-else class="text-venus-text-secondary">
+                  <p class="flex justify-between">
+                    <span>Shipping:</span>
+                    <span class="text-sm text-gray-500">Select a method</span>
+                  </p>
+                </div>
             </div>
 
             <p class="flex justify-between text-xl font-bold text-orange-gold mt-4 pt-4 border-t-2 border-peach-pink"> <!-- Themed: Grand Total & Border -->
               <span>Grand Total:</span>
-              <span>${{ cartFinalTotalPrice.toFixed(2) }}</span>
+              <span>${{ cartFinalTotalPriceWithShipping.toFixed(2) }}</span>
             </p>
           </div>
 
@@ -151,6 +164,84 @@
 
         <div v-if="submissionError" class="mt-4 p-4 text-sm text-red-700 bg-red-50 border border-red-300 rounded-md">{{ submissionError }}</div> <!-- Adjusted rounded -->
 
+        <!-- Shipping Method Selection -->
+        <div class="mt-8 p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
+          <h3 class="text-xl font-serif text-peach-pink mb-4">Shipping Method</h3>
+          
+          <!-- Loading State -->
+          <div v-if="loadingShippingMethods" class="flex justify-center items-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-peach-pink"></div>
+            <span class="ml-3 text-venus-text-secondary">Loading shipping options...</span>
+          </div>
+
+          <!-- Error State -->
+          <div v-else-if="shippingError" class="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-red-800">Error loading shipping methods</h3>
+                <div class="mt-2 text-sm text-red-700">{{ shippingError }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Shipping Methods -->
+          <div v-else-if="shippingMethods.length === 0" class="text-center py-8">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No shipping methods available</h3>
+            <p class="mt-1 text-sm text-gray-500">Please contact customer support for assistance.</p>
+          </div>
+
+          <div v-else class="space-y-3">
+            <div
+              v-for="method in shippingMethods"
+              :key="method.id"
+              class="relative border border-gray-200 rounded-lg p-4 cursor-pointer transition-all duration-200 hover:border-peach-pink hover:shadow-md"
+              :class="{
+                'border-peach-pink bg-peach-pink/5': selectedShippingMethod?.id === method.id,
+                'border-gray-200': selectedShippingMethod?.id !== method.id
+              }"
+              @click="selectShippingMethod(method)"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                  <input
+                    type="radio"
+                    :id="`shipping-${method.id}`"
+                    :name="'shipping-method'"
+                    :value="method.id"
+                    :checked="selectedShippingMethod?.id === method.id"
+                    class="h-4 w-4 text-peach-pink border-gray-300 focus:ring-peach-pink"
+                    @change="selectShippingMethod(method)"
+                  />
+                  <div class="ml-3">
+                    <label :for="`shipping-${method.id}`" class="text-sm font-medium text-venus-text-primary cursor-pointer">
+                      {{ method.name }}
+                    </label>
+                    <div class="flex items-center mt-1">
+                      <span v-if="method.courier_name" class="text-xs text-venus-text-secondary mr-2">
+                        {{ method.courier_name }}
+                      </span>
+                      <span v-if="method.description" class="text-xs text-venus-text-secondary">
+                        {{ method.description }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="text-lg font-bold text-orange-gold">${{ parseFloat(method.price).toFixed(2) }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Payment Method Section (Placeholder) -->
         <div class="mt-8 p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
           <h3 class="text-xl font-serif text-peach-pink mb-4">Payment Method</h3>
@@ -178,7 +269,7 @@
         <h3 class="text-2xl font-serif text-peach-pink text-center">Confirm Mock Payment</h3>
         <p class="text-center text-venus-text-secondary">
           You are about to place an order for:
-          <strong class="text-orange-gold">${{ cartFinalTotalPrice.toFixed(2) }}</strong>
+          <strong class="text-orange-gold">${{ cartFinalTotalPriceWithShipping.toFixed(2) }}</strong>
         </p>
         <p class="text-sm text-center text-gray-600">This is a simulated payment. No real transaction will occur.</p>
         <div class="flex justify-around mt-6">
@@ -251,12 +342,20 @@ const showMockPaymentModal = ref(false);
 const isPlacingOrderAfterMockPayment = ref(false); // For the "Confirm Payment & Place Order" button state
 const mockPaymentError = ref('');
 
-
-// console.log('[checkout.vue setup] Initial isCartStoreInitialized.value:', isCartStoreInitialized.value); // Debug
+const loadingShippingMethods = ref(false);
+const shippingError = ref('');
+const shippingMethods = ref([]);
+const selectedShippingMethod = ref(null);
 
 const showInitializingMessage = computed(() => {
-  // console.log('[checkout.vue computed showInitializingMessage] isCartStoreInitialized.value is:', isCartStoreInitialized.value); // Debug
   return !isCartStoreInitialized.value;
+});
+
+// Calculate total with shipping
+const cartFinalTotalPriceWithShipping = computed(() => {
+  const baseTotal = cartFinalTotalPrice.value;
+  const shippingCost = selectedShippingMethod.value ? parseFloat(selectedShippingMethod.value.price) : 0;
+  return baseTotal + shippingCost;
 });
 
 // Helper function to find tax details for a specific cart item (similar to cart.vue)
@@ -274,36 +373,48 @@ const getLineItemTaxCheckout = (cartItem) => {
 
 // Watchers for auth and cart initialization
 watchEffect(() => {
-    // console.log('[checkout.vue watchEffect] TOP: isAuthInitialized.value:', (typeof isAuthInitialized === 'undefined' ? 'undefined_itself' : isAuthInitialized.value), 'isCartStoreInitialized.value:', isCartStoreInitialized.value); // Debug
     const authReady = typeof isAuthInitialized === 'undefined' ? true : isAuthInitialized.value;
     const cartReady = isCartStoreInitialized.value;
-    // console.log('[checkout.vue watchEffect] authReady:', authReady, 'cartReady:', cartReady); // Debug
 
     if (authReady && cartReady) {
-        // console.log('[checkout.vue watchEffect] Both ready. Setting isLoadingAuthOrCart to false. Prev value:', isLoadingAuthOrCart.value); // Debug
         isLoadingAuthOrCart.value = false;
         isAuthenticated.value = !!authToken.value;
-        // console.log('[checkout.vue watchEffect] isLoadingAuthOrCart is now:', isLoadingAuthOrCart.value, 'isAuthenticated is now:', isAuthenticated.value); // Debug
 
         if (isAuthenticated.value && cartItems.value.length === 0) {
-            // console.log("[checkout.vue watchEffect] User authenticated but cart empty. Redirecting to /cart"); // Debug
             router.replace('/cart');
         } else if (!isAuthenticated.value && cartItems.value.length === 0 && route.path === '/checkout') { // Ensure only redirect from checkout
-            // console.log("[checkout.vue watchEffect] User is guest and cart is empty on checkout page. Redirecting to /cart"); // Debug
             router.replace('/cart');
         }
-    } else {
-        // console.log('[checkout.vue watchEffect] Not yet ready. isLoadingAuthOrCart:', isLoadingAuthOrCart.value); // Debug
     }
 });
 
 onMounted(() => {
   if (typeof initCart === 'function') {
       initCart();
-  } else {
-      console.error('[checkout.vue onMounted] initCart is not available from useCart()');
   }
+  fetchShippingMethods();
 });
+
+const fetchShippingMethods = async () => {
+  loadingShippingMethods.value = true;
+  shippingError.value = '';
+  try {
+    const response = await $axios.get('/shipping/options');
+    shippingMethods.value = response.data.options || [];
+    if (shippingMethods.value.length > 0 && !selectedShippingMethod.value) {
+      selectedShippingMethod.value = shippingMethods.value[0];
+    }
+  } catch (error) {
+    shippingError.value = error.response?.data?.message || error.message || 'Failed to load shipping methods';
+    console.error('Error fetching shipping methods:', error);
+  } finally {
+    loadingShippingMethods.value = false;
+  }
+};
+
+const selectShippingMethod = (method) => {
+  selectedShippingMethod.value = method;
+};
 
 const validateForm = () => {
   submissionError.value = ''; // Clear previous errors
@@ -320,6 +431,10 @@ const validateForm = () => {
   }
   if (!sameAsShipping.value && (!billingAddress.line1 || !billingAddress.city || !billingAddress.postalCode || !billingAddress.country)) {
     submissionError.value = "Please fill in all required billing address fields.";
+    return false;
+  }
+  if (!selectedShippingMethod.value) {
+    submissionError.value = "Please select a shipping method.";
     return false;
   }
   return true;
@@ -351,6 +466,8 @@ const executeOrderPlacement = async () => {
     shippingAddress: { ...shippingAddress },
     billingAddress: sameAsShipping.value ? { ...shippingAddress } : { ...billingAddress },
     discount_code: appliedDiscount.value?.code || undefined,
+    shipping_method_id: selectedShippingMethod.value?.id,
+    shipping_cost: selectedShippingMethod.value ? parseFloat(selectedShippingMethod.value.price) : 0,
     // Add a flag to indicate mock payment was "successful"
     mock_payment_successful: true
   };
@@ -372,7 +489,6 @@ const executeOrderPlacement = async () => {
       mockPaymentError.value = 'Failed to place order. Unexpected response from server.';
     }
   } catch (error) {
-    console.error('Order submission error after mock payment:', error);
     mockPaymentError.value = error.response?.data?.message || 'An error occurred while placing your order.';
   } finally {
     isPlacingOrderAfterMockPayment.value = false;

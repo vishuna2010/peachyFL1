@@ -15,7 +15,7 @@
             <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 9 4-4-4-4"/>
           </svg>
           <NuxtLink
-            v-if="index < breadcrumbs.length - 1"
+            v-if="index < breadcrumbs.length - 1 && crumb.path"
             :to="crumb.path"
             class="ms-1 text-sm font-medium text-gray-700 hover:text-indigo-600 md:ms-2"
           >
@@ -34,9 +34,25 @@
 import { computed } from 'vue';
 import { useRoute } from '#app';
 
+const props = defineProps({
+  items: {
+    type: Array,
+    default: () => []
+  }
+});
+
 const route = useRoute();
 
 const breadcrumbs = computed(() => {
+  // If custom breadcrumbs are provided, use them
+  if (props.items && props.items.length > 0) {
+    return props.items.map(item => ({
+      name: item.text || item.name,
+      path: item.href || item.path
+    }));
+  }
+
+  // Otherwise, generate breadcrumbs automatically from route
   const pathArray = route.path.split('/').filter(p => p);
   const crumbs = [];
 
@@ -48,49 +64,38 @@ const breadcrumbs = computed(() => {
   let currentPath = '/admin'; // Start with admin base path
 
   pathArray.forEach((segment, index) => {
-    currentPath += `/${segment}`;
+    // Check if this segment is a dynamic parameter value (numeric ID)
+    const isDynamicValue = /^\d+$/.test(segment) && index > 0;
+    
+    // Skip dynamic values in path building to avoid invalid paths
+    if (!isDynamicValue) {
+      currentPath += `/${segment}`;
+    }
 
     // Capitalize and improve segment name
     let name = segment
-      .replace(/\[id\]/g, route.params.id || 'detail') // Prioritize [id] specifically
-      .replace(/\[(.*?)\]/g, (match, p1) => route.params[p1] || p1) // General param replacement
       .replace(/-/g, ' ') // Replace hyphens with spaces
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
 
-    // Specific overrides for better names
-    if (name.toLowerCase() === 'classes' && crumbs.length > 0 && crumbs[crumbs.length-1].name.toLowerCase().includes('tax')) {
-        name = 'Classes';
-    } else if (name.toLowerCase() === 'rates' && crumbs.length > 0 && crumbs[crumbs.length-1].name.toLowerCase().includes('tax')) {
-        name = 'Rates';
-    } else if (name.toLowerCase() === 'logs' && crumbs.length > 0 && crumbs[crumbs.length-1].name.toLowerCase().includes('inventory')) {
-        name = 'Movement Logs';
+    // Handle dynamic values
+    if (isDynamicValue) {
+      const prevSegmentName = crumbs[crumbs.length-1]?.name || pathArray[index-1];
+      let detailName = prevSegmentName;
+      if (prevSegmentName.endsWith('s')) {
+        detailName = prevSegmentName.slice(0, -1);
+      }
+      name = `${detailName} #${segment}`;
     }
 
-
-    // Handle dynamic segments like [id] or [paramName]
-    if (segment.match(/^\[.*\]$/) && index > 0) {
-        const prevSegmentName = crumbs[crumbs.length-1]?.name || pathArray[index-1];
-        let detailName = prevSegmentName;
-        // Try to make it singular, e.g. "Users" -> "User Detail" or "User [ID]"
-        if (prevSegmentName.endsWith('s')) {
-            detailName = prevSegmentName.slice(0, -1);
-        }
-        // If the current segment was [id] and we have an ID, show it. Otherwise, "Detail".
-        if (segment === '[id]' && route.params.id) {
-            name = `${detailName} #${route.params.id}`;
-        } else {
-            name = `${detailName} Detail`;
-        }
-    }
-
-
+    // Only create clickable links for non-dynamic segments
     crumbs.push({
       name: name,
-      path: currentPath
+      path: isDynamicValue ? null : currentPath
     });
   });
+  
   return crumbs;
 });
 </script>

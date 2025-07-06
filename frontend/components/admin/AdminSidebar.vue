@@ -48,77 +48,7 @@
         </NuxtLink>
       </template>
 
-      <!-- Inventory Sub-menu -->
-      <div v-if="can('products:view').value">
-        <button @click="toggleInventorySubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75 transition-colors duration-150">
-          <span class="flex items-center">
-            <span v-html="iconInventory" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-300 group-hover:text-white"></span>
-            Inventory
-          </span>
-          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-300 group-hover:text-white" :class="{'rotate-90': inventorySubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
-        </button>
-        <div v-if="inventorySubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-sky-blue/50 ml-3"> <!-- Adjusted border -->
-          <NuxtLink
-            v-for="invItem in inventoryItems"
-            :key="invItem.name"
-            :to="invItem.href"
-            @click="closeMobileSidebarIfNeeded"
-            class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
-            :class="isActive(invItem.href) ? 'bg-peach-pink text-white shadow-sm' : 'text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75'"
-          >
-            <span v-if="invItem.iconSvg" v-html="invItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(invItem.href) ? 'text-white' : 'text-neutral-300 group-hover:text-white'"></span>
-            {{ invItem.name }}
-          </NuxtLink>
-        </div>
-      </div>
 
-      <!-- Tax Management Sub-menu -->
-      <div v-if="can('taxes:manage_classes').value || can('taxes:manage_rates').value">
-        <button @click="toggleTaxSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75 transition-colors duration-150">
-          <span class="flex items-center">
-            <span v-html="iconTax" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-300 group-hover:text-white"></span>
-            Tax Management
-          </span>
-          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-300 group-hover:text-white" :class="{'rotate-90': taxSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
-        </button>
-        <div v-if="taxSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-sky-blue/50 ml-3"> <!-- Adjusted border -->
-          <NuxtLink
-            v-for="taxItem in taxItems"
-            :key="taxItem.name"
-            :to="taxItem.href"
-            @click="closeMobileSidebarIfNeeded"
-            class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
-            :class="isActive(taxItem.href) ? 'bg-peach-pink text-white shadow-sm' : 'text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75'"
-          >
-            <span v-if="taxItem.iconSvg" v-html="taxItem.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(taxItem.href) ? 'text-white' : 'text-neutral-300 group-hover:text-white'"></span>
-            {{ taxItem.name }}
-          </NuxtLink>
-        </div>
-      </div>
-
-      <!-- Reports Sub-menu -->
-      <div v-if="can('reports:view').value">
-        <button @click="toggleReportsSubmenu" class="group w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-md text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75 transition-colors duration-150">
-          <span class="flex items-center">
-            <span v-html="iconReportsMain" class="mr-3 h-5 w-5 flex-shrink-0 text-neutral-300 group-hover:text-white"></span>
-            Reports
-          </span>
-          <svg class="w-4 h-4 transform transition-transform duration-150 text-neutral-300 group-hover:text-white" :class="{'rotate-90': reportsSubmenuOpen}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
-        </button>
-        <div v-if="reportsSubmenuOpen" class="mt-1 space-y-1 pl-4 border-l border-sky-blue/50 ml-3"> <!-- Adjusted border -->
-          <NuxtLink
-            v-for="report in reportItems"
-            :key="report.name"
-            :to="report.href"
-            @click="closeMobileSidebarIfNeeded"
-            class="group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-150"
-            :class="isActive(report.href) ? 'bg-peach-pink text-white shadow-sm' : 'text-neutral-100 hover:bg-peach-pink hover:text-white hover:bg-opacity-75'"
-          >
-            <span v-if="report.iconSvg" v-html="report.iconSvg" class="mr-2 h-4 w-4 flex-shrink-0" :class="isActive(report.href) ? 'text-white' : 'text-neutral-300 group-hover:text-white'"></span>
-            {{ report.name }}
-          </NuxtLink>
-        </div>
-      </div>
     </nav>
 
     <!-- Footer / View Site Link -->
@@ -186,15 +116,40 @@ const iconTax = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 
 const iconSettings = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.646.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.438.99l0 0.234c0 .376.146.75.437.99l1.005.828c.293.24.438.613.438.99l0 0.234c0 .376-.146.75-.437.99l-1.003.827a1.125 1.125 0 01-1.432.26l-1.295-2.247a1.125 1.125 0 01-1.37-.49l-1.217-.456c-.354-.133-.75-.072-1.075.124a6.586 6.586 0 01-.22.128c-.333.183-.582.495-.646.87l-.212 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.646-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.37-.49l-1.296-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.437-.99l0-.234c0-.376-.145-.75-.437-.99l-1.004-.828a1.125 1.125 0 01-.26-1.432l1.296-2.247a1.125 1.125 0 011.37-.49l1.217.456c.354.133.75.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.646-.87l.212-1.281zM12 15a3 3 0 100-6 3 3 0 000 6z" /></svg>`;
 
 const navigationItems = ref([
+  // 1. DASHBOARD & OVERVIEW
   { name: 'Dashboard', href: '/admin', iconSvg: iconDashboard, permission: 'admin:access_dashboard' },
+  
+  // 2. CUSTOMER MANAGEMENT
   { name: 'Users', href: '/admin/users', iconSvg: iconUsers, permission: 'users:view' },
-  { name: 'Products', href: '/admin/products', iconSvg: null, permission: 'products:view' },
-  { name: 'Categories', href: '/admin/categories', iconSvg: null, permission: 'categories:manage' },
+  { name: 'Reviews', href: '/admin/reviews', iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.82.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.82-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>`, permission: 'reviews:manage' },
+  
+  // 3. PRODUCT CATALOG
+  { name: 'Products', href: '/admin/products', iconSvg: iconProducts, permission: 'products:view' },
+  { name: 'Categories', href: '/admin/categories', iconSvg: iconCategories, permission: 'categories:manage' },
+  { name: 'Product Options', href: '/admin/options', iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.646.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.438.99l0 0.234c0 .376.146.75.437.99l1.005.828c.293.24.438.613.438.99l0 0.234c0 .376-.146.75-.437.99l-1.003.827a1.125 1.125 0 01-1.432.26l-1.295-2.247a1.125 1.125 0 01-1.37-.49l-1.217-.456c-.354-.133-.75-.072-1.075.124a6.586 6.586 0 01-.22.128c-.333.183-.582.495-.646.87l-.212 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.646-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.37-.49l-1.296-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.437-.99l0-.234c0-.376-.145-.75-.437-.99l-1.004-.828a1.125 1.125 0 01-.26-1.432l1.296-2.247a1.125 1.125 0 011.37-.49l1.217.456c.354.133.75.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.646-.87l.212-1.281zM12 15a3 3 0 100-6 3 3 0 000 6z" /></svg>`, permission: 'products:edit' },
+  
+  // 4. SALES & ORDERS
   { name: 'Orders', href: '/admin/orders', iconSvg: iconOrders, permission: 'orders:view_all' },
+  { name: 'Fulfillment', href: '/admin/fulfillment', iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>`, permission: 'orders:validate_fulfillment' },
   { name: 'Discounts', href: '/admin/discounts', iconSvg: iconDiscounts, permission: 'discounts:manage' },
+  
+  // 5. INVENTORY & SUPPLY CHAIN
   { name: 'Suppliers', href: '/admin/suppliers', iconSvg: iconSuppliers, permission: 'suppliers:manage' },
   { name: 'Purchase Orders', href: '/admin/purchase-orders', iconSvg: iconPurchaseOrders, permission: 'purchase_orders:manage' },
-  // Marketing parent with submenu
+  
+  // 6. SHIPPING & LOGISTICS
+  {
+    name: 'Shipping',
+    iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v.958m12.013 0v11.177m-12.013 0v-11.177" /></svg>`,
+    permission: 'shipping:view_options',
+    children: [
+      { name: 'Couriers', href: '/admin/shipping/couriers', permission: 'shipping:manage_couriers' },
+      { name: 'Shipping Methods', href: '/admin/shipping/methods', permission: 'shipping:manage_methods' },
+      { name: 'Shipping Options', href: '/admin/shipping/options', permission: 'shipping:view_options' }
+    ]
+  },
+  
+  // 7. MARKETING & PROMOTIONS
   {
     name: 'Marketing',
     iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688 0-1.25-.561-1.25-1.25s.562-1.25 1.25-1.25m0 2.5c.688 0 1.25-.561 1.25-1.25S11.028 13.34 10.34 13.34m0 2.5v-2.5m2.5 0h-5m-1.25 0H5.34c-.688 0-1.25.561-1.25 1.25s.562 1.25 1.25 1.25h1.75m2.5 0V12A2.5 2.5 0 009.09 9.5h-2.84A2.5 2.5 0 003.75 12v3.09c0 .928.624 1.737 1.5 2.038M14.09 3.5H9.59A2.5 2.5 0 007.09 6v2.5m7-5H20.25c.966 0 1.75.784 1.75 1.75V15A2.5 2.5 0 0119.5 17.5h-2.5m-7-14v5.09c0 .928.624 1.737 1.5 2.038M14.09 3.5L17.5 6.91M14.09 3.5L10.69 6.91M1.5 15.84V6.25C1.5 5.007 2.507 4 3.75 4h4.49M1.5 15.84l3.84.96M1.5 15.84L5.34 13.34" /></svg>`,
@@ -206,32 +161,40 @@ const navigationItems = ref([
       { name: 'Unsubscribes', href: '/admin/email-unsubscribes', permission: 'marketing:view_unsubscribes' }
     ]
   },
-  { name: 'Product Options', href: '/admin/options', iconSvg: null, permission: 'products:edit' },
-  { name: 'Reviews', href: '/admin/reviews', iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.82.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.82-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>`, permission: 'reviews:manage' },
+  
+  // 8. FINANCIAL & TAXES
+  {
+    name: 'Tax Management',
+    iconSvg: iconTax,
+    permission: 'taxes:manage_classes',
+    children: [
+      { name: 'Tax Overview', href: '/admin/taxes', permission: 'taxes:manage_classes' },
+      { name: 'Tax Classes', href: '/admin/taxes/classes', permission: 'taxes:manage_classes' },
+      { name: 'Tax Rates', href: '/admin/taxes/rates', permission: 'taxes:manage_rates' }
+    ]
+  },
+  
+  // 9. REPORTS & ANALYTICS
+  {
+    name: 'Reports',
+    iconSvg: iconReportsMain,
+    permission: 'reports:view',
+    children: [
+      { name: 'Overview', href: '/admin/reports', permission: 'reports:view' },
+      { name: 'Sales', href: '/admin/reports/sales', permission: 'reports:view' },
+      { name: 'Best Sellers', href: '/admin/reports/best-sellers', permission: 'reports:view' },
+      { name: 'Low Stock', href: '/admin/reports/low-stock', permission: 'reports:view' },
+      { name: 'Stock Valuation', href: '/admin/reports/stock-valuation', permission: 'reports:view' },
+      { name: 'Audit Logs', href: '/admin/reports/audit-logs', permission: 'auditlogs:view' }
+    ]
+  },
+  
+  // 10. SYSTEM ADMINISTRATION
   { name: 'General Settings', href: '/admin/settings', iconSvg: iconSettings, permission: 'settings:manage_general' },
   { name: 'Roles & Permissions', href: '/admin/roles', iconSvg: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg>`, permission: 'rbac:manage' },
 ]);
 
-const reportItems = ref([
-    { name: 'Overview', href: '/admin/reports', iconSvg: iconReportSubItem }, // Added Overview
-    { name: 'Low Stock', href: '/admin/reports/low-stock', iconSvg: iconReportSubItem },
-    { name: 'Sales', href: '/admin/reports/sales', iconSvg: iconReportSubItem },
-    { name: 'Best Sellers', href: '/admin/reports/best-sellers', iconSvg: iconReportSubItem },
-    { name: 'Stock Valuation', href: '/admin/reports/stock-valuation', iconSvg: iconReportSubItem },
-    { name: 'Audit Logs', href: '/admin/reports/audit-logs', iconSvg: iconReportSubItem },
-]);
-const inventoryItems = ref([
-  { name: 'Stock Levels', href: '/admin/inventory', iconSvg: iconReportSubItem },
-  { name: 'Batch Management', href: '/admin/inventory/batches', iconSvg: iconReportSubItem },
-  { name: 'Stock Adjustments', href: '/admin/inventory/adjustments', iconSvg: iconReportSubItem },
-  { name: 'Movement Logs', href: '/admin/inventory/logs', iconSvg: iconReportSubItem }
-]);
 
-const taxItems = ref([
-  { name: 'Tax Overview', href: '/admin/taxes', iconSvg: iconReportSubItem },
-  { name: 'Tax Classes', href: '/admin/taxes/classes', iconSvg: iconReportSubItem },
-  { name: 'Tax Rates', href: '/admin/taxes/rates', iconSvg: iconReportSubItem },
-]);
 
 const isActive = (path) => {
   if (path === '/admin' && route.path === '/admin') return true; // Exact match for dashboard
@@ -249,62 +212,44 @@ const closeMobileSidebarIfNeeded = () => {
 // Submenu open state
 const openSubmenu = ref(null);
 const toggleSubmenu = (item) => {
-  console.log('Marketing submenu toggle clicked for:', item.name, 'current openSubmenu:', openSubmenu.value);
   openSubmenu.value = openSubmenu.value === item.name ? null : item.name;
-  console.log('Marketing submenu new openSubmenu value:', openSubmenu.value);
 };
 
 function isSubmenuOpen(item) {
   const isOpen = openSubmenu.value === item.name;
-  console.log('isSubmenuOpen check for', item.name, ':', isOpen, 'openSubmenu.value:', openSubmenu.value);
   return isOpen;
 }
 
-// Additional submenu states and functions
-const inventorySubmenuOpen = ref(false);
-const reportsSubmenuOpen = ref(false);
-const taxSubmenuOpen = ref(false);
 
-const toggleInventorySubmenu = () => {
-  inventorySubmenuOpen.value = !inventorySubmenuOpen.value;
-};
-
-const toggleReportsSubmenu = () => {
-  reportsSubmenuOpen.value = !reportsSubmenuOpen.value;
-};
-
-const toggleTaxSubmenu = () => {
-  taxSubmenuOpen.value = !taxSubmenuOpen.value;
-};
 
 // Function to handle child menu item clicks
 const handleChildClick = (child) => {
-  console.log('Child menu item clicked:', child.name, 'href:', child.href);
-  console.log('Current route before navigation:', route.path);
+  console.log('handleChildClick fired', child);
   closeMobileSidebarIfNeeded();
   
   // Perform navigation
   if (child.href) {
     console.log('Attempting to navigate to:', child.href);
-    // Use router.push for programmatic navigation
-    router.push(child.href).catch(err => {
-      console.error('Navigation error:', err);
+    // Use navigateTo for Nuxt 3 navigation
+    navigateTo(child.href).then(() => {
+      console.log('Navigation successful to:', child.href);
+    }).catch(err => {
+      console.error('Navigation failed:', err);
     });
+  } else {
+    console.log('No href found in child:', child);
   }
 };
 
 // Function to filter children based on permissions
 const getFilteredChildren = (item) => {
   if (!item.children || !Array.isArray(item.children)) {
-    console.log('No children for item:', item.name);
     return [];
   }
   const filtered = item.children.filter(child => {
     const hasPermission = child && child.permission && can(child.permission).value;
-    console.log('Child permission check for', child.name, ':', hasPermission, 'permission:', child.permission);
     return hasPermission;
   });
-  console.log('Filtered children for', item.name, ':', filtered.map(c => c.name));
   return filtered;
 };
 

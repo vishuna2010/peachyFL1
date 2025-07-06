@@ -141,14 +141,12 @@ const fetchBanners = async () => {
     if (response.data && Array.isArray(response.data.banners)) {
       banners.value = response.data.banners;
       if (banners.value.length === 0) {
-        console.log('HeroBanner: No active banners fetched from API.');
+        // No active banners fetched from API
       }
     } else {
-      console.warn('HeroBanner: Unexpected API response structure or no banners array.', response.data);
       banners.value = [];
     }
   } catch (err) {
-    console.error('HeroBanner: Error fetching banners:', err);
     error.value = 'Failed to load promotional content. Please try again later.';
     banners.value = [];
   } finally {
@@ -234,15 +232,12 @@ watch(() => banners.value.length, (newLength) => {
 onMounted(async () => {
   await fetchBanners();
   if (currentBanner.value) {
-    console.log('HeroBanner: Current Banner Data for Link:', JSON.parse(JSON.stringify(currentBanner.value)));
     applyAnimations();
     
     // Start autoplay if multiple banners
     if (banners.value.length > 1) {
       startAutoPlay();
     }
-  } else {
-    console.log('HeroBanner: No current banner to display after fetch.');
   }
 });
 

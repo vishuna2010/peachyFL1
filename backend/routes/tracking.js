@@ -162,4 +162,45 @@ router.get('/email/resubscribe', async (req, res) => {
   }
 });
 
+// POST /api/email/resubscribe - Admin resubscribe endpoint
+router.post('/email/resubscribe', async (req, res) => {
+  try {
+    const { email, email_type } = req.body;
+
+    if (!email || !email_type) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required parameters: email and email_type' 
+      });
+    }
+
+    // Process resubscribe
+    const resubscribeResult = await emailTrackingService.resubscribe(
+      email,
+      email_type,
+      null // campaignId
+    );
+
+    if (!resubscribeResult) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No unsubscribe record found to resubscribe' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'User resubscribed successfully',
+      data: resubscribeResult
+    });
+
+  } catch (error) {
+    console.error('Error processing resubscribe:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to process resubscribe request' 
+    });
+  }
+});
+
 module.exports = router; 

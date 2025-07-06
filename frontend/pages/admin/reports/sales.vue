@@ -43,6 +43,8 @@
             <p><strong>Total Orders:</strong> {{ reportData.summary.total_orders_count }}</p>
             <p><strong>Total Gross Revenue:</strong> ${{ reportData.summary.total_gross_revenue }}</p>
             <p><strong>Total Discounts Given:</strong> ${{ reportData.summary.total_discount_given }}</p>
+            <p><strong>Total Tax Collected:</strong> ${{ reportData.summary.total_tax_collected }}</p>
+            <p><strong>Total Shipping Charged:</strong> ${{ reportData.summary.total_shipping_charged }}</p>
             <p><strong>Total Net Revenue:</strong> ${{ reportData.summary.total_revenue }}</p>
         </div>
       </div>
@@ -55,7 +57,8 @@
               <th>Order ID</th>
               <th>Order Date</th>
               <th>Status</th>
-              <th>User ID</th>
+              <th>User Email</th>
+              <th>Payment Method</th>
               <th>Original Total</th>
               <th>Discount Applied</th>
               <th>Final Total</th>
@@ -66,7 +69,8 @@
               <td><NuxtLink :to="`/admin/orders/${order.id}`">#{{ order.id }}</NuxtLink></td>
               <td>{{ new Date(order.created_at).toLocaleDateString() }}</td>
               <td><span :class="`status status-${order.status.toLowerCase()}`">{{ order.status }}</span></td>
-              <td>{{ order.user_id }}</td>
+              <td>{{ order.user_email || 'N/A' }}</td>
+              <td>{{ order.payment_method || 'N/A' }}</td>
               <td>${{ parseFloat(order.original_total_amount || order.total_amount).toFixed(2) }}</td>
               <td>${{ parseFloat(order.discount_amount_applied || 0).toFixed(2) }}</td>
               <td><strong>${{ parseFloat(order.total_amount).toFixed(2) }}</strong></td>
@@ -127,8 +131,8 @@ async function generateReport() {
   try {
     const response = await $axios.get('/admin/reports/sales', {
       params: {
-        start_date: startDate.value,
-        end_date: endDate.value,
+        startDate: startDate.value,
+        endDate: endDate.value,
         // group_by: groupBy.value, // For future use
       },
     });

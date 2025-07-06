@@ -609,26 +609,58 @@ const createTables = async () => {
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
         status VARCHAR(50) DEFAULT 'pending',
+        payment_status VARCHAR(50) DEFAULT 'pending',
         total_amount DECIMAL(10, 2) NOT NULL,
+        original_total_amount DECIMAL(10, 2) NULL,
+        discount_id INTEGER NULL REFERENCES discounts(id) ON DELETE SET NULL,
+        discount_code_applied VARCHAR(255) NULL,
+        discount_amount_applied DECIMAL(10, 2) NULL,
+        total_tax_amount DECIMAL(10, 2) DEFAULT 0.00,
+        tax_summary_details JSONB NULL,
         shipping_address_line1 VARCHAR(255) NOT NULL,
         shipping_address_line2 VARCHAR(255) NULL,
         shipping_city VARCHAR(100) NOT NULL,
         shipping_postal_code VARCHAR(20) NOT NULL,
         shipping_country VARCHAR(50) NOT NULL,
+        shipping_state_province_region VARCHAR(100) NULL,
+        shipping_phone VARCHAR(50) NULL,
         billing_address_line1 VARCHAR(255) NULL,
         billing_address_line2 VARCHAR(255) NULL,
         billing_city VARCHAR(100) NULL,
         billing_postal_code VARCHAR(20) NULL,
         billing_country VARCHAR(50) NULL,
-        discount_id INTEGER NULL REFERENCES discounts(id) ON DELETE SET NULL,
-        discount_code_applied VARCHAR(255) NULL,
-        discount_amount_applied DECIMAL(10, 2) NULL,
-        original_total_amount DECIMAL(10, 2) NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        billing_state_province_region VARCHAR(100) NULL,
+        invoice_number VARCHAR(100) NULL UNIQUE,
+        invoice_issue_date TIMESTAMPTZ NULL,
+        shipping_carrier VARCHAR(100) NULL,
+        tracking_number VARCHAR(100) NULL,
+        delivery_confirmed_at TIMESTAMPTZ NULL,
+        fulfillment_validation_code VARCHAR(50) NULL UNIQUE,
+        fulfillment_validated_at TIMESTAMPTZ NULL,
+        fulfillment_validated_by_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+        shipping_method_id INTEGER NULL REFERENCES shipping_methods(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('Table "orders" created or already exists.');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT \'pending\';');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS original_total_amount DECIMAL(10, 2) NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_tax_amount DECIMAL(10, 2) DEFAULT 0.00;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_summary_details JSONB NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_state_province_region VARCHAR(100) NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_phone VARCHAR(50) NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS billing_state_province_region VARCHAR(100) NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(100) NULL UNIQUE;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS invoice_issue_date TIMESTAMPTZ NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_carrier VARCHAR(100) NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(100) NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_confirmed_at TIMESTAMPTZ NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfillment_validation_code VARCHAR(50) NULL UNIQUE;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfillment_validated_at TIMESTAMPTZ NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS fulfillment_validated_by_user_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL;');
+    await client.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_method_id INTEGER NULL REFERENCES shipping_methods(id) ON DELETE SET NULL;');
+    console.log('✅ Added missing columns to orders table');
     await client.query(`
       DO $$
       BEGIN
@@ -645,6 +677,27 @@ const createTables = async () => {
     await client.query('CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_fulfillment_validation_code ON orders(fulfillment_validation_code);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(payment_status);');
+
+    // --- Fulfillment Validation Logs Table ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS fulfillment_validation_logs (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        validation_code VARCHAR(50) NOT NULL,
+        validated_by_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        validation_method VARCHAR(50) NOT NULL DEFAULT 'qr_scan',
+        validation_status VARCHAR(50) NOT NULL DEFAULT 'success',
+        validation_notes TEXT NULL,
+        scanned_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "fulfillment_validation_logs" created or already exists.');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_fulfillment_validation_logs_order_id ON fulfillment_validation_logs(order_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_fulfillment_validation_logs_validation_code ON fulfillment_validation_logs(validation_code);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_fulfillment_validation_logs_scanned_at ON fulfillment_validation_logs(scanned_at);');
 
     // --- Order Items Table ---
     await client.query(`
@@ -700,6 +753,7 @@ const createTables = async () => {
         id SERIAL PRIMARY KEY,
         purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
         product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+        product_variant_id INTEGER NULL REFERENCES product_variants(id) ON DELETE RESTRICT,
         quantity_ordered INTEGER NOT NULL CHECK (quantity_ordered > 0),
         unit_cost_price DECIMAL(10, 2) NOT NULL,
         quantity_received INTEGER NOT NULL DEFAULT 0 CHECK (quantity_received >= 0 AND quantity_received <= quantity_ordered)
@@ -709,6 +763,7 @@ const createTables = async () => {
     console.log('Table "purchase_order_items" created or already exists.');
     await client.query('CREATE INDEX IF NOT EXISTS idx_poi_purchase_order_id ON purchase_order_items(purchase_order_id);');
     await client.query('CREATE INDEX IF NOT EXISTS idx_poi_product_id ON purchase_order_items(product_id);');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_poi_variant_id ON purchase_order_items(product_variant_id);');
 
     // --- Product Reviews Table ---
     await client.query(`
@@ -924,6 +979,20 @@ const createTables = async () => {
     } catch (alterError) {
         // Benign if already set or other non-critical issues
     }
+
+    // Site Settings Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS site_settings (
+        id SERIAL PRIMARY KEY,
+        setting_key VARCHAR(100) UNIQUE NOT NULL,
+        setting_value TEXT NOT NULL,
+        setting_type VARCHAR(20) NOT NULL DEFAULT 'string' CHECK (setting_type IN ('string', 'boolean', 'number', 'json')),
+        setting_description TEXT,
+        is_public BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     console.log('All tables and triggers ensured.');
 

@@ -113,10 +113,10 @@ function _buildProductBaseQueryParts(options = {}) {
   };
 }
 
-function _buildProductFilterConditions(options = {}, startingParamIndex = 1) {
+async function _buildProductFilterConditions(options = {}, startingParamIndex = 1) {
   const {
     searchTerm, categoryId, minPrice, maxPrice, optionValueId,
-    status, stock_status, supplierId, is_admin_request, onSale, // Added onSale
+    status, stock_status, supplierId, is_admin_request, onSale, newArrivals, // Added onSale and newArrivals
     optionValueFilterAlias = 'pvov_filter'
   } = options;
 
@@ -204,6 +204,25 @@ function _buildProductFilterConditions(options = {}, startingParamIndex = 1) {
     whereClauses.push(`(p.is_on_sale = TRUE AND p.sale_price IS NOT NULL AND p.sale_price < COALESCE(p.original_price, p.price))`);
   }
 
+  if (newArrivals === true) {
+    // Get the new arrivals days setting from the database
+    let newArrivalsDays = 30; // Default fallback
+    try {
+      const settingResult = await db.query(
+        'SELECT setting_value FROM site_settings WHERE setting_key = $1',
+        ['new_arrivals_days']
+      );
+      if (settingResult.rows.length > 0) {
+        newArrivalsDays = parseInt(settingResult.rows[0].setting_value) || 30;
+      }
+    } catch (error) {
+      console.warn('Failed to fetch new_arrivals_days setting, using default 30 days:', error);
+    }
+    
+    // New arrivals are products created within the configured number of days
+    whereClauses.push(`p.created_at >= NOW() - INTERVAL '${newArrivalsDays} days'`);
+  }
+
   const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
   return { whereString, queryParams, finalParamIndex: paramIndex };
@@ -252,7 +271,7 @@ async function getAllProducts(options = {}) {
   const stockCteString = _buildProductStockCTEString();
   const withClause = `WITH ${stockCteString}`;
   const baseQueryParts = _buildProductBaseQueryParts(filterAndSortOptions);
-  const filterConditions = _buildProductFilterConditions(filterAndSortOptions, 1);
+  const filterConditions = await _buildProductFilterConditions(filterAndSortOptions, 1);
   const orderByClause = _buildProductSortLogic(filterAndSortOptions);
   const selectPrefix = filterAndSortOptions.optionValueId ? `SELECT ${baseQueryParts.selectDistinctOn}` : "SELECT";
 
@@ -272,7 +291,7 @@ async function getAllProducts(options = {}) {
   dataQueryString += ` LIMIT $${filterConditions.finalParamIndex} OFFSET $${filterConditions.finalParamIndex + 1}`;
   const finalDataParams = [...filterConditions.queryParams, numLimit, offset];
 
-  const countFilterConditions = _buildProductFilterConditions({ ...filterAndSortOptions, optionValueFilterAlias: 'pvov_filter_count' }, 1);
+  const countFilterConditions = await _buildProductFilterConditions({ ...filterAndSortOptions, optionValueFilterAlias: 'pvov_filter_count' }, 1);
   let countWhereString = countFilterConditions.whereString;
   if (filterAndSortOptions.optionValueId) {
       countWhereString = countFilterConditions.whereString.replace('pvov_filter.product_option_value_id', 'pvov_filter_count.product_option_value_id');

@@ -3,6 +3,7 @@ const router = express.Router();
 // const db = require('../db'); // No longer directly needed for most routes
 const { isAuthenticated, checkPermission } = require('../auth');
 const { generateOrderInvoicePdf, generatePackingSlipPdf, generateShippingLabelPdf } = require('../services/pdfService'); // Added generateShippingLabelPdf
+const s3Service = require('../services/s3Service');
 const { param, query, body, validationResult } = require('express-validator');
 const { NotFoundError, BadRequestError, AppError } = require('../utils/AppError'); // Added AppError
 const crypto = require('crypto'); // Still needed for QR code token in one route, could move to service
@@ -55,6 +56,11 @@ router.get('/orders', isAuthenticated, checkPermission('orders:view_all'), valid
 // Validation for GET /orders/:id
 const validateOrderIdParam = [
   param('id').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt()
+];
+
+// Validation for routes using :orderId parameter
+const validateOrderIdParamForOrderId = [
+  param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt()
 ];
 
 // GET /admin/orders/:id - View a specific order
@@ -150,7 +156,7 @@ router.put(
     }
 });
 
-// GET /admin/orders/:orderId/invoice/pdf - Generate PDF invoice for an order
+// GET /admin/orders/:orderId/invoice/pdf - Generate PDF invoice for an order and upload to S3
 router.get(
   '/orders/:orderId/invoice/pdf',
   isAuthenticated,
@@ -158,8 +164,6 @@ router.get(
   [
     param('orderId').isInt({ gt: 0 }).withMessage('Order ID must be a positive integer.').toInt()
   ],
-  // Removed duplicated path string and redundant middleware that caused TypeError.
-  // The async handler function below is the correct next argument.
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -171,21 +175,27 @@ router.get(
       const orderDetailsForPdf = await orderService.getOrderDetailsForPdf(orderId, 'invoice');
       const pdfBuffer = await generateOrderInvoicePdf(orderDetailsForPdf);
 
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="invoice_order_${orderId}.pdf"`);
-      res.send(pdfBuffer);
+      // Upload to S3
+      const fileName = `documents/invoices/invoice_order_${orderId}_${Date.now()}.pdf`;
+      const s3Result = await s3Service.uploadFileToS3(pdfBuffer, fileName, 'application/pdf');
+
+      res.status(200).json({
+        message: 'Invoice generated and uploaded successfully',
+        pdfUrl: s3Result.Location,
+        fileName: `invoice_order_${orderId}.pdf`
+      });
     } catch (error) {
       next(error);
     }
   }
 );
 
-// GET /admin/orders/:orderId/shipping-label/pdf - Generate PDF shipping label for an order
+// GET /admin/orders/:orderId/shipping-label/pdf - Generate PDF shipping label for an order and upload to S3
 router.get(
   '/orders/:orderId/shipping-label/pdf',
   isAuthenticated,
   checkPermission('orders:print_shipping_label'), // New permission
-  validateOrderIdParam, // Reuse validation for orderId
+  validateOrderIdParamForOrderId, // Reuse validation for orderId
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -203,10 +213,15 @@ router.get(
 
       const pdfBuffer = await generateShippingLabelPdf(labelData);
 
-      res.setHeader('Content-Type', 'application/pdf');
-      // Suggest inline for preview, or attachment to force download
-      res.setHeader('Content-Disposition', `inline; filename="shipping_label_order_${orderId}.pdf"`);
-      res.send(pdfBuffer);
+      // Upload to S3
+      const fileName = `documents/shipping-labels/shipping_label_order_${orderId}_${Date.now()}.pdf`;
+      const s3Result = await s3Service.uploadFileToS3(pdfBuffer, fileName, 'application/pdf');
+
+      res.status(200).json({
+        message: 'Shipping label generated and uploaded successfully',
+        pdfUrl: s3Result.Location,
+        fileName: `shipping_label_order_${orderId}.pdf`
+      });
 
     } catch (error) {
       // Log specific error for shipping label generation failure
@@ -216,12 +231,12 @@ router.get(
   }
 );
 
-// GET /admin/orders/:orderId/packing-slip/pdf - Generate PDF packing slip for an order
+// GET /admin/orders/:orderId/packing-slip/pdf - Generate PDF packing slip for an order and upload to S3
 router.get(
   '/orders/:orderId/packing-slip/pdf',
   isAuthenticated,
   checkPermission('orders:view_details'),
-  validateOrderIdParam, // Re-use
+  validateOrderIdParamForOrderId, // Re-use
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -236,9 +251,15 @@ router.get(
 
       const pdfBuffer = await generatePackingSlipPdf(packingSlipDataForPdf);
 
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="packing_slip_order_${orderId}.pdf"`);
-      res.send(pdfBuffer);
+      // Upload to S3
+      const fileName = `documents/packing-slips/packing_slip_order_${orderId}_${Date.now()}.pdf`;
+      const s3Result = await s3Service.uploadFileToS3(pdfBuffer, fileName, 'application/pdf');
+
+      res.status(200).json({
+        message: 'Packing slip generated and uploaded successfully',
+        pdfUrl: s3Result.Location,
+        fileName: `packing_slip_order_${orderId}.pdf`
+      });
     } catch (error) {
       next(error);
     }
@@ -250,7 +271,7 @@ router.get(
   '/orders/:orderId/packing-slip-data',
   isAuthenticated,
   checkPermission('orders:view_details'),
-  validateOrderIdParam, // Re-use
+  validateOrderIdParamForOrderId, // Re-use
   async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

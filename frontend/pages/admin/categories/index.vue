@@ -34,6 +34,7 @@
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Menu</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
             <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
           </tr>
@@ -51,6 +52,18 @@
             </td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{{ tc.name }}</td>
             <td class="px-4 py-3 whitespace-normal text-sm text-gray-600 max-w-sm truncate">{{ tc.description || 'N/A' }}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+              <div v-if="tc.show_in_menu" class="flex items-center space-x-2">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                  </svg>
+                  Menu
+                </span>
+                <span v-if="tc.menu_order !== null" class="text-xs text-gray-500">#{{ tc.menu_order }}</span>
+              </div>
+              <span v-else class="text-gray-400 text-xs">Not in menu</span>
+            </td>
             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{{ formatTimestamp(tc.updated_at) }}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium">
               <NuxtLink :to="`/admin/categories/edit/${tc.id}`" class="text-indigo-600 hover:text-indigo-800 mr-3">Edit</NuxtLink>

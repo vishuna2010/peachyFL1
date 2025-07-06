@@ -160,6 +160,66 @@
 
 
       <!-- Ordered Items Section -->
+      <!-- Fulfillment Validation Section -->
+      <div class="pt-6 border-t border-gray-200">
+        <h3 class="text-xl font-semibold text-gray-800 mb-4">📦 Fulfillment Validation</h3>
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div v-if="order.fulfillment_validation_code" class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-700">Validation Code:</p>
+                <p class="font-mono text-lg bg-white px-3 py-1 rounded border">{{ order.fulfillment_validation_code }}</p>
+              </div>
+              <div class="text-right">
+                <p class="text-sm font-medium text-gray-700">Status:</p>
+                <span v-if="order.fulfillment_validated_at" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  ✅ Validated
+                </span>
+                <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  ⏳ Pending
+                </span>
+              </div>
+            </div>
+            
+            <div v-if="order.fulfillment_validated_at" class="text-sm text-gray-600">
+              <p><strong>Validated at:</strong> {{ formatOrderDateTime(order.fulfillment_validated_at) }}</p>
+              <p v-if="order.validated_by_name"><strong>Validated by:</strong> {{ order.validated_by_name }}</p>
+            </div>
+            
+            <div class="flex space-x-3">
+              <button
+                v-if="!order.fulfillment_validated_at"
+                @click="validateFulfillment"
+                class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                ✅ Validate Fulfillment
+              </button>
+              <button
+                @click="showQRCode"
+                class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                📱 Show QR Code
+              </button>
+              <NuxtLink
+                to="/admin/fulfillment"
+                class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+              >
+                🔍 Fulfillment Dashboard
+              </NuxtLink>
+            </div>
+          </div>
+          <div v-else class="text-center py-4">
+            <p class="text-gray-500">No fulfillment validation code assigned to this order.</p>
+            <button
+              @click="assignValidationCode"
+              class="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Assign Validation Code
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div class="pt-6">
         <h3 class="text-xl font-semibold text-gray-800 mb-4">Ordered Items ({{ order.items?.length || 0 }})</h3>
         <div v-if="order.items && order.items.length > 0" class="overflow-x-auto border border-gray-200 rounded-md">
@@ -198,6 +258,31 @@
         <p v-else class="text-sm text-gray-500">No items found for this order.</p>
       </div>
 
+      <!-- Document Generation Section -->
+      <div class="pt-6 border-t border-gray-200">
+        <h3 class="text-xl font-semibold text-gray-800 mb-4">📄 Generate Documents</h3>
+        <div class="flex flex-wrap gap-3">
+          <button
+            @click="generateInvoice"
+            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            📋 Generate Invoice
+          </button>
+          <button
+            @click="generatePackingSlip"
+            class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+          >
+            📦 Generate Packing Slip
+          </button>
+          <button
+            @click="generateShippingLabel"
+            class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+          >
+            🚚 Generate Shipping Label
+          </button>
+        </div>
+      </div>
+
       <div class="mt-8 text-center">
         <NuxtLink to="/admin/orders"
           class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 inline-block">
@@ -206,10 +291,32 @@
       </div>
     </div>
   </div>
+
+  <!-- QR Code Modal -->
+  <div v-if="showQRModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+      <div class="mt-3 text-center">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">QR Code for Fulfillment Validation</h3>
+        <div class="bg-gray-100 p-4 rounded-lg">
+          <img v-if="qrCodeDataUrl" :src="qrCodeDataUrl" alt="QR Code" class="mx-auto w-48 h-48" />
+          <p class="mt-2 text-sm text-gray-600">Scan this QR code to validate fulfillment</p>
+          <p class="mt-1 font-mono text-sm bg-white px-2 py-1 rounded">{{ order?.fulfillment_validation_code }}</p>
+        </div>
+        <div class="mt-4">
+          <button
+            @click="showQRModal = false"
+            class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, reactive } from 'vue';
 import { useRoute, useNuxtApp, useRuntimeConfig, useHead } from '#app'; // Added useHead
 import { usePermissions } from '~/composables/usePermissions'; // Import usePermissions
 
@@ -238,6 +345,10 @@ const isRefunding = ref(false);
 const refundError = ref('');
 const refundSuccess = ref('');
 const refundReason = ref('');
+
+// Fulfillment validation state
+const showQRModal = ref(false);
+const qrCodeDataUrl = ref('');
 
 // State for partial refund item selection
 const itemsToRefundState = reactive({});
@@ -422,6 +533,109 @@ async function handleProcessPartialRefund() {
     reason: refundReason.value.trim() || undefined,
   };
   await processRefundApiCall(order.value.id, payload);
+}
+
+// Fulfillment validation functions
+async function validateFulfillment() {
+  if (!order.value?.fulfillment_validation_code) {
+    alert('No validation code available for this order.');
+    return;
+  }
+  
+  if (!confirm(`Are you sure you want to validate fulfillment for Order #${order.value.id}?`)) {
+    return;
+  }
+  
+  try {
+    const response = await $axios.post(`/fulfillment/validate/${order.value.fulfillment_validation_code}`, {
+      validationMethod: 'manual'
+    });
+    
+    if (response.data.success) {
+      alert('Fulfillment validated successfully!');
+      await fetchOrderDetails(); // Refresh order data
+    }
+  } catch (err) {
+    alert(err.response?.data?.message || 'Failed to validate fulfillment.');
+  }
+}
+
+async function showQRCode() {
+  if (!order.value?.fulfillment_validation_code) {
+    alert('No validation code available for this order.');
+    return;
+  }
+  
+  try {
+    const response = await $axios.get(`/fulfillment/qr-code/${order.value.fulfillment_validation_code}`);
+    qrCodeDataUrl.value = response.data.qr_code_data_url;
+    showQRModal.value = true;
+  } catch (err) {
+    alert('Failed to generate QR code.');
+  }
+}
+
+async function assignValidationCode() {
+  if (!order.value) return;
+  
+  try {
+    const response = await $axios.post(`/fulfillment/orders/${order.value.id}/assign-code`);
+    if (response.data.validation_code) {
+      alert(`Validation code assigned: ${response.data.validation_code}`);
+      await fetchOrderDetails(); // Refresh order data
+    }
+  } catch (err) {
+    alert(err.response?.data?.message || 'Failed to assign validation code.');
+  }
+}
+
+// Document generation functions
+async function generateInvoice() {
+  if (!order.value) return;
+  
+  try {
+    const response = await $axios.get(`/admin/orders/${order.value.id}/invoice/pdf`);
+    
+    // Open the PDF URL in a new tab
+    window.open(response.data.pdfUrl, '_blank');
+    
+    // Also show a success message
+    alert(`Invoice generated successfully! Opening in new tab.`);
+  } catch (err) {
+    alert('Failed to generate invoice.');
+  }
+}
+
+async function generatePackingSlip() {
+  if (!order.value) return;
+  
+  try {
+    const response = await $axios.get(`/admin/orders/${order.value.id}/packing-slip/pdf`);
+    
+    // Open the PDF URL in a new tab
+    window.open(response.data.pdfUrl, '_blank');
+    
+    // Also show a success message
+    alert(`Packing slip generated successfully! Opening in new tab.`);
+  } catch (err) {
+    alert('Failed to generate packing slip.');
+  }
+}
+
+async function generateShippingLabel() {
+  if (!order.value) return;
+  
+  try {
+    const response = await $axios.get(`/admin/orders/${order.value.id}/shipping-label/pdf`);
+    
+    // Open the PDF URL in a new tab
+    window.open(response.data.pdfUrl, '_blank');
+    
+    // Also show a success message
+    alert(`Shipping label generated successfully! Opening in new tab.`);
+  } catch (err) {
+    alert('Failed to generate shipping label.');
+  }
 }
 
 

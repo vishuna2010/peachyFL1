@@ -152,7 +152,6 @@ const handleLogin = async () => {
               originalTargetPath = '/profile';
             }
           }
-          console.log('[Login Page] Login successful, redirecting to auth callback. Original target:', originalTargetPath);
           router.push({ path: '/auth/callback', query: { redirect: originalTargetPath } });
         } else {
           errorMessage.value = 'Login failed: Could not process login response.';
@@ -194,7 +193,6 @@ const handleTwoFactorVerify = async () => {
               originalTargetPath = '/profile';
             }
           }
-        console.log('[Login Page] 2FA Login successful, redirecting to auth callback. Original target:', originalTargetPath);
         router.push({ path: '/auth/callback', query: { redirect: originalTargetPath } });
 
         isTwoFactorStep.value = false;

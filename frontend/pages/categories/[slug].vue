@@ -151,7 +151,6 @@ async function fetchCategoryDetails() {
       categoryError.value = { message: 'Category details not found.' };
     }
   } catch (err) {
-    console.error(`Error fetching category ${categorySlug.value}:`, err);
     category.value = null;
     categoryError.value = err.response?.data || err;
      if (err.response?.status === 404) {
@@ -169,8 +168,6 @@ async function fetchProductsForCategory() {
     // If category is still loading, wait for it or handle appropriately.
     // This might involve the watcher on categorySlug to trigger this fetch once category is loaded.
     // For now, if category isn't loaded, we might not fetch or show an intermediate state.
-    console.log("Category details pending, deferring product fetch for now.");
-    // productsPending.value = false; // Or keep it true until category loads
     return;
   }
 
@@ -228,7 +225,6 @@ async function fetchProductsForCategory() {
       pagination.totalItems = products.value.length;
     }
   } catch (err) {
-    console.error('Error fetching products for category:', err);
     productsError.value = err.response?.data || err;
     products.value = [];
   } finally {

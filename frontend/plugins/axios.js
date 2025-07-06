@@ -3,8 +3,8 @@ import { defineNuxtPlugin, useRuntimeConfig, useState } from '#app'; // Explicit
 
 export default defineNuxtPlugin((nuxtApp) => {
   const config = useRuntimeConfig();
-  const backendBaseUrl = config.public.backendBaseUrl || 'http://localhost:3000'; // Fallback if not set
-  // baseURL should include /api
+  const backendBaseUrl = config.public.backendBaseUrl || 'http://localhost:3000';
+  // Use direct backend calls with full API path
   const baseURL = `${backendBaseUrl}/api`;
 
   // Initialize useState hooks in the main plugin scope
@@ -28,14 +28,13 @@ export default defineNuxtPlugin((nuxtApp) => {
         finalToken = localStorage.getItem('authToken');
       }
 
-      console.log('[Axios Interceptor] Current Token:', finalToken ? 'Token Present' : 'Token Missing/Null');
-      console.log('[Axios Interceptor] Request URL:', config.url);
+      // Only log in development mode to reduce console noise
+      if (process.dev) {
+        console.log('[Axios Interceptor] Request URL:', config.url);
+      }
 
       if (finalToken) {
         config.headers.Authorization = `Bearer ${finalToken}`;
-        console.log('[Axios Interceptor] Authorization header SET');
-      } else {
-        console.log('[Axios Interceptor] Authorization header NOT SET (no token)');
       }
       return config;
     },

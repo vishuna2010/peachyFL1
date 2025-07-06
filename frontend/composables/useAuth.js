@@ -29,7 +29,10 @@ export const useAuth = () => {
         if (authUser.value) { // Ensure authUser still exists
           const updatedUser = { ...authUser.value, permissions: response.data.permissions };
           setUser(updatedUser); // Use setUser to also update localStorage
-          console.log('useAuth: User permissions fetched and set:', response.data.permissions);
+          // Only log in development mode
+      if (process.dev) {
+        console.log('useAuth: User permissions fetched and set:', response.data.permissions);
+      }
           await nextTick(); // Ensure reactivity propagates before isLoadingPermissions is set to false
         }
       } else {
@@ -165,7 +168,10 @@ export const useAuth = () => {
       // Set basic user data first
       const basicUser = { ...apiResponseData.user, permissions: [] }; // Initialize with empty permissions
       setUser(basicUser);
-      console.log('Login successful, basic user set:', authUser.value);
+      // Only log in development mode
+      if (process.dev) {
+        console.log('Login successful, basic user set:', authUser.value);
+      }
 
       // After setting basic user, fetch their permissions
       await _fetchUserPermissions(); // await the permission fetching

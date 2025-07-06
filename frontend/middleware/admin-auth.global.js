@@ -20,7 +20,10 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     return;
   }
 
-  console.log(`[AdminAuth] Path: ${path}. Checking admin access...`);
+  // Only log in development mode
+  if (process.dev) {
+    console.log(`[AdminAuth] Path: ${path}. Checking admin access...`);
+  }
 
   if (!authToken.value) {
     console.log(`[AdminAuth] Path: ${path}. No auth token found. Redirecting to login.`);
@@ -48,5 +51,8 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     return navigateTo('/');
   }
 
-  console.log(`[AdminAuth] Path: ${path}. Access granted for role "${finalUserRole}".`);
+  // Only log in development mode
+  if (process.dev) {
+    console.log(`[AdminAuth] Path: ${path}. Access granted for role "${finalUserRole}".`);
+  }
 });

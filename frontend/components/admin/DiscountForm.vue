@@ -154,15 +154,12 @@ watch(() => props.initialData, (newData) => {
 const handleSubmit = () => {
   // Basic client-side validation (can be expanded)
   if (!formData.code && !props.isEditMode) { // Code is required for new, not for edit (as it's disabled)
-    alert('Discount code is required.'); // TODO: Replace with a non-blocking notification
     return;
   }
   if (formData.type === 'percentage' && (formData.value < 0 || formData.value > 100)) {
-    alert('Percentage value must be between 0 and 100.'); // TODO: Replace
     return;
   }
   if (formData.value < 0 && (formData.type === 'percentage' || formData.type === 'fixed_amount')) {
-    alert('Discount value must be non-negative.'); // TODO: Replace
     return;
   }
   // Convert empty strings for nullable number fields to null

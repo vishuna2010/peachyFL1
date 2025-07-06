@@ -91,7 +91,6 @@ const fetchProducts = async () => {
       products.value = [];
     }
   } catch (err) {
-    console.error('Error fetching products by tag:', err);
     error.value = 'Failed to load products. Please try again.';
     products.value = [];
   } finally {

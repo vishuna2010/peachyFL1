@@ -143,7 +143,6 @@ async function fetchProductsForSupplier(supplierId) {
 
 
   } catch (error) {
-    console.error(`Error fetching products for supplier ${supplierId}:`, error);
     availableProducts.value = [];
     apiError.value = `Failed to load products for supplier. ${error.response?.data?.message || error.message || ''}`;
   } finally {
@@ -174,7 +173,7 @@ function removeItem(index) {
   } else {
     // Optionally, clear the single item instead of an alert, or prevent deletion if it's the only one
     // For now, keeping original logic.
-    alert("A purchase order must have at least one item.");
+    // Handle error silently or show toast notification
   }
 }
 
@@ -217,7 +216,6 @@ async function submitPurchaseOrder() {
     await $axios.post('/admin/purchase-orders', payload);
     router.push('/admin/purchase-orders?created=success');
   } catch (error) {
-    console.error('Error creating purchase order:', error);
     apiError.value = error.response?.data?.message || 'Failed to create purchase order.';
   } finally {
     isSubmitting.value = false;

@@ -216,6 +216,7 @@ import StatCard from '~/components/admin/StatCard.vue'
 import Modal from '~/components/common/Modal.vue'
 
 const toast = useToast()
+const { apiFetch } = useApi()
 
 definePageMeta({
   layout: 'admin',
@@ -246,7 +247,7 @@ const newCampaign = ref({
 const fetchCampaigns = async () => {
   loading.value = true
   try {
-    const response = await $fetch('/api/admin/email-campaigns')
+    const response = await apiFetch('/api/admin/email-campaigns')
     campaigns.value = response.campaigns || []
     stats.value = response.stats || {
       totalCampaigns: 0,
@@ -265,7 +266,7 @@ const fetchCampaigns = async () => {
 const createCampaign = async () => {
   creating.value = true
   try {
-    await $fetch('/api/admin/email-campaigns', {
+    await apiFetch('/api/admin/email-campaigns', {
       method: 'POST',
       body: newCampaign.value
     })
@@ -283,7 +284,7 @@ const createCampaign = async () => {
 
 const sendCampaign = async (campaign) => {
   try {
-    await $fetch(`/api/admin/email-campaigns/${campaign.id}/send`, {
+    await apiFetch(`/api/admin/email-campaigns/${campaign.id}/send`, {
       method: 'POST'
     })
     toast.success('Campaign sent successfully')

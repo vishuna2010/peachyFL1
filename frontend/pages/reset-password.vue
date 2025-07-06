@@ -184,7 +184,6 @@ const handleResetPassword = async () => {
       errorMessage.value = response.data.message || 'Failed to reset password. Please try again.';
     }
   } catch (error) {
-    console.error('Password reset error:', error);
     if (error.response) {
       errorMessage.value = error.response.data?.message || 'Failed to reset password. Please try again.';
     } else {

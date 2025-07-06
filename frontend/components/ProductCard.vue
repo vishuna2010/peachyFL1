@@ -135,7 +135,6 @@ const handleAddToCart = () => {
   );
 
   if (props.product && !props.product.has_variants && props.product.stock_quantity && props.product.stock_quantity > 0 && !isNaN(priceForCart)) {
-    // console.log('ProductCard: props.product before creating cartItemData:', JSON.parse(JSON.stringify(props.product))); // Cleaned
     const cartItemData = {
       id: props.product.id, // Use product ID as item ID if no variants
       product_id: props.product.id,
@@ -143,7 +142,7 @@ const handleAddToCart = () => {
       name: sanitizeAttributeValue(props.product.name), // Sanitize name before adding to cart
       price: priceForCart,
       sku: sanitizeAttributeValue(props.product.sku), // Sanitize SKU
-      image_url: sanitizeAttributeValue(props.product.image_url || 'https://via.placeholder.com/300x300.png?text=No+Image'), // Sanitize image_url
+      image_url: sanitizeAttributeValue(props.product.image_url || 'https://picsum.photos/300/300?random=998'), // Sanitize image_url
       type: 'product',
       tax_class_id: props.product.tax_class_id || null,
       tax_class_name: props.product.tax_class_name || null,

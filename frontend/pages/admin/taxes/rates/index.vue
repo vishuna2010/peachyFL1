@@ -198,7 +198,6 @@ const fetchTaxRates = async () => {
 
   try {
     const response = await $axios.get('/admin/tax-rates', { params });
-    console.log('Tax rates data from API:', response.data.data); // DEBUGGING
     taxRates.value = response.data.data.map(rate => ({
       ...rate,
       rate: typeof rate.rate === 'string' ? parseFloat(rate.rate) : rate.rate // Ensure rate is a number
@@ -207,7 +206,6 @@ const fetchTaxRates = async () => {
     totalRates.value = response.data.pagination.totalItems || response.data.pagination.total || 0; // Adjusted to match potential variations
     currentPage.value = response.data.pagination.currentPage || response.data.pagination.page || 1;
   } catch (error) {
-    console.error('Error fetching tax rates:', error);
     fetchError.value = error.response?.data?.message || error.message || 'Could not fetch tax rates.';
     toast.error(fetchError.value);
     taxRates.value = [];
@@ -241,7 +239,6 @@ const deleteTaxRate = async (rateId, rateName) => {
       fetchTaxRates(); // Otherwise, just refetch current page
     }
   } catch (error) {
-    console.error(`Error deleting tax rate ${rateId}:`, error);
     toast.error(error.response?.data?.message || `Failed to delete tax rate "${rateName}".`);
   }
 };

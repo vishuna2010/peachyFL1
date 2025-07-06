@@ -155,7 +155,6 @@ async function fetchUserOrders(pageToFetch = currentPage.value) {
         router.push({ query: { ...route.query, page: currentPage.value } });
     }
   } catch (err) {
-    console.error('Failed to fetch user orders:', err);
     fetchError.value = err.response?.data?.message || err.message || 'Could not load orders.';
     orders.value = [];
   } finally {

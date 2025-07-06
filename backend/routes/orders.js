@@ -35,7 +35,10 @@ router.post(
       return true;
     }),
     body('discount_code').optional().isString().trim(),
-    body('mock_payment_successful').optional().isBoolean().toBoolean()
+    body('mock_payment_successful').optional().isBoolean().toBoolean(),
+    body('payment_method').optional().isString().trim().isLength({ max: 100 }).withMessage('Payment method cannot exceed 100 characters.'),
+    body('shipping_cost').optional().isFloat({ min: 0 }).toFloat().withMessage('Shipping cost must be a non-negative number.'),
+    body('shipping_method_id').optional().isInt({ gt: 0 }).withMessage('Shipping method ID must be a positive integer if provided.')
   ],
   async (req, res, next) => {
     const errors = validationResult(req);
@@ -49,7 +52,10 @@ router.post(
       billingAddress: req.body.billingAddress,
       discount_code: req.body.discount_code,
       guestDetails: req.body.guestDetails,
-      mock_payment_successful: req.body.mock_payment_successful
+      mock_payment_successful: req.body.mock_payment_successful,
+      payment_method: req.body.payment_method,
+      shipping_cost: req.body.shipping_cost,
+      shipping_method_id: req.body.shipping_method_id
     };
 
     const authenticatedUser = req.user ? {

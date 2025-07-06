@@ -59,6 +59,17 @@ async function createPurchaseOrder(poData, itemsData, adminUserId) {
       if (productCheck.rows.length === 0) {
         throw new NotFoundError(`Product with ID ${item.product_id} not found.`);
       }
+      
+      // If product_variant_id is provided, validate it belongs to the product
+      if (item.product_variant_id) {
+        const variantCheck = await client.query(
+          'SELECT id FROM product_variants WHERE id = $1 AND product_id = $2', 
+          [item.product_variant_id, item.product_id]
+        );
+        if (variantCheck.rows.length === 0) {
+          throw new NotFoundError(`Variant with ID ${item.product_variant_id} not found for product ${item.product_id}.`);
+        }
+      }
     }
 
     const poQuery = `
@@ -79,8 +90,8 @@ async function createPurchaseOrder(poData, itemsData, adminUserId) {
 
     const itemInsertQuery = `
       INSERT INTO purchase_order_items
-        (purchase_order_id, product_id, quantity_ordered, unit_cost_price, currency_code)
-      VALUES ($1, $2, $3, $4, $5)
+        (purchase_order_id, product_id, product_variant_id, quantity_ordered, unit_cost_price, currency_code)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *;
     `;
     const createdItems = [];
@@ -88,6 +99,7 @@ async function createPurchaseOrder(poData, itemsData, adminUserId) {
       const itemResult = await client.query(itemInsertQuery, [
         newPurchaseOrder.id,
         item.product_id,
+        item.product_variant_id || null,
         parseInt(item.quantity_ordered, 10),
         parseFloat(item.unit_cost_price),
         supplierCurrencyCode
@@ -195,7 +207,7 @@ async function getPurchaseOrderById(purchaseOrderId) {
 
     const itemsQuery = `
       SELECT poi.*, p.name as product_name, p.sku as product_sku,
-             pv.sku as variant_sku
+             pv.sku as variant_sku, pv.price_modifier as variant_price_modifier
       FROM purchase_order_items poi
       JOIN products p ON poi.product_id = p.id
       LEFT JOIN product_variants pv ON poi.product_variant_id = pv.id
@@ -315,7 +327,7 @@ async function updatePurchaseOrderHeader(purchaseOrderId, headerData, adminUserI
  * @returns {Promise<object>} The newly created purchase order item.
  */
 async function addPurchaseOrderItem(purchaseOrderId, itemData, adminUserId) {
-  const { product_id, quantity_ordered, unit_cost_price, currency_code: itemCurrencyCode } = itemData;
+  const { product_id, product_variant_id, quantity_ordered, unit_cost_price, currency_code: itemCurrencyCode } = itemData;
 
   if (!product_id || !quantity_ordered || unit_cost_price === undefined) {
     throw new BadRequestError('product_id, quantity_ordered, and unit_cost_price are required for new item.');
@@ -336,6 +348,17 @@ async function addPurchaseOrderItem(purchaseOrderId, itemData, adminUserId) {
 
     const productCheck = await client.query('SELECT id FROM products WHERE id = $1', [product_id]);
     if (productCheck.rows.length === 0) throw new NotFoundError(`Product with ID ${product_id} not found.`);
+    
+    // If product_variant_id is provided, validate it belongs to the product
+    if (product_variant_id) {
+      const variantCheck = await client.query(
+        'SELECT id FROM product_variants WHERE id = $1 AND product_id = $2', 
+        [product_variant_id, product_id]
+      );
+      if (variantCheck.rows.length === 0) {
+        throw new NotFoundError(`Variant with ID ${product_variant_id} not found for product ${product_id}.`);
+      }
+    }
 
     let finalCurrencyCode = itemCurrencyCode;
     if (!finalCurrencyCode) {
@@ -347,12 +370,12 @@ async function addPurchaseOrderItem(purchaseOrderId, itemData, adminUserId) {
 
     const itemInsertQuery = `
       INSERT INTO purchase_order_items
-        (purchase_order_id, product_id, quantity_ordered, unit_cost_price, currency_code)
-      VALUES ($1, $2, $3, $4, $5)
+        (purchase_order_id, product_id, product_variant_id, quantity_ordered, unit_cost_price, currency_code)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *;
     `;
     const itemResult = await client.query(itemInsertQuery, [
-      purchaseOrderId, product_id, parseInt(quantity_ordered), parseFloat(unit_cost_price), finalCurrencyCode
+      purchaseOrderId, product_id, product_variant_id || null, parseInt(quantity_ordered), parseFloat(unit_cost_price), finalCurrencyCode
     ]);
 
     // Mark PO as updated
@@ -381,7 +404,7 @@ async function addPurchaseOrderItem(purchaseOrderId, itemData, adminUserId) {
  * @returns {Promise<object>} The updated purchase order item.
  */
 async function updatePurchaseOrderItem(poItemId, itemData, adminUserId) {
-  const { quantity_ordered, unit_cost_price, currency_code } = itemData;
+  const { quantity_ordered, unit_cost_price, currency_code, product_variant_id } = itemData;
 
   const client = await db.pool.connect();
   try {
@@ -419,6 +442,20 @@ async function updatePurchaseOrderItem(poItemId, itemData, adminUserId) {
             codeToSet = currency_code.toUpperCase();
         }
       setClauses.push(`currency_code = $${paramIndex++}`); values.push(codeToSet);
+    }
+    
+    if (product_variant_id !== undefined) {
+      // If product_variant_id is provided, validate it belongs to the product
+      if (product_variant_id) {
+        const variantCheck = await client.query(
+          'SELECT id FROM product_variants WHERE id = $1 AND product_id = $2', 
+          [product_variant_id, currentItem.product_id]
+        );
+        if (variantCheck.rows.length === 0) {
+          throw new NotFoundError(`Variant with ID ${product_variant_id} not found for product ${currentItem.product_id}.`);
+        }
+      }
+      setClauses.push(`product_variant_id = $${paramIndex++}`); values.push(product_variant_id);
     }
 
     if (setClauses.length === 0) {
@@ -485,6 +522,58 @@ async function removePurchaseOrderItem(poItemId, adminUserId) {
 
 
 const config = require('../config'); // Re-ensure config is imported if not already at top for BASE_CURRENCY_CODE
+
+/**
+ * Gets all variants for a specific product.
+ * @param {number} productId - The ID of the product.
+ * @returns {Promise<Array>} Array of product variants with their option values.
+ * @throws {NotFoundError} If the product is not found.
+ */
+async function getProductVariants(productId) {
+  try {
+    // First check if product exists
+    const productCheck = await db.query('SELECT id, name FROM products WHERE id = $1', [productId]);
+    if (productCheck.rows.length === 0) {
+      throw new NotFoundError(`Product with ID ${productId} not found.`);
+    }
+
+    // Get all variants for the product with their option values
+    const variantsQuery = `
+      SELECT 
+        pv.id,
+        pv.sku,
+        pv.price_modifier,
+        pv.stock_quantity,
+        pv.image_url,
+        pv.created_at,
+        pv.updated_at,
+        ARRAY_AGG(
+          JSON_BUILD_OBJECT(
+            'option_name', po.name,
+            'option_value', pov.value
+          )
+        ) FILTER (WHERE po.name IS NOT NULL) as option_values
+      FROM product_variants pv
+      LEFT JOIN product_variant_option_values pvov ON pv.id = pvov.product_variant_id
+      LEFT JOIN product_option_values pov ON pvov.product_option_value_id = pov.id
+      LEFT JOIN product_options po ON pov.option_id = po.id
+      WHERE pv.product_id = $1
+      GROUP BY pv.id, pv.sku, pv.price_modifier, pv.stock_quantity, pv.image_url, pv.created_at, pv.updated_at
+      ORDER BY pv.id;
+    `;
+    
+    const variantsResult = await db.query(variantsQuery, [productId]);
+    
+    return {
+      product: productCheck.rows[0],
+      variants: variantsResult.rows
+    };
+  } catch (error) {
+    if (error instanceof NotFoundError) throw error;
+    console.error(`Error in purchaseOrderService.getProductVariants for product ID ${productId}:`, error);
+    throw new AppError('Failed to retrieve product variants.', 500, 'GET_PRODUCT_VARIANTS_FAILED');
+  }
+}
 
 /**
  * Receives stock for a specific purchase order item.
@@ -683,4 +772,5 @@ module.exports = {
   updatePurchaseOrderItem,
   removePurchaseOrderItem,
   receiveStockForPurchaseOrderItem,
+  getProductVariants,
 };

@@ -292,6 +292,7 @@ import StatCard from '~/components/admin/StatCard.vue'
 import Modal from '~/components/common/Modal.vue'
 
 const toast = useToast()
+const { apiFetch } = useApi()
 
 definePageMeta({
   layout: 'admin',
@@ -353,7 +354,7 @@ const paginatedUnsubscribes = computed(() => {
 const fetchUnsubscribes = async () => {
   loading.value = true
   try {
-    const response = await $fetch('/api/admin/email-unsubscribes')
+    const response = await apiFetch('/api/admin/email-unsubscribes')
     unsubscribes.value = response.unsubscribes || []
     stats.value = response.stats || {
       totalUnsubscribes: 0,
@@ -370,7 +371,7 @@ const fetchUnsubscribes = async () => {
 
 const resubscribeUser = async (unsubscribe) => {
   try {
-    await $fetch(`/api/email/resubscribe`, {
+    await apiFetch(`/api/email/resubscribe`, {
       method: 'POST',
       body: {
         email: unsubscribe.email,
@@ -387,7 +388,7 @@ const resubscribeUser = async (unsubscribe) => {
 
 const resubscribeUserType = async (user, emailType) => {
   try {
-    await $fetch(`/api/email/resubscribe`, {
+    await apiFetch(`/api/email/resubscribe`, {
       method: 'POST',
       body: {
         email: user.email,
@@ -405,7 +406,7 @@ const resubscribeUserType = async (user, emailType) => {
 
 const viewUserDetails = async (unsubscribe) => {
   try {
-    const response = await $fetch(`/api/admin/email-unsubscribes/user/${unsubscribe.user_id}`)
+    const response = await apiFetch(`/api/admin/email-unsubscribes/user/${unsubscribe.user_id}`)
     selectedUser.value = response.user
   } catch (error) {
     console.error('Error fetching user details:', error)
@@ -416,7 +417,7 @@ const viewUserDetails = async (unsubscribe) => {
 const exportUnsubscribes = async () => {
   exporting.value = true
   try {
-    const response = await $fetch('/api/admin/email-unsubscribes/export', {
+    const response = await apiFetch('/api/admin/email-unsubscribes/export', {
       method: 'POST',
       body: { filters: filters.value }
     })

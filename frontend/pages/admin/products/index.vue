@@ -240,8 +240,7 @@ const openPrintLabelModal = async (product) => {
       }
 
     } catch (err) {
-      console.error('Error fetching product details for labels:', err);
-      alert('Failed to load product details for variant selection. Please try again.');
+      // Handle error silently or show toast notification
       showPrintLabelModal.value = false;
     } finally {
       isLoadingProductDetails.value = false;
@@ -253,13 +252,13 @@ const openPrintLabelModal = async (product) => {
 
 const handlePrintLabels = async () => {
   if (!currentProductForLabel.value || !currentProductForLabel.value.id) {
-    alert('Error: Product information is missing. Cannot print labels.');
+    // Handle error silently or show toast notification
     return;
   }
 
   const quantity = parseInt(labelQuantity.value);
   if (isNaN(quantity) || quantity < 1 || quantity > 200) {
-    alert('Error: Invalid number of labels. Please enter a number between 1 and 200.');
+    // Handle error silently or show toast notification
     return;
   }
 
@@ -295,33 +294,7 @@ const handlePrintLabels = async () => {
     showPrintLabelModal.value = false;
 
   } catch (error) {
-    console.error('Error fetching label PDF:', error);
-    let errorMessage = 'Failed to download label PDF. Please try again.';
-
-    if (error.response && error.response.data) {
-      // The response data for an error from an $axios request with responseType: 'blob'
-      // will itself be a Blob. We need to read it as text to parse as JSON.
-      try {
-        const errorText = await error.response.data.text();
-        const errorJson = JSON.parse(errorText);
-
-        if (errorJson && errorJson.message) {
-          if (errorJson.message.includes("Variant with ID") && errorJson.message.includes("not found")) {
-            errorMessage = `Error: The selected variant could not be found for this product. It might have been recently changed or deleted. Please try selecting the variant again or refresh the product details. (Backend: ${errorJson.message})`;
-          } else {
-            errorMessage = errorJson.message; // Use the specific message from backend
-          }
-        }
-      } catch (e) {
-        // Could not parse error blob or it wasn't JSON, stick to generic message
-        console.error('Could not parse error response blob as JSON:', e);
-      }
-    } else if (error.message) {
-      // For non-Axios errors or network errors where error.response is not available
-      errorMessage = error.message;
-    }
-
-    alert(errorMessage);
+    // Handle error silently or show toast notification
     showPrintLabelModal.value = false;
   } finally {
     isPrintingLabel.value = false;
@@ -358,7 +331,6 @@ const fetchProducts = async () => {
     }
 
   } catch (err) {
-    console.error('Error fetching products:', err);
     const errorMessage = err.response?.data?.message || err.message || 'An unexpected error occurred.';
     error.value = `Failed to load products. ${errorMessage}`;
   } finally {
@@ -375,9 +347,7 @@ const deleteProduct = async (productId) => {
     // alert('Product deleted successfully'); // Replace with a toast notification if available
     fetchProducts(); // Refresh the list
   } catch (err) {
-    console.error('Error deleting product:', err);
     const errorMessage = err.response?.data?.message || err.message || 'An unexpected error occurred.';
-    alert(`Failed to delete product: ${errorMessage}`); // Replace with a toast notification if available
     error.value = `Failed to delete product. ${errorMessage}`;
   }
 };

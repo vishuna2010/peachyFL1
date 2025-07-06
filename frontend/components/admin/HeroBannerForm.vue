@@ -1,24 +1,24 @@
 <template>
   <form @submit.prevent="handleSubmit" class="space-y-6 bg-white shadow sm:rounded-lg p-6">
     <FormField label="Title" :error="fieldErrors.title">
-      <input type="text" id="title" v-model="formData.title" required class="mt-1 block w-full" />
+      <input type="text" id="title" v-model="formData.title" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" />
     </FormField>
 
     <FormField label="Subtitle" :error="fieldErrors.subtitle">
-      <textarea id="subtitle" v-model="formData.subtitle" rows="3" class="mt-1 block w-full"></textarea>
+      <textarea id="subtitle" v-model="formData.subtitle" rows="3" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm"></textarea>
     </FormField>
 
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
       <FormField label="Button Text" :error="fieldErrors.buttonText">
-        <input type="text" id="buttonText" v-model="formData.buttonText" class="mt-1 block w-full" />
+        <input type="text" id="buttonText" v-model="formData.buttonText" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" />
       </FormField>
       <FormField label="Button Link" :error="fieldErrors.buttonLink">
-        <input type="text" id="buttonLink" v-model="formData.buttonLink" placeholder="/products/some-product or https://example.com" class="mt-1 block w-full" />
+        <input type="text" id="buttonLink" v-model="formData.buttonLink" placeholder="/products/some-product or https://example.com" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" />
       </FormField>
     </div>
 
     <FormField label="Image Alt Text" :error="fieldErrors.altText">
-      <input type="text" id="altText" v-model="formData.altText" class="mt-1 block w-full" />
+      <input type="text" id="altText" v-model="formData.altText" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" />
     </FormField>
 
     <div>
@@ -28,7 +28,7 @@
         <p class="text-sm text-gray-700 mb-1">Image Preview:</p>
         <img :src="previewImageUrl" alt="Banner image preview" class="max-h-48 rounded border border-gray-200 shadow-sm" />
       </div>
-      <input type="hidden" v-model="formData.imageUrl" /> <!-- To potentially hold existing image URL if not changed -->
+      <!-- Removed hidden input to avoid conflicts with form submission logic -->
        <button v-if="isEditMode && formData.imageUrl && !selectedFile" type="button" @click="markImageForRemoval" class="mt-2 px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-300 rounded-md hover:bg-red-50">
         Remove Current Image
       </button>
@@ -37,7 +37,7 @@
 
     <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
       <FormField label="Sort Order" :error="fieldErrors.sortOrder">
-        <input type="number" id="sortOrder" v-model.number="formData.sortOrder" class="mt-1 block w-full" />
+        <input type="number" id="sortOrder" v-model.number="formData.sortOrder" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm" />
       </FormField>
 
       <div class="pt-5">
@@ -191,24 +191,43 @@ const handleSubmit = () => {
   }
 
   const submissionData = new FormData();
-  for (const key in formData) {
-    if (key === 'imageUrl' && selectedFile.value) continue; // Don't send old imageUrl if new file is present
+  
+  // Only send the fields that the backend expects
+  const fieldsToSend = ['title', 'subtitle', 'buttonText', 'buttonLink', 'altText', 'isActive', 'sortOrder'];
+  
+  fieldsToSend.forEach(key => {
     if (formData[key] !== null && formData[key] !== undefined) {
-       // FormData converts booleans to strings "true"/"false"
       submissionData.append(key, formData[key]);
     }
+  });
+
+  // Handle imageUrl separately
+  if (selectedFile.value) {
+    // New file uploaded - don't send imageUrl
+  } else if (imageMarkedForRemoval.value && props.isEditMode) {
+    // Image marked for removal - don't send imageUrl
+  } else if (formData.imageUrl && formData.imageUrl.trim() !== '') {
+    // Send existing imageUrl if no new file and not marked for removal
+    submissionData.append('imageUrl', formData.imageUrl);
+  } else if (props.isEditMode) {
+    // In edit mode, send empty string to preserve existing image
+    submissionData.append('imageUrl', '');
   }
 
   if (selectedFile.value) {
-    submissionData.append('bannerImage', selectedFile.value); // Backend expects 'bannerImage'
+    submissionData.append('productImage', selectedFile.value); // Backend expects 'productImage'
   } else if (imageMarkedForRemoval.value && props.isEditMode) {
     submissionData.append('remove_image', 'true'); // Signal to backend to remove image
-    // Ensure imageUrl is not sent or is explicitly nulled if remove_image is true
-    if (submissionData.has('imageUrl')) {
-        submissionData.delete('imageUrl');
-    }
   }
 
+  // Debug: Log what's being sent
+  if (process.dev) {
+    console.log('Form submission data:');
+    for (let [key, value] of submissionData.entries()) {
+      console.log(`${key}:`, value);
+    }
+  }
+  
   emit('submit', submissionData);
 };
 
@@ -217,10 +236,10 @@ const handleSubmit = () => {
 <style scoped>
 /* Using Tailwind utilities, so minimal custom CSS needed here */
 input[type="file"] {
-  @apply file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-peach-pink/10 file:text-peach-pink hover:file:bg-peach-pink/20;
+  /* File input styling handled by Tailwind classes in template */
 }
 /* Standardize input styles if FormField doesn't handle it all */
 input[type="text"], input[type="number"], textarea, select {
-  @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-peach-pink focus:border-peach-pink sm:text-sm;
+  /* Input styling handled by Tailwind classes in template */
 }
 </style>

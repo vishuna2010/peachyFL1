@@ -317,13 +317,14 @@ async function generateSalesReport(options = {}) {
   const client = await db.pool.connect(); // Use a client for multiple queries
   try {
     const ordersQuery = `
-      SELECT id, user_id, total_amount, original_total_amount, discount_amount_applied, status, created_at,
-             shipping_address_line1, shipping_address_line2, shipping_city, shipping_state_province_region, shipping_postal_code, shipping_country,
-             billing_address_line1, billing_address_line2, billing_city, billing_state_province_region, billing_postal_code, billing_country,
-             user_email, payment_method, payment_status, invoice_number
-      FROM orders
-      WHERE created_at >= $1 AND created_at <= $2 AND status = ANY($3::varchar[])
-      ORDER BY created_at DESC;
+      SELECT o.id, o.user_id, o.total_amount, o.original_total_amount, o.discount_amount_applied, o.status, o.created_at,
+             o.shipping_address_line1, o.shipping_address_line2, o.shipping_city, o.shipping_state_province_region, o.shipping_postal_code, o.shipping_country,
+             o.billing_address_line1, o.billing_address_line2, o.billing_city, o.billing_state_province_region, o.billing_postal_code, o.billing_country,
+             u.email as user_email, o.payment_method, o.payment_status, o.invoice_number
+      FROM orders o
+      LEFT JOIN users u ON o.user_id = u.id
+      WHERE o.created_at >= $1 AND o.created_at <= $2 AND o.status = ANY($3::varchar[])
+      ORDER BY o.created_at DESC;
     `;
     const ordersResult = await client.query(ordersQuery, [startDate.toISOString(), endDateQuery.toISOString(), VALID_SALE_STATUSES]);
 
@@ -365,11 +366,116 @@ async function generateSalesReport(options = {}) {
   }
 }
 
+/**
+ * Generates a Stock Valuation Report.
+ * @param {object} options - Report options: page, limit, categoryId, supplierId, sortBy, sortOrder.
+ * @returns {Promise<object>} Stock valuation report data with pagination.
+ */
+async function generateStockValuationReport(options = {}) {
+  const {
+    page = 1,
+    limit = 20,
+    categoryId,
+    supplierId,
+    sortBy = 'product_name',
+    sortOrder = 'ASC'
+  } = options;
+
+  const queryParams = [];
+  let paramIndex = 1;
+  let whereConditions = [];
+  let joinClauses = [];
+
+  // Build WHERE conditions
+  whereConditions.push('p.cost_price IS NOT NULL AND p.cost_price > 0');
+  whereConditions.push('p.stock_quantity > 0');
+
+  if (categoryId) {
+    whereConditions.push(`p.category_id = $${paramIndex++}`);
+    queryParams.push(categoryId);
+  }
+
+  if (supplierId) {
+    whereConditions.push(`p.supplier_id = $${paramIndex++}`);
+    queryParams.push(supplierId);
+  }
+
+  // Add pagination parameters
+  const offset = (page - 1) * limit;
+  queryParams.push(limit, offset);
+  const limitParamIndex = paramIndex++;
+  const offsetParamIndex = paramIndex++;
+
+  // Validate sortBy
+  const allowedSortFields = ['product_name', 'sku', 'stock_quantity', 'cost_price', 'total_value'];
+  const validSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'product_name';
+  const validSortOrder = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
+  try {
+    // First, get the total count for pagination
+    const countQuery = `
+      SELECT COUNT(*) as total_count
+      FROM products p
+      WHERE ${whereConditions.join(' AND ')}
+    `;
+    const countResult = await db.query(countQuery, queryParams.slice(0, -2)); // Exclude limit and offset
+    const totalItems = parseInt(countResult.rows[0].total_count);
+
+    // Then, get the actual data
+    const dataQuery = `
+      SELECT
+        p.id,
+        p.name as product_name,
+        p.sku,
+        p.stock_quantity,
+        p.cost_price,
+        (p.stock_quantity * p.cost_price) as total_value,
+        c.name as category_name,
+        s.name as supplier_name
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      LEFT JOIN suppliers s ON p.supplier_id = s.id
+      WHERE ${whereConditions.join(' AND ')}
+      ORDER BY ${validSortBy} ${validSortOrder}, p.name ASC
+      LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
+    `;
+    const dataResult = await db.query(dataQuery, queryParams);
+
+    // Calculate grand total
+    const grandTotalQuery = `
+      SELECT SUM(p.stock_quantity * p.cost_price) as grand_total
+      FROM products p
+      WHERE ${whereConditions.join(' AND ')}
+    `;
+    const grandTotalResult = await db.query(grandTotalQuery, queryParams.slice(0, -2)); // Exclude limit and offset
+    const grandTotal = parseFloat(grandTotalResult.rows[0].grand_total || 0);
+
+    return {
+      data: dataResult.rows.map(row => ({
+        ...row,
+        total_value: parseFloat(row.total_value).toFixed(2),
+        cost_price: parseFloat(row.cost_price).toFixed(2)
+      })),
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems: totalItems,
+        limit: limit
+      },
+      grandTotalValuation: grandTotal.toFixed(2)
+    };
+  } catch (error) {
+    console.error('[ReportService.generateStockValuationReport] Error:', error);
+    throw new AppError('Failed to generate stock valuation report.', 500, 'STOCK_VALUATION_REPORT_FAILED', { originalError: error.message });
+  }
+}
+
 module.exports = {
   generateLowStockReport,
   generateTaxReport,
   generateInvoiceExport,
   generateTaxSummaryByRegionReport,
   generateBestSellersReport,
-  generateSalesReport
+  generateSalesReport,
+  generateStockValuationReport
 };

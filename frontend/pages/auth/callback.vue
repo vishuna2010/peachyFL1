@@ -29,49 +29,44 @@ const router = useRouter();
 const route = useRoute();
 
 onMounted(() => {
-  console.log('[AuthCallback] Mounted. Initial state:',
-    `isAuthInitialized: ${isAuthInitialized.value}`,
-    `isAuthenticated: ${isAuthenticated.value}`,
-    `isLoadingPermissions: ${isLoadingPermissions.value}`,
-    `authUser: ${JSON.stringify(authUser.value)}`
-  );
-
   let stopWatch = null;
 
   stopWatch = watch(
     [isAuthInitialized, isAuthenticated, isLoadingPermissions, () => authUser.value?.permissions],
     ([authInitialized, authenticated, loadingPermissions, permissionsArray]) => {
-      console.log('[AuthCallback] Watch triggered. State:',
-        `isAuthInitialized: ${authInitialized}`,
-        `isAuthenticated: ${authenticated}`,
-        `isLoadingPermissions: ${loadingPermissions}`,
-        `authUser: ${JSON.stringify(authUser.value)}`,
-        `permissions: ${JSON.stringify(permissionsArray)}`
-      );
-
       if (authInitialized && authenticated && !loadingPermissions) {
-        console.log('[AuthCallback] All conditions met! Proceeding with redirect...');
-        
         if (stopWatch) {
           stopWatch();
         }
 
         let intendedRedirect = route.query.redirect?.toString() || '';
-        console.log(`[AuthCallback] Intended redirect: ${intendedRedirect}`);
 
         const currentUser = authUser.value;
         let finalTargetPath = intendedRedirect;
+
+        // Preserve dynamic route parameters in the redirect
+        if (intendedRedirect && intendedRedirect.includes('/edit/')) {
+          // If the redirect contains an ID parameter, preserve it
+          const pathParts = intendedRedirect.split('/');
+          const editIndex = pathParts.findIndex(part => part === 'edit');
+          if (editIndex !== -1 && editIndex + 1 < pathParts.length) {
+            // The part after 'edit' should be the ID
+            const id = pathParts[editIndex + 1];
+            if (id && /^\d+$/.test(id)) {
+              // This is a valid ID, keep the full path
+              finalTargetPath = intendedRedirect;
+            }
+          }
+        }
 
         // If no specific redirect or redirect is to home, determine based on user role
         if (!intendedRedirect || intendedRedirect === '/' || intendedRedirect === '') {
           if (currentUser && currentUser.role && currentUser.role.toLowerCase().includes('admin')) {
             // Admin users should go to admin dashboard by default
             finalTargetPath = '/admin';
-            console.log('[AuthCallback] Admin user detected, redirecting to /admin');
           } else {
             // Non-admin users go to profile
             finalTargetPath = '/profile';
-            console.log('[AuthCallback] Non-admin user detected, redirecting to /profile');
           }
         } else if (intendedRedirect.startsWith('/admin')) {
           // If trying to access admin area, verify permissions
@@ -86,16 +81,7 @@ onMounted(() => {
           }
         }
 
-        console.log(`[AuthCallback] Final redirect target: ${finalTargetPath}`);
         router.replace(finalTargetPath);
-      } else {
-        console.log('[AuthCallback] Conditions not met yet:', {
-          authInitialized,
-          authenticated,
-          loadingPermissions,
-          userExists: !!currentUser,
-          userRole: currentUser?.role
-        });
       }
     },
     { immediate: true, deep: true }
@@ -107,13 +93,6 @@ onMounted(() => {
       stopWatch();
     }
     if (router.currentRoute.value.path === '/auth/callback') {
-      console.warn('[AuthCallback] Timeout reached. Current state:', {
-        isAuthInitialized: isAuthInitialized.value,
-        isAuthenticated: isAuthenticated.value,
-        isLoadingPermissions: isLoadingPermissions.value,
-        authUser: authUser.value
-      });
-      console.warn('[AuthCallback] Redirecting to homepage due to timeout.');
       router.replace('/');
     }
   }, 10000); // Increased timeout to 10 seconds

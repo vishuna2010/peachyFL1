@@ -20,7 +20,8 @@ router.get('/', [
     query('optionValueId').optional().isInt({ gt: 0 }).toInt(), // New validator
     query('page').optional().isInt({ min: 1 }).toInt().default(1),
     query('limit').optional().isInt({ min: 1, max: 100 }).toInt().default(10),
-    query('on_sale').optional().isIn(['true', 'false']).toBoolean()
+    query('on_sale').optional().isIn(['true', 'false']).toBoolean(),
+    query('new_arrivals').optional().isIn(['true', 'false']).toBoolean()
   ],
   async (req, res, next) => {
     console.log('[DEBUG] /api/products route received query:', JSON.stringify(req.query)); // Log received query
@@ -31,7 +32,7 @@ router.get('/', [
     }
   try {
     // Use validated and sanitized values from req.query
-    const { search_term, category_id, min_price, max_price, sort_by, optionValueId, page, limit, on_sale } = req.query; // Added on_sale here for clarity
+    const { search_term, category_id, min_price, max_price, sort_by, optionValueId, page, limit, on_sale, new_arrivals } = req.query; // Added on_sale here for clarity
 
     // Validation and Parsing (some parsing already handled by express-validator's toInt/toFloat)
     // Re-parsing might not be strictly necessary if trusting express-validator output, but explicit parsing ensures type.
@@ -60,7 +61,8 @@ router.get('/', [
       limit: parsedLimit,
       is_admin_request: false, // Ensure public access rules are applied
       stock_status: 'in_stock', // Add this line
-      onSale: on_sale === 'true' // Add on_sale parameter
+      onSale: on_sale === 'true', // Add on_sale parameter
+      newArrivals: new_arrivals === 'true' // Add new_arrivals parameter
     });
 
     // Transform the response

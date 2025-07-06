@@ -50,8 +50,8 @@
             <div class="flex-1">
               <div class="flex items-center gap-4 mb-4">
                 <img
-                  v-if="banner.image_url"
-                  :src="banner.image_url"
+                  v-if="banner.imageUrl"
+                  :src="banner.imageUrl"
                   :alt="banner.title"
                   class="w-24 h-16 object-cover rounded-lg"
                 />
@@ -66,31 +66,32 @@
                   <span class="font-medium text-gray-700">Status:</span>
                   <span
                     :class="{
-                      'text-green-600': banner.is_active,
-                      'text-red-600': !banner.is_active
+                      'text-green-600': banner.isActive,
+                      'text-red-600': !banner.isActive
                     }"
                     class="ml-2"
                   >
-                    {{ banner.is_active ? 'Active' : 'Inactive' }}
+                    {{ banner.isActive ? 'Active' : 'Inactive' }}
                   </span>
                 </div>
                 <div>
-                  <span class="font-medium text-gray-700">Priority:</span>
-                  <span class="ml-2">{{ banner.priority }}</span>
+                  <span class="font-medium text-gray-700">Sort Order:</span>
+                  <span class="ml-2">{{ banner.sortOrder }}</span>
                 </div>
                 <div>
-                  <span class="font-medium text-gray-700">Start Date:</span>
-                  <span class="ml-2">{{ formatDate(banner.start_date) }}</span>
+                  <span class="font-medium text-gray-700">Created:</span>
+                  <span class="ml-2">{{ formatDate(banner.createdAt) }}</span>
                 </div>
                 <div>
-                  <span class="font-medium text-gray-700">End Date:</span>
-                  <span class="ml-2">{{ formatDate(banner.end_date) }}</span>
+                  <span class="font-medium text-gray-700">Updated:</span>
+                  <span class="ml-2">{{ formatDate(banner.updatedAt) }}</span>
                 </div>
               </div>
 
-              <div v-if="banner.call_to_action_text" class="mt-4">
-                <span class="font-medium text-gray-700">Call to Action:</span>
-                <span class="ml-2 text-blue-600">{{ banner.call_to_action_text }}</span>
+              <div v-if="banner.buttonText" class="mt-4">
+                <span class="font-medium text-gray-700">Button:</span>
+                <span class="ml-2 text-blue-600">{{ banner.buttonText }}</span>
+                <span v-if="banner.buttonLink" class="ml-2 text-gray-500">→ {{ banner.buttonLink }}</span>
               </div>
             </div>
 
@@ -156,13 +157,20 @@ const fetchHeroBanners = async () => {
 
 const toggleBannerStatus = async (banner) => {
   try {
-    const newStatus = !banner.is_active
+    const newStatus = !banner.isActive
     const { $axios } = useNuxtApp()
-    await $axios.patch(`/admin/hero-banners/${banner.id}`, {
-      is_active: newStatus
+    await $axios.put(`/admin/hero-banners/${banner.id}`, {
+      title: banner.title,
+      subtitle: banner.subtitle,
+      buttonText: banner.buttonText,
+      buttonLink: banner.buttonLink,
+      imageUrl: banner.imageUrl,
+      altText: banner.altText,
+      isActive: newStatus,
+      sortOrder: banner.sortOrder
     })
     
-    banner.is_active = newStatus
+    banner.isActive = newStatus
     if (typeof $toast !== 'undefined' && $toast.success) {
       $toast.success(`Banner ${newStatus ? 'activated' : 'deactivated'} successfully`)
     }

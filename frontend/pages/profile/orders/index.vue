@@ -247,7 +247,6 @@ const loadOrders = async () => {
     const response = await $axios.get(`/users/me/orders?${queryParams}`)
     orders.value = response.data
   } catch (err) {
-    console.error('Error loading orders:', err)
     error.value = err.response?.data?.message || 'Failed to load orders'
   } finally {
     loading.value = false
