@@ -762,6 +762,82 @@ async function receiveStockForPurchaseOrderItem(poItemId, receiveData, adminUser
   }
 }
 
+/**
+ * Deletes a purchase order and all its associated items.
+ * Only allows deletion of POs with status 'pending' or 'cancelled'.
+ * @param {number} purchaseOrderId - The ID of the purchase order to delete.
+ * @param {number} adminUserId - ID of the admin performing the deletion.
+ * @returns {Promise<object>} Object containing deletion confirmation.
+ * @throws {NotFoundError} If the purchase order is not found.
+ * @throws {BadRequestError} If the PO cannot be deleted due to its status.
+ */
+async function deletePurchaseOrder(purchaseOrderId, adminUserId) {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Check if PO exists and get its status
+    const poResult = await client.query(
+      'SELECT id, status FROM purchase_orders WHERE id = $1 FOR UPDATE',
+      [purchaseOrderId]
+    );
+    
+    if (poResult.rows.length === 0) {
+      throw new NotFoundError(`Purchase order with ID ${purchaseOrderId} not found.`);
+    }
+
+    const po = poResult.rows[0];
+    
+    // Only allow deletion of pending or cancelled POs
+    if (!['pending', 'cancelled'].includes(po.status)) {
+      throw new BadRequestError(`Cannot delete purchase order with status "${po.status}". Only 'pending' or 'cancelled' purchase orders can be deleted.`);
+    }
+
+    // Check if any items have been received (safety check)
+    const receivedItemsResult = await client.query(
+      'SELECT COUNT(*) as received_count FROM purchase_order_items WHERE purchase_order_id = $1 AND quantity_received > 0',
+      [purchaseOrderId]
+    );
+    
+    const receivedCount = parseInt(receivedItemsResult.rows[0].received_count, 10);
+    if (receivedCount > 0) {
+      throw new BadRequestError(`Cannot delete purchase order #${purchaseOrderId} because ${receivedCount} item(s) have already been received.`);
+    }
+
+    // Delete all PO items first (cascade should handle this, but being explicit)
+    await client.query(
+      'DELETE FROM purchase_order_items WHERE purchase_order_id = $1',
+      [purchaseOrderId]
+    );
+
+    // Delete the purchase order
+    const deleteResult = await client.query(
+      'DELETE FROM purchase_orders WHERE id = $1 RETURNING id, supplier_id, order_date',
+      [purchaseOrderId]
+    );
+
+    if (deleteResult.rows.length === 0) {
+      throw new NotFoundError(`Purchase order with ID ${purchaseOrderId} not found during deletion.`);
+    }
+
+    await client.query('COMMIT');
+
+    return {
+      message: `Purchase order #${purchaseOrderId} has been successfully deleted.`,
+      deletedPO: deleteResult.rows[0]
+    };
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    if (error instanceof NotFoundError || error instanceof BadRequestError || error instanceof AppError) {
+      throw error;
+    }
+    console.error(`Error in purchaseOrderService.deletePurchaseOrder for PO ID ${purchaseOrderId}:`, error);
+    throw new AppError('Failed to delete purchase order.', 500, 'PO_DELETION_FAILED');
+  } finally {
+    client.release();
+  }
+}
 
 module.exports = {
   createPurchaseOrder,
@@ -773,4 +849,5 @@ module.exports = {
   removePurchaseOrderItem,
   receiveStockForPurchaseOrderItem,
   getProductVariants,
+  deletePurchaseOrder,
 };

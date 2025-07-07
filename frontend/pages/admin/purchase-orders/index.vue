@@ -38,7 +38,13 @@
           <td>{{ new Date(po.created_at).toLocaleDateString() }}</td>
           <td class="actions-cell">
             <NuxtLink :to="`/admin/purchase-orders/${po.id}`" class="action-link view-link">View/Edit</NuxtLink>
-            <!-- Delete PO might be added later if business rules allow -->
+            <button 
+              v-if="['pending', 'cancelled'].includes(po.status)"
+              @click="confirmDelete(po)" 
+              class="action-link delete-link"
+            >
+              Delete
+            </button>
           </td>
         </tr>
       </tbody>
@@ -57,6 +63,21 @@
     <div v-if="purchaseOrders.length === 0 && !isLoading && !fetchError" class="empty-state">
       <p>No purchase orders found. <NuxtLink to="/admin/purchase-orders/new">Create one now!</NuxtLink></p>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <Modal v-if="showDeleteModal" @close="showDeleteModal = false">
+      <div class="delete-modal">
+        <h3>Confirm Delete</h3>
+        <p>Are you sure you want to delete Purchase Order #{{ poToDelete?.id }}?</p>
+        <p class="warning">This action cannot be undone.</p>
+        <div class="modal-actions">
+          <button @click="showDeleteModal = false" class="cancel-button">Cancel</button>
+          <button @click="deletePurchaseOrder" class="delete-button" :disabled="isDeleting">
+            {{ isDeleting ? 'Deleting...' : 'Delete' }}
+          </button>
+        </div>
+      </div>
+    </Modal>
   </div>
 </template>
 
@@ -77,6 +98,9 @@ const purchaseOrders = ref([]);
 const isLoading = ref(true);
 const fetchError = ref(null);
 const actionMessage = ref(''); // For messages from redirects (e.g., after creation)
+const showDeleteModal = ref(false);
+const poToDelete = ref(null);
+const isDeleting = ref(false);
 
 const pagination = ref({
   total: 0,
@@ -105,6 +129,42 @@ async function fetchPurchaseOrders(page = pagination.value.page, limit = paginat
 function changePage(newPage) {
   if (newPage > 0 && newPage <= pagination.value.totalPages && newPage !== pagination.value.page) {
     router.push({ query: { ...route.query, page: newPage, limit: pagination.value.limit } });
+  }
+}
+
+function confirmDelete(po) {
+  poToDelete.value = po;
+  showDeleteModal.value = true;
+}
+
+async function deletePurchaseOrder() {
+  if (!poToDelete.value) return;
+  
+  isDeleting.value = true;
+  try {
+    await $axios.delete(`/admin/purchase-orders/${poToDelete.value.id}`);
+    actionMessage.value = `Purchase Order #${poToDelete.value.id} has been successfully deleted.`;
+    showDeleteModal.value = false;
+    poToDelete.value = null;
+    
+    // Refresh the list
+    await fetchPurchaseOrders(pagination.value.page, pagination.value.limit);
+    
+    // Clear the message after 3 seconds
+    setTimeout(() => {
+      actionMessage.value = '';
+    }, 3000);
+  } catch (err) {
+    console.error('Failed to delete purchase order:', err);
+    const errorMessage = err.response?.data?.message || err.response?.data?.error || 'Failed to delete purchase order';
+    actionMessage.value = `Error: ${errorMessage}`;
+    
+    // Clear error message after 5 seconds
+    setTimeout(() => {
+      actionMessage.value = '';
+    }, 5000);
+  } finally {
+    isDeleting.value = false;
   }
 }
 
@@ -160,12 +220,26 @@ h2 { margin-bottom: 1.5rem; }
 .status-cancelled { background-color: #dc3545; }
 
 .actions-cell { white-space: nowrap; }
-.action-link { padding: 0.3rem 0.6rem; border-radius: 4px; text-decoration: none; margin-right: 0.4rem; font-size: 0.9em; }
+.action-link { padding: 0.3rem 0.6rem; border-radius: 4px; text-decoration: none; margin-right: 0.4rem; font-size: 0.9em; cursor: pointer; border: none; }
 .view-link { background-color: #007bff; color: white; }
 .view-link:hover { background-color: #0056b3; }
+.delete-link { background-color: #dc3545; color: white; }
+.delete-link:hover { background-color: #c82333; }
 
 .pagination-controls { margin-top: 1.5rem; text-align: center; }
 .pagination-controls button { padding: 0.5rem 1rem; margin: 0 0.5rem; border: 1px solid #ccc; background-color: #f8f9fa; border-radius: 4px; cursor: pointer; }
 .pagination-controls button:disabled { cursor: not-allowed; opacity: 0.6; }
 .pagination-controls span { margin: 0 0.5rem; }
+
+/* Delete Modal Styles */
+.delete-modal { padding: 1rem; }
+.delete-modal h3 { margin-bottom: 1rem; color: #dc3545; }
+.delete-modal p { margin-bottom: 0.5rem; }
+.delete-modal .warning { color: #dc3545; font-weight: bold; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.cancel-button { padding: 0.5rem 1rem; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.cancel-button:hover { background-color: #5a6268; }
+.delete-button { padding: 0.5rem 1rem; background-color: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.delete-button:hover:not(:disabled) { background-color: #c82333; }
+.delete-button:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>

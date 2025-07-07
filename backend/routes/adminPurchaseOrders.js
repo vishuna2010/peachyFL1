@@ -302,5 +302,30 @@ router.get('/product/:productId/variants',
     }
 });
 
+// DELETE /api/admin/purchase-orders/:id - Delete a Purchase Order
+router.delete('/:id',
+  isAuthenticated,
+  checkPermission('purchase_orders:delete'),
+  validatePOId,
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { id } = req.params;
+    const adminUserId = req.user.userId;
+
+    try {
+      const result = await purchaseOrderService.deletePurchaseOrder(id, adminUserId);
+      
+      // Audit logging for PO deletion
+      auditLogService.recordAuditEvent('PURCHASE_ORDER_DELETE', { userId: adminUserId, userEmail: req.user.email }, { resourceType: 'PURCHASE_ORDER', resourceId: id }, { deleted_po: result.deletedPO }, req)
+        .catch(err => console.error('Audit log failed for PURCHASE_ORDER_DELETE:', err));
+      
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+});
 
 module.exports = router;

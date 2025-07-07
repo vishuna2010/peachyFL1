@@ -181,12 +181,23 @@
                   </div>
                 </div>
                 
-                <NuxtLink
-                  :to="`/admin/orders/${order.id}`"
-                  class="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
-                >
-                  View Details →
-                </NuxtLink>
+                <div class="flex items-center space-x-2">
+                  <NuxtLink
+                    :to="`/admin/orders/${order.id}`"
+                    class="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                  >
+                    View Details →
+                  </NuxtLink>
+                  
+                  <!-- Delete Button - Only show for certain statuses -->
+                  <button
+                    v-if="canDeleteOrder(order)"
+                    @click="confirmDelete(order)"
+                    class="text-red-600 hover:text-red-900 text-sm font-medium"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           </li>
@@ -261,6 +272,43 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="showDeleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3 text-center">
+          <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+            <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+            </svg>
+          </div>
+          <h3 class="text-lg font-medium text-gray-900 mt-4">Confirm Delete</h3>
+          <div class="mt-2 px-7 py-3">
+            <p class="text-sm text-gray-500">
+              Are you sure you want to delete Order #{{ orderToDelete?.id }}?
+            </p>
+            <p class="text-sm text-red-600 mt-2 font-medium">
+              This action cannot be undone.
+            </p>
+          </div>
+          <div class="items-center px-4 py-3">
+            <button
+              @click="showDeleteModal = false"
+              class="px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md w-24 mr-2 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            >
+              Cancel
+            </button>
+            <button
+              @click="deleteOrder"
+              :disabled="isDeleting"
+              class="px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-24 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {{ isDeleting ? 'Deleting...' : 'Delete' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -286,6 +334,11 @@ const error = ref(null)
 const pagination = ref(null)
 const activeTab = ref('all')
 
+// Delete modal state
+const showDeleteModal = ref(false)
+const orderToDelete = ref(null)
+const isDeleting = ref(false)
+
 // Filter state
 const filters = ref({
   order_id: '',
@@ -307,6 +360,46 @@ const tabs = computed(() => [
   { key: 'online', label: 'Online Orders', count: onlineOrdersCount.value },
   { key: 'pos', label: 'POS Orders', count: posOrdersCount.value }
 ])
+
+// Check if order can be deleted
+const canDeleteOrder = (order) => {
+  // Only allow deletion of orders with certain statuses
+  const deletableStatuses = ['pending', 'cancelled', 'failed']
+  return deletableStatuses.includes(order.status)
+}
+
+// Confirm delete
+const confirmDelete = (order) => {
+  orderToDelete.value = order
+  showDeleteModal.value = true
+}
+
+// Delete order
+const deleteOrder = async () => {
+  if (!orderToDelete.value) return
+  
+  isDeleting.value = true
+  try {
+    await $axios.delete(`/admin/orders/${orderToDelete.value.id}`)
+    
+    // Show success message (you might want to add a toast notification here)
+    console.log(`Order #${orderToDelete.value.id} deleted successfully`)
+    
+    // Close modal
+    showDeleteModal.value = false
+    orderToDelete.value = null
+    
+    // Refresh the orders list
+    await fetchOrders()
+    await fetchOrderCounts()
+    
+  } catch (err) {
+    console.error('Error deleting order:', err)
+    error.value = err.response?.data?.message || 'Failed to delete order'
+  } finally {
+    isDeleting.value = false
+  }
+}
 
 // Watch for route changes to sync with URL params
 watch(() => route.query, (newQuery) => {
