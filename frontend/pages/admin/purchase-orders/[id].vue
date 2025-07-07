@@ -71,16 +71,27 @@
             <tr>
               <th>Product SKU</th>
               <th>Product Name</th>
+              <th>Variant</th>
               <th>Qty Ordered</th>
               <th>Unit Cost</th>
               <th>Line Total</th>
               <th>Qty Received</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(item, index) in purchaseOrder.items" :key="item.id">
-              <td>{{ item.product_sku || 'N/A' }}</td>
+              <td>{{ item.display_sku || 'N/A' }}</td>
               <td>{{ item.product_name }} (ID: {{ item.product_id }})</td>
+              <td>
+                <span v-if="item.variant_sku" class="variant-info">
+                  {{ item.variant_sku }}
+                  <span v-if="item.variant_price_modifier" class="price-modifier">
+                    ({{ item.variant_price_modifier > 0 ? '+' : '' }}${{ parseFloat(item.variant_price_modifier).toFixed(2) }})
+                  </span>
+                </span>
+                <span v-else class="no-variant">Base Product</span>
+              </td>
               <td>{{ item.quantity_ordered }}</td>
               <td>${{ parseFloat(item.unit_cost_price).toFixed(2) }}</td>
               <td>${{ (parseFloat(item.unit_cost_price) * item.quantity_ordered).toFixed(2) }}</td>
@@ -335,6 +346,25 @@ h2 { margin-bottom: 0; }
 .items-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.9em;}
 .items-table th, .items-table td { border: 1px solid #ddd; padding: 0.75rem; text-align: left; vertical-align: middle; }
 .items-table th { background-color: #f2f2f2; }
+
+.variant-info { 
+  font-weight: 500; 
+  color: #007bff; 
+  background-color: #f8f9fa; 
+  padding: 0.2rem 0.5rem; 
+  border-radius: 3px; 
+  font-size: 0.85em; 
+}
+.price-modifier { 
+  color: #28a745; 
+  font-size: 0.8em; 
+  margin-left: 0.3rem; 
+}
+.no-variant { 
+  color: #6c757d; 
+  font-style: italic; 
+  font-size: 0.85em; 
+}
 
 .back-link { display: inline-block; margin-top: 1.5rem; padding: 0.6rem 1.2rem; background-color: #6c757d; color: white; text-decoration: none; border-radius: 4px; }
 .header-back-link { margin-top: 0; font-size: 0.9em; }

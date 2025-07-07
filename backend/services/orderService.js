@@ -7,36 +7,110 @@ const paymentService = require('./paymentService');
 
 /**
  * Retrieves a paginated list of all orders for the admin view.
- * @param {object} options - Pagination options.
+ * @param {object} options - Pagination and filter options.
  * @param {number} [options.page=1]
  * @param {number} [options.limit=10] // Default limit from adminOrders route
+ * @param {string} [options.source] - Filter by source: 'online', 'pos'
+ * @param {string} [options.status] - Filter by order status
+ * @param {string} [options.payment_status] - Filter by payment status
+ * @param {string} [options.customer_email] - Filter by customer email (partial match)
+ * @param {string} [options.date_from] - Filter orders from this date (YYYY-MM-DD)
+ * @param {string} [options.date_to] - Filter orders to this date (YYYY-MM-DD)
+ * @param {string} [options.order_id] - Filter by specific order ID
  * @returns {Promise<object>} An object containing { data: orders, pagination: {...} }.
  * @throws {AppError} If database operation fails.
  */
 async function getAllAdminOrders(options = {}) {
   const page = options.page || 1;
   const limit = options.limit || 10;
+  const source = options.source; // 'online', 'pos', or undefined for all
+  const status = options.status;
+  const payment_status = options.payment_status;
+  const customer_email = options.customer_email;
+  const date_from = options.date_from;
+  const date_to = options.date_to;
+  const order_id = options.order_id;
   const offset = (page - 1) * limit;
 
   try {
-    const countQuery = 'SELECT COUNT(*) FROM orders';
+    let whereConditions = [];
+    let queryParams = [];
+    let paramIndex = 1;
+
+    // Build WHERE clause dynamically based on provided filters
+    if (source) {
+      whereConditions.push(`o.source = $${paramIndex++}`);
+      queryParams.push(source);
+    }
+
+    if (status) {
+      if (status.includes(',')) {
+        // Handle comma-separated status values
+        const statuses = status.split(',').map(s => s.trim().toLowerCase());
+        const statusConditions = statuses.map((_, index) => `o.status = $${paramIndex + index}`);
+        whereConditions.push(`(${statusConditions.join(' OR ')})`);
+        queryParams.push(...statuses);
+        paramIndex += statuses.length;
+      } else {
+        whereConditions.push(`o.status = $${paramIndex++}`);
+        queryParams.push(status.toLowerCase());
+      }
+    }
+
+    if (payment_status) {
+      whereConditions.push(`o.payment_status = $${paramIndex++}`);
+      queryParams.push(payment_status.toLowerCase());
+    }
+
+    if (customer_email) {
+      whereConditions.push(`u.email ILIKE $${paramIndex++}`);
+      queryParams.push(`%${customer_email}%`);
+    }
+
+    if (date_from) {
+      whereConditions.push(`o.created_at >= $${paramIndex++}`);
+      queryParams.push(`${date_from} 00:00:00`);
+    }
+
+    if (date_to) {
+      whereConditions.push(`o.created_at <= $${paramIndex++}`);
+      queryParams.push(`${date_to} 23:59:59`);
+    }
+
+    if (order_id) {
+      whereConditions.push(`o.id = $${paramIndex++}`);
+      queryParams.push(parseInt(order_id));
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    const countQuery = `
+      SELECT COUNT(*) 
+      FROM orders o
+      JOIN users u ON o.user_id = u.id 
+      ${whereClause}
+    `;
+
     const ordersQuery = `
       SELECT
         o.id, o.user_id, u.email as user_email,
-        o.status, o.payment_status, o.total_amount,
+        o.status, o.payment_status, o.total_amount, o.source,
         o.invoice_number, o.invoice_issue_date,
         o.shipping_address_line1, o.shipping_city, o.shipping_postal_code, o.shipping_country,
-        o.created_at, o.updated_at
+        o.created_at, o.updated_at,
+        o.fulfillment_validation_code, o.fulfillment_validated_at,
+        u.name as customer_name
       FROM orders o
       JOIN users u ON o.user_id = u.id
+      ${whereClause}
       ORDER BY o.created_at DESC
-      LIMIT $1 OFFSET $2;
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
 
-    const totalResult = await db.query(countQuery);
+    const totalResult = await db.query(countQuery, queryParams);
     const totalOrders = parseInt(totalResult.rows[0].count, 10);
 
-    const ordersResult = await db.query(ordersQuery, [limit, offset]);
+    const ordersResult = await db.query(ordersQuery, [...queryParams, limit, offset]);
 
     return {
       data: ordersResult.rows,
@@ -118,7 +192,7 @@ async function getAdminOrderById(orderId) {
 
 // const { BadRequestError } = require('../utils/AppError'); // REMOVED - Consolidated at top
 
-const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded', 'partially_refunded']; // Added refund statuses
+const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled', 'refunded', 'partially_refunded']; // Added refund statuses
 const BILLABLE_ORDER_STATUSES = ['shipped', 'completed', 'delivered'];
 const ALLOWED_PAYMENT_STATUSES = ['pending', 'paid', 'partially_paid', 'refunded', 'partially_refunded', 'failed', 'cancelled', 'voided'];
 
@@ -347,7 +421,10 @@ async function getOrderDetailsForPdf(orderId, type) {
 
     orderData.company_name = config.company.name;
     orderData.company_address = config.company.address;
-    orderData.company_logo_url = config.company.logoUrl;
+    // Get logo from site settings first, then fall back to config
+    const { getSiteSetting } = require('./siteSettingsService');
+    const siteLogo = await getSiteSetting('site_logo');
+    orderData.company_logo_url = siteLogo || config.company.logoUrl;
     orderData.company_phone = config.company.phone;
     orderData.company_email = config.company.email;
     orderData.company_website = config.company.website;
@@ -772,6 +849,54 @@ async function confirmOrderDelivery(orderId, providedToken) {
   }
 }
 
+/**
+ * Deletes an order and all its associated items.
+ * @param {number} orderId - The ID of the order to delete.
+ * @param {number} adminUserId - ID of the admin performing the deletion (for audit).
+ * @returns {Promise<object>} Confirmation message.
+ * @throws {NotFoundError} If the order is not found.
+ * @throws {AppError} For other DB errors.
+ */
+async function deleteOrder(orderId, adminUserId) {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Check if order exists
+    const orderCheckResult = await client.query(
+      'SELECT id, status FROM orders WHERE id = $1 FOR UPDATE',
+      [orderId]
+    );
+    
+    if (orderCheckResult.rows.length === 0) {
+      throw new NotFoundError(`Order with ID ${orderId} not found.`);
+    }
+
+    const order = orderCheckResult.rows[0];
+
+    // Delete order items first (foreign key constraint)
+    await client.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
+
+    // Delete the order
+    await client.query('DELETE FROM orders WHERE id = $1', [orderId]);
+
+    await client.query('COMMIT');
+
+    return {
+      message: `Order #${orderId} has been successfully deleted.`,
+      deletedOrderId: orderId
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    if (error instanceof NotFoundError) {
+      throw error;
+    }
+    console.error(`Error in orderService.deleteOrder for ID ${orderId}:`, error);
+    throw new AppError(`Failed to delete order ID ${orderId}.`, 500, 'ORDER_DELETE_FAILED');
+  } finally {
+    client.release();
+  }
+}
 
 module.exports = {
   getAllAdminOrders,
@@ -785,7 +910,8 @@ module.exports = {
   getUserOrderDetails, // Added for user's specific order details
   confirmOrderDelivery, // Added for QR code delivery confirmation
   getOrderDetailsForShippingLabel, // Added for shipping label generation
-  getUserOrderStats
+  getUserOrderStats,
+  deleteOrder
 };
 
 /**
@@ -1138,8 +1264,11 @@ async function createPublicOrder(orderRequestData, authenticatedUser) {
     const grandTotal = parseFloat((finalAmountPreTax + orderTotalTaxAmount).toFixed(2));
 
     // 8. Create Order Record
-    const initialOrderStatus = 'pending';
-    const initialPaymentStatus = mock_payment_successful ? 'paid' : 'pending';
+    // For POS orders, set status to 'completed' and payment to 'paid' since they're completed immediately
+    const isPOSOrder = orderRequestData.source === 'pos';
+    const initialOrderStatus = isPOSOrder ? 'completed' : 'pending';
+    const initialPaymentStatus = isPOSOrder ? 'paid' : (mock_payment_successful ? 'paid' : 'pending');
+    
     const orderInsertResult = await client.query(
       `INSERT INTO orders (
           user_id, status, payment_status, total_amount, original_total_amount,
@@ -1147,9 +1276,9 @@ async function createPublicOrder(orderRequestData, authenticatedUser) {
           total_tax_amount, tax_summary_details,
           shipping_address_line1, shipping_address_line2, shipping_city, shipping_postal_code, shipping_country,
           billing_address_line1, billing_address_line2, billing_city, billing_postal_code, billing_country,
-          payment_method, shipping_cost, shipping_method_id,
+          payment_method, shipping_cost, shipping_method_id, source,
           created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       RETURNING *`,
       [
         userId, initialOrderStatus, initialPaymentStatus, grandTotal, subtotalExclusiveForDiscount,
@@ -1157,7 +1286,8 @@ async function createPublicOrder(orderRequestData, authenticatedUser) {
         orderTotalTaxAmount, orderTaxSummaryDetails ? JSON.stringify(orderTaxSummaryDetails) : null,
         shippingAddress.line1, shippingAddress.line2 || null, shippingAddress.city, shippingAddress.postalCode, shippingAddress.country,
         finalBillingAddress.line1, finalBillingAddress.line2 || null, finalBillingAddress.city, finalBillingAddress.postalCode, finalBillingAddress.country,
-        orderRequestData.payment_method || null, orderRequestData.shipping_cost || 0.00, orderRequestData.shipping_method_id || null
+        orderRequestData.payment_method || null, orderRequestData.shipping_cost || 0.00, orderRequestData.shipping_method_id || null,
+        orderRequestData.source || 'online'
       ]
     );
     const newOrder = orderInsertResult.rows[0];

@@ -243,10 +243,6 @@
                   <optgroup label="Asia Pacific">
                     <option value="ja-JP">Japanese (Japan)</option>
                     <option value="ko-KR">Korean (South Korea)</option>
-                    <option value="zh-CN">Chinese (Simplified, China)</option>
-                    <option value="zh-TW">Chinese (Traditional, Taiwan)</option>
-                    <option value="zh-HK">Chinese (Traditional, Hong Kong)</option>
-                    <option value="zh-SG">Chinese (Simplified, Singapore)</option>
                     <option value="th-TH">Thai (Thailand)</option>
                     <option value="vi-VN">Vietnamese (Vietnam)</option>
                     <option value="id-ID">Indonesian (Indonesia)</option>
@@ -279,8 +275,6 @@
                     <option value="sd-PK">Sindhi (Pakistan)</option>
                     <option value="ne-NP">Nepali (Nepal)</option>
                     <option value="dz-BT">Dzongkha (Bhutan)</option>
-                    <option value="bo-CN">Tibetan (China)</option>
-                    <option value="ug-CN">Uyghur (China)</option>
                   </optgroup>
                   
                   <!-- Middle East & Africa -->
@@ -717,6 +711,206 @@
                 <option value="Asia/Tokyo">Tokyo (JST)</option>
                 <option value="Australia/Sydney">Sydney (AEST/AEDT)</option>
               </select>
+            </div>
+
+            <!-- System Locale -->
+            <div class="border-t border-gray-200 pt-6">
+              <h3 class="text-lg font-medium text-gray-900 mb-4">System Locale</h3>
+              <p class="text-sm text-gray-600 mb-4">Configure the default location for system operations like tax calculation, shipping, and POS transactions.</p>
+              
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Default Country</label>
+                  <select
+                    v-model="settings.system_country"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-pink focus:border-transparent"
+                  >
+                    <option value="">Select Country</option>
+                    <option value="US">United States</option>
+                    <option value="CA">Canada</option>
+                    <option value="GB">United Kingdom</option>
+                    <option value="DE">Germany</option>
+                    <option value="FR">France</option>
+                    <option value="IT">Italy</option>
+                    <option value="ES">Spain</option>
+                    <option value="NL">Netherlands</option>
+                    <option value="BE">Belgium</option>
+                    <option value="CH">Switzerland</option>
+                    <option value="AT">Austria</option>
+                    <option value="SE">Sweden</option>
+                    <option value="NO">Norway</option>
+                    <option value="DK">Denmark</option>
+                    <option value="FI">Finland</option>
+                    <option value="PL">Poland</option>
+                    <option value="CZ">Czech Republic</option>
+                    <option value="HU">Hungary</option>
+                    <option value="RO">Romania</option>
+                    <option value="BG">Bulgaria</option>
+                    <option value="HR">Croatia</option>
+                    <option value="SI">Slovenia</option>
+                    <option value="SK">Slovakia</option>
+                    <option value="EE">Estonia</option>
+                    <option value="LV">Latvia</option>
+                    <option value="LT">Lithuania</option>
+                    <option value="GR">Greece</option>
+                    <option value="MT">Malta</option>
+                    <option value="RU">Russia</option>
+                    <option value="UA">Ukraine</option>
+                    <option value="BY">Belarus</option>
+                    <option value="TR">Turkey</option>
+                    <option value="JP">Japan</option>
+                    <option value="KR">South Korea</option>
+                    <option value="CN">China</option>
+                    <option value="IN">India</option>
+                    <option value="AU">Australia</option>
+                    <option value="NZ">New Zealand</option>
+                    <option value="SG">Singapore</option>
+                    <option value="MY">Malaysia</option>
+                    <option value="TH">Thailand</option>
+                    <option value="VN">Vietnam</option>
+                    <option value="ID">Indonesia</option>
+                    <option value="PH">Philippines</option>
+                    <option value="BR">Brazil</option>
+                    <option value="AR">Argentina</option>
+                    <option value="CL">Chile</option>
+                    <option value="CO">Colombia</option>
+                    <option value="PE">Peru</option>
+                    <option value="VE">Venezuela</option>
+                    <option value="MX">Mexico</option>
+                    <option value="BS">Bahamas</option>
+                    <option value="JM">Jamaica</option>
+                    <option value="BB">Barbados</option>
+                    <option value="TT">Trinidad and Tobago</option>
+                    <option value="BZ">Belize</option>
+                    <option value="GY">Guyana</option>
+                    <option value="SR">Suriname</option>
+                    <option value="BM">Bermuda</option>
+                    <option value="KY">Cayman Islands</option>
+                    <option value="AI">Anguilla</option>
+                    <option value="VG">British Virgin Islands</option>
+                    <option value="VI">US Virgin Islands</option>
+                    <option value="TC">Turks and Caicos</option>
+                    <option value="MS">Montserrat</option>
+                    <option value="KN">Saint Kitts and Nevis</option>
+                    <option value="AG">Antigua and Barbuda</option>
+                    <option value="DM">Dominica</option>
+                    <option value="LC">Saint Lucia</option>
+                    <option value="VC">Saint Vincent and the Grenadines</option>
+                    <option value="GD">Grenada</option>
+                    <option value="HT">Haiti</option>
+                    <option value="CU">Cuba</option>
+                    <option value="DO">Dominican Republic</option>
+                    <option value="PR">Puerto Rico</option>
+                    <option value="SA">Saudi Arabia</option>
+                    <option value="AE">United Arab Emirates</option>
+                    <option value="QA">Qatar</option>
+                    <option value="KW">Kuwait</option>
+                    <option value="BH">Bahrain</option>
+                    <option value="OM">Oman</option>
+                    <option value="YE">Yemen</option>
+                    <option value="JO">Jordan</option>
+                    <option value="LB">Lebanon</option>
+                    <option value="SY">Syria</option>
+                    <option value="IQ">Iraq</option>
+                    <option value="IL">Israel</option>
+                    <option value="EG">Egypt</option>
+                    <option value="MA">Morocco</option>
+                    <option value="DZ">Algeria</option>
+                    <option value="TN">Tunisia</option>
+                    <option value="LY">Libya</option>
+                    <option value="SD">Sudan</option>
+                    <option value="SS">South Sudan</option>
+                    <option value="ER">Eritrea</option>
+                    <option value="ET">Ethiopia</option>
+                    <option value="SO">Somalia</option>
+                    <option value="KE">Kenya</option>
+                    <option value="TZ">Tanzania</option>
+                    <option value="UG">Uganda</option>
+                    <option value="RW">Rwanda</option>
+                    <option value="BI">Burundi</option>
+                    <option value="CD">Democratic Republic of the Congo</option>
+                    <option value="CG">Republic of the Congo</option>
+                    <option value="GA">Gabon</option>
+                    <option value="CM">Cameroon</option>
+                    <option value="CF">Central African Republic</option>
+                    <option value="TD">Chad</option>
+                    <option value="NE">Niger</option>
+                    <option value="NG">Nigeria</option>
+                    <option value="GH">Ghana</option>
+                    <option value="CI">Ivory Coast</option>
+                    <option value="BF">Burkina Faso</option>
+                    <option value="ML">Mali</option>
+                    <option value="SN">Senegal</option>
+                    <option value="GN">Guinea</option>
+                    <option value="SL">Sierra Leone</option>
+                    <option value="LR">Liberia</option>
+                    <option value="TG">Togo</option>
+                    <option value="BJ">Benin</option>
+                    <option value="GW">Guinea-Bissau</option>
+                    <option value="CV">Cape Verde</option>
+                    <option value="GM">Gambia</option>
+                    <option value="MR">Mauritania</option>
+                    <option value="MZ">Mozambique</option>
+                    <option value="MW">Malawi</option>
+                    <option value="ZM">Zambia</option>
+                    <option value="ZW">Zimbabwe</option>
+                    <option value="BW">Botswana</option>
+                    <option value="NA">Namibia</option>
+                    <option value="LS">Lesotho</option>
+                    <option value="SZ">Eswatini</option>
+                    <option value="ZA">South Africa</option>
+                    <option value="MG">Madagascar</option>
+                    <option value="MU">Mauritius</option>
+                    <option value="SC">Seychelles</option>
+                    <option value="KM">Comoros</option>
+                    <option value="DJ">Djibouti</option>
+                    <option value="ST">São Tomé and Príncipe</option>
+                    <option value="AO">Angola</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Default State/Province</label>
+                  <input
+                    v-model="settings.system_state"
+                    type="text"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-pink focus:border-transparent"
+                    placeholder="e.g., NP, CA, NY"
+                  />
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Default Postal Code (Optional)</label>
+                  <input
+                    v-model="settings.system_postal_code"
+                    type="text"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-pink focus:border-transparent"
+                    placeholder="e.g., 12345"
+                  />
+                </div>
+              </div>
+              
+              <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                <div class="flex">
+                  <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div class="ml-3">
+                    <h3 class="text-sm font-medium text-blue-800">System Locale Information</h3>
+                    <div class="mt-2 text-sm text-blue-700">
+                      <p>This setting determines the default location used for:</p>
+                      <ul class="list-disc list-inside mt-1 space-y-1">
+                        <li>Tax calculation in POS transactions</li>
+                        <li>Default shipping rates</li>
+                        <li>Regional compliance requirements</li>
+                        <li>Currency and pricing defaults</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Geographic Service Locations -->

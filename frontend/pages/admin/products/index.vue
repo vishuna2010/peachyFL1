@@ -61,9 +61,9 @@
             <tr v-for="product in products" :key="product.id" class="hover:bg-gray-50">
               <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ product.name }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.sku }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.category?.name || 'N/A' }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.category_name || 'N/A' }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${{ (product.price / 100).toFixed(2) }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.stock_quantity }}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ product.effective_stock_quantity || 0 }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-sm">
                 <span
                   :class="{

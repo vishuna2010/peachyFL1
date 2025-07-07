@@ -3,6 +3,7 @@ const puppeteer = require('puppeteer');
 // const { createCanvas } = require('canvas'); // Commented out
 const qrcode = require('qrcode');
 const config = require('../config'); // Import the centralized config
+const { getSiteSetting } = require('./siteSettingsService');
 
 /**
  * Generates a barcode as a data URL.
@@ -362,11 +363,18 @@ async function generateQrCodeDataURL(text) {
   }
 }
 
-function getInvoiceHtml(orderDetails) {
+async function getInvoiceHtml(orderDetails) {
   // --- Company Details from config, overridden by orderDetails if present ---
   const companyName = orderDetails.company_name || config.company.name;
   const companyAddress = orderDetails.company_address || config.company.address;
-  const companyLogoUrl = orderDetails.company_logo_url || config.company.logoUrl;
+  
+  // Get logo from site settings first, then fall back to config
+  let companyLogoUrl = orderDetails.company_logo_url;
+  if (!companyLogoUrl) {
+    const siteLogo = await getSiteSetting('site_logo');
+    companyLogoUrl = siteLogo || config.company.logoUrl;
+  }
+  
   const companyPhone = orderDetails.company_phone || config.company.phone;
   const companyEmail = orderDetails.company_email || config.company.email;
   const companyWebsite = orderDetails.company_website || config.company.website;
@@ -573,14 +581,39 @@ async function generateOrderInvoicePdf(orderDetails) {
       }
     }
 
-    const htmlContent = getInvoiceHtml(finalOrderDetails);
+    const htmlContent = await getInvoiceHtml(finalOrderDetails);
 
     browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security', '--disable-features=VizDisplayCompositor']
     });
     const page = await browser.newPage();
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    
+    // Set a longer timeout and disable images if they cause issues
+    await page.setDefaultNavigationTimeout(60000);
+    await page.setDefaultTimeout(60000);
+    
+    // Test if we can access the logo URL
+    if (finalOrderDetails.company_logo_url) {
+      try {
+        console.log('DEBUG: Testing logo URL accessibility:', finalOrderDetails.company_logo_url);
+        const response = await page.goto(finalOrderDetails.company_logo_url, { waitUntil: 'networkidle0', timeout: 10000 });
+        console.log('DEBUG: Logo URL response status:', response.status());
+        if (response.status() !== 200) {
+          console.log('DEBUG: Logo URL not accessible, status:', response.status());
+        }
+      } catch (error) {
+        console.log('DEBUG: Error accessing logo URL:', error.message);
+      }
+    }
+    
+    // Try to set content with a more lenient wait condition
+    try {
+      await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    } catch (error) {
+      console.log('DEBUG: setContent with domcontentloaded failed, trying without waitUntil:', error.message);
+      await page.setContent(htmlContent, { timeout: 45000 });
+    }
 
     const pdfBuffer = await page.pdf({
       format: 'A4', // Standard page format
@@ -605,9 +638,16 @@ async function generateOrderInvoicePdf(orderDetails) {
 
 // --- Packing Slip Generation ---
 
-function getPackingSlipHtml(packingSlipData) {
+async function getPackingSlipHtml(packingSlipData) {
   const companyName = packingSlipData.company_name || config.company.name;
-  const companyLogoUrl = packingSlipData.company_logo_url || config.company.logoUrl;
+  
+  // Get logo from site settings first, then fall back to config
+  let companyLogoUrl = packingSlipData.company_logo_url;
+  if (!companyLogoUrl) {
+    const siteLogo = await getSiteSetting('site_logo');
+    companyLogoUrl = siteLogo || config.company.logoUrl;
+  }
+  
   const orderDate = new Date(packingSlipData.order_date).toLocaleDateString();
 
   const formatAddress = (addr, type) => {
@@ -722,7 +762,7 @@ async function generatePackingSlipPdf(packingSlipData) {
   try {
     // Optionally add show_images to packingSlipData if not already present
     const dataForHtml = { ...packingSlipData, show_images: packingSlipData.show_images !== undefined ? packingSlipData.show_images : true };
-    const htmlContent = getPackingSlipHtml(dataForHtml);
+    const htmlContent = await getPackingSlipHtml(dataForHtml);
 
     browser = await puppeteer.launch({
         headless: true,
@@ -754,10 +794,16 @@ async function generatePackingSlipPdf(packingSlipData) {
 
 // --- Refund Invoice Generation ---
 
-function getRefundInvoiceHtml(refundData) {
+async function getRefundInvoiceHtml(refundData) {
   const companyName = refundData.company_name || config.company.name;
   const companyAddress = refundData.company_address || config.company.address;
-  const companyLogoUrl = refundData.company_logo_url || config.company.logoUrl;
+  
+  // Get logo from site settings first, then fall back to config
+  let companyLogoUrl = refundData.company_logo_url;
+  if (!companyLogoUrl) {
+    companyLogoUrl = await getSiteSetting('site_logo') || config.company.logoUrl;
+  }
+  
   const companyPhone = refundData.company_phone || config.company.phone;
   const companyEmail = refundData.company_email || config.company.email;
   
@@ -907,7 +953,7 @@ function getRefundInvoiceHtml(refundData) {
 async function generateRefundInvoicePdf(refundData) {
   let browser = null;
   try {
-    const htmlContent = getRefundInvoiceHtml(refundData);
+    const htmlContent = await getRefundInvoiceHtml(refundData);
 
     browser = await puppeteer.launch({
         headless: true,

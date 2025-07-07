@@ -7,9 +7,22 @@ const logger = require('../utils/logger');
 const { productImageUploadMiddleware, handleMulterError } = require('../middleware/fileUpload');
 const s3Service = require('../services/s3Service');
 
-// Apply authentication middleware to all routes
-router.use(isAuthenticated);
-router.use(checkPermission('settings:manage_general'));
+// Apply authentication middleware to all routes except public settings
+router.use((req, res, next) => {
+  // Skip authentication for public settings endpoint
+  if (req.path === '/public') {
+    return next();
+  }
+  return isAuthenticated(req, res, next);
+});
+
+router.use((req, res, next) => {
+  // Skip permission check for public settings endpoint
+  if (req.path === '/public') {
+    return next();
+  }
+  return checkPermission('settings:manage_general')(req, res, next);
+});
 
 // GET /api/admin/settings - Get all site settings
 router.get('/', async (req, res, next) => {
@@ -206,6 +219,27 @@ router.get('/', async (req, res, next) => {
           type: 'string',
           description: 'URL of the site logo',
           is_public: true
+        },
+        {
+          key: 'system_country',
+          value: 'BS',
+          type: 'string',
+          description: 'Default country for system operations (tax calculation, shipping, etc.)',
+          is_public: false
+        },
+        {
+          key: 'system_state',
+          value: 'NP',
+          type: 'string',
+          description: 'Default state/province for system operations (tax calculation, shipping, etc.)',
+          is_public: false
+        },
+        {
+          key: 'system_postal_code',
+          value: '',
+          type: 'string',
+          description: 'Default postal code for system operations (tax calculation, shipping, etc.)',
+          is_public: false
         }
       ];
 
@@ -306,7 +340,7 @@ router.put('/', [
         'social_facebook', 'social_instagram', 'social_twitter', 
         'site_logo', 'maintenance_message', 'order_confirmation_email_template',
         'service_locations', 'facebook_pixel_id', 'google_analytics_id', 'order_number_suffix',
-        'geo_location_service', 'geo_location_api_key'
+        'geo_location_service', 'geo_location_api_key', 'system_postal_code'
       ];
       if (allowedEmptySettings.includes(settingKey)) {
         return true; // Allow empty value
@@ -329,7 +363,7 @@ router.put('/', [
           'social_facebook', 'social_instagram', 'social_twitter', 
           'site_logo', 'maintenance_message', 'order_confirmation_email_template',
           'service_locations', 'facebook_pixel_id', 'google_analytics_id', 'order_number_suffix',
-          'geo_location_service', 'geo_location_api_key'
+          'geo_location_service', 'geo_location_api_key', 'system_postal_code'
         ];
         if ((setting.value === undefined || setting.value === null || setting.value === '') && !allowedEmptySettings.includes(setting.key)) {
           logger.warn(`Setting at index ${idx} with key '${setting.key}' is empty and not allowed to be empty.`);

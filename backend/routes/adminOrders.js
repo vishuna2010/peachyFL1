@@ -14,14 +14,43 @@ const orderService = require('../services/orderService'); // Import the new serv
 // Apply auth middleware to all routes in this router
 // router.use(isAuthenticated, isAdmin); // REMOVED - will apply per route
 
-const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+const ALLOWED_ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled'];
 const BILLABLE_ORDER_STATUSES = ['shipped', 'completed', 'delivered']; // 'completed' can be an alias for delivered or a separate final step
 const ALLOWED_PAYMENT_STATUSES = ['pending', 'paid', 'partially_paid', 'refunded', 'partially_refunded', 'failed', 'cancelled', 'voided'];
 
 // Validation for GET /orders
 const validateListOrdersParams = [
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer.').toInt(),
-  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be an integer between 1 and 100.').toInt()
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be an integer between 1 and 100.').toInt(),
+  query('source').optional().isIn(['online', 'pos']).withMessage('Source must be either "online" or "pos"'),
+  query('status').optional().customSanitizer((value) => {
+    // Allow comma-separated status values
+    return value;
+  }).custom((value) => {
+    if (!value) return true;
+    
+    const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled', 'refunded', 'partially_refunded'];
+    
+    if (value.includes(',')) {
+      // Handle comma-separated status values
+      const statuses = value.split(',').map(s => s.trim().toLowerCase());
+      const invalidStatuses = statuses.filter(s => !validStatuses.includes(s));
+      if (invalidStatuses.length > 0) {
+        throw new Error(`Invalid status values: ${invalidStatuses.join(', ')}. Valid values: ${validStatuses.join(', ')}`);
+      }
+    } else {
+      // Single status value
+      if (!validStatuses.includes(value.toLowerCase())) {
+        throw new Error(`Invalid status. Valid values: ${validStatuses.join(', ')}`);
+      }
+    }
+    return true;
+  }),
+  query('payment_status').optional().isIn(['pending', 'paid', 'partially_paid', 'refunded', 'partially_refunded', 'failed', 'cancelled', 'voided']).withMessage('Invalid payment status'),
+  query('customer_email').optional().isEmail().withMessage('Customer email must be a valid email address'),
+  query('date_from').optional().isISO8601().withMessage('Date from must be a valid date (YYYY-MM-DD)'),
+  query('date_to').optional().isISO8601().withMessage('Date to must be a valid date (YYYY-MM-DD)'),
+  query('order_id').optional().isInt({ min: 1 }).withMessage('Order ID must be a positive integer').toInt()
 ];
 
 // GET /admin/orders - List all orders
@@ -31,12 +60,32 @@ router.get('/orders', isAuthenticated, checkPermission('orders:view_all'), valid
     return res.status(400).json({ errors: errors.array() });
   }
 
-  // page and limit are validated and have defaults from express-validator (e.g., .default(1))
-  // The declarations below will use these validated and defaulted values.
-  const { page, limit } = req.query;
+  // Extract all filter parameters
+  const { 
+    page, 
+    limit, 
+    source, 
+    status, 
+    payment_status, 
+    customer_email, 
+    date_from, 
+    date_to, 
+    order_id 
+  } = req.query;
 
   try {
-    const result = await orderService.getAllAdminOrders({ page, limit });
+    const result = await orderService.getAllAdminOrders({ 
+      page, 
+      limit, 
+      source, 
+      status, 
+      payment_status, 
+      customer_email, 
+      date_from, 
+      date_to, 
+      order_id 
+    });
+    
     // Service returns { data: orders, pagination: { total, page, limit, totalPages } }
     // Add hasNextPage and hasPrevPage for consistency if frontend expects it
     const responsePagination = {
@@ -403,5 +452,46 @@ router.post(
   }
 );
 
+// DELETE /admin/orders/:id - Delete an order
+router.delete(
+  '/orders/:id',
+  isAuthenticated,
+  checkPermission('orders:delete'),
+  validateOrderIdParam,
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const adminUserId = req.user.userId;
+    const adminUserEmail = req.user.email;
+
+    try {
+      const result = await orderService.deleteOrder(id, adminUserId);
+
+      // Audit log for order deletion
+      auditLogService.recordAuditEvent(
+        'ORDER_DELETED',
+        { userId: adminUserId, userEmail: adminUserEmail },
+        { resourceType: 'ORDER', resourceId: id },
+        {
+          deleted_order_id: id,
+          deletion_timestamp: new Date().toISOString()
+        },
+        req
+      ).catch(err => console.error(`Audit log failed for ORDER_DELETED (ID: ${id}):`, err));
+
+      res.status(200).json({
+        message: result.message,
+        deletedOrderId: result.deletedOrderId
+      });
+
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 module.exports = router;

@@ -13,6 +13,9 @@
       v-else
       :categories="categories"
       :suppliers="suppliers"
+      :available-tax-classes="availableTaxClasses"
+      :is-loading-tax-classes="isLoadingTaxClasses"
+      :tax-classes-error="taxClassesError"
       :is-submitting="isSubmitting"
       :api-error="apiError"
       @submit="handleCreateProduct"
@@ -35,7 +38,10 @@ const router = useRouter();
 
 const categories = ref([]);
 const suppliers = ref([]);
+const availableTaxClasses = ref([]);
 const isLoadingInitialData = ref(true);
+const isLoadingTaxClasses = ref(false);
+const taxClassesError = ref('');
 const fetchError = ref('');
 
 const isSubmitting = ref(false);
@@ -60,12 +66,26 @@ async function fetchInitialData() {
   }
 }
 
+async function fetchTaxClasses() {
+  isLoadingTaxClasses.value = true;
+  taxClassesError.value = '';
+  try {
+    const response = await $axios.get('/admin/tax-classes?limit=1000');
+    availableTaxClasses.value = response.data.data || response.data;
+  } catch (error) {
+    console.error('Error fetching tax classes:', error);
+    taxClassesError.value = 'Failed to load tax classes.';
+  } finally {
+    isLoadingTaxClasses.value = false;
+  }
+}
+
 async function handleCreateProduct(formDataPayload) { // formDataPayload is already a FormData object
   isSubmitting.value = true;
   apiError.value = '';
   try {
     // The backend expects multipart/form-data due to image upload
-    await $axios.post('/products', formDataPayload, { // Public product creation, but admin protected
+    await $axios.post('/admin/products', formDataPayload, { // Admin product creation
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -79,7 +99,10 @@ async function handleCreateProduct(formDataPayload) { // formDataPayload is alre
   }
 }
 
-onMounted(fetchInitialData);
+onMounted(async () => {
+  await fetchInitialData();
+  await fetchTaxClasses();
+});
 
 useHead({
   title: 'Admin - Create Product',

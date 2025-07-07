@@ -12,6 +12,14 @@ const geoRestrictionMiddleware = async (req, res, next) => {
       return next();
     }
 
+    // Check if geo-restriction is enabled first (avoid unnecessary API calls)
+    const isEnabled = await geoLocationService.isGeoRestrictionEnabled();
+    
+    if (!isEnabled) {
+      // Geo-restriction is disabled, allow access immediately
+      return next();
+    }
+
     // Get user's IP address
     const userIP = req.ip || 
                    req.connection.remoteAddress || 
@@ -36,7 +44,7 @@ const geoRestrictionMiddleware = async (req, res, next) => {
       });
     }
 
-    // Add country info to request for logging/debugging
+    // Only get country info for logging if geo-restriction is enabled
     const userCountry = await geoLocationService.getCountryFromIP(userIP, req);
     req.userCountry = userCountry;
     
@@ -54,6 +62,14 @@ const geoRestrictionMiddleware = async (req, res, next) => {
  */
 const addCountryHeaders = async (req, res, next) => {
   try {
+    // Check if geo-restriction is enabled first
+    const isEnabled = await geoLocationService.isGeoRestrictionEnabled();
+    
+    if (!isEnabled) {
+      // Skip country detection if geo-restriction is disabled
+      return next();
+    }
+
     const userIP = req.ip || 
                    req.connection.remoteAddress || 
                    req.socket.remoteAddress ||

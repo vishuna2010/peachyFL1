@@ -194,6 +194,66 @@ router.post(
   }
 );
 
+// POST /api/orders/pos - Create a new order from POS system
+router.post(
+  '/pos',
+  isAuthenticated, // POS orders require authentication
+  [ 
+    body('items').isArray({ min: 1 }).withMessage('Items must be a non-empty array.'),
+    body('items.*.product_id').isInt({ gt: 0 }).withMessage('Each item must have a valid product_id.'),
+    body('items.*.quantity').isInt({ gt: 0 }).withMessage('Each item must have a positive quantity.'),
+    body('items.*.variant_id').optional().isInt({ gt: 0 }).withMessage('variant_id must be a positive integer if provided.'),
+    body('items.*.price').isFloat({ gt: 0 }).withMessage('Each item must have a valid price.'),
+    body('payments').isArray({ min: 1 }).withMessage('Payments must be a non-empty array.'),
+    body('payments.*.method').isString().trim().notEmpty().withMessage('Each payment must have a method.'),
+    body('payments.*.amount').isFloat({ gt: 0 }).withMessage('Each payment must have a valid amount.'),
+    body('payments.*.reference').optional().isString().trim(),
+  ],
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { items, payments } = req.body;
+      const userId = req.user.userId;
+
+      // Create POS order data structure
+      const posOrderData = {
+        cartItems: items.map(item => ({
+          productId: item.product_id,
+          quantity: item.quantity,
+          productVariantId: item.variant_id,
+          price: item.price
+        })),
+        shippingAddress: {
+          line1: 'POS Sale',
+          city: 'POS',
+          postalCode: '00000',
+          country: 'BS'
+        },
+        payment_method: payments.map(p => p.method).join(', '),
+        mock_payment_successful: true, // POS payments are always successful
+        source: 'pos' // Mark this as a POS order
+      };
+
+      const authenticatedUser = {
+        userId: userId
+      };
+
+      const createdOrder = await orderService.createPublicOrder(posOrderData, authenticatedUser);
+
+      res.status(201).json({ 
+        message: 'POS order created successfully.', 
+        order: createdOrder 
+      });
+
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 
 // GET /api/orders/my-history - Get order history for the authenticated user
 router.get(

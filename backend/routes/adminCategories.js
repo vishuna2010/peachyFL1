@@ -111,7 +111,12 @@ router.get('/', isAuthenticated, checkPermission('categories:manage'), validateP
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-  const { page, limit } = req.query; // Already validated and defaulted by middleware
+  // Defensive: parse and default page/limit to valid numbers
+  let { page, limit } = req.query;
+  page = parseInt(page, 10);
+  limit = parseInt(limit, 10);
+  if (isNaN(page) || page < 1) page = 1;
+  if (isNaN(limit) || limit < 1 || limit > 100) limit = 10;
 
   try {
     const result = await categoryService.getAllCategories(page, limit);

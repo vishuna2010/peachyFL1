@@ -336,6 +336,8 @@ import ReviewForm from '~/components/reviews/ReviewForm.vue';
 const { $axios } = useNuxtApp();
 const route = useRoute();
 const toast = useToast();
+
+
 const { addToCart } = useCart();
 const { isLoggedIn, user } = useAuth();
 
@@ -417,6 +419,8 @@ const stockStatusMessage = computed(() => {
   if (!product.value && !pending.value && fetchError.value) return 'Error loading product';
 
   const stock = displayStock.value;
+
+  
   if (product.value && product.value.has_variants && Object.keys(selectedOptions).length < (product.value.available_options?.length || 0) ) {
     return "Select options to see stock";
   }
@@ -570,7 +574,8 @@ function updateCurrentVariant() {
     currentVariant.value = null;
     displayPrice.value = parseFloat(product.value.price);
     displaySku.value = product.value.sku || '';
-    displayStock.value = product.value.stock_quantity;
+    displayStock.value = product.value.effective_stock_quantity || 0;
+
     if (galleryImages.value.length > 0) {
         selectedImage.value = galleryImages.value.find(img => img.is_primary === true) || galleryImages.value[0];
         if(selectedImage.value) selectedImage.value = {...selectedImage.value}; // Ensure plain object
@@ -579,7 +584,7 @@ function updateCurrentVariant() {
     } else {
         selectedImage.value = null;
     }
-    addToCartDisabled.value = product.value.stock_quantity <= 0;
+    addToCartDisabled.value = (product.value.effective_stock_quantity || 0) <= 0;
     quantity.value = 1;
     return;
   }
@@ -617,6 +622,21 @@ function updateCurrentVariant() {
     displaySku.value = matchedVariant.sku || product.value.sku || '';
     displayStock.value = matchedVariant.stock_quantity;
     addToCartDisabled.value = matchedVariant.stock_quantity <= 0;
+    
+    // Debug logging for the specific variant we're looking for
+    if (matchedVariant.sku === 'HDPHN-WL-BT-001-USE-RED-XS') {
+      console.log('=== Variant Debug ===');
+      console.log('Matched variant:', {
+        id: matchedVariant.id,
+        sku: matchedVariant.sku,
+        final_price: matchedVariant.final_price,
+        price_modifier: matchedVariant.price_modifier,
+        sale_price: matchedVariant.sale_price,
+        is_on_sale: matchedVariant.is_on_sale,
+        original_final_price: matchedVariant.original_final_price
+      });
+      console.log('Display price set to:', displayPrice.value);
+    }
 
     if (matchedVariant.image_url) {
         const galleryMatch = galleryImages.value.find(gi => gi.url === matchedVariant.image_url);
@@ -686,6 +706,7 @@ const product = ref(null);
 watch(productData, (newProductData) => {
   if (newProductData && newProductData.id) {
     product.value = { ...newProductData };
+
 
     const currentGalleryData = newProductData.gallery_images || [];
     galleryImages.value = currentGalleryData.map(img => ({ ...img }));
@@ -781,6 +802,19 @@ const handleAddToCart = () => {
       tax_class_id: product.value.tax_class_id || null,
       tax_class_name: product.value.tax_class_name || null,
     };
+    
+    // Debug logging for the specific variant
+    if (currentVariant.value.sku === 'HDPHN-WL-BT-001-USE-RED-XS') {
+      console.log('=== Add to Cart Debug ===');
+      console.log('Cart item data:', {
+        sku: cartItemData.sku,
+        price: cartItemData.price,
+        variant_id: cartItemData.variant_id,
+        final_price: currentVariant.value.final_price,
+        tax_class_id: cartItemData.tax_class_id,
+        tax_class_name: cartItemData.tax_class_name
+      });
+    }
   } else {
     cartItemData = {
       id: product.value.id, product_id: product.value.id, variant_id: null,

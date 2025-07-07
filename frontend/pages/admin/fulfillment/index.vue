@@ -1,7 +1,10 @@
 <template>
   <div class="p-4 sm:p-6 lg:p-8">
     <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-semibold text-gray-900">Fulfillment Validation</h1>
+      <div>
+        <h1 class="text-2xl font-semibold text-gray-900">Online Order Fulfillment</h1>
+        <p class="text-sm text-gray-600 mt-1">Validate shipping and delivery for online orders only</p>
+      </div>
       <div class="flex space-x-3">
         <button
           @click="showScanner = !showScanner"
@@ -80,7 +83,8 @@
     <!-- Pending Orders Section -->
     <div class="bg-white rounded-lg shadow-md">
       <div class="px-6 py-4 border-b border-gray-200">
-        <h2 class="text-lg font-semibold text-gray-800">Pending Fulfillment Validation</h2>
+        <h2 class="text-lg font-semibold text-gray-800">Pending Online Orders - Fulfillment Required</h2>
+        <p class="text-sm text-gray-600 mt-1">These online orders need shipping validation and delivery confirmation</p>
       </div>
       
       <div v-if="isLoading" class="p-6 text-center">
@@ -106,8 +110,9 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
           </svg>
         </div>
-        <h3 class="text-lg font-medium text-gray-900 mb-2">All Orders Validated!</h3>
-        <p class="text-gray-500">No pending orders require fulfillment validation.</p>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">All Online Orders Validated!</h3>
+        <p class="text-gray-500">No pending online orders require fulfillment validation.</p>
+        <p class="text-xs text-gray-400 mt-2">Note: POS orders are completed immediately and don't require fulfillment validation.</p>
       </div>
       
       <div v-else class="overflow-x-auto">
@@ -225,13 +230,17 @@ const loadPendingOrders = async () => {
     const response = await $axios.get('/admin/orders', {
       params: {
         status: 'pending,processing',
+        source: 'online', // Only online orders need fulfillment validation
         limit: 50
       }
     });
     
     // Filter orders that have validation codes but haven't been validated
+    // Only online orders should be shown for fulfillment validation
     pendingOrders.value = response.data.data.filter(order => 
-      order.fulfillment_validation_code && !order.fulfillment_validated_at
+      order.source === 'online' && 
+      order.fulfillment_validation_code && 
+      !order.fulfillment_validated_at
     );
     
   } catch (err) {

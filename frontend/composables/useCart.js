@@ -111,6 +111,17 @@ export const useCart = () => {
           if (typeof item.variantId === 'number' && item.variantId > 0) {
             mappedItem.variantId = item.variantId;
           }
+          
+          // Debug logging for variant items in tax calculation
+          if (item.variantId) {
+            console.log('Tax calculation item:', {
+              sku: item.sku,
+              price: mappedItem.price,
+              variantId: mappedItem.variantId,
+              productId: mappedItem.productId
+            });
+          }
+          
           return mappedItem;
         }); // Corrected: removed extra parenthesis
 
@@ -256,6 +267,18 @@ export const useCart = () => {
         tax_class_name: itemDetails.tax_class_name || null,
         quantity: quantityToAdd,
       };
+      
+      // Debug logging for variant items
+      if (itemDetails.type === 'variant') {
+        console.log('Adding variant to cart:', {
+          sku: newItem.sku,
+          price: newItem.price,
+          variantId: newItem.variantId,
+          tax_class_id: newItem.tax_class_id,
+          tax_class_name: newItem.tax_class_name
+        });
+      }
+      
       cartItems.value.push(newItem);
       toast.success(`"${newItem.name}" (Qty: ${quantityToAdd}) added to cart!`);
     }

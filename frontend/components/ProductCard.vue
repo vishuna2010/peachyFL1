@@ -48,20 +48,12 @@
         </span>
       </div>
       <div class="mt-3">
-        <NuxtLink
-          v-if="product.has_variants"
-          :to="`/products/${product.id}`"
-          class="block w-full text-center bg-peach-pink text-white text-sm font-semibold px-4 py-2 rounded-md shadow-sm hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink transition-all duration-200"
-        >
-          View Options
-        </NuxtLink>
         <button
-          v-else
           class="block w-full bg-peach-pink text-white text-sm font-semibold px-4 py-2 rounded-md shadow-sm hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-peach-pink transition-all duration-200 disabled:opacity-50 disabled:bg-peach-pink/50"
-          :disabled="!product.stock_quantity || product.stock_quantity <= 0"
-          @click.stop="handleAddToCart"
+          :disabled="!product.effective_stock_quantity || product.effective_stock_quantity <= 0"
+          @click.stop="handleOpenQuickView"
         >
-          {{ product.stock_quantity && product.stock_quantity > 0 ? 'Add to Cart' : 'Out of Stock' }}
+          Quick View
         </button>
       </div>
     </div>
@@ -134,7 +126,7 @@ const handleAddToCart = () => {
     : props.product.price
   );
 
-  if (props.product && !props.product.has_variants && props.product.stock_quantity && props.product.stock_quantity > 0 && !isNaN(priceForCart)) {
+  if (props.product && !props.product.has_variants && props.product.effective_stock_quantity && props.product.effective_stock_quantity > 0 && !isNaN(priceForCart)) {
     const cartItemData = {
       id: props.product.id, // Use product ID as item ID if no variants
       product_id: props.product.id,

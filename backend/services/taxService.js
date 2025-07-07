@@ -33,13 +33,21 @@ async function calculatePriceWithAppliedTaxes(basePrice, taxClassId, addressForT
   let taxRatesDbResult = [];
   try {
     const sql = `
-      SELECT tr.id, tr.name, tr.rate, tr.is_compound
+      SELECT tr.id, tr.name, tr.rate, tr.is_compound,
+             CASE 
+               WHEN tr.country = $2 AND tr.state_province = $3 AND tr.postal_code = $4 THEN 1
+               WHEN tr.country = $2 AND tr.state_province = $3 AND tr.postal_code IS NULL THEN 2
+               WHEN tr.country = $2 AND tr.state_province IS NULL AND tr.postal_code IS NULL THEN 3
+               WHEN tr.country IS NULL AND tr.state_province IS NULL AND tr.postal_code IS NULL THEN 4
+               ELSE 5
+             END as specificity
       FROM tax_rates tr
       WHERE tr.tax_class_id = $1 
         AND (tr.country = $2 OR tr.country IS NULL)
         AND (tr.state_province = $3 OR tr.state_province IS NULL)
         AND (tr.postal_code = $4 OR tr.postal_code IS NULL)
-      ORDER BY tr.priority ASC, tr.id ASC;
+      ORDER BY specificity ASC, tr.priority ASC, tr.id ASC
+      LIMIT 1;
     `;
     const result = await queryRunner.query(sql, [
       taxClassId, 

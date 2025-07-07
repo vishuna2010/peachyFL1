@@ -504,7 +504,9 @@ async function getProductById(productId) {
          WHERE ib.product_id = $1 AND ib.variant_id IS NULL`,
         [productId]
       );
-      product.stock_quantity = parseInt(baseProductBatchStockQuery.rows[0]?.total_batch_stock || 0, 10);
+      const effectiveStock = parseInt(baseProductBatchStockQuery.rows[0]?.total_batch_stock || 0, 10);
+      product.stock_quantity = effectiveStock;
+      product.effective_stock_quantity = effectiveStock;
     } else {
       const baseProductOwnStockQuery = await client.query(
         `SELECT COALESCE(SUM(ib.quantity_remaining), 0) as total_batch_stock
@@ -512,7 +514,9 @@ async function getProductById(productId) {
          WHERE ib.product_id = $1 AND ib.variant_id IS NULL`,
         [productId]
       );
-      product.stock_quantity = parseInt(baseProductOwnStockQuery.rows[0]?.total_batch_stock || 0, 10);
+      const effectiveStock = parseInt(baseProductOwnStockQuery.rows[0]?.total_batch_stock || 0, 10);
+      product.stock_quantity = effectiveStock;
+      product.effective_stock_quantity = effectiveStock;
     }
 
     const imagesQuery = `
@@ -722,11 +726,12 @@ async function createProduct(productData, fileData) {
       const batchNumber = `INITIAL-${sku || `PROD${newProductId}`}-${Date.now()}`;
       const costAtReceipt = cost_price !== null ? cost_price : 0;
       const currencyCodeAtReceipt = (config.company && config.company.currencyCode) || 'USD'; // Corrected
+      const batchSku = sku || `PROD${newProductId}`;
       await client.query(
         `INSERT INTO inventory_batches
-          (product_id, variant_id, batch_number, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, received_date)
-         VALUES ($1, NULL, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING id;`,
-        [newProductId, batchNumber, initialStockQuantity, initialStockQuantity, costAtReceipt, currencyCodeAtReceipt]
+          (product_id, variant_id, batch_number, sku, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, received_date)
+         VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP) RETURNING id;`,
+        [newProductId, batchNumber, batchSku, initialStockQuantity, initialStockQuantity, costAtReceipt, currencyCodeAtReceipt]
       );
       const requestingUserId = productData.requestingUserId || null;
       await client.query(
@@ -1138,7 +1143,7 @@ async function getProductAssignedOptions(productId) {
   const productCheck = await db.query('SELECT id FROM products WHERE id = $1', [productId]);
   if (productCheck.rows.length === 0) throw new NotFoundError(`Product with ID ${productId} not found.`);
   const query = `
-    SELECT pao.id AS assigned_option_id, pao.option_id AS global_option_id, po.name AS global_option_name, pao.created_at, pao.updated_at,
+    SELECT pao.id AS id, pao.option_id AS option_id, po.name AS option_name, pao.created_at, pao.updated_at,
            COALESCE((SELECT json_agg(json_build_object('id', pov.id, 'value', pov.value) ORDER BY pov.value ASC)
                      FROM product_assigned_option_specific_values paosv JOIN product_option_values pov ON paosv.product_option_value_id = pov.id
                      WHERE paosv.product_assigned_option_id = pao.id), '[]'::json) AS selected_values

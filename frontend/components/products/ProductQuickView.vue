@@ -374,7 +374,7 @@ function updateCurrentVariantUIData() {
     currentVariant.value = null;
     displayPrice.value = parseFloat(detailedProduct.value.price);
     displaySku.value = detailedProduct.value.sku || '';
-    displayStock.value = detailedProduct.value.stock_quantity;
+    displayStock.value = detailedProduct.value.effective_stock_quantity || 0;
     if (galleryImages.value.length > 0) {
         selectedImage.value = galleryImages.value.find(img => img.is_primary) || galleryImages.value[0];
          if(selectedImage.value) selectedImage.value = {...selectedImage.value};
@@ -383,7 +383,7 @@ function updateCurrentVariantUIData() {
     } else {
         selectedImage.value = null;
     }
-    addToCartDisabled.value = detailedProduct.value.stock_quantity <= 0;
+    addToCartDisabled.value = (detailedProduct.value.effective_stock_quantity || 0) <= 0;
     quantity.value = 1;
     return;
   }

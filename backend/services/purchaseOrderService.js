@@ -556,7 +556,7 @@ async function getProductVariants(productId) {
       FROM product_variants pv
       LEFT JOIN product_variant_option_values pvov ON pv.id = pvov.product_variant_id
       LEFT JOIN product_option_values pov ON pvov.product_option_value_id = pov.id
-      LEFT JOIN product_options po ON pov.option_id = po.id
+      LEFT JOIN product_options po ON pov.product_option_id = po.id
       WHERE pv.product_id = $1
       GROUP BY pv.id, pv.sku, pv.price_modifier, pv.stock_quantity, pv.image_url, pv.created_at, pv.updated_at
       ORDER BY pv.id;

@@ -9,6 +9,7 @@ const { uploadFileToS3, deleteFileFromS3, isS3Configured } = require('../service
 const path = require('path');
 const { query, validationResult } = require('express-validator'); // Import express-validator
 const { getOrCreateTagIds, getS3KeyFromUrl } = require('../utils/productHelpers'); // Import helpers
+const taxService = require('../services/taxService'); // Import tax service
 
 // GET /products - Get all products with filtering, sorting, and pagination
 router.get('/', [
@@ -105,6 +106,186 @@ router.get('/best-sellers', [
     }
 });
 
+
+// GET /api/products/pos - Get products with tax-inclusive prices for POS
+router.get('/pos', async (req, res, next) => {
+  try {
+    const { limit = 100, page = 1, search, category_id, supplier_id } = req.query;
+    
+    // Use the existing getAllProducts service but with additional processing
+    const productsResult = await productService.getAllProducts({
+      limit: parseInt(limit),
+      page: parseInt(page),
+      search,
+      category_id: category_id ? parseInt(category_id) : undefined,
+      supplier_id: supplier_id ? parseInt(supplier_id) : undefined,
+    });
+
+    // Calculate tax-inclusive prices and include variants for each product
+    const productsWithTaxAndVariants = await Promise.all(
+      productsResult.products.map(async (product) => {
+        const basePrice = parseFloat(product.price);
+        let taxDetails = {
+          basePrice: basePrice.toFixed(2),
+          taxAmount: 0,
+          priceWithTax: basePrice.toFixed(2),
+          appliedRates: []
+        };
+
+        // Calculate tax if product has a tax class
+        if (product.tax_class_id) {
+          try {
+            // Get system locale settings for tax calculation
+            const systemSettings = await db.query(`
+              SELECT setting_key, setting_value FROM site_settings 
+              WHERE setting_key IN ('system_country', 'system_state', 'system_postal_code')
+            `);
+            
+            let systemAddress = null;
+            if (systemSettings.rows.length > 0) {
+              const country = systemSettings.rows.find(row => row.setting_key === 'system_country')?.setting_value;
+              const state = systemSettings.rows.find(row => row.setting_key === 'system_state')?.setting_value;
+              const postalCode = systemSettings.rows.find(row => row.setting_key === 'system_postal_code')?.setting_value;
+              
+              if (country) {
+                systemAddress = {
+                  country: country,
+                  state_province: state || null,
+                  postalCode: postalCode || null
+                };
+              }
+            }
+            
+            taxDetails = await taxService.calculatePriceWithAppliedTaxes(
+              basePrice, 
+              product.tax_class_id,
+              systemAddress // Use system locale for tax calculation
+            );
+          } catch (taxError) {
+            console.error(`Error calculating tax for product ${product.id}:`, taxError);
+            // Keep default taxDetails if calculation fails
+          }
+        }
+
+        // Get variants if product has them
+        let variants = [];
+        if (product.has_variants) {
+          try {
+            const fullProduct = await productService.getProductById(product.id);
+            variants = fullProduct.variants || [];
+            
+            // Calculate tax for each variant
+            variants = await Promise.all(variants.map(async (variant) => {
+              const variantBasePrice = parseFloat(variant.final_price);
+              let variantTaxDetails = {
+                basePrice: variantBasePrice.toFixed(2),
+                taxAmount: 0,
+                priceWithTax: variantBasePrice.toFixed(2),
+                appliedRates: []
+              };
+
+              if (product.tax_class_id) {
+                try {
+                  // Get system locale settings for tax calculation
+                  const systemSettings = await db.query(`
+                    SELECT setting_key, setting_value FROM site_settings 
+                    WHERE setting_key IN ('system_country', 'system_state', 'system_postal_code')
+                  `);
+                  
+                  let systemAddress = null;
+                  if (systemSettings.rows.length > 0) {
+                    const country = systemSettings.rows.find(row => row.setting_key === 'system_country')?.setting_value;
+                    const state = systemSettings.rows.find(row => row.setting_key === 'system_state')?.setting_value;
+                    const postalCode = systemSettings.rows.find(row => row.setting_key === 'system_postal_code')?.setting_value;
+                    
+                    if (country) {
+                      systemAddress = {
+                        country: country,
+                        state_province: state || null,
+                        postalCode: postalCode || null
+                      };
+                    }
+                  }
+                  
+                  variantTaxDetails = await taxService.calculatePriceWithAppliedTaxes(
+                    variantBasePrice,
+                    product.tax_class_id,
+                    systemAddress // Use system locale for tax calculation
+                  );
+                } catch (taxError) {
+                  console.error(`Error calculating tax for variant ${variant.id}:`, taxError);
+                }
+              }
+
+              // Get option values for this variant
+              let optionValues = [];
+              if (variant.option_value_ids && variant.option_value_ids.length > 0) {
+                try {
+                  optionValues = await getVariantOptionValues(variant.option_value_ids);
+                } catch (optionError) {
+                  console.error(`Error getting option values for variant ${variant.id}:`, optionError);
+                }
+              }
+
+              return {
+                ...variant,
+                price: variantBasePrice,
+                price_exclusive: parseFloat(variantTaxDetails.basePrice),
+                price_inclusive: parseFloat(variantTaxDetails.priceWithTax),
+                tax_amount: parseFloat(variantTaxDetails.taxAmount),
+                applied_tax_rates: variantTaxDetails.appliedRates,
+                display_price: parseFloat(variantTaxDetails.priceWithTax).toFixed(2),
+                option_values: optionValues
+              };
+            }));
+          } catch (variantError) {
+            console.error(`Error loading variants for product ${product.id}:`, variantError);
+          }
+        }
+
+        return {
+          ...product,
+          price_exclusive: parseFloat(taxDetails.basePrice),
+          price_inclusive: parseFloat(taxDetails.priceWithTax),
+          tax_amount: parseFloat(taxDetails.taxAmount),
+          applied_tax_rates: taxDetails.appliedRates,
+          display_price: parseFloat(taxDetails.priceWithTax).toFixed(2), // For display purposes
+          variants: variants
+        };
+      })
+    );
+
+    res.status(200).json({
+      data: productsWithTaxAndVariants,
+      totalProducts: productsResult.totalProducts,
+      page: productsResult.page,
+      limit: productsResult.limit,
+      totalPages: productsResult.totalPages
+    });
+
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Helper function to get option values for variants
+async function getVariantOptionValues(optionValueIds) {
+  if (!optionValueIds || optionValueIds.length === 0) return [];
+  
+  const client = await db.pool.connect();
+  try {
+    const query = `
+      SELECT value 
+      FROM product_option_values 
+      WHERE id = ANY($1)
+      ORDER BY id ASC;
+    `;
+    const result = await client.query(query, [optionValueIds]);
+    return result.rows.map(row => row.value);
+  } finally {
+    client.release();
+  }
+}
 
 // GET /products/:id - Get a single product by ID with variants
 router.get('/:id', async (req, res, next) => {
