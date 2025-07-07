@@ -37,6 +37,8 @@ const adminMarketingRoutes = require('./routes/adminMarketing'); // Import admin
 const adminHeroBannerRoutes = require('./routes/adminHeroBanners'); // Import admin hero banner routes
 const adminEmailCampaignRoutes = require('./routes/adminEmailCampaigns'); // Import admin email campaign routes
 const adminSettingsRoutes = require('./routes/adminSettings'); // Import admin settings routes
+const adminGeoLocationRoutes = require('./routes/adminGeoLocation'); // Import admin geo-location routes
+const { geoRestrictionMiddleware, addCountryHeaders } = require('./middleware/geoRestriction');
 // Duplicate imports for adminOptionManagementRoutes and adminProductSpecificOptionsRoutes were removed by only keeping the first ones.
 const reviewRoutes = require('./routes/reviews'); // Import review routes
 const userRoutes = require('./routes/users'); // Import user profile routes
@@ -132,7 +134,7 @@ app.get('/api', (req, res) => {
 app.use('/api/auth', authRoutes); // Use the new dedicated auth router
 
 // --- Product Routes ---
-app.use('/api/products', productRoutes); // Mount product routes under /api/products
+app.use('/api/products', geoRestrictionMiddleware, productRoutes); // Mount product routes under /api/products with geo-restriction
 
 // --- Admin Routes ---
 // Mount user management specific admin routes
@@ -154,7 +156,7 @@ app.use('/api/admin/reviews', adminReviewRoutes); // Mount admin review manageme
 // (e.g. POST /api/products/:productId/reviews, GET /api/products/:productId/reviews)
 // These routes are defined in reviews.js starting with /products/:productId/reviews
 // So, if reviewsRouter is mounted at /api, the paths will be correct.
-app.use('/api', reviewRoutes);
+app.use('/api', geoRestrictionMiddleware, reviewRoutes);
 
 
 // Mount order management specific admin routes
@@ -184,13 +186,14 @@ app.use('/api/admin/marketing', adminMarketingRoutes); // Mount admin marketing 
 app.use('/api/admin/hero-banners', adminHeroBannerRoutes); // Mount admin hero banner routes
 app.use('/api/admin', adminEmailCampaignRoutes); // Mount admin email campaign routes
 app.use('/api/admin/settings', adminSettingsRoutes); // Mount admin settings routes
+app.use('/api/admin/geo-location', adminGeoLocationRoutes); // Mount admin geo-location routes
 
 
 // --- User Profile Routes ---
 app.use('/api/users', userRoutes); // Mount user profile routes under /api/users
 
 // --- Public Category Routes ---
-app.use('/api/categories', categoryRoutes);
+app.use('/api/categories', geoRestrictionMiddleware, categoryRoutes);
 
 // --- Public Settings Routes ---
 app.get('/api/settings/public', async (req, res) => {
@@ -229,27 +232,27 @@ app.get('/api/settings/public', async (req, res) => {
 });
 
 // --- Public Cart Routes (e.g. for discount validation) ---
-app.use('/api/cart', cartRoutes);
+app.use('/api/cart', geoRestrictionMiddleware, cartRoutes);
 
 // --- Address Routes ---
-app.use('/api/addresses', addressRoutes);
+app.use('/api/addresses', geoRestrictionMiddleware, addressRoutes);
 
 // --- CMS Routes (e.g., for Hero Banners) ---
 const cmsRoutes = require('./routes/cmsRoutes');
-app.use('/api/cms', cmsRoutes);
+app.use('/api/cms', geoRestrictionMiddleware, cmsRoutes);
 
 // --- Public Order Routes (e.g., for user to create their own order) ---
-app.use('/api/orders', orderRoutes);
+app.use('/api/orders', geoRestrictionMiddleware, orderRoutes);
 
 // --- Public Options Routes (e.g., for product filters) ---
-app.use('/api/options', optionsRoutes);
+app.use('/api/options', geoRestrictionMiddleware, optionsRoutes);
 
 // --- Email Tracking Routes ---
 app.use('/api/track', trackingRoutes);
 
 // --- Other Public Utility Routes (e.g., delivery confirmation) ---
 const publicUtilityRoutes = require('./routes/public');
-app.use('/api/public', publicUtilityRoutes);
+app.use('/api/public', geoRestrictionMiddleware, publicUtilityRoutes);
 
 // --- Fulfillment Validation Routes ---
 app.use('/api/fulfillment', fulfillmentValidationRoutes);
@@ -261,10 +264,10 @@ app.use('/api/admin/permissions', adminPermissionsRoutes);
 app.use('/api/admin/roles', adminRolesRoutes);
 
 // --- Shipping Routes ---
-app.use('/api/shipping', shippingRoutes);
+app.use('/api/shipping', geoRestrictionMiddleware, shippingRoutes);
 
 // --- Payment Routes ---
-app.use('/api/payments', paymentRoutes); // Mount payment routes under /api/payments
+app.use('/api/payments', geoRestrictionMiddleware, paymentRoutes); // Mount payment routes under /api/payments with geo-restriction
 
 // Ensure DB connection is attempted and tables are created when server starts
 // The db.js file already tries to connect and create tables upon import.

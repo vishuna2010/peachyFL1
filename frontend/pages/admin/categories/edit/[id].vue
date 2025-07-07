@@ -64,6 +64,9 @@ const fetchCategoryData = async () => {
     if (response.data) {
         categoryData.name = response.data.name || '';
         categoryData.description = response.data.description || '';
+        categoryData.image_url = response.data.image_url || '';
+        categoryData.show_in_menu = response.data.show_in_menu || false;
+        categoryData.menu_order = response.data.menu_order || 0;
     } else {
         throw new Error('Invalid category data structure received from API.');
     }
@@ -90,12 +93,14 @@ const handleUpdate = async (formData) => {
   isSubmitting.value = true;
   submitError.value = '';
   try {
-    // The CategoryForm already ensures that initialData is compared for changes.
-    // We just need to check if formData is different from what was fetched (categoryData)
+    // Check if any field has changed
     const nameChanged = formData.name !== categoryData.name;
     const descriptionChanged = formData.description !== categoryData.description;
+    const imageUrlChanged = formData.image_url !== categoryData.image_url;
+    const showInMenuChanged = formData.show_in_menu !== categoryData.show_in_menu;
+    const menuOrderChanged = formData.menu_order !== categoryData.menu_order;
 
-    if (!nameChanged && !descriptionChanged) {
+    if (!nameChanged && !descriptionChanged && !imageUrlChanged && !showInMenuChanged && !menuOrderChanged) {
         toast.info('No changes detected to submit.');
         isSubmitting.value = false;
         return;
@@ -104,7 +109,9 @@ const handleUpdate = async (formData) => {
     const payload = {};
     if (nameChanged) payload.name = formData.name;
     if (descriptionChanged) payload.description = formData.description;
-
+    if (imageUrlChanged) payload.image_url = formData.image_url;
+    if (showInMenuChanged) payload.show_in_menu = formData.show_in_menu;
+    if (menuOrderChanged) payload.menu_order = formData.menu_order;
 
     await $axios.put(`/admin/categories/${categoryId}`, payload);
     toast.success('Category updated successfully!');

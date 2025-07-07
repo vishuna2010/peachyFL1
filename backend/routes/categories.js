@@ -15,6 +15,16 @@ router.get('/', async (req, res, next) => { // Added next parameter
   }
 });
 
+// GET /api/categories/menu - Fetch categories for menu bar
+router.get('/menu', async (req, res, next) => {
+  try {
+    const menuCategories = await categoryService.getMenuCategories();
+    res.status(200).json(menuCategories);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/categories/slug/:slug - Fetch a single category by its slug
 router.get('/slug/:slug', async (req, res, next) => {
   try {

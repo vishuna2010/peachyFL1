@@ -197,10 +197,9 @@ const currentHoveredCategory = computed(() => {
 // ---- Fetch categories ----
 const fetchHeaderCategories = async () => {
   try {
-    // First try to get menu categories, fallback to all categories
-    const { data } = await $axios.get('/categories');
-    // Filter to only show categories that should be in the menu
-    headerCategories.value = data.filter(cat => cat.show_in_menu).sort((a, b) => (a.menu_order || 0) - (b.menu_order || 0)) || [];
+    // Use the dedicated menu endpoint to get only categories that should be shown in the menu
+    const { data } = await $axios.get('/categories/menu');
+    headerCategories.value = data || [];
   } catch (error) {
     console.error('Error fetching menu categories:', error);
     headerCategories.value = [];

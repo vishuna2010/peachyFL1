@@ -822,6 +822,19 @@ async function seedRegularUsers(client, seededUserIds) {
   const usersToSeed = [
     { name: 'John Doe', email: 'john.doe@example.com', password: 'password123', role: 'customer' },
     { name: 'Jane Smith', email: 'jane.smith@example.com', password: 'password123', role: 'customer' },
+    { name: 'Mike Johnson', email: 'mike.johnson@example.com', password: 'password123', role: 'customer' },
+    { name: 'Sarah Wilson', email: 'sarah.wilson@example.com', password: 'password123', role: 'customer' },
+    { name: 'David Brown', email: 'david.brown@example.com', password: 'password123', role: 'customer' },
+    { name: 'Emily Davis', email: 'emily.davis@example.com', password: 'password123', role: 'customer' },
+    { name: 'Robert Miller', email: 'robert.miller@example.com', password: 'password123', role: 'customer' },
+    { name: 'Lisa Garcia', email: 'lisa.garcia@example.com', password: 'password123', role: 'customer' },
+    { name: 'James Rodriguez', email: 'james.rodriguez@example.com', password: 'password123', role: 'customer' },
+    { name: 'Maria Martinez', email: 'maria.martinez@example.com', password: 'password123', role: 'customer' },
+    { name: 'Christopher Lee', email: 'christopher.lee@example.com', password: 'password123', role: 'customer' },
+    { name: 'Amanda Taylor', email: 'amanda.taylor@example.com', password: 'password123', role: 'customer' },
+    { name: 'Daniel Anderson', email: 'daniel.anderson@example.com', password: 'password123', role: 'customer' },
+    { name: 'Jessica Thomas', email: 'jessica.thomas@example.com', password: 'password123', role: 'customer' },
+    { name: 'Matthew Jackson', email: 'matthew.jackson@example.com', password: 'password123', role: 'customer' },
   ];
   try {
     for (const user of usersToSeed) {
@@ -941,27 +954,27 @@ async function seedCategories(client, seededDataIds) {
     .replace(/-+$/, '');            // Trim - from end of text
 
   const categoriesToSeed = [
-    { name: 'Electronics', description: 'Gadgets, devices, and accessories.' },
-    { name: 'Apparel', description: 'Clothing for men, women, and children.' },
-    { name: 'Books', description: 'Various genres of books.' },
-    { name: 'Home Goods', description: 'Items for home and kitchen.' },
+    { name: 'Electronics', description: 'Gadgets, devices, and accessories.', show_in_menu: true, menu_order: 1 },
+    { name: 'Apparel', description: 'Clothing for men, women, and children.', show_in_menu: true, menu_order: 2 },
+    { name: 'Books', description: 'Various genres of books.', show_in_menu: true, menu_order: 3 },
+    { name: 'Home Goods', description: 'Items for home and kitchen.', show_in_menu: true, menu_order: 4 },
     // Adding categories from the console log provided by user
-    { name: 'Accessories', description: 'Fashion accessories.'},
-    { name: 'Beauty', description: 'Beauty and personal care products.'},
-    { name: 'Digital Music', description: 'Digital music albums and tracks.'},
-    { name: 'Footwear', description: 'Shoes, boots, and sandals.'},
-    { name: 'Sports & Outdoors', description: 'Equipment for sports and outdoor activities.'},
-    { name: 'Toys & Games', description: 'Toys and games for all ages.'},
+    { name: 'Accessories', description: 'Fashion accessories.', show_in_menu: true, menu_order: 5},
+    { name: 'Beauty', description: 'Beauty and personal care products.', show_in_menu: true, menu_order: 6},
+    { name: 'Digital Music', description: 'Digital music albums and tracks.', show_in_menu: false, menu_order: null},
+    { name: 'Footwear', description: 'Shoes, boots, and sandals.', show_in_menu: true, menu_order: 7},
+    { name: 'Sports & Outdoors', description: 'Equipment for sports and outdoor activities.', show_in_menu: true, menu_order: 8},
+    { name: 'Toys & Games', description: 'Toys and games for all ages.', show_in_menu: true, menu_order: 9},
 
   ];
   try {
     for (const cat of categoriesToSeed) {
       const slug = slugify(cat.name);
       const result = await client.query(
-        `INSERT INTO categories (name, slug, description) VALUES ($1, $2, $3)
-         ON CONFLICT (name) DO UPDATE SET slug=EXCLUDED.slug, description=EXCLUDED.description
+        `INSERT INTO categories (name, slug, description, show_in_menu, menu_order) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (name) DO UPDATE SET slug=EXCLUDED.slug, description=EXCLUDED.description, show_in_menu=EXCLUDED.show_in_menu, menu_order=EXCLUDED.menu_order
          RETURNING id, name, slug;`,
-        [cat.name, slug, cat.description]
+        [cat.name, slug, cat.description, cat.show_in_menu, cat.menu_order]
       );
       if (result.rows.length > 0) {
         seededDataIds.categories[result.rows[0].name] = {id: result.rows[0].id, slug: result.rows[0].slug};
@@ -974,10 +987,10 @@ async function seedCategories(client, seededDataIds) {
         const subCatName = 'Headphones';
         const subCatSlug = slugify(subCatName);
         const subCatRes = await client.query(
-            `INSERT INTO categories (name, slug, description, parent_category_id) VALUES ($1, $2, $3, $4)
-             ON CONFLICT (name) DO UPDATE SET slug=EXCLUDED.slug, description=EXCLUDED.description, parent_category_id=EXCLUDED.parent_category_id
+            `INSERT INTO categories (name, slug, description, parent_category_id, show_in_menu, menu_order) VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (name) DO UPDATE SET slug=EXCLUDED.slug, description=EXCLUDED.description, parent_category_id=EXCLUDED.parent_category_id, show_in_menu=EXCLUDED.show_in_menu, menu_order=EXCLUDED.menu_order
              RETURNING id, name, slug;`,
-            [subCatName, subCatSlug, 'Audio listening devices', electronicsData.id]
+            [subCatName, subCatSlug, 'Audio listening devices', electronicsData.id, false, null]
         );
         if (subCatRes.rows.length > 0) {
             seededDataIds.categories[subCatRes.rows[0].name] = {id: subCatRes.rows[0].id, slug: subCatRes.rows[0].slug};
@@ -998,50 +1011,141 @@ async function seedProducts(client, seededDataIds) {
   const productsToSeed = [
     {
       name: 'Wireless Bluetooth Headphones', sku: 'HDPHN-WL-BT-001', description: 'High-fidelity wireless headphones with noise cancellation and 20-hour battery life.',
-      price: 149.99, cost_price: 75.00, stock_quantity: 0,
+      price: 149.99, cost_price: 75.00, stock_quantity: 10, // changed from 0 to 10
       category_id: seededDataIds.categories?.Headphones?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
-      image_url: 'https://picsum.photos/300/300?random=10', is_active: true,
+      image_url: 'https://picsum.photos/300/300?random=10',
       has_variants: false, // Will be set to true later if options/variants are added
       reorder_threshold: 5,
-      product_status: 'active'
+      tags: ['wireless', 'bluetooth', 'noise-cancelling', 'audio', 'headphones'],
+      is_featured: true
     },
     {
       name: 'Men\'s Cotton T-Shirt', sku: 'TSHRT-MEN-COT-005', description: 'Comfortable and durable 100% cotton t-shirt for everyday wear.',
-      price: 25.99, cost_price: 10.00, stock_quantity: 0,
+      price: 25.99, cost_price: 10.00, stock_quantity: 10, // changed from 0 to 10
       category_id: seededDataIds.categories?.Apparel?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
-      image_url: 'https://picsum.photos/300/300?random=11', is_active: true,
+      image_url: 'https://picsum.photos/300/300?random=11',
       has_variants: false, // Will be set to true later if options/variants are added
       reorder_threshold: 10,
-      product_status: 'active'
+      tags: ['cotton', 't-shirt', 'men', 'casual', 'comfortable']
     },
     {
       name: 'Simple LED Desk Lamp', sku: 'LAMP-DSK-LED-010', description: 'Modern LED desk lamp with adjustable brightness.',
-      price: 39.99, cost_price: 15.00, stock_quantity: 50, // Stock_quantity here is for the base product if no variants
+      price: 39.99, cost_price: 15.00, stock_quantity: 10, // changed from 50 to 10 for consistency
       category_id: seededDataIds.categories?.['Home Goods']?.id, // Correctly access .id
       supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
       tax_class_id: seededDataIds.taxClasses?.standard_goods,
-      image_url: 'https://picsum.photos/300/300?random=12', is_active: true,
+      image_url: 'https://picsum.photos/300/300?random=12',
+      has_variants: false,
+      reorder_threshold: 5
+    },
+    {
+      name: 'Premium Wireless Earbuds', sku: 'EARBUDS-WL-PREM-001', description: 'High-quality wireless earbuds with noise cancellation.',
+      price: 199.99, cost_price: 80.00, stock_quantity: 10, // changed from 25 to 10 for consistency
+      category_id: seededDataIds.categories?.Electronics?.id,
+      supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
+      tax_class_id: seededDataIds.taxClasses?.standard_goods,
+      image_url: 'https://picsum.photos/300/300?random=13',
+      has_variants: false,
+      reorder_threshold: 8
+    },
+    {
+      name: 'Women\'s Running Shoes', sku: 'SHOES-WOM-RUN-001', description: 'Comfortable running shoes with excellent cushioning.',
+      price: 89.99, cost_price: 35.00, stock_quantity: 40,
+      category_id: seededDataIds.categories?.Footwear?.id,
+      supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
+      tax_class_id: seededDataIds.taxClasses?.standard_goods,
+      image_url: 'https://picsum.photos/300/300?random=14',
+      has_variants: false,
+      reorder_threshold: 12
+    },
+    {
+      name: 'Smart Fitness Watch', sku: 'WATCH-SMART-FIT-001', description: 'Advanced fitness tracking watch with heart rate monitor.',
+      price: 299.99, cost_price: 120.00, stock_quantity: 15,
+      category_id: seededDataIds.categories?.Electronics?.id,
+      supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
+      tax_class_id: seededDataIds.taxClasses?.standard_goods,
+      image_url: 'https://picsum.photos/300/300?random=15',
       has_variants: false,
       reorder_threshold: 5,
-      product_status: 'draft'
+      is_featured: true
+    },
+    {
+      name: 'Organic Cotton Hoodie', sku: 'HOODIE-ORG-COT-001', description: 'Comfortable organic cotton hoodie for everyday wear.',
+      price: 59.99, cost_price: 22.00, stock_quantity: 30,
+      category_id: seededDataIds.categories?.Apparel?.id,
+      supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
+      tax_class_id: seededDataIds.taxClasses?.standard_goods,
+      image_url: 'https://picsum.photos/300/300?random=16',
+      has_variants: false,
+      reorder_threshold: 8
+    },
+    {
+      name: 'Portable Bluetooth Speaker', sku: 'SPEAKER-BT-PORT-001', description: 'Waterproof portable speaker with 20-hour battery life.',
+      price: 79.99, cost_price: 30.00, stock_quantity: 10, // changed from 35 to 10 for consistency
+      category_id: seededDataIds.categories?.Electronics?.id,
+      supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
+      tax_class_id: seededDataIds.taxClasses?.standard_goods,
+      image_url: 'https://picsum.photos/300/300?random=17',
+      has_variants: false,
+      reorder_threshold: 10
+    },
+    {
+      name: 'Yoga Mat Premium', sku: 'MAT-YOGA-PREM-001', description: 'Non-slip yoga mat with carrying strap.',
+      price: 45.99, cost_price: 18.00, stock_quantity: 10, // changed from 50 to 10 for consistency
+      category_id: seededDataIds.categories?.['Sports & Outdoors']?.id,
+      supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
+      tax_class_id: seededDataIds.taxClasses?.standard_goods,
+      image_url: 'https://picsum.photos/300/300?random=18',
+      has_variants: false,
+      reorder_threshold: 15
+    },
+    {
+      name: 'Stainless Steel Water Bottle', sku: 'BOTTLE-SS-WATER-001', description: 'Insulated stainless steel water bottle, 32oz.',
+      price: 34.99, cost_price: 12.00, stock_quantity: 10, // changed from 60 to 10 for consistency
+      category_id: seededDataIds.categories?.['Sports & Outdoors']?.id,
+      supplier_id: seededDataIds.suppliers?.['TechGadget Inc.'],
+      tax_class_id: seededDataIds.taxClasses?.standard_goods,
+      image_url: 'https://picsum.photos/300/300?random=19',
+      has_variants: false,
+      reorder_threshold: 20
+    },
+    {
+      name: 'Natural Face Cream', sku: 'CREAM-FACE-NAT-001', description: 'Organic face cream with natural ingredients.',
+      price: 24.99, cost_price: 8.00, stock_quantity: 10, // changed from 45 to 10 for consistency
+      category_id: seededDataIds.categories?.Beauty?.id,
+      supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
+      tax_class_id: seededDataIds.taxClasses?.standard_goods,
+      image_url: 'https://picsum.photos/300/300?random=20',
+      has_variants: false,
+      reorder_threshold: 12
+    },
+    {
+      name: 'Board Game Collection', sku: 'GAME-BOARD-COLL-001', description: 'Family board game collection with 5 popular games.',
+      price: 69.99, cost_price: 25.00, stock_quantity: 10, // changed from 20 to 10 for consistency
+      category_id: seededDataIds.categories?.['Toys & Games']?.id,
+      supplier_id: seededDataIds.suppliers?.['FashionFabrics Co.'],
+      tax_class_id: seededDataIds.taxClasses?.standard_goods,
+      image_url: 'https://picsum.photos/300/300?random=21',
+      has_variants: false,
+      reorder_threshold: 8
     },
   ];
 
   try {
     for (const prod of productsToSeed) {
       const result = await client.query(
-        `INSERT INTO products (name, sku, description, price, cost_price, stock_quantity, category_id, supplier_id, tax_class_id, image_url, is_active, has_variants, reorder_threshold, product_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        `INSERT INTO products (name, sku, description, price, cost_price, stock_quantity, category_id, supplier_id, tax_class_id, image_url, is_active, has_variants, reorder_threshold, product_status, tags, is_featured)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (sku) DO UPDATE SET
            name=EXCLUDED.name, description=EXCLUDED.description, price=EXCLUDED.price, cost_price=EXCLUDED.cost_price, stock_quantity=EXCLUDED.stock_quantity,
            category_id=EXCLUDED.category_id, supplier_id=EXCLUDED.supplier_id, tax_class_id=EXCLUDED.tax_class_id, image_url=EXCLUDED.image_url, is_active=EXCLUDED.is_active, has_variants=EXCLUDED.has_variants,
-           reorder_threshold=EXCLUDED.reorder_threshold, product_status=EXCLUDED.product_status
+           reorder_threshold=EXCLUDED.reorder_threshold, product_status=EXCLUDED.product_status, tags=EXCLUDED.tags, is_featured=EXCLUDED.is_featured
          RETURNING id, sku;`,
-        [prod.name, prod.sku, prod.description, prod.price, prod.cost_price, prod.stock_quantity, prod.category_id, prod.supplier_id, prod.tax_class_id, prod.image_url, prod.is_active, prod.has_variants, prod.reorder_threshold, prod.product_status]
+        [prod.name, prod.sku, prod.description, prod.price, prod.cost_price, prod.stock_quantity, prod.category_id, prod.supplier_id, prod.tax_class_id, prod.image_url, prod.is_active, prod.has_variants, prod.reorder_threshold, prod.product_status, prod.tags || null, prod.is_featured || false]
       );
       if (result.rows.length > 0) {
         seededDataIds.products[result.rows[0].sku] = { id: result.rows[0].id, sku: result.rows[0].sku, image_url: prod.image_url, cost_price: prod.cost_price };
@@ -1472,48 +1576,147 @@ async function seedOrders(client, seededDataIds) {
     return;
   }
 
-  // Create a sample order for each user
-  for (let i = 0; i < userIds.length; i++) {
-    const userId = userIds[i];
-    const product = productList[i % productList.length];
-    const shippingCost = 7.99 + i; // Just for variety
-    const paymentMethod = i % 2 === 0 ? 'credit_card' : 'paypal';
-    const basePrice = parseFloat(product.price) || 0;
-    const totalAmount = basePrice + shippingCost;
-    // Create variety in order statuses for testing
-    const statuses = ['pending', 'completed', 'delivered', 'cancelled'];
-    const orderStatus = statuses[i % statuses.length];
-    const orderRes = await client.query(
-      `INSERT INTO orders (
-        user_id, status, total_amount, original_total_amount, discount_amount_applied, payment_status,
-        shipping_address_line1, shipping_city, shipping_postal_code, shipping_country,
-        billing_address_line1, billing_city, billing_postal_code, billing_country,
-        total_tax_amount, payment_method, shipping_cost
-      ) VALUES (
-        $1, $2, $3, $4, $5, 'paid',
-        $6, $7, $8, $9,
-        $10, $11, $12, $13,
-        $14, $15, $16
-      ) RETURNING id;`,
-      [
-        userId, orderStatus, totalAmount, basePrice, 0,
-        '123 Main St', 'Test City', '12345', 'USA',
-        '123 Main St', 'Test City', '12345', 'USA',
-        0, paymentMethod, shippingCost
-      ]
-    );
-    const orderId = orderRes.rows[0].id;
-    seededDataIds.orders[orderId] = { id: orderId, user_id: userId };
-    // Insert order item
-    const productPrice = parseFloat(product.price) || 0;
-    await client.query(
-      `INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase)
-       VALUES ($1, $2, $3, $4)`,
-      [orderId, product.id, 1, productPrice]
-    );
-    console.log(`Seeded order ${orderId} for user ${userId} and product ${product.sku}`);
+  // Create more comprehensive sample orders for better reports
+  const orderStatuses = ['pending', 'processing', 'dispatched', 'delivered', 'completed', 'cancelled', 'refunded'];
+  const paymentStatuses = ['pending', 'paid', 'partially_paid', 'refunded', 'partially_refunded', 'failed', 'cancelled', 'voided'];
+  const paymentMethods = ['credit_card', 'paypal', 'bank_transfer', 'cash_on_delivery'];
+  const countries = ['US', 'CA', 'GB', 'DE', 'FR', 'AU'];
+  const cities = ['New York', 'Los Angeles', 'Toronto', 'London', 'Berlin', 'Paris', 'Sydney'];
+  
+  // Generate orders over the past 6 months for time series data
+  const now = new Date();
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+  
+  let orderCounter = 0;
+  
+  // Create multiple orders per user with different dates and statuses
+  for (let userIndex = 0; userIndex < userIds.length; userIndex++) {
+    const userId = userIds[userIndex];
+    
+    // Create 3-8 orders per user
+    const ordersPerUser = 3 + (userIndex % 6);
+    
+    for (let orderIndex = 0; orderIndex < ordersPerUser; orderIndex++) {
+      orderCounter++;
+      
+      // Generate random date within the past 6 months
+      const randomDaysAgo = Math.floor(Math.random() * 180);
+      const orderDate = new Date(now.getTime() - (randomDaysAgo * 24 * 60 * 60 * 1000));
+      
+      // Select random products for this order (1-3 products)
+      const numProducts = 1 + (orderIndex % 3);
+      const selectedProducts = [];
+      for (let p = 0; p < numProducts; p++) {
+        const product = productList[(userIndex + orderIndex + p) % productList.length];
+        selectedProducts.push(product);
+      }
+      
+      // Calculate order totals
+      let subtotal = 0;
+      let taxAmount = 0;
+      const shippingCost = 5.99 + (orderIndex * 2); // Varying shipping costs
+      const discountAmount = orderIndex % 3 === 0 ? (subtotal * 0.1) : 0; // 10% discount on some orders
+      
+      // Calculate subtotal and tax
+      for (const product of selectedProducts) {
+        const productPrice = parseFloat(product.price) || 29.99;
+        const quantity = 1 + (orderIndex % 3); // 1-3 quantity
+        subtotal += productPrice * quantity;
+      }
+      
+      // Add tax (8.5% for US, 13% for CA, 20% for EU, 10% for AU)
+      const country = countries[userIndex % countries.length];
+      const taxRate = country === 'US' ? 0.085 : country === 'CA' ? 0.13 : country === 'AU' ? 0.10 : 0.20;
+      taxAmount = subtotal * taxRate;
+      
+      const totalAmount = subtotal + taxAmount + shippingCost - discountAmount;
+      
+      // Select order status (weighted towards completed/delivered for revenue reports)
+      const statusWeights = [0.1, 0.15, 0.2, 0.25, 0.2, 0.05, 0.05]; // pending, processing, dispatched, delivered, completed, cancelled, refunded
+      const random = Math.random();
+      let cumulativeWeight = 0;
+      let selectedStatus = orderStatuses[0];
+      for (let i = 0; i < orderStatuses.length; i++) {
+        cumulativeWeight += statusWeights[i];
+        if (random <= cumulativeWeight) {
+          selectedStatus = orderStatuses[i];
+          break;
+        }
+      }
+      
+      // Select payment status based on order status
+      let selectedPaymentStatus = 'paid';
+      if (selectedStatus === 'pending' || selectedStatus === 'processing') {
+        selectedPaymentStatus = paymentStatuses[Math.floor(Math.random() * 3)]; // pending, paid, partially_paid
+      } else if (selectedStatus === 'cancelled') {
+        selectedPaymentStatus = paymentStatuses[Math.floor(Math.random() * 4) + 4]; // failed, cancelled, voided, refunded
+      } else if (selectedStatus === 'refunded') {
+        selectedPaymentStatus = paymentStatuses[Math.floor(Math.random() * 2) + 3]; // refunded, partially_refunded
+      } else {
+        selectedPaymentStatus = paymentStatuses[Math.floor(Math.random() * 2) + 1]; // paid, partially_paid
+      }
+      
+      const paymentMethod = paymentMethods[orderIndex % paymentMethods.length];
+      const city = cities[userIndex % cities.length];
+      
+      // Insert order
+      const orderRes = await client.query(
+        `INSERT INTO orders (
+          user_id, status, total_amount, original_total_amount, discount_amount_applied, payment_status,
+          shipping_address_line1, shipping_city, shipping_postal_code, shipping_country,
+          billing_address_line1, billing_city, billing_postal_code, billing_country,
+          total_tax_amount, payment_method, shipping_cost, created_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10,
+          $11, $12, $13, $14,
+          $15, $16, $17, $18
+        ) RETURNING id;`,
+        [
+          userId, selectedStatus, totalAmount, subtotal, discountAmount, selectedPaymentStatus,
+          `${100 + orderCounter} Main St`, city, `${10000 + orderCounter}`, country,
+          `${100 + orderCounter} Main St`, city, `${10000 + orderCounter}`, country,
+          taxAmount, paymentMethod, shippingCost, orderDate
+        ]
+      );
+      
+      const orderId = orderRes.rows[0].id;
+      seededDataIds.orders[orderId] = { id: orderId, user_id: userId };
+      
+      // Insert order items
+      for (const product of selectedProducts) {
+        const productPrice = parseFloat(product.price) || 29.99;
+        const quantity = 1 + (orderIndex % 3);
+        
+        // Check if product has variants and randomly assign some to variants
+        let variantId = null;
+        if (product.has_variants && seededDataIds.productVariants && seededDataIds.productVariants[product.id]) {
+          const productVariants = seededDataIds.productVariants[product.id];
+          if (productVariants.length > 0 && Math.random() < 0.3) { // 30% chance to use variant
+            const randomVariant = productVariants[Math.floor(Math.random() * productVariants.length)];
+            variantId = randomVariant.id;
+          }
+        }
+        
+        await client.query(
+          `INSERT INTO order_items (
+            order_id, product_id, product_variant_id, quantity, price_at_purchase, 
+            product_name_at_purchase, product_sku_at_purchase,
+            line_item_tax_amount, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            orderId, product.id, variantId, quantity, productPrice,
+            product.name, product.sku,
+            (productPrice * quantity * taxRate), orderDate
+          ]
+        );
+      }
+      
+      console.log(`Seeded order ${orderId} for user ${userId} with ${selectedProducts.length} products, status: ${selectedStatus}, payment: ${selectedPaymentStatus}, total: $${totalAmount.toFixed(2)}`);
+    }
   }
-  console.log('Orders seeding completed.');
+  
+  console.log(`Orders seeding completed. Created ${orderCounter} orders.`);
 }
 
 async function seedSiteSettings(client) {
@@ -1536,6 +1739,8 @@ async function seedSiteSettings(client) {
     
     // Geographic Service Locations
     { setting_key: 'service_locations', setting_value: 'US,CA,GB,DE,FR,IT,ES,NL,JP,KR,CN,AU,SG,IN' },
+    { setting_key: 'geo_location_service', setting_value: 'ipapi' },
+    { setting_key: 'geo_location_api_key', setting_value: '' },
     
     // Social Media Settings
     { setting_key: 'social_facebook', setting_value: '' },
@@ -1665,6 +1870,74 @@ async function seedSiteSettings(client) {
   console.log('Site settings seeded successfully.');
 }
 
+async function seedDiscounts(client, seededDataIds) {
+  console.log('Seeding discounts...');
+  
+  const discounts = [
+    {
+      code: 'WELCOME10',
+      type: 'percentage',
+      value: 10.00,
+      description: 'Welcome discount for new customers',
+      is_active: true,
+      valid_from: new Date(),
+      valid_until: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
+      usage_limit: 1000,
+      times_used: 0,
+      min_order_amount: 25.00
+    },
+    {
+      code: 'FREESHIP',
+      type: 'fixed_amount',
+      value: 5.99,
+      description: 'Free shipping on orders over $50',
+      is_active: true,
+      valid_from: new Date(),
+      valid_until: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      usage_limit: 500,
+      times_used: 0,
+      min_order_amount: 50.00
+    },
+    {
+      code: 'FLASH20',
+      type: 'percentage',
+      value: 20.00,
+      description: 'Flash sale - 20% off everything',
+      is_active: true,
+      valid_from: new Date(),
+      valid_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+      usage_limit: 100,
+      times_used: 0,
+      min_order_amount: 0.00
+    }
+  ];
+
+  for (const discount of discounts) {
+    try {
+      await client.query(
+        `INSERT INTO discounts (code, type, value, description, is_active, valid_from, valid_until, usage_limit, times_used, min_order_amount)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (code) DO UPDATE SET
+           type = EXCLUDED.type,
+           value = EXCLUDED.value,
+           description = EXCLUDED.description,
+           is_active = EXCLUDED.is_active,
+           valid_from = EXCLUDED.valid_from,
+           valid_until = EXCLUDED.valid_until,
+           usage_limit = EXCLUDED.usage_limit,
+           min_order_amount = EXCLUDED.min_order_amount`,
+        [discount.code, discount.type, discount.value, discount.description, discount.is_active, 
+         discount.valid_from, discount.valid_until, discount.usage_limit, discount.times_used, discount.min_order_amount]
+      );
+      console.log(`Discount code "${discount.code}" seeded/updated.`);
+    } catch (error) {
+      console.error(`Error seeding discount ${discount.code}:`, error.message);
+    }
+  }
+  
+  console.log('Discounts seeding completed.');
+}
+
 async function seedCouriersAndShippingMethods(client, seededDataIds) {
   console.log('Seeding couriers and shipping methods...');
   // Seed couriers
@@ -1751,6 +2024,7 @@ async function seedDatabase() {
     await seedSpecificGlobalOptionsAndValues(client, seededDataIds);
     await seedProducts(client, seededDataIds);
     await seedCouriersAndShippingMethods(client, seededDataIds);
+    await seedDiscounts(client, seededDataIds);
     await seedOrders(client, seededDataIds);
 
     const productSkusToConfigure = ['TSHRT-MEN-COT-005', 'HDPHN-WL-BT-001'];
@@ -1771,6 +2045,7 @@ async function seedDatabase() {
       console.log('Proceeding with product option configurations and variant seeding.');
       await seedProductOptionConfigurations(client, seededDataIds, productSkusToConfigure);
       await seedProductVariants(client, seededDataIds);
+      await seedInventoryBatchesForVariants(client, seededDataIds);
     } else {
       console.warn("Skipping product option configurations and variant seeding due to missing prerequisite data. Check logs above for details on options/values.");
     }
@@ -1802,6 +2077,39 @@ async function seedDatabase() {
     }
     await pool.end();
     console.log('Seeding pool has ended.');
+  }
+}
+
+async function seedInventoryBatchesForVariants(client, seededDataIds) {
+  console.log('Seeding inventory batches for product variants...');
+  try {
+    // Get all variants
+    const variantsResult = await client.query('SELECT id, product_id, sku, cost_price FROM product_variants');
+    const variants = variantsResult.rows;
+    for (const variant of variants) {
+      const seedBatchNumber = `SEED-VARIANT-${variant.sku}`;
+      const costAtReceipt = variant.cost_price || 0;
+      const currencyCode = (config.company && config.company.currencyCode) || 'USD';
+      // Check if a batch with the same characteristics already exists
+      const existingBatchResult = await client.query(
+        'SELECT id FROM inventory_batches WHERE product_id = $1 AND variant_id = $2 AND batch_number = $3 LIMIT 1',
+        [variant.product_id, variant.id, seedBatchNumber]
+      );
+      if (existingBatchResult.rows.length === 0) {
+        await client.query(
+          `INSERT INTO inventory_batches (product_id, variant_id, sku, quantity_received, quantity_remaining, cost_price_at_receipt, currency_code_at_receipt, batch_number, received_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW());`,
+          [variant.product_id, variant.id, variant.sku, 10, 10, costAtReceipt, currencyCode, seedBatchNumber]
+        );
+        console.log(`Created initial inventory batch for variant SKU ${variant.sku}, quantity 10, batch: ${seedBatchNumber}.`);
+      } else {
+        console.log(`Skipping batch creation for variant SKU ${variant.sku} (batch: ${seedBatchNumber}) as a similar batch already exists.`);
+      }
+    }
+    console.log('Inventory batches seeding for variants completed.');
+  } catch (error) {
+    console.error('Error seeding inventory batches for variants:', error);
+    throw error;
   }
 }
 

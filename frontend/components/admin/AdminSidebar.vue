@@ -181,6 +181,7 @@ const navigationItems = ref([
     permission: 'reports:view',
     children: [
       { name: 'Overview', href: '/admin/reports', permission: 'reports:view' },
+      { name: 'Profit & Loss', href: '/admin/reports/profit-loss', permission: 'reports:view' },
       { name: 'Sales', href: '/admin/reports/sales', permission: 'reports:view' },
       { name: 'Best Sellers', href: '/admin/reports/best-sellers', permission: 'reports:view' },
       { name: 'Low Stock', href: '/admin/reports/low-stock', permission: 'reports:view' },

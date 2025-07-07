@@ -1966,6 +1966,161 @@
               </div>
             </div>
           </div>
+
+          <!-- Geo-Location -->
+          <div v-if="activeTab === 'geo-location'" class="space-y-6">
+            <h2 class="text-xl font-semibold text-gray-800">Geo-Location Services</h2>
+            
+            <!-- Service Provider Selection -->
+            <div class="space-y-4">
+              <h3 class="text-lg font-medium text-gray-900">Service Provider</h3>
+              <p class="text-sm text-gray-600 mb-4">Choose a geo-location service to restrict access based on user location.</p>
+              
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  v-for="provider in geoLocationProviders"
+                  :key="provider.key"
+                  @click="selectGeoProvider(provider.key)"
+                  class="border-2 rounded-lg p-4 cursor-pointer transition-colors"
+                  :class="currentProvider?.key === provider.key 
+                    ? 'border-peach-pink bg-peach-pink/5' 
+                    : 'border-gray-200 hover:border-gray-300'"
+                >
+                  <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                      <h4 class="font-medium text-gray-900">{{ provider.name }}</h4>
+                      <p class="text-sm text-gray-600 mt-1">{{ provider.description }}</p>
+                      <div v-if="provider.requiresApiKey" class="mt-2">
+                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          Requires API Key
+                        </span>
+                      </div>
+                    </div>
+                    <div v-if="currentProvider?.key === provider.key" class="text-peach-pink">
+                      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- API Key Input -->
+              <div v-if="currentProvider?.requiresApiKey" class="mt-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">API Key</label>
+                <input
+                  v-model="settings.geo_location_api_key"
+                  type="password"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-pink focus:border-transparent"
+                  placeholder="Enter API key"
+                />
+                <p class="text-xs text-gray-500 mt-1">Your API key will be securely stored and encrypted.</p>
+              </div>
+            </div>
+
+            <!-- Service Status -->
+            <div class="space-y-4">
+              <h3 class="text-lg font-medium text-gray-900">Service Status</h3>
+              
+              <div v-if="geoLocationStatus" class="bg-gray-50 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h4 class="font-medium text-gray-900">Current Status</h4>
+                    <p class="text-sm text-gray-600">
+                      Provider: {{ geoLocationStatus.provider }} | 
+                      Allowed Countries: {{ geoLocationStatus.allowedCountriesCount }}
+                    </p>
+                  </div>
+                  <div class="flex items-center">
+                    <div 
+                      class="w-3 h-3 rounded-full mr-2"
+                      :class="geoLocationStatus.isEnabled ? 'bg-green-500' : 'bg-gray-400'"
+                    ></div>
+                    <span class="text-sm font-medium" :class="geoLocationStatus.isEnabled ? 'text-green-700' : 'text-gray-500'">
+                      {{ geoLocationStatus.isEnabled ? 'Active' : 'Inactive' }}
+                    </span>
+                  </div>
+                </div>
+                
+                <!-- Test Results -->
+                <div v-if="geoLocationStatus.testResult" class="mt-4 p-3 bg-white rounded border">
+                  <h5 class="font-medium text-gray-900 mb-2">Last Test Result</h5>
+                  <div class="text-sm">
+                    <p><strong>Test IP:</strong> {{ geoLocationStatus.testResult.testIP }}</p>
+                    <p><strong>Detected Country:</strong> {{ geoLocationStatus.testResult.detectedCountry || 'Unknown' }}</p>
+                    <p><strong>Status:</strong> 
+                      <span :class="geoLocationStatus.testResult.success ? 'text-green-600' : 'text-red-600'">
+                        {{ geoLocationStatus.testResult.success ? 'Success' : 'Failed' }}
+                      </span>
+                    </p>
+                    <p v-if="geoLocationStatus.testResult.error" class="text-red-600">
+                      <strong>Error:</strong> {{ geoLocationStatus.testResult.error }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Test Service Button -->
+              <div class="flex space-x-3">
+                <button
+                  @click="testGeoService"
+                  :disabled="testingService"
+                  class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span v-if="testingService" class="flex items-center">
+                    <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Testing...
+                  </span>
+                  <span v-else>Test Service</span>
+                </button>
+                
+                <button
+                  @click="refreshGeoStatus"
+                  class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-peach-pink focus:border-transparent"
+                >
+                  Refresh Status
+                </button>
+              </div>
+            </div>
+
+            <!-- IP Testing -->
+            <div class="space-y-4">
+              <h3 class="text-lg font-medium text-gray-900">Test Specific IP</h3>
+              <p class="text-sm text-gray-600">Test how a specific IP address would be handled by the geo-restriction system.</p>
+              
+              <div class="flex space-x-3">
+                <input
+                  v-model="testIP"
+                  type="text"
+                  placeholder="Enter IP address (e.g., 8.8.8.8)"
+                  class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-peach-pink focus:border-transparent"
+                />
+                <button
+                  @click="testSpecificIP"
+                  :disabled="!testIP || testingService"
+                  class="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Test IP
+                </button>
+              </div>
+
+              <!-- Test Result -->
+              <div v-if="testResult" class="bg-gray-50 rounded-lg p-4">
+                <h4 class="font-medium text-gray-900 mb-2">Test Result</h4>
+                <div class="text-sm space-y-1">
+                  <p><strong>IP:</strong> {{ testResult.ip }}</p>
+                  <p><strong>Detected Country:</strong> {{ testResult.detectedCountry || 'Unknown' }}</p>
+                  <p><strong>Allowed:</strong> 
+                    <span :class="testResult.isAllowed ? 'text-green-600' : 'text-red-600'">
+                      {{ testResult.isAllowed ? 'Yes' : 'No' }}
+                    </span>
+                  </p>
+                  <p><strong>Provider:</strong> {{ testResult.provider }}</p>
+                  <p class="text-gray-600">{{ testResult.message }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2033,6 +2188,14 @@ const expandedRegions = ref({
   asiaPacific: false,
   caribbean: false
 });
+
+// Geo-location service state
+const geoLocationProviders = ref([]);
+const currentProvider = ref(null);
+const geoLocationStatus = ref(null);
+const testingService = ref(false);
+const testResult = ref(null);
+const testIP = ref('');
 
 // Location mapping
 const locationNames = {
@@ -2134,6 +2297,11 @@ const tabs = [
     id: 'maintenance',
     name: 'Maintenance',
     icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"></path></svg>'
+  },
+  {
+    id: 'geo-location',
+    name: 'Geo-Location',
+    icon: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
   }
 ];
 
@@ -2182,11 +2350,23 @@ const saveSettings = async () => {
     // Update original settings to reflect saved state
     originalSettings.value = JSON.parse(JSON.stringify(settings.value));
     
-    // Show success message (you can add a toast notification here)
+    // Show success message
     console.log('Settings saved successfully');
+    
+    // Show success notification
+    const { $toast } = useNuxtApp();
+    if ($toast) {
+      $toast.success('Settings saved successfully!');
+    }
   } catch (err) {
     error.value = err.response?.data?.message || 'Failed to save settings';
     console.error('Error saving settings:', err);
+    
+    // Show error notification
+    const { $toast } = useNuxtApp();
+    if ($toast) {
+      $toast.error('Failed to save settings. Please try again.');
+    }
   } finally {
     saving.value = false;
   }
@@ -2313,6 +2493,94 @@ const initializeLocations = () => {
     selectedLocations.value = settings.value.service_locations.split(',').filter(loc => loc.trim());
   }
 };
+
+// Geo-location methods
+const fetchGeoLocationProviders = async () => {
+  try {
+    const response = await $axios.get('/admin/geo-location/providers');
+    geoLocationProviders.value = response.data.providers;
+  } catch (err) {
+    console.error('Error fetching geo-location providers:', err);
+  }
+};
+
+const fetchGeoLocationStatus = async () => {
+  try {
+    const response = await $axios.get('/admin/geo-location/status');
+    geoLocationStatus.value = response.data;
+  } catch (err) {
+    console.error('Error fetching geo-location status:', err);
+  }
+};
+
+const selectGeoProvider = (providerKey) => {
+  currentProvider.value = geoLocationProviders.value.find(p => p.key === providerKey);
+  settings.value.geo_location_service = providerKey;
+};
+
+const testGeoService = async () => {
+  testingService.value = true;
+  try {
+    const response = await $axios.post('/admin/geo-location/test');
+    geoLocationStatus.value = response.data;
+    
+    const { $toast } = useNuxtApp();
+    if ($toast) {
+      $toast.success('Service test completed successfully!');
+    }
+  } catch (err) {
+    console.error('Error testing geo-location service:', err);
+    const { $toast } = useNuxtApp();
+    if ($toast) {
+      $toast.error('Failed to test service. Please check your configuration.');
+    }
+  } finally {
+    testingService.value = false;
+  }
+};
+
+const testSpecificIP = async () => {
+  if (!testIP.value) return;
+  
+  testingService.value = true;
+  try {
+    const response = await $axios.post('/admin/geo-location/test-ip', {
+      ip: testIP.value
+    });
+    testResult.value = response.data;
+  } catch (err) {
+    console.error('Error testing IP:', err);
+    testResult.value = {
+      ip: testIP.value,
+      error: err.response?.data?.message || 'Failed to test IP'
+    };
+  } finally {
+    testingService.value = false;
+  }
+};
+
+const refreshGeoStatus = async () => {
+  await fetchGeoLocationStatus();
+  const { $toast } = useNuxtApp();
+  if ($toast) {
+    $toast.success('Status refreshed!');
+  }
+};
+
+// Initialize geo-location data when tab is selected
+watch(activeTab, async (newTab) => {
+  if (newTab === 'geo-location') {
+    await fetchGeoLocationProviders();
+    await fetchGeoLocationStatus();
+    
+    // Set current provider based on settings
+    if (settings.value.geo_location_service) {
+      currentProvider.value = geoLocationProviders.value.find(
+        p => p.key === settings.value.geo_location_service
+      );
+    }
+  }
+});
 
 // Lifecycle
 onMounted(async () => {

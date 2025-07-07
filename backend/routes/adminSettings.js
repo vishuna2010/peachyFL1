@@ -75,6 +75,27 @@ router.get('/', async (req, res, next) => {
           is_public: true
         },
         {
+          key: 'service_locations',
+          value: 'US,CA,GB,DE,FR,IT,ES,NL,JP,KR,CN,AU,SG,IN',
+          type: 'string',
+          description: 'Comma-separated list of country codes where the service is available',
+          is_public: true
+        },
+        {
+          key: 'geo_location_service',
+          value: 'ipapi',
+          type: 'string',
+          description: 'Geo-location service provider (ipapi, maxmind, cloudflare, none)',
+          is_public: false
+        },
+        {
+          key: 'geo_location_api_key',
+          value: '',
+          type: 'string',
+          description: 'API key for geo-location service (if required)',
+          is_public: false
+        },
+        {
           key: 'contact_email',
           value: 'contact@peachyfl.com',
           type: 'string',
@@ -283,7 +304,9 @@ router.put('/', [
       // Allow empty values for social media and optional settings
       const allowedEmptySettings = [
         'social_facebook', 'social_instagram', 'social_twitter', 
-        'site_logo', 'maintenance_message', 'order_confirmation_email_template'
+        'site_logo', 'maintenance_message', 'order_confirmation_email_template',
+        'service_locations', 'facebook_pixel_id', 'google_analytics_id', 'order_number_suffix',
+        'geo_location_service', 'geo_location_api_key'
       ];
       if (allowedEmptySettings.includes(settingKey)) {
         return true; // Allow empty value
@@ -297,10 +320,26 @@ router.put('/', [
   }).withMessage('Setting value is required'),
 ], async (req, res, next) => {
   try {
-    logger.info('Received settings update request body:', JSON.stringify(req.body, null, 2));
+    logger.info('Received settings update request body:');
+    logger.info(JSON.stringify(req.body, null, 2));
+    // Add extra debug logging for empty values
+    if (Array.isArray(req.body.settings)) {
+      req.body.settings.forEach((setting, idx) => {
+        const allowedEmptySettings = [
+          'social_facebook', 'social_instagram', 'social_twitter', 
+          'site_logo', 'maintenance_message', 'order_confirmation_email_template',
+          'service_locations', 'facebook_pixel_id', 'google_analytics_id', 'order_number_suffix',
+          'geo_location_service', 'geo_location_api_key'
+        ];
+        if ((setting.value === undefined || setting.value === null || setting.value === '') && !allowedEmptySettings.includes(setting.key)) {
+          logger.warn(`Setting at index ${idx} with key '${setting.key}' is empty and not allowed to be empty.`);
+        }
+      });
+    }
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       logger.error('Settings validation failed: ' + JSON.stringify(errors.array(), null, 2));
+      logger.error('Settings array: ' + JSON.stringify(req.body.settings, null, 2));
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
@@ -399,6 +438,13 @@ router.post('/initialize', async (req, res, next) => {
         value: 'America/New_York',
         type: 'string',
         description: 'Default timezone for the website',
+        is_public: true
+      },
+      {
+        key: 'service_locations',
+        value: 'US,CA,GB,DE,FR,IT,ES,NL,JP,KR,CN,AU,SG,IN',
+        type: 'string',
+        description: 'Comma-separated list of country codes where the service is available',
         is_public: true
       },
       {

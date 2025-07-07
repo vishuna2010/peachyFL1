@@ -127,6 +127,13 @@
       <span class="block sm:inline">{{ apiError }}</span>
     </div>
 
+    <!-- Form Status -->
+    <div v-if="!isEditMode && !isChanged" class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+      <p class="text-sm text-yellow-700">
+        Please enter a category name (at least 2 characters) to enable the submit button.
+      </p>
+    </div>
+
     <div class="mt-6 flex items-center justify-end space-x-4">
       <NuxtLink
         :to="cancelLink"
@@ -195,34 +202,7 @@ const isValidImageUrl = ref(false);
 const imageUploading = ref(false);
 const imageInput = ref(null);
 
-watch(() => props.initialData, (newData) => {
-  editableName.value = newData?.name || '';
-  editableDescription.value = newData?.description || '';
-  editableImageUrl.value = newData?.image_url || '';
-  editableShowInMenu.value = newData?.show_in_menu || false;
-  editableMenuOrder.value = newData?.menu_order || 0;
-  if (newData?.image_url) {
-    validateImageUrl(newData.image_url);
-  }
-}, { immediate: true, deep: true });
-
-const isChanged = computed(() => {
-  if (!props.isEditMode) return true; // Always enabled for new categories if fields are filled
-  return (editableName.value.trim() !== (props.initialData?.name || '').trim() ||
-          editableDescription.value.trim() !== (props.initialData?.description || '').trim() ||
-          editableImageUrl.value.trim() !== (props.initialData?.image_url || '').trim() ||
-          editableShowInMenu.value !== (props.initialData?.show_in_menu || false) ||
-          editableMenuOrder.value !== (props.initialData?.menu_order || 0));
-});
-
-const submitButtonText = computed(() => {
-  if (props.isSubmitting) {
-    return props.isEditMode ? 'Updating...' : 'Creating...';
-  }
-  return props.isEditMode ? 'Update Category' : 'Create Category';
-});
-
-// Image validation and handling
+// Image validation and handling - Define this before the watch function
 const validateImageUrl = (url) => {
   if (!url) {
     isValidImageUrl.value = false;
@@ -249,6 +229,37 @@ const handleImageLoad = () => {
   imageLoading.value = false;
   isValidImageUrl.value = true;
 };
+
+watch(() => props.initialData, (newData) => {
+  editableName.value = newData?.name || '';
+  editableDescription.value = newData?.description || '';
+  editableImageUrl.value = newData?.image_url || '';
+  editableShowInMenu.value = newData?.show_in_menu || false;
+  editableMenuOrder.value = newData?.menu_order || 0;
+  if (newData?.image_url) {
+    validateImageUrl(newData.image_url);
+  }
+}, { immediate: true, deep: true });
+
+const isChanged = computed(() => {
+  if (!props.isEditMode) {
+    // For new categories, check if required fields are filled
+    return editableName.value.trim().length >= 2;
+  }
+  // For edit mode, check if any field has changed
+  return (editableName.value.trim() !== (props.initialData?.name || '').trim() ||
+          editableDescription.value.trim() !== (props.initialData?.description || '').trim() ||
+          editableImageUrl.value.trim() !== (props.initialData?.image_url || '').trim() ||
+          editableShowInMenu.value !== (props.initialData?.show_in_menu || false) ||
+          editableMenuOrder.value !== (props.initialData?.menu_order || 0));
+});
+
+const submitButtonText = computed(() => {
+  if (props.isSubmitting) {
+    return props.isEditMode ? 'Updating...' : 'Creating...';
+  }
+  return props.isEditMode ? 'Update Category' : 'Create Category';
+});
 
 // Watch for image URL changes
 watch(editableImageUrl, (newUrl) => {
@@ -283,14 +294,16 @@ const handleImageUpload = async (event) => {
     const formData = new FormData();
     formData.append('productImage', file);
 
-    const response = await $fetch('/api/admin/categories/upload-image', {
-      method: 'POST',
-      body: formData,
+    const { $axios } = useNuxtApp();
+    const response = await $axios.post('/admin/categories/upload-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
     });
 
-    if (response.image_url) {
-      editableImageUrl.value = response.image_url;
-      validateImageUrl(response.image_url);
+    if (response.data.image_url) {
+      editableImageUrl.value = response.data.image_url;
+      validateImageUrl(response.data.image_url);
     }
   } catch (error) {
     console.error('Error uploading image:', error);
@@ -306,10 +319,9 @@ const handleImageUpload = async (event) => {
 
 const handleSubmit = () => {
   if (!editableName.value.trim()) {
-    // Consider using a prop for error display or emitting an error event
     return;
   }
-   if (editableName.value.trim().length < 2) {
+  if (editableName.value.trim().length < 2) {
     return;
   }
 
